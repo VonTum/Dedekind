@@ -1,6 +1,5 @@
 .vs/
 Debug/
-*.vcxproj
 *.filters
 *.user
 *.json
