@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?> 
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="std::vector&lt;FunctionInput&gt;">
+    <DisplayString>CustomFunctionList</DisplayString>
+  </Type>
+  <Type Name="PreprocessedFunctionInputSet">
+    <DisplayString Condition="functionInputSet._Mylast - functionInputSet._Myfirst == 1">{functionInputSet._Myfirst}</DisplayString>
+    <DisplayString>{functionInputSet}</DisplayString>
+  </Type>
+  <Type Name="SymmetryGroup">
+    <DisplayString>count={count}, f={example.functionInputSet}</DisplayString>
+    <Expand>
+      <Item Name="funcs">example.functionInputSet</Item>
+      <Item Name="count">count</Item>
+    </Expand>
+  </Type>
+  <Type Name="SymmetryGroupValue">
+    <DisplayString>count={count}, value={value}, f={example.functionInputSet}</DisplayString>
+    <Expand>
+      <Item Name="funcs">example.functionInputSet</Item>
+      <Item Name="count">count</Item>
+      <Item Name="value">value</Item>
+    </Expand>
+  </Type>
+</AutoVisualizer>

@@ -1,0 +1,11 @@
+.vs/
+Debug/
+*.vcxproj
+*.filters
+*.user
+*.json
+Dedekind/.gitattributes
+Dedekind/x86/
+Dedekind/x64/
+Release/
+Debug/
