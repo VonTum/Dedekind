@@ -161,7 +161,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="collectionOperations.h" />
+    <ClInclude Include="countedEquivalenceClass.h" />
+    <ClInclude Include="dedekind.h" />
+    <ClInclude Include="equivalenceClass.h" />
     <ClInclude Include="functionInput.h" />
+    <ClInclude Include="layerStack.h" />
+    <ClInclude Include="math.h" />
+    <ClInclude Include="toString.h" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="debug.natvis" />

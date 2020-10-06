@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <ostream>
 
 struct IteratorEnd {};
 
@@ -185,24 +184,6 @@ std::vector<int> generateIntegers(int max) {
 	}
 
 	return result;
-}
-
-
-
-template<typename T>
-std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
-	os << '{';
-	auto iter = vec.begin();
-	auto iterEnd = vec.end();
-	if(iter != iterEnd) {
-		os << *iter;
-		++iter;
-		for(; iter != iterEnd; ++iter) {
-			os << ',' << *iter;
-		}
-	}
-	os << '}';
-	return os;
 }
 
 template<typename T1, typename T2>
