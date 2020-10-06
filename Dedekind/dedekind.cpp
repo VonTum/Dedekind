@@ -70,20 +70,14 @@ std::vector<FunctionInput> computeAvailableElementsInLayerAbove(const std::vecto
 
 std::vector<SymmetryGroupValue> emptyGroupValueList{SymmetryGroupValue(SymmetryGroup{1, EquivalenceClass::emptyEquivalenceClass}, 1)};
 
-std::vector<SymmetryGroupValue> allContainedGroup(const std::vector<std::vector<SymmetryGroupValue>>& valuesOfLayerAbove, const std::vector<FunctionInput>& thisLayer) {
-	SymmetryGroupValue result;
-
-	result.example = EquivalenceClass(preprocess(thisLayer));
+bigInt getTotalOfAllSymmetryGroups(std::vector<std::vector<SymmetryGroupValue>>& valuesOfLayerAbove) {
 	bigInt totalValue = 0;
 	for(const std::vector<SymmetryGroupValue>& lst : valuesOfLayerAbove) {
 		for(const SymmetryGroupValue& v : lst) {
 			totalValue += v.count * v.value;
 		}
 	}
-	result.value = totalValue;
-	result.count = 1;
-
-	return std::vector<SymmetryGroupValue>{result};
+	return totalValue;
 }
 
 std::vector<std::vector<SymmetryGroupValue>> computeSymmetryGroupValues(const LayerStack& stack, size_t layerIndex) {
@@ -94,11 +88,12 @@ std::vector<std::vector<SymmetryGroupValue>> computeSymmetryGroupValues(const La
 
 	const std::vector<FunctionInput>& curLayer = stack.layers[layerIndex];
 	const std::vector<FunctionInput>& layerAbove = stack.layers[layerIndex+1];
+	std::vector<std::vector<SymmetryGroup>> symmetryGroupsOfCurLayer = findAllSymmetryGroups(curLayer);
 	std::vector<std::vector<SymmetryGroupValue>> symmetryGroupsOfThisLayer(curLayer.size()+1);
 	symmetryGroupsOfThisLayer[0] = emptyGroupValueList;
-	symmetryGroupsOfThisLayer[curLayer.size()] = allContainedGroup(valuesOfLayerAbove, curLayer);
+	symmetryGroupsOfThisLayer[curLayer.size()] = std::vector<SymmetryGroupValue>{SymmetryGroupValue(symmetryGroupsOfCurLayer[curLayer.size()][0], getTotalOfAllSymmetryGroups(valuesOfLayerAbove))};
 	for(size_t groupSize = 1; groupSize < curLayer.size(); groupSize++) {
-		std::vector<SymmetryGroup> symmetryGroupsForGroupSize = findSymmetryGroups(curLayer, groupSize);
+		const std::vector<SymmetryGroup>& symmetryGroupsForGroupSize = symmetryGroupsOfCurLayer[groupSize];
 		std::vector<SymmetryGroupValue> symmetryGroupValueAssociationsOfThisLayer;
 		symmetryGroupValueAssociationsOfThisLayer.reserve(symmetryGroupsForGroupSize.size());
 		for(const SymmetryGroup& sg : symmetryGroupsForGroupSize) {
