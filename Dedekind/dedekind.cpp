@@ -62,6 +62,33 @@ bigInt computeTotalOptionsForAvailableChoices(const std::vector<FunctionInput>& 
 	return totalOptions;
 }
 
+bigInt computeTotalOptionsForAvailableChoicesFast(const std::vector<FunctionInput>& availableOptions, const std::vector<std::vector<SymmetryGroupValue>>& symmetryGroups) {
+	bigInt totalOptions = 1; // 1 for everything on, no further options
+
+	if(availableOptions.size() == 0) return 1;
+	std::vector<std::vector<SymmetryGroup>> symGroupsOfAvailableOptions = findAllSymmetryGroupsFast(availableOptions);
+
+	for(size_t offCount = 1; offCount <= availableOptions.size(); offCount++) {
+		const std::vector<SymmetryGroupValue>& relevantSymmetryGroupsOfLayerAbove = symmetryGroups[offCount];
+		
+		const std::vector<SymmetryGroup>& relevantSymmetryGroupsOfAvailable = symGroupsOfAvailableOptions[offCount];
+
+
+		for(size_t i = 0; i < relevantSymmetryGroupsOfAvailable.size(); i++) {
+			const SymmetryGroup& g = relevantSymmetryGroupsOfAvailable[i];
+			for(size_t j = 0; j < relevantSymmetryGroupsOfLayerAbove.size(); j++) {
+				const SymmetryGroupValue& sgv = relevantSymmetryGroupsOfLayerAbove[j];
+				if(sgv.example.contains(g.example)) {
+					totalOptions += g.count * sgv.value;
+				}
+			}
+			throw "g does not exist in sgv";
+		}
+	}
+
+	return totalOptions;
+}
+
 std::vector<FunctionInput> computeAvailableElementsInLayerAbove(const std::vector<FunctionInput>& offInputSet, const std::vector<FunctionInput>& curLayer, const std::vector<FunctionInput>& layerAbove) {
 	std::vector<FunctionInput> onInputSet = removeAll(curLayer, offInputSet);
 	return removeSuperInputs(layerAbove, onInputSet);
@@ -88,7 +115,7 @@ std::vector<std::vector<SymmetryGroupValue>> computeSymmetryGroupValues(const La
 
 	const std::vector<FunctionInput>& curLayer = stack.layers[layerIndex];
 	const std::vector<FunctionInput>& layerAbove = stack.layers[layerIndex+1];
-	std::vector<std::vector<SymmetryGroup>> symmetryGroupsOfCurLayer = findAllSymmetryGroups(curLayer);
+	std::vector<std::vector<SymmetryGroup>> symmetryGroupsOfCurLayer = findAllSymmetryGroupsFast(curLayer);
 	std::vector<std::vector<SymmetryGroupValue>> symmetryGroupsOfThisLayer(curLayer.size()+1);
 	symmetryGroupsOfThisLayer[0] = emptyGroupValueList;
 	symmetryGroupsOfThisLayer[curLayer.size()] = std::vector<SymmetryGroupValue>{SymmetryGroupValue(symmetryGroupsOfCurLayer[curLayer.size()][0], getTotalOfAllSymmetryGroups(valuesOfLayerAbove))};
@@ -140,9 +167,17 @@ void printSymmetryGroupsForInputSetAndGroupSize(const std::vector<FunctionInput>
 }
 
 void printAllSymmetryGroupsForInputSet(const std::vector<FunctionInput>& inputSet) {
+	auto allSets = findAllSymmetryGroups(inputSet);
 	std::cout << "Symmetry groups for: " << std::endl << inputSet << std::endl;
-	for(size_t size = 1; size <= inputSet.size(); size++) {
-		printSymmetryGroupsForInputSetAndGroupSize(inputSet, size);
+	for(size_t size = 0; size <= inputSet.size(); size++) {
+		std::cout << "Size " << size << " => " << allSets[size].size() << " groups" << std::endl << allSets[size] << std::endl;
+	}
+}
+void printAllSymmetryGroupsForInputSetFast(const std::vector<FunctionInput>& inputSet) {
+	auto allSets = findAllSymmetryGroupsFast(inputSet);
+	std::cout << "Symmetry groups for: " << std::endl << inputSet << std::endl;
+	for(size_t size = 0; size <= inputSet.size(); size++) {
+		std::cout << "Size " << size << " => " << allSets[size].size() << " groups" << std::endl << allSets[size] << std::endl;
 	}
 }
 
@@ -161,22 +196,36 @@ bigInt dedekind(int order) {
 
 int main() {
 
-	dedekind(1);
+	/*dedekind(1);
 	dedekind(2);
 	dedekind(3);
 	dedekind(4);
 	dedekind(5);
 	dedekind(6);
+	dedekind(7);
 	
 	return 0;//*/
 
 	/*LayerStack layers = generateLayers(4);
 	std::cout << layers << std::endl;*/
 
-	LayerStack layers6 = generateLayers(6);
-	std::cout << layers6 << std::endl;
+	std::cout << "Starting" << std::endl;
+	LayerStack layers = generateLayers(6);
+	std::cout << "Layers made" << std::endl;
 
-	printAllSymmetryGroupsForInputSet(layers6.layers[2]);
+	/*std::cout << layers << std::endl;
+	
+	std::vector<FunctionInput> testSet = layers.layers[2];
+	testSet.pop_back();
+
+	printAllSymmetryGroupsForInputSet(testSet);
+	printAllSymmetryGroupsForInputSetFast(testSet);*/
+
+	std::vector<std::vector<SymmetryGroup>> result = findAllSymmetryGroupsFast(layers.layers[3]);
+	for(size_t s = 0; s < result.size(); s++) {
+		std::cout << "Size " << s << ": " << result[s].size() << " different groups" << std::endl;
+	}
+	std::cout << "Done!" << std::endl;
 
 	/*ZLayerStack layers7 = generateLayers(7);
 	std::cout << layers7 << std::endl;

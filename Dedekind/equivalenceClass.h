@@ -5,6 +5,7 @@
 
 #include "collectionOperations.h"
 #include "functionInput.h"
+#include "functionInputSet.h"
 
 struct VariableOccurence {
 	int index;
@@ -145,7 +146,7 @@ struct EquivalenceClass : public PreprocessedFunctionInputSet {
 	EquivalenceClass(PreprocessedFunctionInputSet&& parent, int32_t hash) : PreprocessedFunctionInputSet(std::move(parent)), hash(hash) {}
 
 	EquivalenceClass(const PreprocessedFunctionInputSet& parent) : PreprocessedFunctionInputSet(parent), hash(hashInputSet(parent.functionInputSet)) {}
-	EquivalenceClass(PreprocessedFunctionInputSet&& parent) : PreprocessedFunctionInputSet(std::move(parent)), hash(hashInputSet(parent.functionInputSet)) {}
+	EquivalenceClass(PreprocessedFunctionInputSet&& parent) : PreprocessedFunctionInputSet(parent), hash(hashInputSet(parent.functionInputSet)) {}
 
 	static EquivalenceClass emptyEquivalenceClass;
 

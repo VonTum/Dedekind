@@ -165,12 +165,14 @@
     <ClInclude Include="dedekind.h" />
     <ClInclude Include="equivalenceClass.h" />
     <ClInclude Include="functionInput.h" />
+    <ClInclude Include="functionInputSet.h" />
     <ClInclude Include="layerStack.h" />
     <ClInclude Include="math.h" />
+    <ClInclude Include="set.h" />
     <ClInclude Include="toString.h" />
   </ItemGroup>
   <ItemGroup>
-    <Natvis Include="debug.natvis" />
+    <Natvis Include="functionInput.natvis" />
     <Natvis Include="symmetryGroup.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

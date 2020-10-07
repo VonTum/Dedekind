@@ -23,6 +23,22 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
 	return os;
 }
 
+template<typename T>
+std::ostream& operator<<(std::ostream& os, const set<T>& vec) {
+	os << '{';
+	auto iter = vec.begin();
+	auto iterEnd = vec.end();
+	if(iter != iterEnd) {
+		os << *iter;
+		++iter;
+		for(; iter != iterEnd; ++iter) {
+			os << ',' << *iter;
+		}
+	}
+	os << '}';
+	return os;
+}
+
 std::ostream& operator<<(std::ostream& os, FunctionInput f) {
 	if(f.empty()) {
 		os << '/';
@@ -50,10 +66,15 @@ std::ostream& operator<<(std::ostream& os, VariableOccurenceGroup vog) {
 }
 std::ostream& operator<<(std::ostream& os, const PreprocessedFunctionInputSet& s) {
 	os << s.functionInputSet;
-	/*os << '.';
+	os << '.';
 	for(auto occ : s.variableOccurences) {
 		os << occ;
-	}*/
+	}
+	return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const EquivalenceClass& eq) {
+	os << static_cast<const PreprocessedFunctionInputSet&>(eq) << 'h' << eq.hash;
 	return os;
 }
 
