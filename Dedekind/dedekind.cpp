@@ -31,9 +31,9 @@ std::ostream& operator<<(std::ostream& os, const SymmetryGroupValue& s) {
 	return os;
 }
 
-std::vector<countInt> countEachSymmetryGroup(const std::vector<FunctionInput>& available, size_t groupSize, const std::vector<SymmetryGroupValue>& groups) {
+std::vector<countInt> countEachSymmetryGroup(const set<FunctionInput>& available, size_t groupSize, const std::vector<SymmetryGroupValue>& groups) {
 	std::vector<countInt> result(groups.size(), 0);
-	forEachSubgroup(available, groupSize, [&groups, &result](const std::vector<FunctionInput>& subGroup) {
+	forEachSubgroup(available, groupSize, [&groups, &result](const set<FunctionInput>& subGroup) {
 		PreprocessedFunctionInputSet preprocessed = preprocess(subGroup);
 		for(size_t i = 0; i < groups.size(); i++){
 			if(groups[i].example.contains(preprocessed)) {
@@ -47,7 +47,7 @@ std::vector<countInt> countEachSymmetryGroup(const std::vector<FunctionInput>& a
 	return result;
 }
 
-bigInt computeTotalOptionsForAvailableChoices(const std::vector<FunctionInput>& availableOptions, const std::vector<std::vector<SymmetryGroupValue>>& symmetryGroups) {
+bigInt computeTotalOptionsForAvailableChoices(const set<FunctionInput>& availableOptions, const std::vector<std::vector<SymmetryGroupValue>>& symmetryGroups) {
 	bigInt totalOptions = 1; // 1 for everything on, no further options
 
 	for(size_t offCount = 1; offCount <= availableOptions.size(); offCount++) {
@@ -62,7 +62,7 @@ bigInt computeTotalOptionsForAvailableChoices(const std::vector<FunctionInput>& 
 	return totalOptions;
 }
 
-bigInt computeTotalOptionsForAvailableChoicesFast(const std::vector<FunctionInput>& availableOptions, const std::vector<std::vector<SymmetryGroupValue>>& symmetryGroups) {
+bigInt computeTotalOptionsForAvailableChoicesFast(const set<FunctionInput>& availableOptions, const std::vector<std::vector<SymmetryGroupValue>>& symmetryGroups) {
 	bigInt totalOptions = 1; // 1 for everything on, no further options
 
 	if(availableOptions.size() == 0) return 1;
@@ -89,8 +89,8 @@ bigInt computeTotalOptionsForAvailableChoicesFast(const std::vector<FunctionInpu
 	return totalOptions;
 }
 
-std::vector<FunctionInput> computeAvailableElementsInLayerAbove(const std::vector<FunctionInput>& offInputSet, const std::vector<FunctionInput>& curLayer, const std::vector<FunctionInput>& layerAbove) {
-	std::vector<FunctionInput> onInputSet = removeAll(curLayer, offInputSet);
+set<FunctionInput> computeAvailableElementsInLayerAbove(const set<FunctionInput>& offInputSet, const set<FunctionInput>& curLayer, const set<FunctionInput>& layerAbove) {
+	set<FunctionInput> onInputSet = removeAll(curLayer, offInputSet);
 	return removeSuperInputs(layerAbove, onInputSet);
 }
 
@@ -113,8 +113,8 @@ std::vector<std::vector<SymmetryGroupValue>> computeSymmetryGroupValues(const La
 	}
 	std::vector<std::vector<SymmetryGroupValue>> valuesOfLayerAbove = computeSymmetryGroupValues(stack, layerIndex + 1);
 
-	const std::vector<FunctionInput>& curLayer = stack.layers[layerIndex];
-	const std::vector<FunctionInput>& layerAbove = stack.layers[layerIndex+1];
+	const set<FunctionInput>& curLayer = stack.layers[layerIndex];
+	const set<FunctionInput>& layerAbove = stack.layers[layerIndex+1];
 	std::vector<std::vector<SymmetryGroup>> symmetryGroupsOfCurLayer = findAllSymmetryGroupsFast(curLayer);
 	std::vector<std::vector<SymmetryGroupValue>> symmetryGroupsOfThisLayer(curLayer.size()+1);
 	symmetryGroupsOfThisLayer[0] = emptyGroupValueList;
@@ -124,7 +124,7 @@ std::vector<std::vector<SymmetryGroupValue>> computeSymmetryGroupValues(const La
 		std::vector<SymmetryGroupValue> symmetryGroupValueAssociationsOfThisLayer;
 		symmetryGroupValueAssociationsOfThisLayer.reserve(symmetryGroupsForGroupSize.size());
 		for(const SymmetryGroup& sg : symmetryGroupsForGroupSize) {
-			std::vector<FunctionInput> availableElementsInLayerAbove = computeAvailableElementsInLayerAbove(sg.example.functionInputSet, curLayer, layerAbove);
+			set<FunctionInput> availableElementsInLayerAbove = computeAvailableElementsInLayerAbove(sg.example.functionInputSet, curLayer, layerAbove);
 
 			bigInt valueOfSG = computeTotalOptionsForAvailableChoices(availableElementsInLayerAbove, valuesOfLayerAbove);
 
@@ -160,20 +160,20 @@ std::vector<ValueSharedSymmetryGroupValue> groupByValue(const std::vector<Symmet
 	return foundGroups;
 }
 
-void printSymmetryGroupsForInputSetAndGroupSize(const std::vector<FunctionInput>& inputSet, size_t groupSize) {
+void printSymmetryGroupsForInputSetAndGroupSize(const set<FunctionInput>& inputSet, size_t groupSize) {
 	auto sgs = findSymmetryGroups(inputSet, groupSize);
 	//auto groupsByValue = groupByValue(sgs);
 	std::cout << "Size " << groupSize << " => " << sgs.size() << " groups" << std::endl << sgs << std::endl;
 }
 
-void printAllSymmetryGroupsForInputSet(const std::vector<FunctionInput>& inputSet) {
+void printAllSymmetryGroupsForInputSet(const set<FunctionInput>& inputSet) {
 	auto allSets = findAllSymmetryGroups(inputSet);
 	std::cout << "Symmetry groups for: " << std::endl << inputSet << std::endl;
 	for(size_t size = 0; size <= inputSet.size(); size++) {
 		std::cout << "Size " << size << " => " << allSets[size].size() << " groups" << std::endl << allSets[size] << std::endl;
 	}
 }
-void printAllSymmetryGroupsForInputSetFast(const std::vector<FunctionInput>& inputSet) {
+void printAllSymmetryGroupsForInputSetFast(const set<FunctionInput>& inputSet) {
 	auto allSets = findAllSymmetryGroupsFast(inputSet);
 	std::cout << "Symmetry groups for: " << std::endl << inputSet << std::endl;
 	for(size_t size = 0; size <= inputSet.size(); size++) {
@@ -194,8 +194,20 @@ bigInt dedekind(int order) {
 	return result;
 }
 
-int main() {
+class TimeTracker {	
+	std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
+	std::string message;
+public:
+	TimeTracker(std::string message) : message(message), startTime(std::chrono::high_resolution_clock::now()) {}
+	TimeTracker() : message("Time taken: "), startTime(std::chrono::high_resolution_clock::now()) {}
+	~TimeTracker() {
+		std::chrono::nanoseconds deltaTime = std::chrono::high_resolution_clock::now() - startTime;
+		std::cout << message << deltaTime.count() * 1.0e-6 << "ms";
+	}
+};
 
+int main() {
+	TimeTracker timer;
 	/*dedekind(1);
 	dedekind(2);
 	dedekind(3);
@@ -215,7 +227,7 @@ int main() {
 
 	/*std::cout << layers << std::endl;
 	
-	std::vector<FunctionInput> testSet = layers.layers[2];
+	set<FunctionInput> testSet = layers.layers[2];
 	testSet.pop_back();
 
 	printAllSymmetryGroupsForInputSet(testSet);

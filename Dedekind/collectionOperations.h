@@ -16,64 +16,8 @@ struct IteratorFactory {
 	}
 };
 
-template<typename T>
-struct SubGroupIterator {
-	const std::vector<T>* collection;
-	std::vector<int> indices;
-
-	SubGroupIterator(const std::vector<T>& collection, int subGroupSize) : collection(&collection), indices(subGroupSize) {
-		assert(subGroupSize <= collection.size());
-
-		for(int i = 0; i < subGroupSize; i++) {
-			indices[i] = subGroupSize - i - 1;
-		}
-	}
-
-	std::vector<T> operator*() const {
-		std::vector<T> result(indices.size());
-
-		std::transform(indices.begin(), indices.end(), result.begin(), [this](int index) {
-			return (*this->collection)[index];
-		});
-
-		return result;
-	}
-
-	void increment(int index) {
-		indices[index]++;
-		if(indices[index] == collection->size() - index) {
-			if(index + 1 == indices.size()) {
-				this->collection = nullptr; // signify end of iteration
-			} else {
-				increment(index + 1);
-				indices[index] = indices[index + 1] + 1;
-			}
-		}
-	}
-
-	void operator++() {
-		for(int index = 0; index < indices.size(); index++) {
-			indices[index]++;
-			if(indices[index] < collection->size() - index) {
-				for(; index > 0; index--) {
-					indices[index - 1] = indices[index] + 1;
-				}
-				return;
-			}
-		}
-		this->indices.clear();
-	}
-
-	bool operator!=(IteratorEnd) const { return this->indices.size() != 0; }
-};
-
-template<typename T>
-IteratorFactory<SubGroupIterator<T>> iterSubgroups(const std::vector<T>& collection, int groupSize) {
-	return IteratorFactory<SubGroupIterator<T>>{SubGroupIterator<T>(collection, groupSize)};
-}
-
-template<typename T, typename Func>
-void forEachSubgroupRecurse(const std::vector<T>& collection, const Func& func, std::vector<T>& output, size_t startFrom, size_t indexInOutput) {
+template<template<typename> typename Collection, typename T, typename Func>
+void forEachSubgroupRecurse(const Collection<T>& collection, const Func& func, Collection<T>& output, size_t startFrom, size_t indexInOutput) {
 	size_t leftoverItems = output.size() - indexInOutput;
 	if(leftoverItems > 0) {
 		for(size_t i = startFrom; i < collection.size() - (leftoverItems - 1); i++) {
@@ -84,16 +28,16 @@ void forEachSubgroupRecurse(const std::vector<T>& collection, const Func& func, 
 		func(output);
 	}
 }
-template<typename T, typename Func>
-void forEachSubgroup(const std::vector<T>& collection, size_t groupSize, const Func& func) {
-	std::vector<T> subGroup(groupSize);
+template<template<typename> typename Collection, typename T, typename Func>
+void forEachSubgroup(const Collection<T>& collection, size_t groupSize, const Func& func) {
+	Collection<T> subGroup(groupSize);
 
 	forEachSubgroupRecurse(collection, func, subGroup, 0, 0);
 }
 
-template<typename T>
-std::vector<T> removeAll(const std::vector<T>& vec, const std::vector<T>& toRemove) {
-	std::vector<T> result;
+template<template<typename> typename Collection, typename T>
+Collection<T> removeAll(const Collection<T>& vec, const Collection<T>& toRemove) {
+	Collection<T> result;
 	result.reserve(vec.size() - toRemove.size());
 
 	for(const T& item : vec) {
@@ -108,9 +52,9 @@ std::vector<T> removeAll(const std::vector<T>& vec, const std::vector<T>& toRemo
 	return result;
 }
 
-template<typename T>
-std::vector<T> pop_front(const std::vector<T>& vec) {
-	std::vector<T> result;
+template<template<typename> typename Collection, typename T>
+Collection<T> pop_front(const Collection<T>& vec) {
+	Collection<T> result;
 	result.reserve(vec.size() - 1);
 	for(int i = 1; i < vec.size(); i++) {
 		result.push_back(vec[i]);
@@ -118,8 +62,8 @@ std::vector<T> pop_front(const std::vector<T>& vec) {
 	return result;
 }
 
-template<typename T, typename F>
-void forEachPermutationRecurse(std::vector<T>& vecToPermute, size_t keepBefore, const F& funcToRun) {
+template<template<typename> typename Collection, typename T, typename F>
+void forEachPermutationRecurse(Collection<T>& vecToPermute, size_t keepBefore, const F& funcToRun) {
 	if(keepBefore < vecToPermute.size() - 1) {
 		forEachPermutationRecurse(vecToPermute, keepBefore + 1, funcToRun);
 		for(size_t i = keepBefore + 1; i < vecToPermute.size(); i++) {
@@ -132,14 +76,14 @@ void forEachPermutationRecurse(std::vector<T>& vecToPermute, size_t keepBefore, 
 	}
 }
 // runs the given function on all permutations of 
-template<typename T, typename F> // pass by value, we're messing with this vector in forEachPermutationRecurse
-void forEachPermutation(std::vector<T> vecToPermute, const F& funcToRun) {
+template<template<typename> typename Collection, typename T, typename F> // pass by value, we're messing with this vector in forEachPermutationRecurse
+void forEachPermutation(Collection<T> vecToPermute, const F& funcToRun) {
 	forEachPermutationRecurse(vecToPermute, 0, funcToRun);
 }
 
 
-template<typename T, typename F>
-bool existsPermutationForWhichRecurse(std::vector<T>& vecToPermute, size_t keepBefore, const F& funcToRun) {
+template<template<typename> typename Collection, typename T, typename F>
+bool existsPermutationForWhichRecurse(Collection<T>& vecToPermute, size_t keepBefore, const F& funcToRun) {
 	if(keepBefore < vecToPermute.size() - 1) {
 		if(existsPermutationForWhichRecurse(vecToPermute, keepBefore + 1, funcToRun)) return true;
 		for(size_t i = keepBefore + 1; i < vecToPermute.size(); i++) {
@@ -153,8 +97,8 @@ bool existsPermutationForWhichRecurse(std::vector<T>& vecToPermute, size_t keepB
 	}
 }
 // runs the given function on all permutations of 
-template<typename T, typename F> // pass by value, we're messing with this vector in forEachPermutationRecurse
-bool existsPermutationForWhich(std::vector<T> vecToPermute, const F& funcToRun) {
+template<template<typename> typename Collection, typename T, typename F> // pass by value, we're messing with this vector in forEachPermutationRecurse
+bool existsPermutationForWhich(Collection<T> vecToPermute, const F& funcToRun) {
 	return existsPermutationForWhichRecurse(vecToPermute, 0, funcToRun);
 }
 

@@ -23,10 +23,10 @@ bool allUnique(const std::vector<SymmetryGroup>& groups) {
 	return true;
 }
 
-std::vector<SymmetryGroup> findSymmetryGroups(const std::vector<FunctionInput>& available, size_t groupSize) {
+std::vector<SymmetryGroup> findSymmetryGroups(const set<FunctionInput>& available, size_t groupSize) {
 	std::vector<SymmetryGroup> foundGroups;
 
-	forEachSubgroup(available, groupSize, [&foundGroups](const std::vector<FunctionInput>& subGroup) {
+	forEachSubgroup(available, groupSize, [&foundGroups](const set<FunctionInput>& subGroup) {
 		PreprocessedFunctionInputSet preprocessed = preprocess(subGroup);
 		for(SymmetryGroup& s : foundGroups) {
 			if(s.example.contains(preprocessed)) {
@@ -41,7 +41,7 @@ std::vector<SymmetryGroup> findSymmetryGroups(const std::vector<FunctionInput>& 
 	return foundGroups;
 }
 
-std::vector<std::vector<SymmetryGroup>> findAllSymmetryGroups(const std::vector<FunctionInput>& available) {
+std::vector<std::vector<SymmetryGroup>> findAllSymmetryGroups(const set<FunctionInput>& available) {
 	std::vector<std::vector<SymmetryGroup>> result(available.size() + 1);
 
 	result[0] = std::vector<SymmetryGroup>{SymmetryGroup{1, EquivalenceClass::emptyEquivalenceClass}};
@@ -54,11 +54,11 @@ std::vector<std::vector<SymmetryGroup>> findAllSymmetryGroups(const std::vector<
 
 #define DEBUG_PRINT(v) std::cout << v
 
-std::vector<std::vector<SymmetryGroup>> findAllSymmetryGroupsFast(const std::vector<FunctionInput>& available) {
+std::vector<std::vector<SymmetryGroup>> findAllSymmetryGroupsFast(const set<FunctionInput>& available) {
 	std::vector<std::vector<SymmetryGroup>> foundGroups(available.size() + 1);
 
 	foundGroups[0] = std::vector<SymmetryGroup>{SymmetryGroup{1, EquivalenceClass::emptyEquivalenceClass}}; // equivalence classes of size 0, only one
-	EquivalenceClass classOfOneEnabled(preprocess(std::vector<FunctionInput>{available[0]}));
+	EquivalenceClass classOfOneEnabled(preprocess(set<FunctionInput>{available[0]}));
 	foundGroups[1] = std::vector<SymmetryGroup>{SymmetryGroup{int64_t(available.size()), classOfOneEnabled}}; // equivalence classes of size 1, only one
 
 	std::vector<std::pair<set<FunctionInput>, set<FunctionInput>>> prevLeftOverItems(1);
@@ -75,7 +75,7 @@ std::vector<std::vector<SymmetryGroup>> findAllSymmetryGroupsFast(const std::vec
 		for(size_t groupIndex = 0; groupIndex < prevGroups.size(); groupIndex++) {
 			const SymmetryGroup& g = prevGroups[groupIndex];
 			const std::pair<set<FunctionInput>, set<FunctionInput>>& leftOverItems = prevLeftOverItems[groupIndex];
-			std::vector<FunctionInput> potentialNewClass(leftOverItems.first.size() + 1);
+			set<FunctionInput> potentialNewClass(leftOverItems.first.size() + 1);
 			for(size_t i = 0; i < leftOverItems.first.size(); i++) {
 				potentialNewClass[i] = leftOverItems.first[i];
 			}

@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cassert>
 #include <vector>
+#include <initializer_list>
 
 template<typename T>
 class set {
@@ -40,6 +41,18 @@ public:
 	set(size_t size) : data(allocT(size)), n(size), capacity(capacity) {
 		for(T& item : *this) {
 			new(&item) T();
+		}
+	}
+	set(size_t size, const T& val) : data(allocT(size)), n(size), capacity(capacity) {
+		for(T& item : *this) {
+			new(&item) T(val);
+		}
+	}
+	set(std::initializer_list<T> lst) : data(allocT(lst.size())), n(lst.size()), capacity(lst.size()) {
+		T* cur = data;
+		for(const T& item : lst) {
+			new(cur) T(item);
+			cur++;
 		}
 	}
 	set(const std::vector<T>& vec) : data(allocT(vec.size())), n(vec.size()), capacity(vec.size()) {
@@ -111,9 +124,31 @@ public:
 		return result;
 	}
 	size_t size() const { return n; }
+	void reserve(size_t newSize) { expandIfNeeded(newSize); }
+	T* getData() { return data; }
+	const T* getData() const { return data; }
 
 	T* begin() { return data; }
 	T* end() { return data + n; }
 	const T* begin() const { return data; }
 	const T* end() const { return data + n; }
 };
+
+template<typename T>
+bool operator==(const set<T>& a, set<T> b) {
+	assert(a.size() == b.size());
+
+	for(const T& itemInA : a) {
+		const T* bEnd = b.end();
+		for(T* bIter = b.begin(); bIter != bEnd; ++bIter) {
+			if(itemInA == *bIter) {
+				b.remove(bIter);
+				goto found;
+			}
+		}
+		return false;
+		found:;
+	}
+	return true;
+}
+

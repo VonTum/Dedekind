@@ -5,15 +5,15 @@
 #include "functionInput.h"
 
 struct LayerStack {
-	std::vector<std::vector<FunctionInput>> layers;
+	std::vector<set<FunctionInput>> layers;
 };
 
 LayerStack generateLayers(size_t n) {
-	std::vector<std::vector<FunctionInput>> result(n + 1);
+	std::vector<set<FunctionInput>> result(n + 1);
 
-	int32_t max = 1 << n;
+	uint32_t max = 1 << n;
 
-	for(int32_t cur = 0; cur < max; cur++) {
+	for(uint32_t cur = 0; cur < max; cur++) {
 		FunctionInput input{cur};
 
 		int layer = input.getNumberEnabled();

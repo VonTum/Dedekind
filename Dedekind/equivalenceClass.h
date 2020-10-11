@@ -20,7 +20,7 @@ bool operator==(VariableOccurenceGroup a, VariableOccurenceGroup b) { return a.g
 bool operator!=(VariableOccurenceGroup a, VariableOccurenceGroup b) { return a.groupSize != b.groupSize || a.occurences != b.occurences; }
 
 struct PreprocessedFunctionInputSet {
-	std::vector<FunctionInput> functionInputSet;
+	set<FunctionInput> functionInputSet;
 	std::vector<VariableOccurenceGroup> variableOccurences;
 	int spanSize;
 
@@ -29,9 +29,9 @@ struct PreprocessedFunctionInputSet {
 	static PreprocessedFunctionInputSet emptyPreprocessedFunctionInputSet;
 };
 
-PreprocessedFunctionInputSet PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{std::vector<FunctionInput>{}, std::vector<VariableOccurenceGroup>{}, 0};
+PreprocessedFunctionInputSet PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{set<FunctionInput>{}, std::vector<VariableOccurenceGroup>{}, 0};
 
-std::vector<VariableOccurence> computeOccurenceCounts(const std::vector<FunctionInput>& inputSet, int spanSize) {
+std::vector<VariableOccurence> computeOccurenceCounts(const set<FunctionInput>& inputSet, int spanSize) {
 	std::vector<VariableOccurence> result(spanSize);
 
 
@@ -50,8 +50,8 @@ std::vector<VariableOccurence> computeOccurenceCounts(const std::vector<Function
 	return result;
 }
 
-PreprocessedFunctionInputSet preprocess(const std::vector<FunctionInput>& inputSet, FunctionInput sp) {
-	std::vector<FunctionInput> result(inputSet.size(), FunctionInput{0});
+PreprocessedFunctionInputSet preprocess(const set<FunctionInput>& inputSet, FunctionInput sp) {
+	set<FunctionInput> result(inputSet.size(), FunctionInput{0});
 
 	int outputIndex = 0;
 	int inputIndex = 0;
@@ -94,7 +94,7 @@ PreprocessedFunctionInputSet preprocess(const std::vector<FunctionInput>& inputS
 	return PreprocessedFunctionInputSet{result, occurences, outputIndex};
 }
 
-PreprocessedFunctionInputSet preprocess(const std::vector<FunctionInput>& inputSet) {
+PreprocessedFunctionInputSet preprocess(const set<FunctionInput>& inputSet) {
 	FunctionInput sp = span(inputSet);
 
 	return preprocess(inputSet, sp);
@@ -130,7 +130,7 @@ bool existsPermutationOverVariableGroups(const std::vector<VariableOccurenceGrou
 }
 
 
-uint32_t hashInputSet(const std::vector<FunctionInput>& inputSet) {
+uint32_t hashInputSet(const set<FunctionInput>& inputSet) {
 	uint32_t result = 0;
 	for(const FunctionInput& f : inputSet) {
 		result += f.inputBits;
@@ -155,15 +155,15 @@ struct EquivalenceClass : public PreprocessedFunctionInputSet {
 
 		if(this->spanSize != b.spanSize || this->variableOccurences != b.variableOccurences) return false; // early exit, a and b do not span the same number of variables, impossible to be isomorphic!
 
-		std::vector<FunctionInput> permutedB(b.functionInputSet.size()); // avoid frequent alloc/dealloc
+		set<FunctionInput> permutedB(b.functionInputSet.size()); // avoid frequent alloc/dealloc
 		return existsPermutationOverVariableGroups(this->variableOccurences, generateIntegers(spanSize), [this, &bp = b.functionInputSet, &permutedB](const std::vector<int>& permutation) {
 			swizzleVector(permutation, bp, permutedB);
 			uint32_t bHash = hashInputSet(permutedB);
 			if(this->hash != bHash) {
 				return false;
 			}
-			const std::vector<FunctionInput>& aInput = this->functionInputSet;
-			return unordered_contains_all(aInput.begin(), aInput.end(), permutedB.begin(), permutedB.end());
+			const set<FunctionInput>& aInput = this->functionInputSet;
+			return aInput == permutedB;
 		});
 	}
 };
@@ -178,7 +178,7 @@ bool isIsomorphic(const PreprocessedFunctionInputSet& a, const PreprocessedFunct
 	return EquivalenceClass(a).contains(b);
 }
 
-bool isIsomorphic(const PreprocessedFunctionInputSet& a, const std::vector<FunctionInput>& b) {
+bool isIsomorphic(const PreprocessedFunctionInputSet& a, const set<FunctionInput>& b) {
 	assert(a.size() == b.size()); // assume we are only comparing functionInputSets with the same number of edges
 
 	FunctionInput spb = span(b);
@@ -190,7 +190,7 @@ bool isIsomorphic(const PreprocessedFunctionInputSet& a, const std::vector<Funct
 	return isIsomorphic(a, bn);
 }
 
-bool isIsomorphic(const std::vector<FunctionInput>& a, const std::vector<FunctionInput>& b) {
+bool isIsomorphic(const set<FunctionInput>& a, const set<FunctionInput>& b) {
 	assert(a.size() == b.size()); // assume we are only comparing functionInputSets with the same number of edges
 
 	FunctionInput spa = span(a);
