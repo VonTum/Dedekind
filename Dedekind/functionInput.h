@@ -2,15 +2,22 @@
 
 #include <intrin.h>
 
-inline uint32_t lowerBitsOnes(int n) {
+/*template<typename IntType>
+inline IntType lowerBitsOnes(IntType n) {
 	return (1U << n) - 1;
 }
-inline uint32_t oneBitInterval(int n, int offset) {
+template<typename IntType>
+inline IntType oneBitInterval(IntType n, IntType offset) {
 	return lowerBitsOnes(n) << offset;
-}
+}*/
 
 struct FunctionInput {
-	uint32_t inputBits;
+	using underlyingType = uint32_t;
+	underlyingType inputBits;
+
+	static FunctionInput allOnes(int count) {
+		return FunctionInput{(1U << count) - 1};
+	}
 
 	inline bool operator[](int index) const {
 		return (inputBits & (1 << index)) != 0;
@@ -32,9 +39,8 @@ struct FunctionInput {
 		FunctionInput result{0};
 
 		for(int i = 0; i < swiz.size(); i++) {
-			if((*this)[swiz[i]]) {
-				result.enableInput(i);
-			}
+			FunctionInput::underlyingType bit = (this->inputBits & (1 << swiz[i])) >> swiz[i];
+			result.inputBits |= bit << i;
 		}
 
 		return result;

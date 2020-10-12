@@ -6,6 +6,7 @@
 #include "collectionOperations.h"
 #include "functionInput.h"
 #include "functionInputSet.h"
+#include "intSet.h"
 
 struct VariableOccurence {
 	int index;
@@ -67,7 +68,7 @@ PreprocessedFunctionInputSet preprocess(const set<FunctionInput>& inputSet, Func
 		inputIndex++;
 	}
 	assert(outputIndex == sp.getNumberEnabled());
-	assert(span(result) == FunctionInput{lowerBitsOnes(outputIndex)});
+	assert(span(result) == FunctionInput::allOnes(outputIndex));
 	std::vector<VariableOccurence> occ = computeOccurenceCounts(result, outputIndex);
 	std::vector<int> permutation(occ.size());
 	for(size_t i = 0; i < occ.size(); i++) { permutation[i] = occ[i].index; }
@@ -129,24 +130,13 @@ bool existsPermutationOverVariableGroups(const std::vector<VariableOccurenceGrou
 	return existsPermutationOverVariableGroupsRecursive(groups.begin(), groups.end(), permutation, 0, func);
 }
 
-
-uint32_t hashInputSet(const set<FunctionInput>& inputSet) {
-	uint32_t result = 0;
-	for(const FunctionInput& f : inputSet) {
-		result += f.inputBits;
-	}
-	return result;
-}
-
 struct EquivalenceClass : public PreprocessedFunctionInputSet {
-	uint32_t hash;
+	int_set<FunctionInput, FunctionInput::underlyingType> equalityChecker;
 
 	EquivalenceClass() = default;
-	EquivalenceClass(const PreprocessedFunctionInputSet& parent, int32_t hash) : PreprocessedFunctionInputSet(parent), hash(hash) {}
-	EquivalenceClass(PreprocessedFunctionInputSet&& parent, int32_t hash) : PreprocessedFunctionInputSet(std::move(parent)), hash(hash) {}
-
-	EquivalenceClass(const PreprocessedFunctionInputSet& parent) : PreprocessedFunctionInputSet(parent), hash(hashInputSet(parent.functionInputSet)) {}
-	EquivalenceClass(PreprocessedFunctionInputSet&& parent) : PreprocessedFunctionInputSet(parent), hash(hashInputSet(parent.functionInputSet)) {}
+	
+	EquivalenceClass(const PreprocessedFunctionInputSet& parent) : PreprocessedFunctionInputSet(parent), equalityChecker(1 << parent.spanSize, parent.functionInputSet) {}
+	EquivalenceClass(PreprocessedFunctionInputSet&& parent) : PreprocessedFunctionInputSet(parent), equalityChecker(1 << parent.spanSize, parent.functionInputSet) {}
 
 	static EquivalenceClass emptyEquivalenceClass;
 
@@ -155,20 +145,19 @@ struct EquivalenceClass : public PreprocessedFunctionInputSet {
 
 		if(this->spanSize != b.spanSize || this->variableOccurences != b.variableOccurences) return false; // early exit, a and b do not span the same number of variables, impossible to be isomorphic!
 
-		set<FunctionInput> permutedB(b.functionInputSet.size()); // avoid frequent alloc/dealloc
-		return existsPermutationOverVariableGroups(this->variableOccurences, generateIntegers(spanSize), [this, &bp = b.functionInputSet, &permutedB](const std::vector<int>& permutation) {
-			swizzleVector(permutation, bp, permutedB);
-			uint32_t bHash = hashInputSet(permutedB);
-			if(this->hash != bHash) {
-				return false;
+		std::vector<int> permut = generateIntegers(spanSize);
+		return existsPermutationOverVariableGroups(this->variableOccurences, std::move(permut), [this, &bp = b.functionInputSet](const std::vector<int>& permutation) {
+			for(FunctionInput bIn : bp) {
+				if(!equalityChecker.contains(bIn.swizzle(permutation))) {
+					return false;
+				}
 			}
-			const set<FunctionInput>& aInput = this->functionInputSet;
-			return aInput == permutedB;
+			return true;
 		});
 	}
 };
 
-EquivalenceClass EquivalenceClass::emptyEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet, 0);
+EquivalenceClass EquivalenceClass::emptyEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet);
 
 bool isIsomorphic(const PreprocessedFunctionInputSet& a, const PreprocessedFunctionInputSet& b) {
 	assert(a.size() == b.size()); // assume we are only comparing functionInputSets with the same number of edges

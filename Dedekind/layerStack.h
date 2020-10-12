@@ -11,9 +11,9 @@ struct LayerStack {
 LayerStack generateLayers(size_t n) {
 	std::vector<set<FunctionInput>> result(n + 1);
 
-	uint32_t max = 1 << n;
+	FunctionInput::underlyingType max = 1 << n;
 
-	for(uint32_t cur = 0; cur < max; cur++) {
+	for(FunctionInput::underlyingType cur = 0; cur < max; cur++) {
 		FunctionInput input{cur};
 
 		int layer = input.getNumberEnabled();

@@ -74,7 +74,7 @@ std::ostream& operator<<(std::ostream& os, const PreprocessedFunctionInputSet& s
 }
 
 std::ostream& operator<<(std::ostream& os, const EquivalenceClass& eq) {
-	os << static_cast<const PreprocessedFunctionInputSet&>(eq) << 'h' << eq.hash;
+	os << static_cast<const PreprocessedFunctionInputSet&>(eq);
 	return os;
 }
 
