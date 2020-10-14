@@ -213,7 +213,7 @@ int main() {
 	dedekind(3);
 	dedekind(4);
 	dedekind(5);*/
-	dedekind(6);
+	dedekind(7);
 	/*dedekind(6);
 	dedekind(6);
 	dedekind(6);

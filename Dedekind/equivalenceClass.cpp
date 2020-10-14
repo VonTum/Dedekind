@@ -120,28 +120,32 @@ static __m256i grabBitIntoBit(__m256i data, long long bitToGrab, long long bitTo
 	return _mm256_or_si256(storeIn, outputShifted);
 }
 
-/*
-	
-*/
+template<typename Iter>
+static __m256i parallelSwizzle(__m256i functionInputs, Iter swizStart, Iter swizEnd) {
+	__m256i one = _mm256_set1_epi32(1);
+	__m256i result = _mm256_setzero_si256();
+	int index = 0;
+	for(; swizStart != swizEnd; ++swizStart) {
+		result = grabBitIntoBit(functionInputs, *swizStart, index, result);
+		index++;
+	}
+	return result;
+}
 
 template<typename Func>
-bool existsSubPermutationSIMDRecursive(vIter groupStart, vIter groupEnd, __m256i curVal, size_t indexInPermutation, int* itemsLeftToPlace, size_t numberOfItemsLeftToPlace, __m256i data, const Func& func) {
+bool existsSubPermutationSIMDRecursive(vIter groupStart, vIter groupEnd, __m256i curVal, int indexInPermutation, int* itemsLeftToPlace, int numberOfItemsLeftToPlace, __m256i data, const Func& func) {
 	if(numberOfItemsLeftToPlace == 0) {
-		return existsPermutationOverVariableGroupsSIMDRecursive(groupStart + 1, groupEnd, curVal, indexInPermutation, data, func);
+		return existsPermutationOverVariableGroupsSIMDRecursive(groupStart + 1, groupEnd, curVal, indexInPermutation, itemsLeftToPlace, data, func);
 	} else {
-		for(size_t i = 0;;) {
+		for(int i = 0;;) {
 			__m256i newVal = grabBitIntoBit(data, itemsLeftToPlace[0], indexInPermutation, curVal);
 			if(existsSubPermutationSIMDRecursive(groupStart, groupEnd, newVal, indexInPermutation + 1, itemsLeftToPlace+1, numberOfItemsLeftToPlace-1, data, func)) return true;
 			i++;
 			if(!(i < numberOfItemsLeftToPlace)) break;
 			std::swap(itemsLeftToPlace[0], itemsLeftToPlace[i]);
-			// 0 1 2 3
-			// 1 0 2 3
-			// 2 0 1 3
-			// 3 0 1 2
 		}
 		int firstVal = itemsLeftToPlace[0];
-		for(size_t i = 1; i < numberOfItemsLeftToPlace; i++) {
+		for(int i = 1; i < numberOfItemsLeftToPlace; i++) {
 			itemsLeftToPlace[i - 1] = itemsLeftToPlace[i];
 		}
 		itemsLeftToPlace[numberOfItemsLeftToPlace - 1] = firstVal;
@@ -150,24 +154,23 @@ bool existsSubPermutationSIMDRecursive(vIter groupStart, vIter groupEnd, __m256i
 }
 
 template<typename Func>
-bool existsPermutationOverVariableGroupsSIMDRecursive(vIter start, vIter end, __m256i curVal, size_t indexInPermutation, __m256i data, const Func& func) {
+bool existsPermutationOverVariableGroupsSIMDRecursive(vIter start, vIter end, __m256i curVal, int indexInPermutation, int* itemsLeftToPlace, __m256i data, const Func& func) {
 	if(start != end) {
-		size_t groupSize = (*start).groupSize;
-		int* group = new int[groupSize];
-		for(int i = 0; i < groupSize; i++) {
-			group[i] = i + indexInPermutation;
-		}
-		return existsSubPermutationSIMDRecursive(start, end, curVal, indexInPermutation, group, groupSize, data, func);
-		delete[] group;
+		return existsSubPermutationSIMDRecursive(start, end, curVal, indexInPermutation, itemsLeftToPlace, (*start).groupSize, data, func);
 	} else {
-		return func(curVal);
+		return func(curVal, itemsLeftToPlace - indexInPermutation, itemsLeftToPlace);
 	}
 }
 
 template<typename Func>
-bool existsPermutationOverVariableGroupsSIMD(const std::vector<VariableOccurenceGroup>& groups, __m256i data, const Func& func) {
+bool existsPermutationOverVariableGroupsSIMD(int numberOfVariables, const std::vector<VariableOccurenceGroup>& groups, __m256i data, const Func& func) {
 	__m256i startingVal = _mm256_setzero_si256();
-	return existsPermutationOverVariableGroupsSIMDRecursive(groups.begin(), groups.end(), startingVal, 0, data, func);
+
+	int permutation[MAX_DEDEKIND];
+	for(int i = 0; i < numberOfVariables; i++) {
+		permutation[i] = i;
+	}
+	return existsPermutationOverVariableGroupsSIMDRecursive(groups.begin(), groups.end(), startingVal, 0, permutation, data, func);
 }
 
 bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
@@ -177,10 +180,10 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 
 	__m256i initialData = _mm256_load_si256(reinterpret_cast<const __m256i*>(b.functionInputSet.getData()));
 	if(b.functionInputSet.size() <= 8) {
-		return existsPermutationOverVariableGroupsSIMD(this->variableOccurences, initialData, [this, sz = b.functionInputSet.size()](__m256i swizzled){
-			for(int i = 0; i < sz; i++) {
-				FunctionInput fn{swizzled.m256i_i32[i]};
-				if(!equalityChecker.contains(fn)) {
+		return existsPermutationOverVariableGroupsSIMD(this->spanSize, this->variableOccurences, initialData, [&eqCheck = this->equalityChecker, bsize = b.functionInputSet.size()](__m256i swizzledFirstBlock, int* swizStart, int* swizEnd){
+			for(int i = 0; i < bsize; i++) {
+				FunctionInput fn{swizzledFirstBlock.m256i_i32[i]};
+				if(!eqCheck.contains(fn)) {
 					return false;
 				}
 			}
@@ -188,14 +191,42 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 		});
 		return false;
 	} else {
-		std::vector<int> permut = generateIntegers(spanSize);
-		return existsPermutationOverVariableGroups(this->variableOccurences, std::move(permut), [this, &bp = b.functionInputSet](const std::vector<int>& permutation) {
-			for(FunctionInput bIn : bp) {
-				if(!equalityChecker.contains(bIn.swizzle(permutation))) {
+		return existsPermutationOverVariableGroupsSIMD(this->spanSize, this->variableOccurences, initialData, [this, &bp = b.functionInputSet](__m256i swizzledFirstBlock, int* swizStart, int* swizEnd) {
+			for(int i = 0; i < 8; i++) {
+				FunctionInput fn{swizzledFirstBlock.m256i_i32[i]};
+				if(!equalityChecker.contains(fn)) {
 					return false;
+				}
+			}
+			
+			size_t blockCount = bp.size() / 8;
+			for(size_t i = 1; i < blockCount; i++) {
+				__m256i curBlock = _mm256_load_si256(reinterpret_cast<const __m256i*>(bp.getData() + i * 8));
+				__m256i swizzledBlock = parallelSwizzle(curBlock, swizStart, swizEnd);
+				for(int i = 0; i < 8; i++) {
+					if(!equalityChecker.contains(FunctionInput{swizzledBlock.m256i_u32[i]})) {
+						return false;
+					}
+				}
+			}
+			if(bp.size() % 8 != 0) {
+				__m256i curBlock = _mm256_load_si256(reinterpret_cast<const __m256i*>(bp.getData() + blockCount * 8));
+				__m256i swizzledBlock = parallelSwizzle(curBlock, swizStart, swizEnd);
+				for(int i = 0; i < bp.size() - blockCount * 8; i++) {
+					if(!equalityChecker.contains(FunctionInput{swizzledBlock.m256i_u32[i]})) {
+						return false;
+					}
 				}
 			}
 			return true;
 		});
 	}
+
+	/*std::vector<int> permut = generateIntegers(spanSize);
+	return existsPermutationOverVariableGroups(this->variableOccurences, std::move(permut), [this, &bp = b.functionInputSet](const std::vector<int>& permutation) {
+		for(FunctionInput fn : bp) {
+			if(!equalityChecker.contains(fn.swizzle(permutation))) return false;
+		}
+		return true;
+	});*/
 }
