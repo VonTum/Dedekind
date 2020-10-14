@@ -13,8 +13,8 @@ class int_set {
 public:
 	int_set() : data(nullptr), bufSize(0) {}
 	int_set(UnderlyingIntType bufSize) : data(new bool[bufSize]), bufSize(bufSize) { for(UnderlyingIntType i = 0; i < bufSize; i++) data[i] = false; }
-	template<template<typename> typename Collection>
-	int_set(UnderlyingIntType bufSize, const Collection<IntType>& initialData) : data(new bool[bufSize]), bufSize(bufSize) {
+	template<typename Collection>
+	int_set(UnderlyingIntType bufSize, const Collection& initialData) : data(new bool[bufSize]), bufSize(bufSize) {
 		for(UnderlyingIntType i = 0; i < bufSize; i++) data[i] = false;
 		for(IntType v : initialData) {
 			data[getIndex(v)] = true;
@@ -58,8 +58,8 @@ public:
 		data[getIndex(item)] = false;
 	}
 
-	template<template<typename> typename Collection>
-	bool containsAll(const Collection<IntType>& col) const {
+	template<typename Collection>
+	bool containsAll(const Collection& col) const {
 		for(IntType t : col) {
 			if(data[getIndex(t)] == false) {
 				return false;

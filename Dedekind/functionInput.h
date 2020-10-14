@@ -2,6 +2,8 @@
 
 #include <intrin.h>
 
+#define MAX_DEDEKIND 10
+
 /*template<typename IntType>
 inline IntType lowerBitsOnes(IntType n) {
 	return (1U << n) - 1;
@@ -13,7 +15,7 @@ inline IntType oneBitInterval(IntType n, IntType offset) {
 
 struct FunctionInput {
 	using underlyingType = uint32_t;
-	underlyingType inputBits;
+	underlyingType inputBits = 0;
 
 	static FunctionInput allOnes(int count) {
 		return FunctionInput{(1U << count) - 1};

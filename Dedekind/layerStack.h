@@ -5,11 +5,11 @@
 #include "functionInput.h"
 
 struct LayerStack {
-	std::vector<set<FunctionInput>> layers;
+	std::vector<FunctionInputSet> layers;
 };
 
 LayerStack generateLayers(size_t n) {
-	std::vector<set<FunctionInput>> result(n + 1);
+	std::vector<FunctionInputSet> result(n + 1);
 
 	FunctionInput::underlyingType max = 1 << n;
 

@@ -2,9 +2,11 @@
 
 #include "functionInput.h"
 #include "set.h"
+#include "aligned_set.h"
 
+typedef aligned_set<FunctionInput, 32> FunctionInputSet;
 
-FunctionInput span(const set<FunctionInput>& inputSet) {
+inline FunctionInput span(const FunctionInputSet& inputSet) {
 	FunctionInput result{0};
 
 	for(FunctionInput f : inputSet) {
@@ -14,14 +16,14 @@ FunctionInput span(const set<FunctionInput>& inputSet) {
 	return result;
 }
 
-void swizzleVector(const std::vector<int>& permutation, const set<FunctionInput>& input, set<FunctionInput>& output) {
+inline void swizzleVector(const std::vector<int>& permutation, const FunctionInputSet& input, FunctionInputSet& output) {
 	for(size_t i = 0; i < input.size(); i++) {
 		output[i] = input[i].swizzle(permutation);
 	}
 }
 
-set<FunctionInput> removeSuperInputs(const set<FunctionInput>& layer, const set<FunctionInput>& inputSet) {
-	set<FunctionInput> result;
+inline FunctionInputSet removeSuperInputs(const FunctionInputSet& layer, const FunctionInputSet& inputSet) {
+	FunctionInputSet result;
 	for(FunctionInput f : layer) {
 		for(FunctionInput i : inputSet) {
 			if(isSubSet(i, f)) {

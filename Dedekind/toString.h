@@ -7,6 +7,9 @@
 #include "countedEquivalenceClass.h"
 #include "layerStack.h"
 
+#include "set.h"
+#include "aligned_set.h"
+
 template<typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
 	os << '{';
@@ -22,9 +25,23 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
 	os << '}';
 	return os;
 }
-
 template<typename T>
 std::ostream& operator<<(std::ostream& os, const set<T>& vec) {
+	os << '{';
+	auto iter = vec.begin();
+	auto iterEnd = vec.end();
+	if(iter != iterEnd) {
+		os << *iter;
+		++iter;
+		for(; iter != iterEnd; ++iter) {
+			os << ',' << *iter;
+		}
+	}
+	os << '}';
+	return os;
+}
+template<typename T, size_t Align>
+std::ostream& operator<<(std::ostream& os, const aligned_set<T, Align>& vec) {
 	os << '{';
 	auto iter = vec.begin();
 	auto iterEnd = vec.end();

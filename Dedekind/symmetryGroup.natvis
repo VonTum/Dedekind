@@ -43,4 +43,25 @@
       </ArrayItems>
     </Expand>
   </Type>
+  <Type Name="aligned_set&lt;*,*&gt;">
+    <DisplayString Condition="n==1">{{{data[0]}}}</DisplayString>
+    <DisplayString Condition="n==2">{{{data[0]},{data[1]}}}</DisplayString>
+    <DisplayString Condition="n==3">{{{data[0]},{data[1]},{data[2]}}}</DisplayString>
+    <DisplayString Condition="n==4">{{{data[0]},{data[1]},{data[2]},{data[3]}}}</DisplayString>
+    <DisplayString Condition="n==5">{{{data[0]},{data[1]},{data[2]},{data[3]},{data[4]}}}</DisplayString>
+    <DisplayString Condition="n==6">{{{data[0]},{data[1]},{data[2]},{data[3]},{data[4]},{data[5]}}}</DisplayString>
+    <DisplayString Condition="n==7">{{{data[0]},{data[1]},{data[2]},{data[3]},{data[4]},{data[5]},{data[6]}}}</DisplayString>
+    <DisplayString Condition="n==8">{{{data[0]},{data[1]},{data[2]},{data[3]},{data[4]},{data[5]},{data[6]},{data[7]}}}</DisplayString>
+    <DisplayString Condition="n==9">{{{data[0]},{data[1]},{data[2]},{data[3]},{data[4]},{data[5]},{data[6]},{data[7]},{data[8]}}}</DisplayString>
+    <DisplayString Condition="n==10">{{{data[0]},{data[1]},{data[2]},{data[3]},{data[4]},{data[5]},{data[6]},{data[7]},{data[8]},{data[9]}}}</DisplayString>
+    <DisplayString>{{size = {n}}}</DisplayString>
+    <Expand>
+      <Item Name="Size">n</Item>
+      <Item Name="Capacity">capacity</Item>
+      <ArrayItems>
+        <Size>n</Size>
+        <ValuePointer>data</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
 </AutoVisualizer>
