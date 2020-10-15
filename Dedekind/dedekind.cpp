@@ -11,7 +11,7 @@
 #include "layerStack.h"
 #include "toString.h"
 
-
+#include "codeGen.h"
 
 
 typedef int64_t bigInt;
@@ -207,13 +207,15 @@ public:
 };
 
 int main() {
+	genCodeForEquivClass();
+	return 0;
 	TimeTracker timer;
 	/*dedekind(1);
 	dedekind(2);
 	dedekind(3);
 	dedekind(4);
 	dedekind(5);*/
-	dedekind(7);
+	dedekind(6);
 	/*dedekind(6);
 	dedekind(6);
 	dedekind(6);

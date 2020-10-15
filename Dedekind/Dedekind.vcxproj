@@ -158,12 +158,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="aligned_alloc.cpp" />
+    <ClCompile Include="codeGen.cpp" />
     <ClCompile Include="dedekind.cpp" />
     <ClCompile Include="equivalenceClass.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="aligned_alloc.h" />
     <ClInclude Include="aligned_set.h" />
+    <ClInclude Include="codeGen.h" />
     <ClInclude Include="collectionOperations.h" />
     <ClInclude Include="countedEquivalenceClass.h" />
     <ClInclude Include="dedekind.h" />
