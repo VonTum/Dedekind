@@ -2,6 +2,8 @@
 
 #include <immintrin.h>
 
+#include <iostream>
+
 
 PreprocessedFunctionInputSet PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{}, std::vector<VariableOccurenceGroup>{}, 0};
 EquivalenceClass EquivalenceClass::emptyEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet);
@@ -133,7 +135,8 @@ static __m256i parallelSwizzle(__m256i functionInputs, Iter swizStart, Iter swiz
 }
 
 
-
+#define SWAP(a, b) {__m256i tmp = a; a = b; b = tmp;}
+#define ROTRIGHT(a, b, c) {__m256i tmp = c; c = b; b = a; a = tmp;}
 struct SmallEqualityChecker {
 	const int_set<FunctionInput, uint32_t>& equalityChecker;
 	std::vector<VariableOccurenceGroup>::const_iterator groupIter;
@@ -141,6 +144,7 @@ struct SmallEqualityChecker {
 	size_t functionInputSetSize;
 	__m256i data;
 	__m256i curMask = _mm256_set1_epi32(1);
+	__m256i bits0 = _mm256_undefined_si256(); // special value, contains current mask, where ones, value must be destroyed upon exit
 	__m256i bits1 = _mm256_undefined_si256();
 	__m256i bits2 = _mm256_undefined_si256();
 	__m256i bits3 = _mm256_undefined_si256();
@@ -150,6 +154,12 @@ struct SmallEqualityChecker {
 	__m256i bits7 = _mm256_undefined_si256();
 	__m256i bits8 = _mm256_undefined_si256();
 	__m256i bits9 = _mm256_undefined_si256();
+	__m256i bits10 = _mm256_undefined_si256();
+	__m256i bits11 = _mm256_undefined_si256();
+	__m256i bits12 = _mm256_undefined_si256();
+	__m256i bits13 = _mm256_undefined_si256();
+	__m256i bits14 = _mm256_undefined_si256();
+	__m256i bits15 = _mm256_undefined_si256();
 	__m256i curValue = _mm256_setzero_si256();
 	static_assert(MAX_DEDEKIND <= 10, "number of bits registers should be extended for higher order equivalence checking");
 
@@ -161,6 +171,7 @@ struct SmallEqualityChecker {
 		data(_mm256_load_si256(reinterpret_cast<const __m256i*>(functionInputSet.getData()))) {}
 
 	inline bool allContained() {
+		__debugbreak();
 		for(int i = 0; i < functionInputSetSize; i++) {
 			FunctionInput fn{curValue.m256i_i32[i]};
 			if(!equalityChecker.contains(fn)) {
@@ -170,151 +181,407 @@ struct SmallEqualityChecker {
 		return true;
 	}
 
-	void checkAllForGroup();
+	bool checkAllForGroup();
 
-	inline void nextGroup() {
+	inline bool nextGroup() {
 		if(groupIter != groupsEnd) {
-			checkAllForGroup();
+			return checkAllForGroup();
 		} else {
-			allContained();
+			return allContained();
 		}
 	}
 
-	inline void permute1() {
-		curValue = _mm256_or_si256(curValue, bits1);
-		nextGroup();
-		curValue = _mm256_andnot_si256(curValue, bits1);
+	inline bool permute1() { // no mask needed to repair permute1, can just reuse bits1
+		curValue = _mm256_or_si256(curValue, bits0);
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		return false;
 	}
-	inline void permute2() {
-		
+	inline bool permute2() {
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits1, _mm256_srli_epi32(bits2, 1)));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits2, _mm256_srli_epi32(bits1, 1)));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		return false;
 	}
-	inline void permute3() {}
-	inline void permute4() {}
-	inline void permute5() {
-		
+	inline bool permute3() {
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits1, _mm256_or_si256(_mm256_srli_epi32(bits2, 1), _mm256_srli_epi32(bits3, 2))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits1, _mm256_or_si256(_mm256_srli_epi32(bits3, 1), _mm256_srli_epi32(bits2, 2))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits2, _mm256_or_si256(_mm256_srli_epi32(bits1, 1), _mm256_srli_epi32(bits3, 2))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits2, _mm256_or_si256(_mm256_srli_epi32(bits3, 1), _mm256_srli_epi32(bits1, 2))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits3, _mm256_or_si256(_mm256_srli_epi32(bits2, 1), _mm256_srli_epi32(bits1, 2))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits3, _mm256_or_si256(_mm256_srli_epi32(bits1, 1), _mm256_srli_epi32(bits2, 2))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		return false;
 	}
-	inline void permute6() {}
-	inline void permute7() {}
-	inline void permute8() {}
-	inline void permute9() {}
+	inline bool permute4() {
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits1, _mm256_or_si256(_mm256_srli_epi32(bits2, 1), _mm256_or_si256(_mm256_srli_epi32(bits3, 2), _mm256_srli_epi32(bits4, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits1, _mm256_or_si256(_mm256_srli_epi32(bits2, 1), _mm256_or_si256(_mm256_srli_epi32(bits4, 2), _mm256_srli_epi32(bits3, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits1, _mm256_or_si256(_mm256_srli_epi32(bits3, 1), _mm256_or_si256(_mm256_srli_epi32(bits2, 2), _mm256_srli_epi32(bits4, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits1, _mm256_or_si256(_mm256_srli_epi32(bits3, 1), _mm256_or_si256(_mm256_srli_epi32(bits4, 2), _mm256_srli_epi32(bits2, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits1, _mm256_or_si256(_mm256_srli_epi32(bits4, 1), _mm256_or_si256(_mm256_srli_epi32(bits3, 2), _mm256_srli_epi32(bits2, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits1, _mm256_or_si256(_mm256_srli_epi32(bits4, 1), _mm256_or_si256(_mm256_srli_epi32(bits2, 2), _mm256_srli_epi32(bits3, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits2, _mm256_or_si256(_mm256_srli_epi32(bits1, 1), _mm256_or_si256(_mm256_srli_epi32(bits3, 2), _mm256_srli_epi32(bits4, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits2, _mm256_or_si256(_mm256_srli_epi32(bits1, 1), _mm256_or_si256(_mm256_srli_epi32(bits4, 2), _mm256_srli_epi32(bits3, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits2, _mm256_or_si256(_mm256_srli_epi32(bits3, 1), _mm256_or_si256(_mm256_srli_epi32(bits1, 2), _mm256_srli_epi32(bits4, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits2, _mm256_or_si256(_mm256_srli_epi32(bits3, 1), _mm256_or_si256(_mm256_srli_epi32(bits4, 2), _mm256_srli_epi32(bits1, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits2, _mm256_or_si256(_mm256_srli_epi32(bits4, 1), _mm256_or_si256(_mm256_srli_epi32(bits3, 2), _mm256_srli_epi32(bits1, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits2, _mm256_or_si256(_mm256_srli_epi32(bits4, 1), _mm256_or_si256(_mm256_srli_epi32(bits1, 2), _mm256_srli_epi32(bits3, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits3, _mm256_or_si256(_mm256_srli_epi32(bits2, 1), _mm256_or_si256(_mm256_srli_epi32(bits1, 2), _mm256_srli_epi32(bits4, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits3, _mm256_or_si256(_mm256_srli_epi32(bits2, 1), _mm256_or_si256(_mm256_srli_epi32(bits4, 2), _mm256_srli_epi32(bits1, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits3, _mm256_or_si256(_mm256_srli_epi32(bits1, 1), _mm256_or_si256(_mm256_srli_epi32(bits2, 2), _mm256_srli_epi32(bits4, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits3, _mm256_or_si256(_mm256_srli_epi32(bits1, 1), _mm256_or_si256(_mm256_srli_epi32(bits4, 2), _mm256_srli_epi32(bits2, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits3, _mm256_or_si256(_mm256_srli_epi32(bits4, 1), _mm256_or_si256(_mm256_srli_epi32(bits1, 2), _mm256_srli_epi32(bits2, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits3, _mm256_or_si256(_mm256_srli_epi32(bits4, 1), _mm256_or_si256(_mm256_srli_epi32(bits2, 2), _mm256_srli_epi32(bits1, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits4, _mm256_or_si256(_mm256_srli_epi32(bits2, 1), _mm256_or_si256(_mm256_srli_epi32(bits3, 2), _mm256_srli_epi32(bits1, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits4, _mm256_or_si256(_mm256_srli_epi32(bits2, 1), _mm256_or_si256(_mm256_srli_epi32(bits1, 2), _mm256_srli_epi32(bits3, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits4, _mm256_or_si256(_mm256_srli_epi32(bits3, 1), _mm256_or_si256(_mm256_srli_epi32(bits2, 2), _mm256_srli_epi32(bits1, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits4, _mm256_or_si256(_mm256_srli_epi32(bits3, 1), _mm256_or_si256(_mm256_srli_epi32(bits1, 2), _mm256_srli_epi32(bits2, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits4, _mm256_or_si256(_mm256_srli_epi32(bits1, 1), _mm256_or_si256(_mm256_srli_epi32(bits3, 2), _mm256_srli_epi32(bits2, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits4, _mm256_or_si256(_mm256_srli_epi32(bits1, 1), _mm256_or_si256(_mm256_srli_epi32(bits2, 2), _mm256_srli_epi32(bits3, 3)))));
+		if(nextGroup()) return true;
+		curValue = _mm256_andnot_si256(bits0, curValue);
+		return false;
+	}
+	inline bool permute5() {
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits5, 4));
+		if(permute4()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits5, 4), curValue);
+		SWAP(bits1, bits5);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits5, 4));
+		if(permute4()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits5, 4), curValue);
+		ROTRIGHT(bits1, bits2, bits5);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits5, 4));
+		if(permute4()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits5, 4), curValue);
+		ROTRIGHT(bits2, bits3, bits5);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits5, 4));
+		if(permute4()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits5, 4), curValue);
+		ROTRIGHT(bits3, bits4, bits5);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits5, 4));
+		if(permute4()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits5, 4), curValue);
+		SWAP(bits4, bits5);
+		return false;
+	}
+	inline bool permute6() {
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits6, 5));
+		if(permute5()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits6, 5), curValue);
+		SWAP(bits1, bits6);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits6, 5));
+		if(permute5()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits6, 5), curValue);
+		ROTRIGHT(bits1, bits2, bits6);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits6, 5));
+		if(permute5()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits6, 5), curValue);
+		ROTRIGHT(bits2, bits3, bits6);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits6, 5));
+		if(permute5()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits6, 5), curValue);
+		ROTRIGHT(bits3, bits4, bits6);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits6, 5));
+		if(permute5()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits6, 5), curValue);
+		ROTRIGHT(bits4, bits5, bits6);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits6, 5));
+		if(permute5()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits6, 5), curValue);
+		SWAP(bits5, bits6);
+		return false;
+	}
+	inline bool permute7() {
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits7, 6));
+		if(permute6()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits7, 6), curValue);
+		SWAP(bits1, bits7);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits7, 6));
+		if(permute6()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits7, 6), curValue);
+		ROTRIGHT(bits1, bits2, bits7);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits7, 6));
+		if(permute6()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits7, 6), curValue);
+		ROTRIGHT(bits2, bits3, bits7);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits7, 6));
+		if(permute6()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits7, 6), curValue);
+		ROTRIGHT(bits3, bits4, bits7);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits7, 6));
+		if(permute6()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits7, 6), curValue);
+		ROTRIGHT(bits4, bits5, bits7);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits7, 6));
+		if(permute6()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits7, 6), curValue);
+		ROTRIGHT(bits5, bits6, bits7);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits7, 6));
+		if(permute6()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits7, 6), curValue);
+		SWAP(bits6, bits7);
+		return false;
+	}
+	inline bool permute8() {
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits8, 7));
+		if(permute7()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits8, 7), curValue);
+		SWAP(bits1, bits8);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits8, 7));
+		if(permute7()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits8, 7), curValue);
+		ROTRIGHT(bits1, bits2, bits8);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits8, 7));
+		if(permute7()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits8, 7), curValue);
+		ROTRIGHT(bits2, bits3, bits8);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits8, 7));
+		if(permute7()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits8, 7), curValue);
+		ROTRIGHT(bits3, bits4, bits8);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits8, 7));
+		if(permute7()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits8, 7), curValue);
+		ROTRIGHT(bits4, bits5, bits8);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits8, 7));
+		if(permute7()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits8, 7), curValue);
+		ROTRIGHT(bits5, bits6, bits8);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits8, 7));
+		if(permute7()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits8, 7), curValue);
+		ROTRIGHT(bits6, bits7, bits8);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits8, 7));
+		if(permute7()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits8, 7), curValue);
+		SWAP(bits7, bits8);
+		return false;
+	}
+	inline bool permute9() {
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits9, 8));
+		if(permute8()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits9, 8), curValue);
+		SWAP(bits1, bits9);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits9, 8));
+		if(permute8()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits9, 8), curValue);
+		ROTRIGHT(bits1, bits2, bits9);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits9, 8));
+		if(permute8()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits9, 8), curValue);
+		ROTRIGHT(bits2, bits3, bits9);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits9, 8));
+		if(permute8()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits9, 8), curValue);
+		ROTRIGHT(bits3, bits4, bits9);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits9, 8));
+		if(permute8()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits9, 8), curValue);
+		ROTRIGHT(bits4, bits5, bits9);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits9, 8));
+		if(permute8()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits9, 8), curValue);
+		ROTRIGHT(bits5, bits6, bits9);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits9, 8));
+		if(permute8()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits9, 8), curValue);
+		ROTRIGHT(bits6, bits7, bits9);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits9, 8));
+		if(permute8()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits9, 8), curValue);
+		ROTRIGHT(bits7, bits8, bits9);
+		curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits9, 8));
+		if(permute8()) return true;
+		curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits9, 8), curValue);
+		SWAP(bits8, bits9);
+		return false;
+	}
 };
 
-void SmallEqualityChecker::checkAllForGroup() {
+bool SmallEqualityChecker::checkAllForGroup() {
 	int curGroupSize = (*groupIter).groupSize;
 	++groupIter;
 	switch(curGroupSize) {
 	case 1:
-		bits9 = bits8; bits8 = bits7; bits7 = bits6; bits6 = bits5; bits5 = bits4; bits4 = bits3; bits3 = bits2; bits2 = bits1;
-		bits1 = _mm256_and_si256(data, curMask);
+		bits15 = bits14; bits14 = bits13; bits13 = bits12; bits12 = bits11; bits11 = bits10; bits10 = bits9; bits9 = bits8; bits8 = bits7; bits7 = bits6; bits6 = bits5; bits5 = bits4; bits4 = bits3; bits3 = bits2; bits2 = bits1; bits1 = bits0;
+		bits0 = _mm256_and_si256(data, curMask);
 		curMask = _mm256_slli_epi32(curMask, 1);
-		permute1();
+		if(permute1()) return true;
 		curMask = _mm256_srli_epi32(curMask, 1);
-		bits1 = bits2; bits2 = bits3; bits3 = bits4; bits4 = bits5; bits5 = bits6; bits6 = bits7; bits7 = bits8; bits8 = bits9;
+		bits0 = bits1; bits1 = bits2; bits2 = bits3; bits3 = bits4; bits4 = bits5; bits5 = bits6; bits6 = bits7; bits7 = bits8; bits8 = bits9; bits9 = bits10; bits10 = bits11; bits11 = bits12; bits12 = bits13; bits13 = bits14; bits14 = bits15;
 		break;
 	case 2:
-		bits9 = bits7; bits8 = bits6; bits7 = bits5; bits6 = bits4; bits5 = bits3; bits4 = bits2; bits3 = bits1;
-		bits1 = _mm256_and_si256(data, curMask);
-		bits2 = _mm256_and_si256(_mm256_srli_epi32(data, 2), curMask);
+		bits15 = bits12; bits14 = bits11; bits13 = bits10; bits12 = bits9; bits11 = bits8; bits10 = bits7; bits9 = bits6; bits8 = bits5; bits7 = bits4; bits6 = bits3; bits5 = bits2; bits4 = bits1; bits3 = bits0;
+		bits0 = _mm256_sub_epi32(_mm256_slli_epi32(curMask, 2), curMask);
+		bits1 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 1), curMask), 1); // TODO optimize, perhaps unneeded shift
+		bits2 = _mm256_slli_epi32(_mm256_and_si256(data, curMask), 1); // TODO optimize, perhaps unneeded shift
 		curMask = _mm256_slli_epi32(curMask, 2);
-		permute2();
+		if(permute2()) return true;
 		curMask = _mm256_srli_epi32(curMask, 2);
-		bits1 = bits3; bits2 = bits4; bits3 = bits5; bits4 = bits6; bits5 = bits7; bits6 = bits8; bits7 = bits9;
+		bits0 = bits3; bits1 = bits4; bits2 = bits5; bits3 = bits6; bits4 = bits7; bits5 = bits8; bits6 = bits9; bits7 = bits10; bits8 = bits11; bits9 = bits12; bits10 = bits13; bits11 = bits14; bits12 = bits15;
 		break;
 	case 3:
-		bits9 = bits6; bits8 = bits5; bits7 = bits4; bits6 = bits3; bits5 = bits2; bits4 = bits1;
-		bits1 = _mm256_and_si256(data, curMask);
-		bits2 = _mm256_and_si256(_mm256_srli_epi32(data, 2), curMask);
-		bits3 = _mm256_and_si256(_mm256_srli_epi32(data, 3), curMask);
+		bits15 = bits11; bits14 = bits10; bits13 = bits9; bits12 = bits8; bits11 = bits7; bits10 = bits6; bits9 = bits5; bits8 = bits4; bits7 = bits3; bits6 = bits2; bits5 = bits1; bits4 = bits0;
+		bits0 = _mm256_sub_epi32(_mm256_slli_epi32(curMask, 3), curMask);
+		bits1 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 2), curMask), 2); // TODO optimize, perhaps unneeded shift
+		bits2 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 1), curMask), 2); // TODO optimize, perhaps unneeded shift
+		bits3 = _mm256_slli_epi32(_mm256_and_si256(data, curMask), 2); // TODO optimize, perhaps unneeded shift
 		curMask = _mm256_slli_epi32(curMask, 3);
-		permute3();
+		if(permute3()) return true;
 		curMask = _mm256_srli_epi32(curMask, 3);
-		bits1 = bits4; bits2 = bits5; bits3 = bits6; bits4 = bits7; bits5 = bits8; bits6 = bits9;
+		bits0 = bits4; bits1 = bits5; bits2 = bits6; bits3 = bits7; bits4 = bits8; bits5 = bits9; bits6 = bits10; bits7 = bits11; bits8 = bits12; bits9 = bits13; bits10 = bits14; bits11 = bits15;
 		break;
 	case 4:
-		bits9 = bits5; bits8 = bits4; bits7 = bits3; bits6 = bits2; bits5 = bits1;
-		bits1 = _mm256_and_si256(data, curMask);
-		bits2 = _mm256_and_si256(_mm256_srli_epi32(data, 2), curMask);
-		bits3 = _mm256_and_si256(_mm256_srli_epi32(data, 3), curMask);
-		bits4 = _mm256_and_si256(_mm256_srli_epi32(data, 4), curMask);
+		bits15 = bits10; bits14 = bits9; bits13 = bits8; bits12 = bits7; bits11 = bits6; bits10 = bits5; bits9 = bits4; bits8 = bits3; bits7 = bits2; bits6 = bits1; bits5 = bits0;
+		bits0 = _mm256_sub_epi32(_mm256_slli_epi32(curMask, 4), curMask);
+		bits1 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 3), curMask), 3); // TODO optimize, perhaps unneeded shift
+		bits2 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 2), curMask), 3); // TODO optimize, perhaps unneeded shift
+		bits3 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 1), curMask), 3); // TODO optimize, perhaps unneeded shift
+		bits4 = _mm256_slli_epi32(_mm256_and_si256(data, curMask), 3); // TODO optimize, perhaps unneeded shift
 		curMask = _mm256_slli_epi32(curMask, 4);
-		permute4();
+		if(permute4()) return true;
 		curMask = _mm256_srli_epi32(curMask, 4);
-		bits1 = bits5; bits2 = bits6; bits3 = bits7; bits4 = bits8; bits5 = bits9;
+		bits0 = bits5; bits1 = bits6; bits2 = bits7; bits3 = bits8; bits4 = bits9; bits5 = bits10; bits6 = bits11; bits7 = bits12; bits8 = bits13; bits9 = bits14; bits10 = bits15;
 		break;
 	case 5:
-		bits9 = bits4; bits8 = bits3; bits7 = bits2; bits6 = bits1;
-		bits1 = _mm256_and_si256(data, curMask);
-		bits2 = _mm256_and_si256(_mm256_srli_epi32(data, 2), curMask);
-		bits3 = _mm256_and_si256(_mm256_srli_epi32(data, 3), curMask);
-		bits4 = _mm256_and_si256(_mm256_srli_epi32(data, 4), curMask);
-		bits5 = _mm256_and_si256(_mm256_srli_epi32(data, 5), curMask);
+		bits15 = bits9; bits14 = bits8; bits13 = bits7; bits12 = bits6; bits11 = bits5; bits10 = bits4; bits9 = bits3; bits8 = bits2; bits7 = bits1; bits6 = bits0;
+		bits0 = _mm256_slli_epi32(_mm256_sub_epi32(_mm256_slli_epi32(curMask, 4), curMask), 1);
+		bits1 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 4), curMask), 4); // TODO optimize, perhaps unneeded shift
+		bits2 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 3), curMask), 4); // TODO optimize, perhaps unneeded shift
+		bits3 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 2), curMask), 4); // TODO optimize, perhaps unneeded shift
+		bits4 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 1), curMask), 4); // TODO optimize, perhaps unneeded shift
+		bits5 = _mm256_slli_epi32(_mm256_and_si256(data, curMask), 4); // TODO optimize, perhaps unneeded shift
 		curMask = _mm256_slli_epi32(curMask, 5);
-		permute5();
+		if(permute5()) return true;
 		curMask = _mm256_srli_epi32(curMask, 5);
-		bits1 = bits6; bits2 = bits7; bits3 = bits8; bits4 = bits9;
+		bits0 = bits6; bits1 = bits7; bits2 = bits8; bits3 = bits9; bits4 = bits10; bits5 = bits11; bits6 = bits12; bits7 = bits13; bits8 = bits14; bits9 = bits15;
 		break;
 	case 6:
-		bits9 = bits3; bits8 = bits2; bits7 = bits1;
-		bits1 = _mm256_and_si256(data, curMask);
-		bits2 = _mm256_and_si256(_mm256_srli_epi32(data, 2), curMask);
-		bits3 = _mm256_and_si256(_mm256_srli_epi32(data, 3), curMask);
-		bits4 = _mm256_and_si256(_mm256_srli_epi32(data, 4), curMask);
-		bits5 = _mm256_and_si256(_mm256_srli_epi32(data, 5), curMask);
-		bits6 = _mm256_and_si256(_mm256_srli_epi32(data, 6), curMask);
+		bits15 = bits8; bits14 = bits7; bits13 = bits6; bits12 = bits5; bits11 = bits4; bits10 = bits3; bits9 = bits2; bits8 = bits1; bits7 = bits0;
+		bits0 = _mm256_slli_epi32(_mm256_sub_epi32(_mm256_slli_epi32(curMask, 4), curMask), 2);
+		bits1 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 5), curMask), 5); // TODO optimize, perhaps unneeded shift
+		bits2 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 4), curMask), 5); // TODO optimize, perhaps unneeded shift
+		bits3 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 3), curMask), 5); // TODO optimize, perhaps unneeded shift
+		bits4 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 2), curMask), 5); // TODO optimize, perhaps unneeded shift
+		bits5 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 1), curMask), 5); // TODO optimize, perhaps unneeded shift
+		bits6 = _mm256_slli_epi32(_mm256_and_si256(data, curMask), 5); // TODO optimize, perhaps unneeded shift
 		curMask = _mm256_slli_epi32(curMask, 6);
-		permute6();
+		if(permute6()) return true;
 		curMask = _mm256_srli_epi32(curMask, 6);
-		bits1 = bits7; bits2 = bits8; bits3 = bits9;
+		bits0 = bits7; bits1 = bits8; bits2 = bits9; bits3 = bits10; bits4 = bits11; bits5 = bits12; bits6 = bits13; bits7 = bits14; bits8 = bits15;
 		break;
 	case 7:
-		bits9 = bits2; bits8 = bits1;
-		bits1 = _mm256_and_si256(data, curMask);
-		bits2 = _mm256_and_si256(_mm256_srli_epi32(data, 2), curMask);
-		bits3 = _mm256_and_si256(_mm256_srli_epi32(data, 3), curMask);
-		bits4 = _mm256_and_si256(_mm256_srli_epi32(data, 4), curMask);
-		bits5 = _mm256_and_si256(_mm256_srli_epi32(data, 5), curMask);
-		bits6 = _mm256_and_si256(_mm256_srli_epi32(data, 6), curMask);
-		bits7 = _mm256_and_si256(_mm256_srli_epi32(data, 7), curMask);
+		bits15 = bits7; bits14 = bits6; bits13 = bits5; bits12 = bits4; bits11 = bits3; bits10 = bits2; bits9 = bits1; bits8 = bits0;
+		bits0 = _mm256_slli_epi32(_mm256_sub_epi32(_mm256_slli_epi32(curMask, 4), curMask), 3);
+		bits1 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 6), curMask), 6); // TODO optimize, perhaps unneeded shift
+		bits2 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 5), curMask), 6); // TODO optimize, perhaps unneeded shift
+		bits3 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 4), curMask), 6); // TODO optimize, perhaps unneeded shift
+		bits4 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 3), curMask), 6); // TODO optimize, perhaps unneeded shift
+		bits5 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 2), curMask), 6); // TODO optimize, perhaps unneeded shift
+		bits6 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 1), curMask), 6); // TODO optimize, perhaps unneeded shift
+		bits7 = _mm256_slli_epi32(_mm256_and_si256(data, curMask), 6); // TODO optimize, perhaps unneeded shift
 		curMask = _mm256_slli_epi32(curMask, 7);
-		permute7();
+		if(permute7()) return true;
 		curMask = _mm256_srli_epi32(curMask, 7);
-		bits1 = bits8; bits2 = bits9;
+		bits0 = bits8; bits1 = bits9; bits2 = bits10; bits3 = bits11; bits4 = bits12; bits5 = bits13; bits6 = bits14; bits7 = bits15;
 		break;
 	case 8:
-		bits9 = bits1;
-		bits1 = _mm256_and_si256(data, curMask);
-		bits2 = _mm256_and_si256(_mm256_srli_epi32(data, 2), curMask);
-		bits3 = _mm256_and_si256(_mm256_srli_epi32(data, 3), curMask);
-		bits4 = _mm256_and_si256(_mm256_srli_epi32(data, 4), curMask);
-		bits5 = _mm256_and_si256(_mm256_srli_epi32(data, 5), curMask);
-		bits6 = _mm256_and_si256(_mm256_srli_epi32(data, 6), curMask);
-		bits7 = _mm256_and_si256(_mm256_srli_epi32(data, 7), curMask);
-		bits8 = _mm256_and_si256(_mm256_srli_epi32(data, 8), curMask);
+		bits15 = bits6; bits14 = bits5; bits13 = bits4; bits12 = bits3; bits11 = bits2; bits10 = bits1; bits9 = bits0;
+		bits0 = _mm256_slli_epi32(_mm256_sub_epi32(_mm256_slli_epi32(curMask, 4), curMask), 4);
+		bits1 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 7), curMask), 7); // TODO optimize, perhaps unneeded shift
+		bits2 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 6), curMask), 7); // TODO optimize, perhaps unneeded shift
+		bits3 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 5), curMask), 7); // TODO optimize, perhaps unneeded shift
+		bits4 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 4), curMask), 7); // TODO optimize, perhaps unneeded shift
+		bits5 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 3), curMask), 7); // TODO optimize, perhaps unneeded shift
+		bits6 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 2), curMask), 7); // TODO optimize, perhaps unneeded shift
+		bits7 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 1), curMask), 7); // TODO optimize, perhaps unneeded shift
+		bits8 = _mm256_slli_epi32(_mm256_and_si256(data, curMask), 7); // TODO optimize, perhaps unneeded shift
 		curMask = _mm256_slli_epi32(curMask, 8);
-		permute8();
+		if(permute8()) return true;
 		curMask = _mm256_srli_epi32(curMask, 8);
-		bits1 = bits9;
+		bits0 = bits9; bits1 = bits10; bits2 = bits11; bits3 = bits12; bits4 = bits13; bits5 = bits14; bits6 = bits15;
 		break;
 	case 9:
-
-		bits1 = _mm256_and_si256(data, curMask);
-		bits2 = _mm256_and_si256(_mm256_srli_epi32(data, 2), curMask);
-		bits3 = _mm256_and_si256(_mm256_srli_epi32(data, 3), curMask);
-		bits4 = _mm256_and_si256(_mm256_srli_epi32(data, 4), curMask);
-		bits5 = _mm256_and_si256(_mm256_srli_epi32(data, 5), curMask);
-		bits6 = _mm256_and_si256(_mm256_srli_epi32(data, 6), curMask);
-		bits7 = _mm256_and_si256(_mm256_srli_epi32(data, 7), curMask);
-		bits8 = _mm256_and_si256(_mm256_srli_epi32(data, 8), curMask);
-		bits9 = _mm256_and_si256(_mm256_srli_epi32(data, 9), curMask);
+		bits15 = bits5; bits14 = bits4; bits13 = bits3; bits12 = bits2; bits11 = bits1; bits10 = bits0;
+		bits0 = _mm256_slli_epi32(_mm256_sub_epi32(_mm256_slli_epi32(curMask, 4), curMask), 5);
+		bits1 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 8), curMask), 8); // TODO optimize, perhaps unneeded shift
+		bits2 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 7), curMask), 8); // TODO optimize, perhaps unneeded shift
+		bits3 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 6), curMask), 8); // TODO optimize, perhaps unneeded shift
+		bits4 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 5), curMask), 8); // TODO optimize, perhaps unneeded shift
+		bits5 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 4), curMask), 8); // TODO optimize, perhaps unneeded shift
+		bits6 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 3), curMask), 8); // TODO optimize, perhaps unneeded shift
+		bits7 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 2), curMask), 8); // TODO optimize, perhaps unneeded shift
+		bits8 = _mm256_slli_epi32(_mm256_and_si256(_mm256_srli_epi32(data, 1), curMask), 8); // TODO optimize, perhaps unneeded shift
+		bits9 = _mm256_slli_epi32(_mm256_and_si256(data, curMask), 8); // TODO optimize, perhaps unneeded shift
 		curMask = _mm256_slli_epi32(curMask, 9);
-		permute9();
+		if(permute9()) return true;
 		curMask = _mm256_srli_epi32(curMask, 9);
-
+		bits0 = bits10; bits1 = bits11; bits2 = bits12; bits3 = bits13; bits4 = bits14; bits5 = bits15;
 		break;
-
-
 	}
 	--groupIter;
+	return false;
 }
 
 template<typename Func>
@@ -360,10 +627,11 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 	if(this->spanSize != b.spanSize || this->variableOccurences != b.variableOccurences) return false; // early exit, a and b do not span the same number of variables, impossible to be isomorphic!
 
 	if(b.functionInputSet.size() <= 8) {
-		//SmallEqualityChecker eqChecker(this->equalityChecker, b.functionInputSet);
+		SmallEqualityChecker eqChecker(this->equalityChecker, b.functionInputSet, b.variableOccurences);
 
+		return eqChecker.checkAllForGroup();
 
-		__m256i initialData = _mm256_load_si256(reinterpret_cast<const __m256i*>(b.functionInputSet.getData()));
+		/*__m256i initialData = _mm256_load_si256(reinterpret_cast<const __m256i*>(b.functionInputSet.getData()));
 		return existsPermutationOverVariableGroupsSIMD(this->spanSize, this->variableOccurences, initialData, [&eqCheck = this->equalityChecker, bsize = b.functionInputSet.size()](__m256i swizzledFirstBlock, int* swizStart, int* swizEnd){
 			for(int i = 0; i < bsize; i++) {
 				FunctionInput fn{swizzledFirstBlock.m256i_i32[i]};
@@ -372,8 +640,20 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 				}
 			}
 			return true;
-		});
-		return false;
+		});*/
+		
+		//return newAlgoResult;
+
+		/*if(newAlgoResult != oldAlgoResult) {
+			std::cout << (newAlgoResult ? 'T' : 'F');
+			SmallEqualityChecker eqChecker(this->equalityChecker, b.functionInputSet, b.variableOccurences);
+
+			bool newAlgoResult = eqChecker.checkAllForGroup();
+		} else {
+			std::cout << (newAlgoResult ? 't' : 'f');
+		}*/
+
+		//return oldAlgoResult;
 	} else {
 		__m256i initialData = _mm256_load_si256(reinterpret_cast<const __m256i*>(b.functionInputSet.getData()));
 		return existsPermutationOverVariableGroupsSIMD(this->spanSize, this->variableOccurences, initialData, [this, &bp = b.functionInputSet](__m256i swizzledFirstBlock, int* swizStart, int* swizEnd) {

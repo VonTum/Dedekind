@@ -207,8 +207,11 @@ public:
 };
 
 int main() {
-	genCodeForEquivClass();
-	return 0;
+	//genCodeForEquivClass();
+	//genCodeForSmallPermut(4);
+	//genCodeForAllLargePermut();
+	//genCodeForAllPermut();
+	//return 0;
 	TimeTracker timer;
 	/*dedekind(1);
 	dedekind(2);

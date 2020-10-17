@@ -1,7 +1,17 @@
 
 #include "codeGen.h"
 
+#include "collectionOperations.h"
+
 #include <fstream>
+#include <algorithm>
+
+
+int groupCount = 9; // max group count
+int bitsCount = 16; // max stack size
+int maxSmallPermuteSize = 4; // number of permute functions with builtin impl
+
+
 
 /*
 case 1:
@@ -22,16 +32,16 @@ case 2:
 	...
 */
 
-static void genPushStack(std::ostream& os, int bitsCount, int groupSize) {
-	for(int bitsMover = bitsCount - 1; bitsMover - groupSize > 0; bitsMover--) {
-		os << "bits" << bitsMover << " = bits" << bitsMover - groupSize << "; ";
+static void genPushStack(std::ostream& os, int bitsCount, int offset) {
+	for(int bitsMover = bitsCount - 1; bitsMover - offset >= 0; bitsMover--) {
+		os << "bits" << bitsMover << " = bits" << bitsMover - offset << "; ";
 	}
 	os << "\n";
 }
 
-static void genPopStack(std::ostream& os, int bitsCount, int groupSize) {
-	for(int bitsMover = 1; bitsMover + groupSize < bitsCount; bitsMover++) {
-		os << "bits" << bitsMover << " = bits" << bitsMover + groupSize << "; ";
+static void genPopStack(std::ostream& os, int bitsCount, int offset) {
+	for(int bitsMover = 0; bitsMover + offset < bitsCount; bitsMover++) {
+		os << "bits" << bitsMover << " = bits" << bitsMover + offset << "; ";
 	}
 	os << "\n";
 }
@@ -39,23 +49,135 @@ static void genPopStack(std::ostream& os, int bitsCount, int groupSize) {
 void genCodeForEquivClass() {
 	std::ofstream os("equivClassCode.txt");
 
-	int groupCount = 9;
-	int bitsCount = 13;
-	for(int groupSize = 1; groupSize <= groupCount; groupSize++) {
+	os << "case " << 1 << ":\n";
+	os << "\t";
+	genPushStack(os, bitsCount, 1);
+	os << "\tbits0 = _mm256_and_si256(data, curMask);\n";
+	os << "\tcurMask = _mm256_slli_epi32(curMask, 1);\n";
+	os << "\tif(permute1()) return true;\n";
+	os << "\tcurMask = _mm256_srli_epi32(curMask, 1);\n";
+	os << "\t";
+	genPopStack(os, bitsCount, 1);
+	os << "\tbreak;\n";
+
+	for(int groupSize = 2; groupSize <= groupCount; groupSize++) {
 		os << "case " << groupSize << ":\n";
 		os << "\t";
-		genPushStack(os, bitsCount, groupSize);
-		os << "\tbits0 = _mm256_sub_epi32(_mm256_slli_epi32(curMask, " << groupSize << "), curMask);\n";
-		os << "\tbits1 = _mm256_and_si256(data, curMask);\n";
-		for(int j = 2; j <= groupSize; j++) {
-			os << "\tbits" << j << " = _mm256_and_si256(_mm256_srli_epi32(data, " << j << "), curMask);\n";
+		genPushStack(os, bitsCount, groupSize+1);
+		if(groupSize <= maxSmallPermuteSize) {
+			os << "\tbits0 = _mm256_sub_epi32(_mm256_slli_epi32(curMask, " << groupSize << "), curMask);\n";
+		} else {
+			os << "\tbits0 = _mm256_slli_epi32( _mm256_sub_epi32(_mm256_slli_epi32(curMask, " << maxSmallPermuteSize << "), curMask), " << groupSize - maxSmallPermuteSize << ");\n";
 		}
+		for(int j = 1; j < groupSize; j++) {
+			os << "\tbits" << j << " = _mm256_slli_epi32( _mm256_and_si256(_mm256_srli_epi32(data, " << groupSize - j << "), curMask) , " << groupSize-1 << "); // TODO optimize, perhaps unneeded shift\n";
+		}
+		os << "\tbits" << groupSize << " = _mm256_slli_epi32( _mm256_and_si256(data, curMask) , " << groupSize - 1 << "); // TODO optimize, perhaps unneeded shift\n";
 		os << "\tcurMask = _mm256_slli_epi32(curMask, " << groupSize << ");\n";
-		os << "\tpermute" << groupSize << "();\n";
+		os << "\tif(permute" << groupSize << "()) return true;\n";
 		os << "\tcurMask = _mm256_srli_epi32(curMask, " << groupSize << ");\n";
 		os << "\t";
-		genPopStack(os, bitsCount, groupSize);
+		genPopStack(os, bitsCount, groupSize+1);
 		os << "\tbreak;\n";
 	}
 }
+
+/*
+curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits1, _mm256_srli_epi32(bits2, 1)));
+nextGroup();
+curValue = _mm256_andnot_si256(bits0, curValue);
+curValue = _mm256_or_si256(curValue, _mm256_or_si256(bits2, _mm256_srli_epi32(bits1, 1)));
+nextGroup();
+curValue = _mm256_andnot_si256(bits0, curValue);
+*/
+
+static void genShift(std::ostream& os, int bitsIndex, int shift) {
+	if(shift > 0) {
+		os << "_mm256_srli_epi32(bits" << bitsIndex+1 << ", " << shift << ")";
+	} else {
+		os << "bits" << bitsIndex+1;
+	}
+}
+
+static void genArg(std::ostream& os, const std::vector<int>& permut, int index) {
+	if(permut.size() - index == 1) {
+		genShift(os, permut[index], index);
+	} else {
+		os << "_mm256_or_si256(";
+		genShift(os, permut[index], index);
+		os << ", ";
+		genArg(os, permut, index + 1);
+		os << ")";
+	}
+}
+
+void genCodeForSmallPermut(std::ostream& os, int permutSize) {
+	std::vector<int> integers = generateIntegers(permutSize);
+
+	forEachPermutation(integers, [&os](const std::vector<int>& permut) {
+		os << "\tcurValue = _mm256_or_si256(curValue, ";
+		genArg(os, permut, 0);
+		os << ");\n";
+		os << "\tif(nextGroup()) return true;\n";
+		os << "\tcurValue = _mm256_andnot_si256(bits0, curValue);\n";
+	});
+}
+
+/*
+curValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits5, 4));
+permute4();
+curValue = _mm256_andnot_si256(_mm256_srli_epi32(bits5, 4), curValue);
+SWAP(bits1, bits5);
+*/
+
+static void genCodeForLargePermut(std::ostream& os, int permutSize) {
+	for(int i = 1; i <= permutSize; i++) {
+		os << "\tcurValue = _mm256_or_si256(curValue, _mm256_srli_epi32(bits" << permutSize << ", " << permutSize - 1 << "));\n";
+		os << "\tif(permute" << permutSize-1 << "()) return true;\n";
+		os << "\tcurValue = _mm256_andnot_si256(_mm256_srli_epi32(bits" << permutSize << ", " << permutSize - 1 << "), curValue);\n";
+		if(i == 1) {
+			os << "\tSWAP(bits" << i << ", bits" << permutSize << ");\n";
+		} else if(i == permutSize) {
+			os << "\tSWAP(bits" << i-1 << ", bits" << permutSize << ");\n";
+		} else {
+			os << "\tROTRIGHT(bits" << i-1 << ", bits" << i << ", bits" << permutSize << ");\n";
+		}
+	}
+}
+
+static void genCodeForAllLargePermut(std::ostream& os) {
+	for(int i = maxSmallPermuteSize+1; i <= groupCount; i++) {
+		os << "inline bool permute" << i << "() {\n";
+		genCodeForLargePermut(os, i);
+		os << "\treturn false;\n";
+		os << "}\n";
+	}
+}
+
+void genCodeForAllPermut() {
+	std::ofstream os("permuteCode.txt");
+
+	os << "inline bool permute1() { // no mask needed to repair permute1, can just reuse bits1\n";
+	os << "\tcurValue = _mm256_or_si256(curValue, bits0);\n";
+	os << "\tif(nextGroup()) return true;\n";
+	os << "\tcurValue = _mm256_andnot_si256(bits0, curValue);\n";
+	os << "\treturn false;\n";
+	os << "}\n";
+
+	for(int i = 2; i <= maxSmallPermuteSize; i++) {
+		os << "inline bool permute" << i << "() {\n";
+		genCodeForSmallPermut(os, i);
+		os << "\treturn false;\n";
+		os << "}\n";
+	}
+
+	for(int i = maxSmallPermuteSize + 1; i <= groupCount; i++) {
+		os << "inline bool permute" << i << "() {\n";
+		genCodeForLargePermut(os, i);
+		os << "\treturn false;\n";
+		os << "}\n";
+	}
+}
+
+
 
