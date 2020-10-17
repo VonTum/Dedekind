@@ -69,6 +69,7 @@ PreprocessedFunctionInputSet preprocess(const FunctionInputSet& inputSet, Functi
 	}
 
 	swizzleVector(permutation, result, result);
+	result.fixFinalBlock();
 	return PreprocessedFunctionInputSet{result, occurences, outputIndex};
 }
 
@@ -171,14 +172,18 @@ struct SmallEqualityChecker {
 		data(_mm256_load_si256(reinterpret_cast<const __m256i*>(functionInputSet.getData()))) {}
 
 	inline bool allContained() {
-		__debugbreak();
-		for(int i = 0; i < functionInputSetSize; i++) {
+		/*for(int i = 0; i < functionInputSetSize; i++) {
 			FunctionInput fn{curValue.m256i_i32[i]};
 			if(!equalityChecker.contains(fn)) {
 				return false;
 			}
 		}
-		return true;
+		return true;*/
+
+		__m256i v = _mm256_i32gather_epi32(reinterpret_cast<const int*>(equalityChecker.getData()), curValue, 1);
+
+		int msk = _mm256_movemask_epi8(v);
+		return (msk & 0x11111111) == 0x11111111;
 	}
 
 	bool checkAllForGroup();
@@ -626,13 +631,19 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 
 	if(this->spanSize != b.spanSize || this->variableOccurences != b.variableOccurences) return false; // early exit, a and b do not span the same number of variables, impossible to be isomorphic!
 
-	if(b.functionInputSet.size() <= 8) {
-		SmallEqualityChecker eqChecker(this->equalityChecker, b.functionInputSet, b.variableOccurences);
+	SmallEqualityChecker eqChecker(this->equalityChecker, b.functionInputSet, b.variableOccurences);
 
-		return eqChecker.checkAllForGroup();
+	bool newAlgoResult = eqChecker.checkAllForGroup();
+
+	if(!newAlgoResult) return false;
+
+	if(b.functionInputSet.size() <= 8) {
+		
+		//std::cout << (newAlgoResult ? '.' : 'f');
+		//return newAlgoResult;
 
 		/*__m256i initialData = _mm256_load_si256(reinterpret_cast<const __m256i*>(b.functionInputSet.getData()));
-		return existsPermutationOverVariableGroupsSIMD(this->spanSize, this->variableOccurences, initialData, [&eqCheck = this->equalityChecker, bsize = b.functionInputSet.size()](__m256i swizzledFirstBlock, int* swizStart, int* swizEnd){
+		bool oldAlgoResult = existsPermutationOverVariableGroupsSIMD(this->spanSize, this->variableOccurences, initialData, [&eqCheck = this->equalityChecker, bsize = b.functionInputSet.size()](__m256i swizzledFirstBlock, int* swizStart, int* swizEnd){
 			for(int i = 0; i < bsize; i++) {
 				FunctionInput fn{swizzledFirstBlock.m256i_i32[i]};
 				if(!eqCheck.contains(fn)) {
@@ -642,7 +653,7 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 			return true;
 		});*/
 		
-		//return newAlgoResult;
+		return newAlgoResult;
 
 		/*if(newAlgoResult != oldAlgoResult) {
 			std::cout << (newAlgoResult ? 'T' : 'F');
@@ -651,9 +662,9 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 			bool newAlgoResult = eqChecker.checkAllForGroup();
 		} else {
 			std::cout << (newAlgoResult ? 't' : 'f');
-		}*/
+		}
 
-		//return oldAlgoResult;
+		return oldAlgoResult;*/
 	} else {
 		__m256i initialData = _mm256_load_si256(reinterpret_cast<const __m256i*>(b.functionInputSet.getData()));
 		return existsPermutationOverVariableGroupsSIMD(this->spanSize, this->variableOccurences, initialData, [this, &bp = b.functionInputSet](__m256i swizzledFirstBlock, int* swizStart, int* swizEnd) {

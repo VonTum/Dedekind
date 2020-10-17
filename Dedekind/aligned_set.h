@@ -35,12 +35,6 @@ class aligned_set {
 		}
 	}
 
-	void fillLeftover() {
-		for(size_t i = n; i < capacity; i++) {
-			new(data + i) T();
-		}
-	}
-
 	void expandIfNeeded(size_t newSize) {
 		if(newSize > capacity) {
 			size_t newCapacity = nextAligned(capacity + 1);
@@ -53,7 +47,6 @@ class aligned_set {
 			freeT(this->data, this->n);
 			this->data = newData;
 			this->capacity = newCapacity;
-			fillLeftover();
 		}
 	}
 
@@ -64,13 +57,11 @@ public:
 		for(T& item : *this) {
 			new(&item) T();
 		}
-		fillLeftover();
 	}
 	aligned_set(size_t size, const T& val) : aligned_set(size, nextAligned(size)) {
 		for(size_t i = 0; i < size; i++) {
 			new(data + i) T(val);
 		}
-		fillLeftover();
 	}
 	aligned_set(std::initializer_list<T> lst) : aligned_set(lst.size(), nextAligned(lst.size())) {
 		T* cur = data;
@@ -78,13 +69,11 @@ public:
 			new(cur) T(item);
 			cur++;
 		}
-		fillLeftover();
 	}
 	aligned_set(const std::vector<T>& vec) : aligned_set(vec.size(), nextAligned(vec.size())) {
 		for(size_t i = 0; i < n; i++) {
 			new(data + i) T(vec[i]);
 		}
-		fillLeftover();
 	}
 	~aligned_set() {
 		freeT(data, n);
@@ -94,20 +83,18 @@ public:
 	}
 
 	aligned_set(const aligned_set& other) : aligned_set(other.n, nextAligned(other.n)) {
-		for(size_t i = 0; i < other.n; i++) {
-			data[i] = other[i];
+		for(size_t i = 0; i < nextAligned(other.n); i++) {
+			data[i] = other.data[i];
 		}
-		fillLeftover();
 	}
 	aligned_set& operator=(const aligned_set& other) {
 		freeT(data, n);
 		data = allocT(other.n);
 		n = other.n;
 		capacity = other.n;
-		for(size_t i = 0; i < other.n; i++) {
-			data[i] = other[i];
+		for(size_t i = 0; i < nextAligned(other.n); i++) {
+			data[i] = other.data[i];
 		}
-		fillLeftover();
 		return *this;
 	}
 	aligned_set(aligned_set&& other) noexcept : data(other.data), n(other.n), capacity(other.capacity) {
@@ -156,6 +143,16 @@ public:
 	void reserve(size_t newSize) { expandIfNeeded(newSize); }
 	T* getData() { return data; }
 	const T* getData() const { return data; }
+
+	void fixFinalBlock() {
+		size_t endOfGatherableData = nextAligned(this->n);
+		if(this->n != endOfGatherableData) {
+			T valueToCopy = this->data[this->n - 1];
+			for(size_t i = this->n; i < endOfGatherableData; i++) {
+				this->data[i] = valueToCopy;
+			}
+		}
+	}
 
 	T* begin() { return data; }
 	T* end() { return data + n; }
