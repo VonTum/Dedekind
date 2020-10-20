@@ -2,20 +2,6 @@
 
 #include <vector>
 
-struct IteratorEnd {};
-
-template<typename Iter>
-struct IteratorFactory {
-	Iter iter;
-
-	Iter begin() const {
-		return iter;
-	}
-	IteratorEnd end() const {
-		return IteratorEnd{};
-	}
-};
-
 template<typename Collection, typename Func>
 void forEachSubgroupRecurse(const Collection& collection, const Func& func, Collection& output, size_t startFrom, size_t indexInOutput) {
 	size_t leftoverItems = output.size() - indexInOutput;
@@ -137,4 +123,18 @@ std::vector<std::pair<T1, T2>> zip(const std::vector<T1>& a, const std::vector<T
 	for(size_t i = 0; i < a.size(); i++) {
 		result[i] = std::make_pair(a[i], b[i]);
 	}
+}
+
+template<typename ColIterBegin, typename ColIterEnd>
+inline bool allEqual(ColIterBegin begin, ColIterEnd end) {
+	if(begin != end) {
+		const auto& firstElem = *begin;
+		++begin;
+		for(; begin != end; ++begin) {
+			if(firstElem != *begin) {
+				return false;
+			}
+		}
+	}
+	return true;
 }

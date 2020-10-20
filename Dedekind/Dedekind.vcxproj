@@ -173,6 +173,8 @@
     <ClInclude Include="functionInput.h" />
     <ClInclude Include="functionInputSet.h" />
     <ClInclude Include="intSet.h" />
+    <ClInclude Include="iteratorEnd.h" />
+    <ClInclude Include="iteratorFactory.h" />
     <ClInclude Include="layerStack.h" />
     <ClInclude Include="math.h" />
     <ClInclude Include="set.h" />

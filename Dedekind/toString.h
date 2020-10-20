@@ -77,7 +77,11 @@ std::ostream& operator<<(std::ostream& os, VariableOccurence vo) {
 	os << char('a' + vo.index) << ':' << vo.count;
 	return os;
 }
-std::ostream& operator<<(std::ostream& os, VariableOccurenceGroup vog) {
+std::ostream& operator<<(std::ostream& os, const VariableCoOccurence& vo) {
+	os << vo.coOccursWith;
+	return os;
+}
+std::ostream& operator<<(std::ostream& os, const VariableGroup& vog) {
 	os << vog.groupSize << 'x' << vog.occurences;
 	return os;
 }

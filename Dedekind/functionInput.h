@@ -2,6 +2,8 @@
 
 #include <intrin.h>
 
+#include "iteratorFactory.h"
+
 #define MAX_DEDEKIND 10
 
 /*template<typename IntType>
@@ -12,6 +14,29 @@ template<typename IntType>
 inline IntType oneBitInterval(IntType n, IntType offset) {
 	return lowerBitsOnes(n) << offset;
 }*/
+
+struct FunctionInputIter {
+	uint32_t curFuncInput;
+	int curIndex;
+
+	FunctionInputIter(uint32_t curFuncInput) : curFuncInput(curFuncInput), curIndex(0) {
+		while((this->curFuncInput & 1) == 0 && this->curFuncInput != 0) {
+			this->curFuncInput >>= 1;
+			curIndex++;
+		}
+	}
+
+	void operator++() {
+		do {
+			curFuncInput >>= 1;
+			curIndex++;
+		} while((curFuncInput & 1) == 0 && curFuncInput != 0);
+	}
+	int operator*() const {
+		return curIndex;
+	}
+	bool operator!=(IteratorEnd) { return curFuncInput != 0; }
+};
 
 struct FunctionInput {
 	using underlyingType = uint32_t;
@@ -56,6 +81,11 @@ struct FunctionInput {
 
 	inline operator uint32_t() const { return inputBits; }
 	inline operator size_t() const { return static_cast<size_t>(inputBits); }
+
+	inline FunctionInputIter begin() const {
+		return FunctionInputIter(inputBits);
+	}
+	inline IteratorEnd end() const { return IteratorEnd(); }
 };
 
 inline FunctionInput operator&(FunctionInput a, FunctionInput b) { return FunctionInput{a.inputBits & b.inputBits}; }

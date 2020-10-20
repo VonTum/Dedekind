@@ -13,16 +13,22 @@ struct VariableOccurence {
 	int count;
 };
 
-struct VariableOccurenceGroup {
-	int groupSize;
-	int occurences;
+struct VariableCoOccurence {
+	std::vector<std::vector<int>> coOccursWith;
 };
-inline bool operator==(VariableOccurenceGroup a, VariableOccurenceGroup b) { return a.groupSize == b.groupSize && a.occurences == b.occurences; }
-inline bool operator!=(VariableOccurenceGroup a, VariableOccurenceGroup b) { return a.groupSize != b.groupSize || a.occurences != b.occurences; }
+inline bool operator==(const VariableCoOccurence& a, const VariableCoOccurence& b) { return a.coOccursWith == b.coOccursWith; }
+inline bool operator!=(const VariableCoOccurence& a, const VariableCoOccurence& b) { return a.coOccursWith != b.coOccursWith; }
+
+struct VariableGroup {
+	int groupSize;
+	VariableCoOccurence occurences;
+};
+inline bool operator==(VariableGroup a, VariableGroup b) { return a.groupSize == b.groupSize && a.occurences == b.occurences; }
+inline bool operator!=(VariableGroup a, VariableGroup b) { return a.groupSize != b.groupSize || a.occurences != b.occurences; }
 
 struct PreprocessedFunctionInputSet {
 	FunctionInputSet functionInputSet;
-	std::vector<VariableOccurenceGroup> variableOccurences;
+	std::vector<VariableGroup> variableOccurences;
 	int spanSize;
 
 	inline size_t size() const { return functionInputSet.size(); }
@@ -82,4 +88,3 @@ inline bool isIsomorphic(const FunctionInputSet& a, const FunctionInputSet& b) {
 
 	return isIsomorphic(an, b);
 }
-

@@ -206,19 +206,34 @@ public:
 	}
 };
 
+void testPreprocess() {
+	FunctionInputSet set;
+
+	set.push_back(FunctionInput{0b000011});
+	set.push_back(FunctionInput{0b000110});
+	set.push_back(FunctionInput{0b001100});
+	set.push_back(FunctionInput{0b011000});
+	set.push_back(FunctionInput{0b110000});
+
+	auto prep = preprocess(set);
+	std::cout << prep;
+}
+
 int main() {
+	//testPreprocess();
+	//return 0;
 	//genCodeForEquivClass();
 	//genCodeForSmallPermut(4);
 	//genCodeForAllLargePermut();
 	//genCodeForAllPermut();
 	//return 0;
-	TimeTracker timer;
+	//TimeTracker timer;
 	/*dedekind(1);
 	dedekind(2);
 	dedekind(3);
 	dedekind(4);
 	dedekind(5);*/
-	dedekind(6);
+	dedekind(5);
 	/*dedekind(6);
 	dedekind(6);
 	dedekind(6);
@@ -232,16 +247,17 @@ int main() {
 	std::cout << layers << std::endl;*/
 
 	std::cout << "Starting" << std::endl;
-	LayerStack layers = generateLayers(6);
+	LayerStack layers = generateLayers(5);
 	std::cout << "Layers made" << std::endl;
 
-	/*std::cout << layers << std::endl;
+	std::cout << layers << std::endl;
 	
 	FunctionInputSet testSet = layers.layers[2];
-	testSet.pop_back();
+	//testSet.pop_back();
+
 
 	printAllSymmetryGroupsForInputSet(testSet);
-	printAllSymmetryGroupsForInputSetFast(testSet);*/
+	printAllSymmetryGroupsForInputSetFast(testSet);
 
 	std::vector<std::vector<SymmetryGroup>> result = findAllSymmetryGroupsFast(layers.layers[3]);
 	for(size_t s = 0; s < result.size(); s++) {
