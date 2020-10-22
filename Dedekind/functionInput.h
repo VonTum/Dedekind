@@ -59,6 +59,15 @@ struct FunctionInput {
 	inline int getNumberEnabled() const {
 		return __popcnt(inputBits);
 	}
+	inline int getHighestEnabled() const {
+		int total = 0;
+		underlyingType v = inputBits;
+		while(v != 0) {
+			total++;
+			v >>= 1;
+		}
+		return total;
+	}
 	inline bool empty() const {
 		return inputBits == 0;
 	}

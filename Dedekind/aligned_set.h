@@ -178,3 +178,7 @@ bool operator==(const aligned_set<T, Align>& a, aligned_set<T, Align> b) {
 	return true;
 }
 
+template<typename T, size_t Align>
+bool operator!=(const aligned_set<T, Align>& a, aligned_set<T, Align> b) {
+	return !(a == b);
+}

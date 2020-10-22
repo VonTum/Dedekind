@@ -22,6 +22,8 @@ bool allUnique(const std::vector<SymmetryGroup>& groups) {
 			bool bContains = b.contains(a);
 			if(aContains || bContains) {
 				__debugbreak();
+				bool aContains = a.contains(b);
+				bool bContains = b.contains(a);
 				return false;
 			}
 		}

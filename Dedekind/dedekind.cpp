@@ -219,8 +219,36 @@ void testPreprocess() {
 	std::cout << prep;
 }
 
+void testPreprocess2() {
+	LayerStack st = generateLayers(5);
+	FunctionInputSet inputInputSet = st.layers[2];
+	
+
+	for(int i = 1; i < inputInputSet.size(); i++) {
+		forEachSubgroup(inputInputSet, i, [](const FunctionInputSet& funcInputSet) {
+			int numberOfVars = span(funcInputSet).getHighestEnabled();
+			PreprocessedFunctionInputSet realprep = preprocess(funcInputSet);
+
+			FunctionInputSet permutedSet(funcInputSet.size());
+			forEachPermutation(generateIntegers(numberOfVars), [&funcInputSet, &permutedSet, &realprep](const std::vector<int>& permut) {
+				swizzleVector(permut, funcInputSet, permutedSet);
+
+				PreprocessedFunctionInputSet prep = preprocess(permutedSet);
+
+				std::cout << prep << std::endl;
+
+				if(prep.variableOccurences != realprep.variableOccurences) {
+					__debugbreak();
+				}
+			});
+		});
+	}
+}
+
 int main() {
-	//testPreprocess();
+
+
+	//testPreprocess2();
 	//return 0;
 	//genCodeForEquivClass();
 	//genCodeForSmallPermut(4);
@@ -233,7 +261,7 @@ int main() {
 	dedekind(3);
 	dedekind(4);
 	dedekind(5);*/
-	dedekind(5);
+	dedekind(6);
 	/*dedekind(6);
 	dedekind(6);
 	dedekind(6);
@@ -241,7 +269,7 @@ int main() {
 	dedekind(6);*/
 	//dedekind(7);
 	
-	return 0;//*/
+	//return 0;//*/
 
 	/*LayerStack layers = generateLayers(4);
 	std::cout << layers << std::endl;*/

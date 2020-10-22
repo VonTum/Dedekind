@@ -14,6 +14,7 @@ struct VariableOccurence {
 };
 
 struct VariableCoOccurence {
+	//int coOccurenceValue;
 	std::vector<std::vector<int>> coOccursWith;
 };
 inline bool operator==(const VariableCoOccurence& a, const VariableCoOccurence& b) { return a.coOccursWith == b.coOccursWith; }
@@ -21,7 +22,8 @@ inline bool operator!=(const VariableCoOccurence& a, const VariableCoOccurence& 
 
 struct VariableGroup {
 	int groupSize;
-	VariableCoOccurence occurences;
+	int occurences;
+	//VariableCoOccurence occurences;
 };
 inline bool operator==(VariableGroup a, VariableGroup b) { return a.groupSize == b.groupSize && a.occurences == b.occurences; }
 inline bool operator!=(VariableGroup a, VariableGroup b) { return a.groupSize != b.groupSize || a.occurences != b.occurences; }
@@ -36,12 +38,7 @@ struct PreprocessedFunctionInputSet {
 	static PreprocessedFunctionInputSet emptyPreprocessedFunctionInputSet;
 };
 
-PreprocessedFunctionInputSet preprocess(const FunctionInputSet& inputSet, FunctionInput sp);
-inline PreprocessedFunctionInputSet preprocess(const FunctionInputSet& inputSet) {
-	FunctionInput sp = span(inputSet);
-
-	return preprocess(inputSet, sp);
-}
+PreprocessedFunctionInputSet preprocess(const FunctionInputSet& inputSet);
 
 struct EquivalenceClass : public PreprocessedFunctionInputSet {
 	int_set<FunctionInput, FunctionInput::underlyingType> equalityChecker;
@@ -55,36 +52,3 @@ struct EquivalenceClass : public PreprocessedFunctionInputSet {
 
 	bool contains(const PreprocessedFunctionInputSet& b) const;
 };
-
-inline bool isIsomorphic(const PreprocessedFunctionInputSet& a, const PreprocessedFunctionInputSet& b) {
-	assert(a.size() == b.size()); // assume we are only comparing functionInputSets with the same number of edges
-
-	if(a.spanSize != b.spanSize) return false; // early exit, a and b do not span the same number of variables, impossible to be isomorphic!
-
-	return EquivalenceClass(a).contains(b);
-}
-
-inline bool isIsomorphic(const PreprocessedFunctionInputSet& a, const FunctionInputSet& b) {
-	assert(a.size() == b.size()); // assume we are only comparing functionInputSets with the same number of edges
-
-	FunctionInput spb = span(b);
-
-	if(a.spanSize != spb.getNumberEnabled()) return false; // early exit, a and b do not span the same number of variables, impossible to be isomorphic!
-
-	PreprocessedFunctionInputSet bn = preprocess(b, spb);
-
-	return isIsomorphic(a, bn);
-}
-
-inline bool isIsomorphic(const FunctionInputSet& a, const FunctionInputSet& b) {
-	assert(a.size() == b.size()); // assume we are only comparing functionInputSets with the same number of edges
-
-	FunctionInput spa = span(a);
-	FunctionInput spb = span(b);
-
-	if(spa.getNumberEnabled() != spb.getNumberEnabled()) return false; // early exit, a and b do not span the same number of variables, impossible to be isomorphic!
-
-	PreprocessedFunctionInputSet an = preprocess(a, spa);
-
-	return isIsomorphic(an, b);
-}
