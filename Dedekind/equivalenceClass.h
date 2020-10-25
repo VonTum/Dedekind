@@ -23,7 +23,6 @@ inline bool operator!=(const VariableCoOccurence& a, const VariableCoOccurence& 
 struct VariableGroup {
 	int groupSize;
 	int occurences;
-	//VariableCoOccurence occurences;
 };
 inline bool operator==(VariableGroup a, VariableGroup b) { return a.groupSize == b.groupSize && a.occurences == b.occurences; }
 inline bool operator!=(VariableGroup a, VariableGroup b) { return a.groupSize != b.groupSize || a.occurences != b.occurences; }
@@ -31,6 +30,7 @@ inline bool operator!=(VariableGroup a, VariableGroup b) { return a.groupSize !=
 struct PreprocessedFunctionInputSet {
 	FunctionInputSet functionInputSet;
 	std::vector<VariableGroup> variableOccurences;
+	std::vector<CountedGroup<VariableCoOccurence>> variableCoOccurences;
 	int spanSize;
 
 	inline size_t size() const { return functionInputSet.size(); }

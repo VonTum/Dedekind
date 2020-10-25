@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <type_traits>
 
 template<typename Collection, typename Func>
 void forEachSubgroupRecurse(const Collection& collection, const Func& func, Collection& output, size_t startFrom, size_t indexInOutput) {
@@ -137,4 +138,71 @@ inline bool allEqual(ColIterBegin begin, ColIterEnd end) {
 		}
 	}
 	return true;
+}
+
+template<typename ColIterBegin, typename ColIterEnd>
+inline size_t countDistinct(ColIterBegin begin, ColIterEnd end) {
+	std::vector<decltype(*begin)> foundItems;
+	for(; begin != end; ++begin) {
+		decltype(*begin) item = *begin;
+		for(decltype(*begin) compareTo : foundItems) {
+			if(item == compareTo) {
+				goto nextItem;
+			}
+		}
+		foundItems.push_back(item);
+		nextItem:;
+	}
+	return foundItems.size();
+}
+
+template<typename T>
+struct CountedGroup {
+	T group;
+	int count;
+};
+
+template<typename T>
+bool operator==(const CountedGroup<T>& first, const CountedGroup<T>& second) {
+	return first.count == second.count && first.group == second.group;
+}
+template<typename T>
+bool operator!=(const CountedGroup<T>& first, const CountedGroup<T>& second) {
+	return first.count != second.count || first.group != second.group;
+}
+
+template<typename ColIterBegin, typename ColIterEnd>
+inline auto tallyDistinctOrdered(ColIterBegin begin, ColIterEnd end) -> std::vector<CountedGroup<typename std::remove_reference<decltype(*begin)>::type>> {
+	std::vector<CountedGroup<typename std::remove_reference<decltype(*begin)>::type>> foundItems;
+	for(; begin != end; ++begin) {
+		const auto& item = *begin;
+		for(auto& compareTo : foundItems) {
+			if(item == compareTo.group) {
+				compareTo.count++;
+				goto nextItem;
+			}
+		}
+		foundItems.push_back({item, 1});
+		nextItem:;
+	}
+	return foundItems;
+}
+
+template<typename Collection, typename Func>
+std::vector<int> getSortPermutation(const Collection& collection, Func compare) {
+	std::vector<int> indices = generateIntegers(collection.size());
+	std::sort(indices.begin(), indices.end(), [&collection, &compare](int first, int second) {
+		return compare(collection[first], collection[second]);
+	});
+	return indices;
+}
+
+template<typename Collection>
+Collection permute(const Collection& col, std::vector<int>& permutation) {
+	Collection result(permutation.size());
+
+	for(size_t i = 0; i < permutation.size(); i++) {
+		result[i] = col[permutation[i]];
+	}
+	return result;
 }

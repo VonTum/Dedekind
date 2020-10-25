@@ -220,11 +220,12 @@ void testPreprocess() {
 }
 
 void testPreprocess2() {
-	LayerStack st = generateLayers(5);
+	LayerStack st = generateLayers(6);
 	FunctionInputSet inputInputSet = st.layers[2];
 	
 
 	for(int i = 1; i < inputInputSet.size(); i++) {
+		std::cout << i << "/" << inputInputSet.size() << std::endl;
 		forEachSubgroup(inputInputSet, i, [](const FunctionInputSet& funcInputSet) {
 			int numberOfVars = span(funcInputSet).getHighestEnabled();
 			PreprocessedFunctionInputSet realprep = preprocess(funcInputSet);
@@ -235,9 +236,10 @@ void testPreprocess2() {
 
 				PreprocessedFunctionInputSet prep = preprocess(permutedSet);
 
-				std::cout << prep << std::endl;
+				//std::cout << prep << std::endl;
 
 				if(prep.variableOccurences != realprep.variableOccurences) {
+					throw "Bad found!";
 					__debugbreak();
 				}
 			});
@@ -255,13 +257,13 @@ int main() {
 	//genCodeForAllLargePermut();
 	//genCodeForAllPermut();
 	//return 0;
-	//TimeTracker timer;
+	TimeTracker timer;
 	/*dedekind(1);
 	dedekind(2);
 	dedekind(3);
 	dedekind(4);
 	dedekind(5);*/
-	dedekind(6);
+	dedekind(7);
 	/*dedekind(6);
 	dedekind(6);
 	dedekind(6);
@@ -269,7 +271,7 @@ int main() {
 	dedekind(6);*/
 	//dedekind(7);
 	
-	//return 0;//*/
+	return 0;//*/
 
 	/*LayerStack layers = generateLayers(4);
 	std::cout << layers << std::endl;*/
