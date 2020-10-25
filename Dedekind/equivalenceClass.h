@@ -14,11 +14,14 @@ struct VariableOccurence {
 };
 
 struct VariableCoOccurence {
-	//int coOccurenceValue;
-	std::vector<std::vector<int>> coOccursWith;
+	std::vector<long long> coOccursWith;
 };
-inline bool operator==(const VariableCoOccurence& a, const VariableCoOccurence& b) { return a.coOccursWith == b.coOccursWith; }
-inline bool operator!=(const VariableCoOccurence& a, const VariableCoOccurence& b) { return a.coOccursWith != b.coOccursWith; }
+inline bool operator==(const VariableCoOccurence& a, const VariableCoOccurence& b) {
+	return a.coOccursWith == b.coOccursWith;
+}
+inline bool operator!=(const VariableCoOccurence& a, const VariableCoOccurence& b) {
+	return !(a == b);
+}
 
 struct VariableGroup {
 	int groupSize;

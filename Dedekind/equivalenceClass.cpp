@@ -8,7 +8,6 @@
 PreprocessedFunctionInputSet PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{}, std::vector<VariableGroup>{}, std::vector<CountedGroup<VariableCoOccurence>>{}, 0};
 EquivalenceClass EquivalenceClass::emptyEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet);
 
-
 static std::vector<VariableOccurence> computeOccurenceCounts(const FunctionInputSet& inputSet, int spanSize) {
 	std::vector<VariableOccurence> result(spanSize);
 
@@ -28,64 +27,29 @@ static std::vector<VariableOccurence> computeOccurenceCounts(const FunctionInput
 	return result;
 }
 
-bool compareLT(const std::vector<int>& first, const std::vector<int>& second) {
-	assert(first.size() == second.size());
-	for(int i = 0; i < first.size(); i++) {
-		if(first[i] < second[i]) {
-			return true;
-		} else if(first[i] > second[i]) {
-			return false;
-		}
-	}
-	return false;
-	// apparently std::sort can try to compare a value with itself -_-
-	// throw "All values should be uniquely sortable, duplicate element?";
-}
+// used for generating VariableCoOccurence lists
+static const long long primes[]{2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47};
 
-static std::vector<VariableCoOccurence> computeCoOccurences(const std::vector<int>& groupAssignments, const FunctionInputSet& functionInputSet) {
+static void computeCoOccurences(const std::vector<int>& groupAssignments, const FunctionInputSet& functionInputSet, std::vector<VariableCoOccurence>& result) {
 	int variableCount = groupAssignments.size();
 
-	std::vector<VariableCoOccurence> result(groupAssignments.size());
-
 	for(int curVar = 0; curVar < variableCount; curVar++) {
-		std::vector<std::vector<int>> curVarCoOccurence;
+		VariableCoOccurence& curVarCoOccurence = result[curVar];
+		size_t curIndexInCoOccursWith = 0;
 		for(FunctionInput fi : functionInputSet) {
 			if(fi[curVar]) {
-				std::vector<int> coOccurrence;
+				long long total = 1;
 				for(int foundVar : fi) {
 					if(foundVar == curVar) continue;
-					coOccurrence.push_back(groupAssignments[foundVar]);
+					total *= primes[groupAssignments[foundVar]];
 				}
-				curVarCoOccurence.push_back(std::move(coOccurrence));
+				curVarCoOccurence.coOccursWith[curIndexInCoOccursWith++] = total;
 			}
 		}
+		assert(curIndexInCoOccursWith == curVarCoOccurence.coOccursWith.size());
 
-		std::sort(curVarCoOccurence.begin(), curVarCoOccurence.end(), compareLT);
-
-		result[curVar] = VariableCoOccurence{std::move(curVarCoOccurence)};
+		std::sort(curVarCoOccurence.coOccursWith.begin(), curVarCoOccurence.coOccursWith.end());
 	}
-
-	return result;
-}
-
-static std::vector<int> assignGroups(const std::vector<VariableCoOccurence>& coOccurences) {
-	std::vector<int> result(coOccurences.size());
-
-	std::vector<const VariableCoOccurence*> foundGroups;
-
-	for(int curVar = 0; curVar < coOccurences.size(); curVar++) {
-		for(int foundGroupIndex = 0; foundGroupIndex < foundGroups.size(); foundGroupIndex++) {
-			if(coOccurences[curVar].coOccursWith == foundGroups[foundGroupIndex]->coOccursWith) {
-				result[curVar] = foundGroupIndex;
-				goto found;
-			}
-		}
-		result[curVar] = foundGroups.size();
-		foundGroups.push_back(&coOccurences[curVar]);
-		found:;
-	}
-
-	return result;
 }
 
 static int getHighest(const std::vector<int>& items) {
@@ -101,16 +65,10 @@ bool compareVariableOccurence(const VariableCoOccurence& first, const VariableCo
 		return first.coOccursWith.size() < second.coOccursWith.size();
 	} else {
 		for(size_t i = 0; i < first.coOccursWith.size(); i++) {
-			const std::vector<int>& occurFirst = first.coOccursWith[i];
-			const std::vector<int>& occurSecond = second.coOccursWith[i];
-			assert(occurFirst.size() == occurSecond.size());
-			for(size_t j = 0; j < occurFirst.size(); j++) {
-				int a = occurFirst[j];
-				int b = occurSecond[j];
-
-				if(a != b) {
-					return a < b;
-				}
+			long long occurFirst = first.coOccursWith[i];
+			long long occurSecond = second.coOccursWith[i];
+			if(occurFirst != occurSecond) {
+				return occurFirst < occurSecond;
 			}
 		}
 		// both are exactly the same
@@ -125,20 +83,26 @@ struct RefinedVariableSymmetryGroups {
 	FunctionInputSet normalizedFunctionInputSet;
 };
 
-static RefinedVariableSymmetryGroups refineVariableSymmetryGroups(std::vector<int> groups, FunctionInputSet functionInputSet) {
-	int oldNumGroups = getHighest(groups);
+static RefinedVariableSymmetryGroups refineVariableSymmetryGroups(const std::vector<int>& occurenceCounts, FunctionInputSet functionInputSet) {
+	std::vector<VariableCoOccurence> coOccurences(occurenceCounts.size());
+	for(size_t i = 0; i < occurenceCounts.size(); i++) {
+		coOccurences[i].coOccursWith.resize(occurenceCounts[i]);
+	}
+
+	std::pair<std::vector<int>, size_t> groups = assignUniqueGroups(occurenceCounts);
+	std::vector<int>& groupIndices = groups.first;
+	int oldNumGroups = groups.second;
 
 	while(true) {
-		std::vector<VariableCoOccurence> coOccurences = computeCoOccurences(groups, functionInputSet);
+		computeCoOccurences(groupIndices, functionInputSet, coOccurences);
 		std::vector<int> sortPermut = getSortPermutation(coOccurences, compareVariableOccurence);
 		coOccurences = permute(coOccurences, sortPermut);
 		swizzleVector(sortPermut, functionInputSet, functionInputSet);
-		groups = assignGroups(coOccurences);
-		int newNumGroups = getHighest(groups);
-		if(oldNumGroups == newNumGroups) {// stagnation, all groups found. Number of groups can only go up as groups are further split up
-			return RefinedVariableSymmetryGroups{groups, coOccurences, functionInputSet};
+		groups = assignUniqueGroups(coOccurences);
+		if(oldNumGroups == groups.second) {// stagnation, all groups found. Number of groups can only go up as groups are further split up
+			return RefinedVariableSymmetryGroups{groupIndices, coOccurences, functionInputSet};
 		}
-		oldNumGroups = newNumGroups;
+		oldNumGroups = groups.second;
 	}
 }
 
@@ -199,23 +163,6 @@ static std::vector<VariableGroup> produceVariableGroups(const std::vector<int>& 
 	return variableGroups;
 }
 
-static std::vector<int> assignUniqueGroups(const std::vector<int>& varValues) {
-	std::vector<int> result(varValues.size());
-	std::vector<int> knownGroupSizes;
-	for(size_t i = 0; i < varValues.size(); i++) {
-		for(int indexinKnownGroupSizes = 0; indexinKnownGroupSizes < knownGroupSizes.size(); indexinKnownGroupSizes++) {
-			if(knownGroupSizes[indexinKnownGroupSizes] == varValues[i]) {
-				result[i] = indexinKnownGroupSizes;
-				goto nextItem;
-			}
-		}
-		result[i] = knownGroupSizes.size();
-		knownGroupSizes.push_back(varValues[i]);
-		nextItem:;
-	}
-	return result;
-}
-
 PreprocessedFunctionInputSet preprocess(const FunctionInputSet& inputSet) {
 	if(inputSet.size() == 0 || inputSet[0].empty()) {
 		return PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet;
@@ -228,11 +175,8 @@ PreprocessedFunctionInputSet preprocess(const FunctionInputSet& inputSet) {
 
 	//return PreprocessedFunctionInputSet{variablesSortedByOccurence.first, produceVariableGroups(varOccurences), variableCount};
 
-	std::vector<int> initialGroups = assignUniqueGroups(varOccurences);
-
-
 	size_t inputSetSize = inputSet.size();
-	RefinedVariableSymmetryGroups resultingRefinedGroups = refineVariableSymmetryGroups(initialGroups, variablesSortedByOccurence.first);
+	RefinedVariableSymmetryGroups resultingRefinedGroups = refineVariableSymmetryGroups(varOccurences, variablesSortedByOccurence.first);
 
 	return PreprocessedFunctionInputSet{
 		resultingRefinedGroups.normalizedFunctionInputSet, 

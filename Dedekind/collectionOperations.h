@@ -206,3 +206,42 @@ Collection permute(const Collection& col, std::vector<int>& permutation) {
 	}
 	return result;
 }
+
+/* 
+	produces a list of ids, where each id corresponds to participation in a certain group, starting from 0 and ascending
+	returns the grouping and the groups
+	example: assignUniqueGroups({1.5, 1.5, 2.0, 1.5, 2.0, 1.7}) = {0, 0, 1, 0, 1, 2}, 3
+*/
+template<typename T>
+static std::pair<std::vector<int>, size_t> assignUniqueGroups(const std::vector<T>& values) {
+	std::vector<int> result(values.size());
+	if constexpr(std::is_trivially_copyable<T>::value) {
+		std::vector<T> knownValues;
+		for(size_t i = 0; i < values.size(); i++) {
+			for(int indexInKnownGroups = 0; indexInKnownGroups < knownValues.size(); indexInKnownGroups++) {
+				if(knownValues[indexInKnownGroups] == values[i]) {
+					result[i] = indexInKnownGroups;
+					goto nextItem;
+				}
+			}
+			result[i] = knownValues.size();
+			knownValues.push_back(values[i]);
+			nextItem:;
+		}
+		return std::make_pair(std::move(result), knownValues.size());
+	} else {
+		std::vector<const T*> knownValues;
+		for(size_t i = 0; i < values.size(); i++) {
+			for(int indexInKnownGroups = 0; indexInKnownGroups < knownValues.size(); indexInKnownGroups++) {
+				if(*knownValues[indexInKnownGroups] == values[i]) {
+					result[i] = indexInKnownGroups;
+					goto nextItem;
+				}
+			}
+			result[i] = knownValues.size();
+			knownValues.push_back(&values[i]);
+			nextItem:;
+		}
+		return std::make_pair(std::move(result), knownValues.size());
+	}
+}
