@@ -14,5 +14,5 @@ struct IteratorFactory {
 	}
 
 	template<typename... Args>
-	IteratorFactory(Args... args) : iter(args) {}
+	IteratorFactory(Args... args) : iter(args...) {}
 };

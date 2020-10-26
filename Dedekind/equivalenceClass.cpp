@@ -8,6 +8,16 @@
 PreprocessedFunctionInputSet PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{}, std::vector<VariableGroup>{}, std::vector<CountedGroup<VariableCoOccurence>>{}, 0};
 EquivalenceClass EquivalenceClass::emptyEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet);
 
+// TODO candidate for optimization
+PreprocessedFunctionInputSet PreprocessedFunctionInputSet::extendedBy(FunctionInput inp) const {
+	FunctionInputSet resultingFuncInputSet(this->functionInputSet.size() + 1);
+	for(size_t i = 0; i < this->functionInputSet.size(); i++) {
+		resultingFuncInputSet[i] = this->functionInputSet[i];
+	}
+	resultingFuncInputSet[this->functionInputSet.size()] = inp;
+	return preprocess(std::move(resultingFuncInputSet));
+}
+
 static std::vector<VariableOccurence> computeOccurenceCounts(const FunctionInputSet& inputSet, int spanSize) {
 	std::vector<VariableOccurence> result(spanSize);
 

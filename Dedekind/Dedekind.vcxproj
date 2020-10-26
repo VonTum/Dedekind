@@ -167,9 +167,8 @@
     <ClInclude Include="aligned_set.h" />
     <ClInclude Include="codeGen.h" />
     <ClInclude Include="collectionOperations.h" />
-    <ClInclude Include="countedEquivalenceClass.h" />
-    <ClInclude Include="dedekind.h" />
     <ClInclude Include="equivalenceClass.h" />
+    <ClInclude Include="equivalenceClassMap.h" />
     <ClInclude Include="functionInput.h" />
     <ClInclude Include="functionInputSet.h" />
     <ClInclude Include="intSet.h" />

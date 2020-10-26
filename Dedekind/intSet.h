@@ -1,5 +1,13 @@
 #pragma once
 
+#include "iteratorEnd.h"
+#include "iteratorFactory.h"
+
+template<typename IntType, typename UnderlyingIntType>
+class IntSetFilteredTrueIterator;
+template<typename IntType, typename UnderlyingIntType>
+class IntSetFilteredFalseIterator;
+
 template<typename IntType, typename UnderlyingIntType = size_t>
 class int_set {
 	unsigned char* data;
@@ -55,6 +63,15 @@ public:
 		return data[getIndex(item)] == TRU;
 	}
 
+	bool containsFree(IntType item) const {
+		UnderlyingIntType index = static_cast<UnderlyingIntType>(item);
+		if(index < bufSize) {
+			return data[index] == TRU;
+		} else {
+			return false;
+		}
+	}
+
 	void add(IntType item) {
 		data[getIndex(item)] = TRU;
 	}
@@ -76,5 +93,59 @@ public:
 	const unsigned char* getData() const {
 		return data;
 	}
+
+	IntSetFilteredTrueIterator<IntType, UnderlyingIntType> begin() const {
+		return IntSetFilteredTrueIterator<IntType, UnderlyingIntType>(data, bufSize);
+	}
+	IteratorEnd end() { return IteratorEnd(); }
+
+	IteratorFactory<IntSetFilteredFalseIterator<IntType, UnderlyingIntType>> iterInverse() const {
+		return IteratorFactory<IntSetFilteredFalseIterator<IntType, UnderlyingIntType>>{
+			IntSetFilteredFalseIterator<IntType, UnderlyingIntType>(data, bufSize)
+		};
+	}
 };
 
+template<typename IntType, typename UnderlyingIntType>
+class IntSetFilteredTrueIterator {
+	unsigned char* data;
+	UnderlyingIntType bufSize;
+	UnderlyingIntType curIndex;
+public:
+	IntSetFilteredTrueIterator(unsigned char* data, UnderlyingIntType bufSize) : data(data), bufSize(bufSize), curIndex(0) {
+		while(!data[curIndex] && curIndex < bufSize) {
+			curIndex++;
+		}
+	}
+	IntSetFilteredTrueIterator& operator++() {
+		do {
+			curIndex++;
+		} while(!data[curIndex] && curIndex < bufSize);
+		return *this;
+	}
+	bool operator==(IteratorEnd) const { return bufSize == curIndex; }
+	bool operator!=(IteratorEnd) const { return bufSize != curIndex; }
+	IntType operator*() const { return IntType{curIndex}; }
+};
+
+template<typename IntType, typename UnderlyingIntType>
+class IntSetFilteredFalseIterator {
+	unsigned char* data;
+	UnderlyingIntType bufSize;
+	UnderlyingIntType curIndex;
+public:
+	IntSetFilteredFalseIterator(unsigned char* data, UnderlyingIntType bufSize) : data(data), bufSize(bufSize), curIndex(0) {
+		while(data[curIndex] && curIndex < bufSize) {
+			curIndex++;
+		}
+	}
+	IntSetFilteredFalseIterator& operator++() {
+		do {
+			curIndex++;
+		} while(data[curIndex] && curIndex < bufSize);
+		return *this;
+	}
+	bool operator==(IteratorEnd) const { return bufSize == curIndex; }
+	bool operator!=(IteratorEnd) const { return bufSize != curIndex; }
+	IntType operator*() const { return IntType{curIndex}; }
+};

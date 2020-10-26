@@ -4,7 +4,7 @@
 #include <ostream>
 #include "functionInput.h"
 #include "equivalenceClass.h"
-#include "countedEquivalenceClass.h"
+#include "equivalenceClassMap.h"
 #include "layerStack.h"
 
 #include "set.h"
@@ -99,8 +99,14 @@ std::ostream& operator<<(std::ostream& os, const EquivalenceClass& eq) {
 	return os;
 }
 
-std::ostream& operator<<(std::ostream& os, const SymmetryGroup& s) {
-	os << s.example << ':' << s.count;
+template<typename V>
+std::ostream& operator<<(std::ostream& os, const EquivalenceClassMap<V>& eqMap) {
+	bool isFirst = true;
+	for(const std::pair<EquivalenceClass, V>& item : eqMap) {
+		os << (isFirst ? '{' : ',') << item.first << ": " << item.second;
+		isFirst = false;
+	}
+	os << '}';
 	return os;
 }
 

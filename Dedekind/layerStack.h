@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "functionInput.h"
+#include "functionInputSet.h"
 
 struct LayerStack {
 	std::vector<FunctionInputSet> layers;

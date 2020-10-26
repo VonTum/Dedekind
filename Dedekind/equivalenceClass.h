@@ -38,6 +38,8 @@ struct PreprocessedFunctionInputSet {
 
 	inline size_t size() const { return functionInputSet.size(); }
 
+	PreprocessedFunctionInputSet extendedBy(FunctionInput inp) const;
+
 	static PreprocessedFunctionInputSet emptyPreprocessedFunctionInputSet;
 };
 
@@ -54,4 +56,8 @@ struct EquivalenceClass : public PreprocessedFunctionInputSet {
 	static EquivalenceClass emptyEquivalenceClass;
 
 	bool contains(const PreprocessedFunctionInputSet& b) const;
+
+	inline bool hasFunctionInput(FunctionInput fi) const {
+		return equalityChecker.containsFree(fi);
+	}
 };
