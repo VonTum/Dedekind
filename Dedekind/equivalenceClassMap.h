@@ -2,76 +2,186 @@
 
 #include "equivalenceClass.h"
 
-#include <vector>
-
 template<typename V>
 class EquivalenceClassMap {
-	std::vector<std::pair<EquivalenceClass, V>> equivClasses;
+	struct MapNode {
+		MapNode* nextNode;
+		std::pair<EquivalenceClass, V> item;
+	};
+
+	MapNode** hashTable;
+	size_t buckets;
+	size_t itemCount;
+
+	MapNode** getBucketFor(const PreprocessedFunctionInputSet& functionInputSet) const {
+		uint64_t hash = functionInputSet.hash();
+		return &hashTable[hash % buckets];
+	}
+	MapNode** getNodeFor(const PreprocessedFunctionInputSet& functionInputSet) const {
+		MapNode** cur = getBucketFor(functionInputSet);
+		for(; *cur != nullptr; cur = &((*cur)->nextNode)) {
+			if((*cur)->item.first.contains(functionInputSet)) {
+				return cur;
+			}
+		}
+		return cur;
+	}
+	void deleteAllNodes() {
+		for(size_t i = 0; i < buckets; i++) {
+			for(MapNode* curNode = hashTable[i]; curNode != nullptr; ) {
+				MapNode* nodeToDelete = curNode;
+				curNode = curNode->nextNode;
+				delete nodeToDelete;
+			}
+			hashTable[i] = nullptr;
+		}
+		itemCount = 0;
+	}
+	void rehash(size_t newBuckets) {
+		MapNode** oldHashTable = this->hashTable;
+		size_t oldBuckets = this->buckets;
+		this->hashTable = new MapNode*[newBuckets];
+		this->buckets = newBuckets;
+		for(size_t i = 0; i < this->buckets; i++) this->hashTable[i] = nullptr;
+		for(size_t i = 0; i < oldBuckets; i++) {
+			for(MapNode* curNode = oldHashTable[i]; curNode != nullptr; ) {
+				MapNode** bucket = getBucketFor(curNode->item.first);
+				MapNode* nextNode = curNode->nextNode;
+				curNode->nextNode = *bucket;
+				*bucket = curNode;
+				curNode = nextNode;
+			}
+		}
+		delete[] oldHashTable;
+	}
+	void notifyNewItem() {
+		itemCount++;
+
+		if(itemCount * 3 >= buckets * 2) {
+			rehash(buckets * 2);
+		}
+	}
 public:
-	V& get(const PreprocessedFunctionInputSet& preprocessed) {
-		for(std::pair<EquivalenceClass, V>& keyValue : equivClasses) {
-			if(keyValue.first.contains(preprocessed)) {
-				return keyValue.second;
-			}
+	EquivalenceClassMap(size_t buckets) : hashTable(new MapNode*[buckets]), buckets(buckets), itemCount(0) {
+		for(size_t i = 0; i < buckets; i++) {
+			hashTable[i] = nullptr;
 		}
-		throw "input was not found!";
 	}
-	const V& get(const PreprocessedFunctionInputSet& preprocessed) const {
-		for(const std::pair<EquivalenceClass, V>& keyValue : equivClasses) {
-			if(keyValue.first.contains(preprocessed)) {
-				return keyValue.second;
-			}
-		}
-		throw "input was not found!";
+	EquivalenceClassMap() : EquivalenceClassMap(16) {}
+
+	EquivalenceClassMap(EquivalenceClassMap&& other) : hashTable(other.hashTable), buckets(other.buckets), itemCount(other.itemCount) {
+		other.hashTable = new MapNode*[16];
+		other.buckets = 16;
+		other.itemCount = 0;
 	}
-	V& getOrDefault(const PreprocessedFunctionInputSet& preprocessed, const V& defaultForCreate) {
-		for(std::pair<EquivalenceClass, V>& keyValue : equivClasses) {
-			if(keyValue.first.contains(preprocessed)) {
-				return keyValue.second;
+	EquivalenceClassMap& operator=(EquivalenceClassMap&& other) noexcept {
+		std::swap(this->hashTable, other.hashTable);
+		std::swap(this->buckets, other.buckets);
+		std::swap(this->itemCount, other.itemCount);
+		return *this;
+	}
+	EquivalenceClassMap(const EquivalenceClassMap& other) : EquivalenceClassMap(other.buckets) {
+		itemCount = other.itemCount;
+		for(size_t i = 0; i < buckets; i++) {
+			MapNode** curNodeInNewMap = &(this->hashTable[i]);
+			for(MapNode* curNode = other.hashTable[i]; curNode != nullptr; curNode = curNode->nextNode) {
+				*curNodeInNewMap = new MapNode(*curNode);
+				curNodeInNewMap = &(*curNodeInNewMap)->nextNode;
 			}
 		}
-		equivClasses.emplace_back(EquivalenceClass(preprocessed), defaultForCreate);
-		return equivClasses.back().second;
+	}
+	EquivalenceClassMap& operator=(const EquivalenceClassMap& other) {
+		*this = EquivalenceClassMap(other);
+		return *this;
 	}
 
-	template<typename FoundFunc, typename NewItemFunc>
-	void findOrCreate(const PreprocessedFunctionInputSet& preprocessed, FoundFunc onFound, NewItemFunc createNewItem) {
-		for(std::pair<EquivalenceClass, V>& keyValue : equivClasses) {
-			if(keyValue.first.contains(preprocessed)) {
-				onFound(keyValue.second);
-				return;
-			}
+	V& get(const PreprocessedFunctionInputSet& preprocessed) {
+		MapNode** foundNode = getNodeFor(preprocessed);
+		assert(*foundNode != nullptr);
+		return (*foundNode)->item.second;
+	}
+	const V& get(const PreprocessedFunctionInputSet& preprocessed) const {
+		MapNode** foundNode = getNodeFor(preprocessed);
+		assert(*foundNode != nullptr);
+		return (*foundNode)->item.second;
+	}
+	V& getOrDefault(const PreprocessedFunctionInputSet& preprocessed, const V& defaultForCreate) {
+		MapNode** foundNode = getNodeFor(preprocessed);
+		MapNode* actualNode = *foundNode;
+		if(actualNode == nullptr) {
+			actualNode = new MapNode{nullptr, std::make_pair(EquivalenceClass(preprocessed), defaultForCreate)};;
+			*foundNode = actualNode;
+			this->notifyNewItem();
 		}
-		equivClasses.emplace_back(EquivalenceClass(preprocessed), createNewItem(preprocessed));
+		return actualNode->item.second;
 	}
 
 	void add(const PreprocessedFunctionInputSet& preprocessed, const V& value) {
-		equivClasses.emplace_back(EquivalenceClass(preprocessed), value);
+		MapNode** bucket = getBucketFor(preprocessed);
+		*bucket = new MapNode{*bucket, std::make_pair(EquivalenceClass(preprocessed), value)};
+		this->notifyNewItem();
 	}
 
 	void add(const EquivalenceClass& eqClass, const V& value) {
-		equivClasses.emplace_back(eqClass, value);
+		MapNode** bucket = getBucketFor(eqClass);
+		*bucket = new MapNode{*bucket, std::make_pair(eqClass, value)};
+		this->notifyNewItem();
 	}
 
-	size_t size() const { return equivClasses.size(); }
-	void clear() { equivClasses.clear(); }
+	size_t size() const { return itemCount; }
+	void clear() {
+		deleteAllNodes();
+	}
+	~EquivalenceClassMap() {
+		deleteAllNodes();
+		delete[] hashTable;
+		buckets = 0;
+	}
 
-	auto begin() { return equivClasses.begin(); }
-	auto begin() const { return equivClasses.begin(); }
-	auto end() { return equivClasses.end(); }
-	auto end() const { return equivClasses.end(); }
+	struct EquivalenceClassMapIter {
+	protected:
+		MapNode** curBucket;
+		MapNode** hashTableEnd;
+		MapNode* curNode;
 
-	std::pair<EquivalenceClass, V>& front() { return equivClasses.front(); }
-	const std::pair<EquivalenceClass, V>& front() const { return equivClasses.front(); }
-
-
-	template<typename VOut, typename Func>
-	EquivalenceClassMap<VOut> mapValues(Func mapFunc) && {
-		EquivalenceClassMap<VOut> result;
-		result.equivClasses.reserve(this->equivClasses.size());
-		for(std::pair<EquivalenceClass, V>& item : *this) {
-			result.equivClasses.push_back(std::move(item.first), mapFunc(std::move(item.second)));
+	public:
+		EquivalenceClassMapIter(MapNode** hashTable, size_t buckets) : curBucket(hashTable), hashTableEnd(hashTable + buckets) {
+			while(*curBucket == nullptr && curBucket != hashTableEnd) {
+				curBucket++;
+			}
+			curNode = *curBucket;
 		}
-		return result;
-	}
+
+		bool operator!=(IteratorEnd) const {
+			return curBucket != hashTableEnd;
+		}
+		void operator++() {
+			curNode = curNode->nextNode;
+			if(curNode == nullptr) {
+				do {
+					curBucket++;
+				} while(*curBucket == nullptr && curBucket != hashTableEnd);
+				curNode = *curBucket;
+			}
+		}
+	};
+
+	struct NonConstEquivalenceClassMapIter : public EquivalenceClassMapIter {
+		using EquivalenceClassMapIter::EquivalenceClassMapIter;
+
+		std::pair<EquivalenceClass, V>& operator*() const {
+			return EquivalenceClassMapIter::curNode->item;
+		}
+	};
+	struct ConstEquivalenceClassMapIter : public EquivalenceClassMapIter {
+		using EquivalenceClassMapIter::EquivalenceClassMapIter;
+
+		const std::pair<EquivalenceClass, V>& operator*() const {
+			return EquivalenceClassMapIter::curNode->item;
+		}
+	};
+
+	auto begin() { return NonConstEquivalenceClassMapIter(hashTable, buckets); }
+	auto begin() const { return ConstEquivalenceClassMapIter(hashTable, buckets); }
+	auto end() const { return IteratorEnd(); }
 };

@@ -41,6 +41,8 @@ struct PreprocessedFunctionInputSet {
 	PreprocessedFunctionInputSet extendedBy(FunctionInput inp) const;
 
 	static PreprocessedFunctionInputSet emptyPreprocessedFunctionInputSet;
+
+	uint64_t hash() const;
 };
 
 PreprocessedFunctionInputSet preprocess(const FunctionInputSet& inputSet);

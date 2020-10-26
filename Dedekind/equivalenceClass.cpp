@@ -18,6 +18,18 @@ PreprocessedFunctionInputSet PreprocessedFunctionInputSet::extendedBy(FunctionIn
 	return preprocess(std::move(resultingFuncInputSet));
 }
 
+uint64_t PreprocessedFunctionInputSet::hash() const {
+	uint64_t hsh = spanSize;
+	for(const CountedGroup<VariableCoOccurence>& cg : variableCoOccurences) {
+		uint64_t hshOfCoOccur = 4398042316799ULL; // big prime
+		for(long long v : cg.group.coOccursWith) {
+			hshOfCoOccur ^= v;
+		}
+		hsh ^= cg.count * 87178291199ULL ^ hshOfCoOccur;// big prime, people use big primes for hashing right?
+	}
+	return hsh;
+}
+
 static std::vector<VariableOccurence> computeOccurenceCounts(const FunctionInputSet& inputSet, int spanSize) {
 	std::vector<VariableOccurence> result(spanSize);
 
