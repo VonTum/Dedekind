@@ -124,6 +124,7 @@ std::vector<std::pair<T1, T2>> zip(const std::vector<T1>& a, const std::vector<T
 	for(size_t i = 0; i < a.size(); i++) {
 		result[i] = std::make_pair(a[i], b[i]);
 	}
+	return result;
 }
 
 template<typename ColIterBegin, typename ColIterEnd>
@@ -210,38 +211,39 @@ Collection permute(const Collection& col, std::vector<int>& permutation) {
 /* 
 	produces a list of ids, where each id corresponds to participation in a certain group, starting from 0 and ascending
 	returns the grouping and the groups
-	example: assignUniqueGroups({1.5, 1.5, 2.0, 1.5, 2.0, 1.7}) = {0, 0, 1, 0, 1, 2}, 3
+	example: assignUniqueGroups({1.5, 1.5, 2.0, 1.5, 2.0, 1.7}) = {0, 0, 1, 0, 1, 2}, {1.5, 2.0, 1.7}
 */
 template<typename T>
-static std::pair<std::vector<int>, size_t> assignUniqueGroups(const std::vector<T>& values) {
+static std::pair<std::vector<int>, std::vector<T>> assignUniqueGroups(const std::vector<T>& values) {
 	std::vector<int> result(values.size());
-	if constexpr(std::is_trivially_copyable<T>::value) {
-		std::vector<T> knownValues;
-		for(size_t i = 0; i < values.size(); i++) {
-			for(int indexInKnownGroups = 0; indexInKnownGroups < knownValues.size(); indexInKnownGroups++) {
-				if(knownValues[indexInKnownGroups] == values[i]) {
-					result[i] = indexInKnownGroups;
-					goto nextItem;
-				}
+	std::vector<T> knownValues;
+	for(size_t i = 0; i < values.size(); i++) {
+		for(int indexInKnownGroups = 0; indexInKnownGroups < knownValues.size(); indexInKnownGroups++) {
+			if(knownValues[indexInKnownGroups] == values[i]) {
+				result[i] = indexInKnownGroups;
+				goto nextItem;
 			}
-			result[i] = knownValues.size();
-			knownValues.push_back(values[i]);
-			nextItem:;
 		}
-		return std::make_pair(std::move(result), knownValues.size());
-	} else {
-		std::vector<const T*> knownValues;
-		for(size_t i = 0; i < values.size(); i++) {
-			for(int indexInKnownGroups = 0; indexInKnownGroups < knownValues.size(); indexInKnownGroups++) {
-				if(*knownValues[indexInKnownGroups] == values[i]) {
-					result[i] = indexInKnownGroups;
-					goto nextItem;
-				}
-			}
-			result[i] = knownValues.size();
-			knownValues.push_back(&values[i]);
-			nextItem:;
-		}
-		return std::make_pair(std::move(result), knownValues.size());
+		result[i] = knownValues.size();
+		knownValues.push_back(values[i]);
+		nextItem:;
 	}
+	return std::make_pair(std::move(result), std::move(knownValues));
+}
+
+template<typename T>
+// input vector must be SORTED
+static std::vector<int> countOccurencesSorted(const std::vector<T>& identifiers) {
+	std::vector<int> occurenceGroups{1};
+	T lastObs = identifiers[0];
+	for(int i = 1; i < identifiers.size(); i++) {
+		T curObs = identifiers[i];
+		if(curObs == lastObs) {
+			occurenceGroups.back()++;
+		} else {
+			occurenceGroups.push_back(1);
+			lastObs = curObs;
+		}
+	}
+	return occurenceGroups;
 }

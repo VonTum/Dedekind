@@ -81,8 +81,8 @@ std::ostream& operator<<(std::ostream& os, const VariableCoOccurence& vo) {
 	os << vo.coOccursWith;
 	return os;
 }
-std::ostream& operator<<(std::ostream& os, const VariableGroup& vog) {
-	os << vog.groupSize << 'x' << vog.occurences;
+std::ostream& operator<<(std::ostream& os, const InitialVariableObservations& obs) {
+	os << "{occ:" << obs.occurenceCount << ",subGraph:" << obs.subGraphSize << '}';
 	return os;
 }
 std::ostream& operator<<(std::ostream& os, const PreprocessedFunctionInputSet& s) {

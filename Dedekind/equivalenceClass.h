@@ -23,16 +23,37 @@ inline bool operator!=(const VariableCoOccurence& a, const VariableCoOccurence& 
 	return !(a == b);
 }
 
-struct VariableGroup {
-	int groupSize;
-	int occurences;
+struct InitialVariableObservations {
+	int occurenceCount;
+	int subGraphSize;
 };
-inline bool operator==(VariableGroup a, VariableGroup b) { return a.groupSize == b.groupSize && a.occurences == b.occurences; }
-inline bool operator!=(VariableGroup a, VariableGroup b) { return a.groupSize != b.groupSize || a.occurences != b.occurences; }
+inline bool operator==(InitialVariableObservations a, InitialVariableObservations b) {
+	return a.occurenceCount == b.occurenceCount && a.subGraphSize == b.subGraphSize;
+}
+inline bool operator!=(InitialVariableObservations a, InitialVariableObservations b) {
+	return a.occurenceCount != b.occurenceCount || a.subGraphSize != b.subGraphSize;
+}
+inline bool operator<(InitialVariableObservations a, InitialVariableObservations b) {
+	if(a.subGraphSize == b.subGraphSize) {
+		return a.occurenceCount < b.occurenceCount;
+	} else {
+		return a.subGraphSize < b.subGraphSize;
+	}
+}
+inline bool operator<=(InitialVariableObservations a, InitialVariableObservations b) {
+	if(a.subGraphSize == b.subGraphSize) {
+		return a.occurenceCount <= b.occurenceCount;
+	} else {
+		return a.subGraphSize <= b.subGraphSize;
+	}
+}
+inline bool operator>(InitialVariableObservations a, InitialVariableObservations b) { return b < a; }
+inline bool operator>=(InitialVariableObservations a, InitialVariableObservations b) { return b <= a; }
 
 struct PreprocessedFunctionInputSet {
 	FunctionInputSet functionInputSet;
-	std::vector<VariableGroup> variableOccurences;
+	std::vector<InitialVariableObservations> variables;
+	std::vector<int> variableOccurences;
 	std::vector<CountedGroup<VariableCoOccurence>> variableCoOccurences;
 	int spanSize;
 

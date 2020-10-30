@@ -64,4 +64,23 @@
       </ArrayItems>
     </Expand>
   </Type>
+  <Type Name="EquivalenceClassMap&lt;*&gt;">
+    <DisplayString>{{Size = {itemCount}, Buckets = {buckets}}}</DisplayString>
+    <Expand>
+      <ArrayItems>
+        <Size>buckets</Size>
+        <ValuePointer>hashTable</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="EquivalenceClassMap&lt;*&gt;::MapNode">
+    <DisplayString>{item.first.functionInputSet} : {item.second}</DisplayString>
+    <Expand>
+      <LinkedListItems>
+        <HeadPointer>this</HeadPointer>
+        <NextPointer>nextNode</NextPointer>
+        <ValueNode>item</ValueNode>
+      </LinkedListItems>
+    </Expand>
+  </Type>
 </AutoVisualizer>

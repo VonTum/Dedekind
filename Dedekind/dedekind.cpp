@@ -192,13 +192,13 @@ static void testFindAllSymmetryGroupsForInputSet() {
 	LayerStack layers = generateLayers(7);
 	std::cout << layers << std::endl;
 
-	findAllSymmetryGroupsFast(layers.layers[4]);
+	findAllSymmetryGroupsFast(layers.layers[2]);
 
 	//printAllSymmetryGroupsForInputSetFast(layers.layers[3]);
 }
 
 int main() {
-	//testFindAllSymmetryGroupsForInputSet(); return 0;
+	testFindAllSymmetryGroupsForInputSet(); return 0;
 
 	//testPreprocess2();return 0;
 	//genCodeForEquivClass();

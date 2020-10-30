@@ -5,7 +5,7 @@
 #include <iostream>
 
 
-PreprocessedFunctionInputSet PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{}, std::vector<VariableGroup>{}, std::vector<CountedGroup<VariableCoOccurence>>{}, 0};
+PreprocessedFunctionInputSet PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{}, std::vector<InitialVariableObservations>{}, std::vector<int>{}, std::vector<CountedGroup<VariableCoOccurence>>{}, 0};
 EquivalenceClass EquivalenceClass::emptyEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet);
 
 // TODO candidate for optimization
@@ -32,9 +32,8 @@ uint64_t PreprocessedFunctionInputSet::hash() const {
 	return hsh ^ (hsh >> 1) ^ (hsh >> 2) ^ (hsh >> 4) ^ (hsh >> 8) ^ (hsh >> 16) ^ (hsh >> 32);
 }
 
-static std::vector<VariableOccurence> computeOccurenceCounts(const FunctionInputSet& inputSet, int spanSize) {
-	std::vector<VariableOccurence> result(spanSize);
-
+static std::vector<int> computeOccurenceCounts(const FunctionInputSet& inputSet, int spanSize) {
+	std::vector<int> result(spanSize);
 
 	for(int bit = 0; bit < spanSize; bit++) {
 		int total = 0;
@@ -43,10 +42,8 @@ static std::vector<VariableOccurence> computeOccurenceCounts(const FunctionInput
 				total++;
 			}
 		}
-		result[bit] = VariableOccurence{bit, total};
+		result[bit] = total;
 	}
-
-	std::sort(result.begin(), result.end(), [](VariableOccurence a, VariableOccurence b) {return a.count < b.count; });
 
 	return result;
 }
@@ -102,31 +99,84 @@ bool compareVariableOccurence(const VariableCoOccurence& first, const VariableCo
 	}
 }
 
+static std::pair<std::vector<int>, int> findDisjointSubGraphs(FunctionInputSet& functionInputSet, int numberOfVariables) {
+	std::vector<int> result(numberOfVariables, -1);
+
+	int curGroup = 0;
+	
+	for(int startOfGroupVar = 0; startOfGroupVar < numberOfVariables; startOfGroupVar++) {
+		if(result[startOfGroupVar] == -1) {
+
+			result[startOfGroupVar] = curGroup;
+			FunctionInput curGroupMask{1 << startOfGroupVar};
+
+			bool wasChanged = true;
+			while(wasChanged) {
+				wasChanged = false;
+				for(int var = 0; var < numberOfVariables; var++) {
+					if(result[var] != -1) continue; // skip already assigned variables
+
+					for(FunctionInput fi : functionInputSet) {
+						if(fi[var] && overlaps(fi, curGroupMask)) {
+							result[var] = curGroup;
+							curGroupMask.enableInput(var);
+							wasChanged = true;
+						}
+					}
+				}
+			}
+			// group exhausted
+			curGroup++;
+		}
+	}
+	return std::make_pair(std::move(result), curGroup);
+}
+
+static std::vector<int> countSizeOfSubgraphForEachVariable(FunctionInputSet& functionInputSet, int numberOfVariables) {
+	std::pair<std::vector<int>, int> disjointSubGraphs = findDisjointSubGraphs(functionInputSet, numberOfVariables);
+
+	std::vector<int> sizesOfEachGroup(disjointSubGraphs.second, 0); // number of groups
+
+	for(int groupID : disjointSubGraphs.first) {
+		sizesOfEachGroup[groupID]++;
+	}
+
+	std::vector<int> result = std::move(disjointSubGraphs.first);
+
+	for(int i = 0; i < result.size(); i++) {
+		result[i] = sizesOfEachGroup[result[i]];
+	}
+
+	return result;
+}
+
+
 struct RefinedVariableSymmetryGroups {
 	std::vector<int> groups;
+	std::pair<std::vector<int>, std::vector<InitialVariableObservations>> initialVariableInfo;
 	std::vector<VariableCoOccurence> coOccurences;
 };
 
-static RefinedVariableSymmetryGroups refineVariableSymmetryGroups(const std::vector<int>& occurenceCounts, FunctionInputSet& functionInputSet) {
-	std::vector<VariableCoOccurence> coOccurences(occurenceCounts.size());
-	for(size_t i = 0; i < occurenceCounts.size(); i++) {
-		coOccurences[i].coOccursWith.resize(occurenceCounts[i]);
+static RefinedVariableSymmetryGroups refineVariableSymmetryGroups(const std::vector<InitialVariableObservations>& variables, FunctionInputSet& functionInputSet) {
+	std::vector<VariableCoOccurence> coOccurences(variables.size());
+	for(size_t i = 0; i < variables.size(); i++) {
+		coOccurences[i].coOccursWith.resize(variables[i].occurenceCount);
 	}
 
-	std::pair<std::vector<int>, size_t> groups = assignUniqueGroups(occurenceCounts);
-	std::vector<int>& groupIndices = groups.first;
-	int oldNumGroups = groups.second;
+	std::pair<std::vector<int>, std::vector<InitialVariableObservations>> initialGroups = assignUniqueGroups(variables);
+	std::vector<int>& groupIndices = initialGroups.first;
+	int oldNumGroups = initialGroups.second.size();
 
 	while(true) {
 		computeCoOccurences(groupIndices, functionInputSet, coOccurences);
 		std::vector<int> sortPermut = getSortPermutation(coOccurences, compareVariableOccurence);
 		coOccurences = permute(coOccurences, sortPermut);
 		swizzleVector(sortPermut, functionInputSet, functionInputSet);
-		groups = assignUniqueGroups(coOccurences);
-		if(oldNumGroups == groups.second) {// stagnation, all groups found. Number of groups can only go up as groups are further split up
-			return RefinedVariableSymmetryGroups{std::move(groupIndices), std::move(coOccurences)};
+		std::pair<std::vector<int>, std::vector<VariableCoOccurence>> newGroups = assignUniqueGroups(coOccurences);
+		if(oldNumGroups == newGroups.second.size()) {// stagnation, all groups found. Number of groups can only go up as groups are further split up
+			return RefinedVariableSymmetryGroups{std::move(groupIndices), std::move(initialGroups), std::move(coOccurences)};
 		}
-		oldNumGroups = groups.second;
+		oldNumGroups = newGroups.second.size();
 	}
 }
 
@@ -154,35 +204,16 @@ static int preprocessRemoveUnusedVariables(FunctionInputSet& inputSet) {
 	return numberOfVariables;
 }
 
-// returns the resulting sorted functionInputSet, and the occurences of each of the variables
-static std::vector<int> preprocessSortByOccurences(FunctionInputSet& inputSet, int variableCount) {
-	std::vector<VariableOccurence> occ = computeOccurenceCounts(inputSet, variableCount);
-	std::vector<int> swizzleSources(occ.size());
-	std::vector<int> counts(occ.size());
-	for(size_t i = 0; i < occ.size(); i++) {
-		swizzleSources[i] = occ[i].index;
-		counts[i] = occ[i].count;
-	}
+template<typename T>
+static std::vector<T> sortSwizzle(const std::vector<T>& collectedData, FunctionInputSet& inputSet) {
+	std::vector<int> permutation = generateIntegers(collectedData.size());
 
-	swizzleVector(swizzleSources, inputSet, inputSet);
-	
-	return counts;
-}
+	std::sort(permutation.begin(), permutation.end(), [&collectedData](int a, int b) {
+		return collectedData[a] < collectedData[b];
+	});
 
-// input vector must be SORTED
-static std::vector<VariableGroup> produceVariableGroups(const std::vector<int>& variableIdentifiers) {
-	std::vector<VariableGroup> variableGroups{VariableGroup{1, variableIdentifiers[0]}};
-	int lastOccurCount = variableIdentifiers[0];
-	for(int i = 1; i < variableIdentifiers.size(); i++) {
-		int curOccurCount = variableIdentifiers[i];
-		if(curOccurCount == lastOccurCount) {
-			variableGroups.back().groupSize++;
-		} else {
-			variableGroups.push_back(VariableGroup{1, curOccurCount});
-			lastOccurCount = curOccurCount;
-		}
-	}
-	return variableGroups;
+	swizzleVector(permutation, inputSet, inputSet);
+	return permute(collectedData, permutation);
 }
 
 PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet) {
@@ -191,21 +222,31 @@ PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet) {
 	}
 	int variableCount = preprocessRemoveUnusedVariables(inputSet);
 
-	std::vector<int> varOccurences = preprocessSortByOccurences(inputSet, variableCount);
+	std::vector<int> varOccurences = computeOccurenceCounts(inputSet, variableCount);
+	std::vector<int> subGraphSizes = countSizeOfSubgraphForEachVariable(inputSet, variableCount);
+
+	std::vector<InitialVariableObservations> variables(variableCount);
+	for(int v = 0; v < varOccurences.size(); v++) {
+		variables[v].occurenceCount = varOccurences[v];
+		variables[v].subGraphSize = subGraphSizes[v];
+	}
+
+	variables = sortSwizzle(variables, inputSet);
 
 	//return PreprocessedFunctionInputSet{variablesSortedByOccurence.first, produceVariableGroups(varOccurences), variableCount};
 
 	size_t inputSetSize = inputSet.size();
-	RefinedVariableSymmetryGroups resultingRefinedGroups = refineVariableSymmetryGroups(varOccurences, inputSet);
+	RefinedVariableSymmetryGroups resultingRefinedGroups = refineVariableSymmetryGroups(variables, inputSet);
 
 	return PreprocessedFunctionInputSet{
 		inputSet,
-		produceVariableGroups(resultingRefinedGroups.groups), 
+		variables,
+		countOccurencesSorted(resultingRefinedGroups.groups),
 		tallyDistinctOrdered(resultingRefinedGroups.coOccurences.begin(), resultingRefinedGroups.coOccurences.end()), 
 		variableCount};
 }
 
-typedef std::vector<VariableGroup>::const_iterator vIter;
+typedef std::vector<int>::const_iterator vIter;
 
 template<typename Func>
 bool existsSubPermutationRecursive(vIter groupStart, vIter groupEnd, std::vector<int>& permutation, size_t indexInPermutation, size_t itemsLeft, const Func& func) {
@@ -225,14 +266,14 @@ bool existsSubPermutationRecursive(vIter groupStart, vIter groupEnd, std::vector
 template<typename Func>
 bool existsPermutationOverVariableGroupsRecursive(vIter start, vIter end, std::vector<int>& permutation, size_t indexInPermutation, const Func& func) {
 	if(start != end) {
-		return existsSubPermutationRecursive(start, end, permutation, indexInPermutation, (*start).groupSize, func);
+		return existsSubPermutationRecursive(start, end, permutation, indexInPermutation, *start, func);
 	} else {
 		return func(permutation);
 	}
 }
 
 template<typename Func>
-bool existsPermutationOverVariableGroups(const std::vector<VariableGroup>& groups, std::vector<int> permutation, const Func& func) {
+bool existsPermutationOverVariableGroups(const std::vector<int>& groups, std::vector<int> permutation, const Func& func) {
 	return existsPermutationOverVariableGroupsRecursive(groups.begin(), groups.end(), permutation, 0, func);
 }
 
@@ -272,8 +313,8 @@ static __m256i parallelSwizzle(__m256i functionInputs, Iter swizStart, Iter swiz
 #define ROTRIGHT(a, b, c) {__m256i tmp = c; c = b; b = a; a = tmp;}
 struct SmallEqualityChecker {
 	const int_set<FunctionInput, uint32_t>& equalityChecker;
-	std::vector<VariableGroup>::const_iterator groupIter;
-	std::vector<VariableGroup>::const_iterator groupsEnd;
+	std::vector<int>::const_iterator groupIter;
+	std::vector<int>::const_iterator groupsEnd;
 	size_t functionInputSetSize;
 	__m256i data;
 	__m256i curMask = _mm256_set1_epi32(1);
@@ -296,7 +337,7 @@ struct SmallEqualityChecker {
 	__m256i curValue = _mm256_setzero_si256();
 	static_assert(MAX_DEDEKIND <= 10, "number of bits registers should be extended for higher order equivalence checking");
 
-	SmallEqualityChecker(const int_set<FunctionInput, uint32_t>& equalityChecker, const aligned_set<FunctionInput, 32>& functionInputSet, const std::vector<VariableGroup>& occurenceGroups) :
+	SmallEqualityChecker(const int_set<FunctionInput, uint32_t>& equalityChecker, const aligned_set<FunctionInput, 32>& functionInputSet, const std::vector<int>& occurenceGroups) :
 		equalityChecker(equalityChecker), 
 		groupIter(occurenceGroups.begin()),
 		groupsEnd(occurenceGroups.end()),
@@ -597,7 +638,7 @@ struct SmallEqualityChecker {
 };
 
 bool SmallEqualityChecker::checkAllForGroup() {
-	int curGroupSize = (*groupIter).groupSize;
+	int curGroupSize = *groupIter;
 	++groupIter;
 	switch(curGroupSize) {
 	case 1:
@@ -748,7 +789,7 @@ bool existsSubPermutationSIMDRecursive(vIter groupStart, vIter groupEnd, __m256i
 }
 
 template<typename Func>
-bool existsPermutationOverVariableGroupsSIMD(int numberOfVariables, const std::vector<VariableGroup>& groups, __m256i data, const Func& func) {
+bool existsPermutationOverVariableGroupsSIMD(int numberOfVariables, const std::vector<int>& groups, __m256i data, const Func& func) {
 	__m256i startingVal = _mm256_setzero_si256();
 
 	int itemsLeftToPlace[MAX_DEDEKIND];
@@ -762,6 +803,7 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 	assert(this->size() == b.size()); // assume we are only comparing functionInputSets with the same number of edges
 
 	if(this->spanSize != b.spanSize) return false;
+	if(this->variables != b.variables) return false;
 	if(this->variableOccurences != b.variableOccurences) return false;
 	if(this->variableCoOccurences != b.variableCoOccurences) return false; // early exit, a and b do not span the same variables, impossible to be isomorphic!
 	
@@ -846,8 +888,9 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 		return true;
 	});
 
-	/*if(realResult == false) {
-		throw "should not happen";
-	}*/
+	if(realResult == false) {
+		__debugbreak();
+		//throw "should not happen";
+	}
 	return realResult;
 }
