@@ -99,6 +99,7 @@ std::pair<std::vector<EquivalenceClassMap<valueInt>>, valueInt> computeSymmetryG
 
 	const FunctionInputSet& layerAbove = stack.layers[layerIndex + 1];
 	for(size_t groupSize = 1; groupSize < curLayer.size(); groupSize++) {
+		DEBUG_PRINT("Assigning values of " << groupSize << "/" << curLayer.size() << "\n");
 		const EquivalenceClassMap<countInt>& symmetryGroupsForGroupSize = symmetryGroupsOfCurLayer[groupSize];
 		EquivalenceClassMap<valueInt> symmetryGroupValueAssociationsOfThisLayer;
 		for(const std::pair<EquivalenceClass, countInt>& countedGroup : symmetryGroupsForGroupSize) {
@@ -188,10 +189,12 @@ void testPreprocess2() {
 }
 
 static void testFindAllSymmetryGroupsForInputSet() {
-	LayerStack layers = generateLayers(4);
+	LayerStack layers = generateLayers(7);
 	std::cout << layers << std::endl;
 
-	printAllSymmetryGroupsForInputSetFast(layers.layers[2]);
+	findAllSymmetryGroupsFast(layers.layers[4]);
+
+	//printAllSymmetryGroupsForInputSetFast(layers.layers[3]);
 }
 
 int main() {

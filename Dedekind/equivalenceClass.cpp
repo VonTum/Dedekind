@@ -22,12 +22,14 @@ uint64_t PreprocessedFunctionInputSet::hash() const {
 	uint64_t hsh = spanSize;
 	for(const CountedGroup<VariableCoOccurence>& cg : variableCoOccurences) {
 		uint64_t hshOfCoOccur = 4398042316799ULL; // big prime
+		int i = 1;
 		for(long long v : cg.group.coOccursWith) {
-			hshOfCoOccur ^= v;
+			hshOfCoOccur ^= v*i;
+			i++;
 		}
 		hsh ^= cg.count * 87178291199ULL ^ hshOfCoOccur;// big prime, people use big primes for hashing right?
 	}
-	return hsh;
+	return hsh ^ (hsh >> 1) ^ (hsh >> 2) ^ (hsh >> 4) ^ (hsh >> 8) ^ (hsh >> 16) ^ (hsh >> 32);
 }
 
 static std::vector<VariableOccurence> computeOccurenceCounts(const FunctionInputSet& inputSet, int spanSize) {
@@ -50,9 +52,10 @@ static std::vector<VariableOccurence> computeOccurenceCounts(const FunctionInput
 }
 
 // used for generating VariableCoOccurence lists
-static const long long primes[]{2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47};
+// skip 2 as it leads to hash collissions
+static const long long primes[]{3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47};
 
-static void computeCoOccurences(const std::vector<int>& groupAssignments, const FunctionInputSet& functionInputSet, std::vector<VariableCoOccurence>& result) {
+__declspec(noinline) static void computeCoOccurences(const std::vector<int>& groupAssignments, const FunctionInputSet& functionInputSet, std::vector<VariableCoOccurence>& result) {
 	int variableCount = groupAssignments.size();
 
 	for(int curVar = 0; curVar < variableCount; curVar++) {
@@ -102,10 +105,9 @@ bool compareVariableOccurence(const VariableCoOccurence& first, const VariableCo
 struct RefinedVariableSymmetryGroups {
 	std::vector<int> groups;
 	std::vector<VariableCoOccurence> coOccurences;
-	FunctionInputSet normalizedFunctionInputSet;
 };
 
-static RefinedVariableSymmetryGroups refineVariableSymmetryGroups(const std::vector<int>& occurenceCounts, FunctionInputSet functionInputSet) {
+static RefinedVariableSymmetryGroups refineVariableSymmetryGroups(const std::vector<int>& occurenceCounts, FunctionInputSet& functionInputSet) {
 	std::vector<VariableCoOccurence> coOccurences(occurenceCounts.size());
 	for(size_t i = 0; i < occurenceCounts.size(); i++) {
 		coOccurences[i].coOccursWith.resize(occurenceCounts[i]);
@@ -122,7 +124,7 @@ static RefinedVariableSymmetryGroups refineVariableSymmetryGroups(const std::vec
 		swizzleVector(sortPermut, functionInputSet, functionInputSet);
 		groups = assignUniqueGroups(coOccurences);
 		if(oldNumGroups == groups.second) {// stagnation, all groups found. Number of groups can only go up as groups are further split up
-			return RefinedVariableSymmetryGroups{groupIndices, coOccurences, functionInputSet};
+			return RefinedVariableSymmetryGroups{std::move(groupIndices), std::move(coOccurences)};
 		}
 		oldNumGroups = groups.second;
 	}
@@ -135,9 +137,7 @@ struct NormalizeVariablesByOccurenceData {
 };
 
 // returns the resulting functionInputSet, and the number of found variables
-static std::pair<FunctionInputSet, int> preprocessRemoveUnusedVariables(const FunctionInputSet& inputSet) {
-	FunctionInputSet resultingFuncInputSet = inputSet;
-
+static int preprocessRemoveUnusedVariables(FunctionInputSet& inputSet) {
 	int inputIndex = 0;
 	FunctionInput shiftingSP = span(inputSet);
 	std::vector<int> variableRemap;
@@ -148,14 +148,14 @@ static std::pair<FunctionInputSet, int> preprocessRemoveUnusedVariables(const Fu
 		shiftingSP >>= 1;
 		inputIndex++;
 	}
-	swizzleVector(variableRemap, resultingFuncInputSet, resultingFuncInputSet);
+	swizzleVector(variableRemap, inputSet, inputSet);
 	int numberOfVariables = variableRemap.size();
-	assert(span(resultingFuncInputSet) == FunctionInput::allOnes(numberOfVariables));
-	return std::make_pair(resultingFuncInputSet, numberOfVariables);
+	assert(span(inputSet) == FunctionInput::allOnes(numberOfVariables));
+	return numberOfVariables;
 }
 
 // returns the resulting sorted functionInputSet, and the occurences of each of the variables
-static std::pair<FunctionInputSet, std::vector<int>> preprocessSortByOccurences(FunctionInputSet inputSet, int variableCount) {
+static std::vector<int> preprocessSortByOccurences(FunctionInputSet& inputSet, int variableCount) {
 	std::vector<VariableOccurence> occ = computeOccurenceCounts(inputSet, variableCount);
 	std::vector<int> swizzleSources(occ.size());
 	std::vector<int> counts(occ.size());
@@ -166,7 +166,7 @@ static std::pair<FunctionInputSet, std::vector<int>> preprocessSortByOccurences(
 
 	swizzleVector(swizzleSources, inputSet, inputSet);
 	
-	return std::make_pair(std::move(inputSet), std::move(counts));
+	return counts;
 }
 
 // input vector must be SORTED
@@ -185,23 +185,21 @@ static std::vector<VariableGroup> produceVariableGroups(const std::vector<int>& 
 	return variableGroups;
 }
 
-PreprocessedFunctionInputSet preprocess(const FunctionInputSet& inputSet) {
+PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet) {
 	if(inputSet.size() == 0 || inputSet[0].empty()) {
 		return PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet;
 	}
-	std::pair<FunctionInputSet, int> variableIndicesNormalized = preprocessRemoveUnusedVariables(inputSet);
-	int variableCount = variableIndicesNormalized.second;
+	int variableCount = preprocessRemoveUnusedVariables(inputSet);
 
-	std::pair<FunctionInputSet, std::vector<int>> variablesSortedByOccurence = preprocessSortByOccurences(std::move(variableIndicesNormalized.first), variableCount);
-	std::vector<int>& varOccurences = variablesSortedByOccurence.second;
+	std::vector<int> varOccurences = preprocessSortByOccurences(inputSet, variableCount);
 
 	//return PreprocessedFunctionInputSet{variablesSortedByOccurence.first, produceVariableGroups(varOccurences), variableCount};
 
 	size_t inputSetSize = inputSet.size();
-	RefinedVariableSymmetryGroups resultingRefinedGroups = refineVariableSymmetryGroups(varOccurences, variablesSortedByOccurence.first);
+	RefinedVariableSymmetryGroups resultingRefinedGroups = refineVariableSymmetryGroups(varOccurences, inputSet);
 
 	return PreprocessedFunctionInputSet{
-		resultingRefinedGroups.normalizedFunctionInputSet, 
+		inputSet,
 		produceVariableGroups(resultingRefinedGroups.groups), 
 		tallyDistinctOrdered(resultingRefinedGroups.coOccurences.begin(), resultingRefinedGroups.coOccurences.end()), 
 		variableCount};

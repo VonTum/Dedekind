@@ -45,7 +45,7 @@ struct PreprocessedFunctionInputSet {
 	uint64_t hash() const;
 };
 
-PreprocessedFunctionInputSet preprocess(const FunctionInputSet& inputSet);
+PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet);
 
 struct EquivalenceClass : public PreprocessedFunctionInputSet {
 	int_set<FunctionInput, FunctionInput::underlyingType> equalityChecker;

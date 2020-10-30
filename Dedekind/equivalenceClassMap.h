@@ -57,7 +57,7 @@ class EquivalenceClassMap {
 	void notifyNewItem() {
 		itemCount++;
 
-		if(itemCount * 3 >= buckets * 2) {
+		if(itemCount * 3 >= buckets) {
 			rehash(buckets * 2);
 		}
 	}
