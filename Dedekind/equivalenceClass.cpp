@@ -11,9 +11,7 @@ EquivalenceClass EquivalenceClass::emptyEquivalenceClass = EquivalenceClass(Prep
 // TODO candidate for optimization
 PreprocessedFunctionInputSet PreprocessedFunctionInputSet::extendedBy(FunctionInput inp) const {
 	FunctionInputSet resultingFuncInputSet(this->functionInputSet.size() + 1);
-	for(size_t i = 0; i < this->functionInputSet.size(); i++) {
-		resultingFuncInputSet[i] = this->functionInputSet[i];
-	}
+	for(size_t i = 0; i < this->functionInputSet.size(); i++) resultingFuncInputSet[i] = this->functionInputSet[i];
 	resultingFuncInputSet[this->functionInputSet.size()] = inp;
 	return preprocess(std::move(resultingFuncInputSet));
 }
@@ -164,7 +162,7 @@ static RefinedVariableSymmetryGroups refineVariableSymmetryGroups(const std::vec
 	}
 
 	std::pair<std::vector<int>, std::vector<InitialVariableObservations>> initialGroups = assignUniqueGroups(variables);
-	std::vector<int>& groupIndices = initialGroups.first;
+	std::vector<int> groupIndices = initialGroups.first;
 	int oldNumGroups = initialGroups.second.size();
 
 	while(true) {
@@ -173,6 +171,7 @@ static RefinedVariableSymmetryGroups refineVariableSymmetryGroups(const std::vec
 		coOccurences = permute(coOccurences, sortPermut);
 		swizzleVector(sortPermut, functionInputSet, functionInputSet);
 		std::pair<std::vector<int>, std::vector<VariableCoOccurence>> newGroups = assignUniqueGroups(coOccurences);
+		groupIndices = newGroups.first;
 		if(oldNumGroups == newGroups.second.size()) {// stagnation, all groups found. Number of groups can only go up as groups are further split up
 			return RefinedVariableSymmetryGroups{std::move(groupIndices), std::move(initialGroups), std::move(coOccurences)};
 		}
@@ -226,16 +225,10 @@ PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet) {
 	std::vector<int> subGraphSizes = countSizeOfSubgraphForEachVariable(inputSet, variableCount);
 
 	std::vector<InitialVariableObservations> variables(variableCount);
-	for(int v = 0; v < varOccurences.size(); v++) {
-		variables[v].occurenceCount = varOccurences[v];
-		variables[v].subGraphSize = subGraphSizes[v];
-	}
+	for(int v = 0; v < varOccurences.size(); v++) {variables[v].occurenceCount = varOccurences[v];variables[v].subGraphSize = subGraphSizes[v];}
 
 	variables = sortSwizzle(variables, inputSet);
 
-	//return PreprocessedFunctionInputSet{variablesSortedByOccurence.first, produceVariableGroups(varOccurences), variableCount};
-
-	size_t inputSetSize = inputSet.size();
 	RefinedVariableSymmetryGroups resultingRefinedGroups = refineVariableSymmetryGroups(variables, inputSet);
 
 	return PreprocessedFunctionInputSet{
