@@ -881,9 +881,9 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 		return true;
 	});
 
-	if(realResult == false) {
+	/*if(realResult == false) {
 		__debugbreak();
-		//throw "should not happen";
-	}
+		//throw "normalization is imperfect, multiple FunctionInputSets are mapped to the same Normalized HyperGraph";
+	}*/
 	return realResult;
 }

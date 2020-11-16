@@ -6,11 +6,12 @@
 #include "functionInputSet.h"
 
 struct LayerStack {
-	std::vector<FunctionInputSet> layers;
+	std::vector<FullLayer> layers;
 };
 
+// returns a LayerStack of size n+1
 LayerStack generateLayers(size_t n) {
-	std::vector<FunctionInputSet> result(n + 1);
+	std::vector<FullLayer> result(n + 1);
 
 	FunctionInput::underlyingType max = 1 << n;
 

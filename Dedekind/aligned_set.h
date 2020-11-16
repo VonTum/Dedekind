@@ -139,6 +139,16 @@ public:
 		result.remove(index);
 		return result;
 	}
+
+	bool contains(const T& item) const {
+		for(size_t i = 0; i < n; i++) {
+			if(data[i] == item) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	size_t size() const { return n; }
 	void reserve(size_t newSize) { expandIfNeeded(newSize); }
 	T* getData() { return data; }
