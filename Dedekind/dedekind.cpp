@@ -22,34 +22,48 @@ typedef int64_t valueInt;
 
 #define DEBUG_PRINT(v) std::cout << v
 
-std::vector<EquivalenceClassMap<countInt>> findAllEquivalenceClasses(const FunctionInputSet& available) {
-	std::vector<EquivalenceClassMap<countInt>> foundGroups(available.size() + 1);
+struct EquivClassInfo {
+	countInt count;
+	valueInt value;
+
+	EquivClassInfo() = default;
+	EquivClassInfo(countInt count) : count(count), value(0) {}
+	EquivClassInfo(countInt count, valueInt value) : count(count), value(value) {}
+};
+
+std::ostream& operator<<(std::ostream& os, const EquivClassInfo& info) {
+	os << "{c=" << info.count << ",v=" << info.value << "}";
+	return os;
+}
+
+std::vector<EquivalenceClassMap<EquivClassInfo>> findAllEquivalenceClasses(const FunctionInputSet& available) {
+	std::vector<EquivalenceClassMap<EquivClassInfo>> foundGroups(available.size() + 1);
 
 	foundGroups[0].add(EquivalenceClass::emptyEquivalenceClass, 1); // equivalence classes of size 0, only one
-	foundGroups[1].add(preprocess(FunctionInputSet{available[0]}), countInt(available.size())); // equivalence classes of size 1, only one
+	foundGroups[1].add(preprocess(FunctionInputSet{available[0]}), available.size()); // equivalence classes of size 1, only one
 
 	for(size_t groupSize = 2; groupSize < available.size(); groupSize++) {
 		DEBUG_PRINT("Looking at size " << groupSize << '/' << available.size());
-		const EquivalenceClassMap<countInt>& prevGroups = foundGroups[groupSize - 1];
-		EquivalenceClassMap<countInt>& curGroups = foundGroups[groupSize];
+		const EquivalenceClassMap<EquivClassInfo>& prevGroups = foundGroups[groupSize - 1];
+		EquivalenceClassMap<EquivClassInfo>& curGroups = foundGroups[groupSize];
 		// try to extend each of the previous groups by 1
-		for(const std::pair<EquivalenceClass, countInt>& element : prevGroups) {
+		for(const std::pair<EquivalenceClass, EquivClassInfo>& element : prevGroups) {
 			const EquivalenceClass& currentlyExtending = element.first;
-			countInt countOfCur = element.second;
+			countInt countOfCur = element.second.count;
 			for(FunctionInput newInput : available) {
 				if(currentlyExtending.hasFunctionInput(newInput)) continue; // only try to add new inputs that are not yet part of this
-				countInt& countOfFoundGroup = curGroups.getOrDefault(element.first.extendedBy(newInput), 0);
-				countOfFoundGroup += countOfCur;
+				EquivClassInfo& countOfFoundGroup = curGroups.getOrDefault(element.first.extendedBy(newInput), 0);
+				countOfFoundGroup.count += countOfCur;
 			}
 		}
 		// all groups covered, add new groups to list, apply correction and repeat
-		for(std::pair<EquivalenceClass, countInt>& newGroup : curGroups) {
-			assert(newGroup.second % groupSize == 0);
-			newGroup.second /= groupSize;
+		for(std::pair<EquivalenceClass, EquivClassInfo>& newGroup : curGroups) {
+			assert(newGroup.second.count % groupSize == 0);
+			newGroup.second.count /= groupSize;
 		}
 		DEBUG_PRINT(" done! " << curGroups.size() << " groups found!" << std::endl);
 	}
-	foundGroups[available.size()].add(EquivalenceClass(preprocess(available)), 1);
+	if(available.size() > 1) foundGroups[available.size()].add(EquivalenceClass(preprocess(available)), 1);
 
 	return foundGroups;
 }
@@ -60,19 +74,19 @@ void forEachSubsetOfInputSet(const FunctionInputSet& availableOptions, const std
 		const EquivalenceClassMap<T>& relevantSymmetryGroupsOfLayerAbove = eqClasses[offCount];
 		forEachSubgroup(availableOptions, offCount, [&eqClassesOffCnt = eqClasses[offCount], &func](const FunctionInputSet& subGroup) {
 			PreprocessedFunctionInputSet preprocessed = preprocess(subGroup);
-			func(subGroup, eqClassesOffCnt.get(preprocessed));
+			func(subGroup, eqClassesOffCnt.get(preprocessed).value);
 		});
 	}
 }
 
-bigInt computeValueOfClass(const FunctionInputSet& availableOptions, const std::vector<EquivalenceClassMap<valueInt>>& eqClasses) {
+bigInt computeValueOfClass(const FunctionInputSet& availableOptions, const std::vector<EquivalenceClassMap<EquivClassInfo>>& eqClasses) {
 	bigInt totalOptions = 1; // 1 for everything on, no further options
 
 	for(size_t offCount = 1; offCount <= availableOptions.size(); offCount++) {
-		const EquivalenceClassMap<valueInt>& relevantSymmetryGroupsOfLayerAbove = eqClasses[offCount];
+		const EquivalenceClassMap<EquivClassInfo>& relevantSymmetryGroupsOfLayerAbove = eqClasses[offCount];
 		forEachSubgroup(availableOptions, offCount, [&eqClassesOffCnt = eqClasses[offCount], &totalOptions](const FunctionInputSet& subGroup) {
 			PreprocessedFunctionInputSet preprocessed = preprocess(subGroup);
-			totalOptions += eqClassesOffCnt.get(preprocessed);
+			totalOptions += eqClassesOffCnt.get(preprocessed).value;
 		});
 	}
 
@@ -84,34 +98,38 @@ FunctionInputSet computeAvailableElements(const FunctionInputSet& offInputSet, c
 	return removeForcedOn(layerAbove, onInputSet);
 }
 
-static std::pair<std::vector<EquivalenceClassMap<valueInt>>, valueInt> computeNextLayerValues(const FullLayer& curLayer, const FullLayer& prevLayer, const std::pair<std::vector<EquivalenceClassMap<valueInt>>, valueInt>& resultOfPrevLayer) {
+valueInt getTotalValueForLayer(const std::vector<EquivalenceClassMap<EquivClassInfo>>& eqClassesOfLayer) {
+	valueInt totalValueForFullLayer = 0;
+
+	for(const EquivalenceClassMap<EquivClassInfo>& eqMap : eqClassesOfLayer) {
+		for(const std::pair<EquivalenceClass, EquivClassInfo>& classOfPrevLayer : eqMap) {
+			const EquivClassInfo& info = classOfPrevLayer.second;
+			totalValueForFullLayer += info.count * info.value;
+		}
+	}
+
+	return totalValueForFullLayer;
+}
+
+static std::vector<EquivalenceClassMap<EquivClassInfo>> computeNextLayerValues(const FullLayer& curLayer, const FullLayer& prevLayer, const std::vector<EquivalenceClassMap<EquivClassInfo>>& resultOfPrevLayer) {
 	DEBUG_PRINT("Normal Next Layer\n");
-	std::vector<EquivalenceClassMap<countInt>> countsOfThisLayer = findAllEquivalenceClasses(curLayer);
-
-	// 1 for empty set, sum total of previous layer for full set
-	valueInt totalValueForFullLayer = 1 + resultOfPrevLayer.second; 
-
-	std::vector<EquivalenceClassMap<valueInt>> resultingValues(curLayer.size() + 1);
+	std::vector<EquivalenceClassMap<EquivClassInfo>> resultingValues = findAllEquivalenceClasses(curLayer);
 	// resulting values of empty set, and full set
-	resultingValues[0].add(EquivalenceClass::emptyEquivalenceClass, 1);
-	resultingValues[curLayer.size()].add(preprocess(curLayer), resultOfPrevLayer.second);
-
+	resultingValues[0].get(EquivalenceClass::emptyEquivalenceClass).value = 1;
+	resultingValues[curLayer.size()].get(preprocess(curLayer)).value = getTotalValueForLayer(resultOfPrevLayer);
+	
 	// for all other group sizes between the empty set and the full set
 	for(size_t setSize = 1; setSize < curLayer.size(); setSize++) {
 		DEBUG_PRINT("Assigning values of " << setSize << "/" << curLayer.size() << "\n");
-		EquivalenceClassMap<valueInt> valuesForSetSize;
-		for(const std::pair<EquivalenceClass, countInt>& countedClass : countsOfThisLayer[setSize]) {
+		for(std::pair<EquivalenceClass, EquivClassInfo>& countedClass : resultingValues[setSize]) {
 			FunctionInputSet availableElementsInPrevLayer = computeAvailableElements(countedClass.first.functionInputSet, curLayer, prevLayer);
 
-			valueInt valueOfSG = computeValueOfClass(availableElementsInPrevLayer, resultOfPrevLayer.first);
+			valueInt valueOfSG = computeValueOfClass(availableElementsInPrevLayer, resultOfPrevLayer);
 
-			totalValueForFullLayer += valueOfSG * countedClass.second;
-
-			valuesForSetSize.add(countedClass.first, valueOfSG);
+			countedClass.second.value = valueOfSG;
 		}
-		resultingValues[setSize] = valuesForSetSize;
 	}
-	return std::make_pair(resultingValues, totalValueForFullLayer);
+	return resultingValues;
 }
 
 static int getNumberOfAvailableInSkippedLayer(const FunctionInputSet& availableElementsInSkippedLayer, const FunctionInputSet& offAbove) {
@@ -124,61 +142,62 @@ static int getNumberOfAvailableInSkippedLayer(const FunctionInputSet& availableE
 	return total;
 }
 
-static std::pair<std::vector<EquivalenceClassMap<valueInt>>, valueInt> computeSkipLayerValues(const FullLayer& curLayer, const FullLayer& skippedLayer, const FullLayer& prevLayer, const std::pair<std::vector<EquivalenceClassMap<valueInt>>, valueInt>& resultOfPrevLayer) {
+static std::vector<EquivalenceClassMap<EquivClassInfo>> computeSkipLayerValues(const FullLayer& curLayer, const FullLayer& skippedLayer, const FullLayer& prevLayer, const std::vector<EquivalenceClassMap<EquivClassInfo>>& resultOfPrevLayer) {
 	DEBUG_PRINT("SKIP Layer\n");
 
-	std::vector<EquivalenceClassMap<countInt>> countsOfThisLayer = findAllEquivalenceClasses(curLayer);
-
-	// 1 for empty set
-	valueInt totalValueForFullLayer = 1;
-
-	std::vector<EquivalenceClassMap<valueInt>> resultingValues(curLayer.size() + 1);
+	std::vector<EquivalenceClassMap<EquivClassInfo>> resultingValues = findAllEquivalenceClasses(curLayer);
 	// resulting values of empty set, and full set
-	resultingValues[0].add(EquivalenceClass::emptyEquivalenceClass, 1);
-
+	resultingValues[0].get(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet).value = 1;
+	{
+		valueInt totalValueForFinalElement = 0;
+		for(const EquivalenceClassMap<EquivClassInfo>& eqMap : resultOfPrevLayer) {
+			for(const std::pair<EquivalenceClass, EquivClassInfo>& countedClass : eqMap) {
+				const EquivClassInfo& info = countedClass.second;
+				int numAvailableInSkippedLayer = getNumberOfAvailableInSkippedLayer(skippedLayer, countedClass.first.functionInputSet);
+				totalValueForFinalElement += info.count * (info.value << numAvailableInSkippedLayer);
+			}
+		}
+		resultingValues[curLayer.size()].get(preprocess(curLayer)).value = totalValueForFinalElement;
+	}
 	// for all other group sizes between the empty set and the full set
-	for(size_t setSize = 1; setSize <= curLayer.size(); setSize++) {
+	for(size_t setSize = 1; setSize < curLayer.size(); setSize++) {
 		DEBUG_PRINT("Assigning values of " << setSize << "/" << curLayer.size() << "\n");
-		EquivalenceClassMap<valueInt> valuesForSetSize;
-		for(const std::pair<EquivalenceClass, countInt>& countedClass : countsOfThisLayer[setSize]) {
+		for(std::pair<EquivalenceClass, EquivClassInfo>& countedClass : resultingValues[setSize]) {
 			FunctionInputSet onInCurLayer = invert(countedClass.first.functionInputSet, curLayer);
 			FunctionInputSet availableAbove = removeForcedOn(prevLayer, onInCurLayer);
 			FunctionInputSet availableSkipped = removeForcedOn(skippedLayer, onInCurLayer);
 
 			valueInt valueOfSG = 0;
 
-			forEachSubsetOfInputSet(availableAbove, resultOfPrevLayer.first, [&valueOfSG, &availableSkipped](const FunctionInputSet& chosenOffAbove, valueInt subSetValue) {
+			forEachSubsetOfInputSet(availableAbove, resultOfPrevLayer, [&valueOfSG, &availableSkipped](const FunctionInputSet& chosenOffAbove, valueInt subSetValue) {
 				int numAvailableInSkippedLayer = getNumberOfAvailableInSkippedLayer(availableSkipped, chosenOffAbove);
 				valueOfSG += subSetValue << numAvailableInSkippedLayer;
 			});
 
-			totalValueForFullLayer += valueOfSG * countedClass.second;
-
-			valuesForSetSize.add(countedClass.first, valueOfSG);
+			countedClass.second.value = valueOfSG;
 		}
-		resultingValues[setSize] = valuesForSetSize;
 	}
-	return std::make_pair(resultingValues, totalValueForFullLayer);
+	return resultingValues;
 }
 
-static std::pair<std::vector<EquivalenceClassMap<valueInt>>, valueInt> getInitialSymmetryGroupValues(const FunctionInputSet& firstLayer) {
+static std::vector<EquivalenceClassMap<EquivClassInfo>> getInitialSymmetryGroupValues(const FunctionInputSet& firstLayer) {
 	assert(firstLayer.size() == 1);
-	std::vector<EquivalenceClassMap<valueInt>> symmetryGroupsOfThisLayer(2);
-	symmetryGroupsOfThisLayer[0].add(EquivalenceClass::emptyEquivalenceClass, 1);
-	symmetryGroupsOfThisLayer[1].add(preprocess(firstLayer), 1);
-	return std::make_pair(symmetryGroupsOfThisLayer, 2); // 2 possibilities for final layer, final node on, or final node off
+	std::vector<EquivalenceClassMap<EquivClassInfo>> symmetryGroupsOfThisLayer(2);
+	symmetryGroupsOfThisLayer[0].add(EquivalenceClass::emptyEquivalenceClass, EquivClassInfo(1, 1));
+	symmetryGroupsOfThisLayer[1].add(preprocess(firstLayer), EquivClassInfo(1, 1));
+	return symmetryGroupsOfThisLayer;
 }
 
 valueInt dedekind(int order) {
 	std::cout << "dedekind(" << order << ") = \n";
 	LayerStack layers = generateLayers(order);
 
-	std::pair<std::vector<EquivalenceClassMap<valueInt>>, valueInt> curValue = getInitialSymmetryGroupValues(layers.layers.back());
+	std::vector<EquivalenceClassMap<EquivClassInfo>> curValue = getInitialSymmetryGroupValues(layers.layers.back());
 	for(size_t i = layers.layers.size()-1; i > 0; i--) {
 		curValue = computeNextLayerValues(layers.layers[i-1], layers.layers[i], curValue);
 	}
 
-	valueInt result = curValue.second;
+	valueInt result = getTotalValueForLayer(curValue);
 
 	std::cout << result << std::endl;
 
@@ -189,13 +208,13 @@ valueInt dedekind7() {
 	std::cout << "dedicated dedekind(7) = \n";
 	LayerStack layers = generateLayers(7);
 
-	std::pair<std::vector<EquivalenceClassMap<valueInt>>, valueInt> curValue = getInitialSymmetryGroupValues(layers.layers[7]);
+	std::vector<EquivalenceClassMap<EquivClassInfo>> curValue = getInitialSymmetryGroupValues(layers.layers[7]);
 	curValue = computeSkipLayerValues(layers.layers[5], layers.layers[6], layers.layers[7], curValue);
 	curValue = computeSkipLayerValues(layers.layers[3], layers.layers[4], layers.layers[5], curValue);
 	curValue = computeSkipLayerValues(layers.layers[1], layers.layers[2], layers.layers[3], curValue);
 	curValue = computeNextLayerValues(layers.layers[0], layers.layers[1], curValue);
 
-	valueInt result = curValue.second;
+	valueInt result = getTotalValueForLayer(curValue);
 
 	std::cout << result << std::endl;
 
@@ -206,12 +225,12 @@ valueInt dedekind6() {
 	std::cout << "dedicated dedekind(6) = \n";
 	LayerStack layers = generateLayers(6);
 
-	std::pair<std::vector<EquivalenceClassMap<valueInt>>, valueInt> curValue = getInitialSymmetryGroupValues(layers.layers[6]);
+	std::vector<EquivalenceClassMap<EquivClassInfo>> curValue = getInitialSymmetryGroupValues(layers.layers[6]);
 	curValue = computeSkipLayerValues(layers.layers[4], layers.layers[5], layers.layers[6], curValue);
 	curValue = computeSkipLayerValues(layers.layers[2], layers.layers[3], layers.layers[4], curValue);
 	curValue = computeSkipLayerValues(layers.layers[0], layers.layers[1], layers.layers[2], curValue);
 
-	valueInt result = curValue.second;
+	valueInt result = getTotalValueForLayer(curValue);
 
 	std::cout << result << std::endl;
 
@@ -222,14 +241,14 @@ valueInt dedekind4() {
 	std::cout << "dedicated dedekind(4) = \n";
 	LayerStack layers = generateLayers(4);
 
-	std::pair<std::vector<EquivalenceClassMap<valueInt>>, valueInt> curValue = getInitialSymmetryGroupValues(layers.layers[4]);
+	std::vector<EquivalenceClassMap<EquivClassInfo>> curValue = getInitialSymmetryGroupValues(layers.layers[4]);
 	curValue = computeNextLayerValues(layers.layers[3], layers.layers[4], curValue);
 	curValue = computeSkipLayerValues(layers.layers[1], layers.layers[2], layers.layers[3], curValue);
 	//curValue = computeNextLayerValues(layers.layers[2], layers.layers[3], curValue);
 	//curValue = computeNextLayerValues(layers.layers[1], layers.layers[2], curValue);
 	curValue = computeNextLayerValues(layers.layers[0], layers.layers[1], curValue);
 
-	valueInt result = curValue.second;
+	valueInt result = getTotalValueForLayer(curValue);
 
 	std::cout << result << std::endl;
 
@@ -252,14 +271,6 @@ Correct numbers
 */
 
 int main() {
-	//testFindAllSymmetryGroupsForInputSet(); return 0;
-
-	//testPreprocess2();return 0;
-	//genCodeForEquivClass();
-	//genCodeForSmallPermut(4);
-	//genCodeForAllLargePermut();
-	//genCodeForAllPermut();
-	//return 0;
 	TimeTracker timer;
 	/*dedekind(1);
 	dedekind(2);
@@ -267,7 +278,7 @@ int main() {
 	dedekind(4);
 	dedekind(5);*/
 	//dedekind(6);
-	dedekind7();
+	dedekind6();
 	/*dedekind(6);
 	dedekind(6);
 	dedekind(6);
