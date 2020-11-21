@@ -102,8 +102,8 @@ std::ostream& operator<<(std::ostream& os, const EquivalenceClass& eq) {
 template<typename V>
 std::ostream& operator<<(std::ostream& os, const EquivalenceClassMap<V>& eqMap) {
 	bool isFirst = true;
-	for(const std::pair<EquivalenceClass, V>& item : eqMap) {
-		os << (isFirst ? '{' : ',') << item.first << ": " << item.second;
+	for(const ValuedEquivalenceClass<V>& item : eqMap) {
+		os << (isFirst ? '{' : ',') << item.equivClass << ": " << item.value;
 		isFirst = false;
 	}
 	os << '}';

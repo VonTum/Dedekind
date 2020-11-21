@@ -3,10 +3,16 @@
 #include "equivalenceClass.h"
 
 template<typename V>
+struct ValuedEquivalenceClass {
+	EquivalenceClass equivClass;
+	V value;
+};
+
+template<typename V>
 class EquivalenceClassMap {
 	struct MapNode {
 		MapNode* nextNode;
-		std::pair<EquivalenceClass, V> item;
+		ValuedEquivalenceClass<V> item;
 	};
 
 	MapNode** hashTable;
@@ -20,7 +26,7 @@ class EquivalenceClassMap {
 	MapNode** getNodeFor(const PreprocessedFunctionInputSet& functionInputSet) const {
 		MapNode** cur = getBucketFor(functionInputSet);
 		for(; *cur != nullptr; cur = &((*cur)->nextNode)) {
-			if((*cur)->item.first.contains(functionInputSet)) {
+			if((*cur)->item.equivClass.contains(functionInputSet)) {
 				return cur;
 			}
 		}
@@ -45,7 +51,7 @@ class EquivalenceClassMap {
 		for(size_t i = 0; i < this->buckets; i++) this->hashTable[i] = nullptr;
 		for(size_t i = 0; i < oldBuckets; i++) {
 			for(MapNode* curNode = oldHashTable[i]; curNode != nullptr; ) {
-				MapNode** bucket = getBucketFor(curNode->item.first);
+				MapNode** bucket = getBucketFor(curNode->item.equivClass);
 				MapNode* nextNode = curNode->nextNode;
 				curNode->nextNode = *bucket;
 				*bucket = curNode;
@@ -98,34 +104,36 @@ public:
 	V& get(const PreprocessedFunctionInputSet& preprocessed) {
 		MapNode** foundNode = getNodeFor(preprocessed);
 		assert(*foundNode != nullptr);
-		return (*foundNode)->item.second;
+		return (*foundNode)->item.value;
 	}
 	const V& get(const PreprocessedFunctionInputSet& preprocessed) const {
 		MapNode** foundNode = getNodeFor(preprocessed);
 		assert(*foundNode != nullptr);
-		return (*foundNode)->item.second;
+		return (*foundNode)->item.value;
 	}
-	V& getOrDefault(const PreprocessedFunctionInputSet& preprocessed, const V& defaultForCreate) {
+	ValuedEquivalenceClass<V>& getOrAdd(const PreprocessedFunctionInputSet& preprocessed, const V& defaultForCreate) {
 		MapNode** foundNode = getNodeFor(preprocessed);
 		MapNode* actualNode = *foundNode;
 		if(actualNode == nullptr) {
-			actualNode = new MapNode{nullptr, std::make_pair(EquivalenceClass(preprocessed), defaultForCreate)};;
+			actualNode = new MapNode{nullptr, ValuedEquivalenceClass<V>{EquivalenceClass(preprocessed), defaultForCreate}};
 			*foundNode = actualNode;
 			this->notifyNewItem();
 		}
-		return actualNode->item.second;
+		return actualNode->item;
 	}
 
-	void add(const PreprocessedFunctionInputSet& preprocessed, const V& value) {
+	ValuedEquivalenceClass<V>& add(const PreprocessedFunctionInputSet& preprocessed, const V& value) {
 		MapNode** bucket = getBucketFor(preprocessed);
-		*bucket = new MapNode{*bucket, std::make_pair(EquivalenceClass(preprocessed), value)};
+		*bucket = new MapNode{*bucket, ValuedEquivalenceClass<V>{EquivalenceClass(preprocessed), value}};
 		this->notifyNewItem();
+		return (*bucket)->item;
 	}
 
-	void add(const EquivalenceClass& eqClass, const V& value) {
+	ValuedEquivalenceClass<V>& add(const EquivalenceClass& eqClass, const V& value) {
 		MapNode** bucket = getBucketFor(eqClass);
-		*bucket = new MapNode{*bucket, std::make_pair(eqClass, value)};
+		*bucket = new MapNode{*bucket, ValuedEquivalenceClass<V>{eqClass, value}};
 		this->notifyNewItem();
+		return (*bucket)->item;
 	}
 
 	size_t size() const { return itemCount; }
@@ -169,14 +177,14 @@ public:
 	struct NonConstEquivalenceClassMapIter : public EquivalenceClassMapIter {
 		using EquivalenceClassMapIter::EquivalenceClassMapIter;
 
-		std::pair<EquivalenceClass, V>& operator*() const {
+		ValuedEquivalenceClass<V>& operator*() const {
 			return EquivalenceClassMapIter::curNode->item;
 		}
 	};
 	struct ConstEquivalenceClassMapIter : public EquivalenceClassMapIter {
 		using EquivalenceClassMapIter::EquivalenceClassMapIter;
 
-		const std::pair<EquivalenceClass, V>& operator*() const {
+		const ValuedEquivalenceClass<V>& operator*() const {
 			return EquivalenceClassMapIter::curNode->item;
 		}
 	};
