@@ -1,5 +1,7 @@
 #include "layerDecomposition.h"
 
+#include "threadPool.h"
+
 #include <iostream>
 
 struct TempEquivClassInfo {
@@ -32,6 +34,8 @@ static std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(
 	ValuedEquivalenceClass<TempEquivClassInfo>& layer0item = equivalenceClasses[0].add(EquivalenceClass::emptyEquivalenceClass, TempEquivClassInfo{1}); // equivalence classes of size 0, only one
 	ValuedEquivalenceClass<TempEquivClassInfo>& layer1item = equivalenceClasses[1].add(preprocess(FunctionInputSet{layer[0]}), TempEquivClassInfo{layer.size()}); // equivalence classes of size 1, only one
 	createLinkBetween(layer0item, layer1item, layer.size());
+
+	
 
 	for(size_t groupSize = 2; groupSize < layer.size(); groupSize++) {
 		std::cout << "Looking at size " << groupSize << '/' << layer.size();

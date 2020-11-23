@@ -10,7 +10,7 @@ struct LayerStack {
 };
 
 // returns a LayerStack of size n+1
-LayerStack generateLayers(size_t n) {
+inline LayerStack generateLayers(size_t n) {
 	std::vector<FullLayer> result(n + 1);
 
 	FunctionInput::underlyingType max = 1 << n;

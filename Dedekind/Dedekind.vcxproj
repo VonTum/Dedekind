@@ -162,6 +162,7 @@
     <ClCompile Include="aligned_alloc.cpp" />
     <ClCompile Include="codeGen.cpp" />
     <ClCompile Include="dedekind.cpp" />
+    <ClCompile Include="dedekindDecomposition.cpp" />
     <ClCompile Include="equivalenceClass.cpp" />
     <ClCompile Include="layerDecomposition.cpp" />
   </ItemGroup>
@@ -172,6 +173,7 @@
     <ClInclude Include="collectionOperations.h" />
     <ClInclude Include="equivalenceClass.h" />
     <ClInclude Include="equivalenceClassMap.h" />
+    <ClInclude Include="dedekindDecomposition.h" />
     <ClInclude Include="heapArray.h" />
     <ClInclude Include="layerDecomposition.h" />
     <ClInclude Include="functionInput.h" />
@@ -182,6 +184,7 @@
     <ClInclude Include="layerStack.h" />
     <ClInclude Include="math.h" />
     <ClInclude Include="set.h" />
+    <ClInclude Include="threadPool.h" />
     <ClInclude Include="timeTracker.h" />
     <ClInclude Include="toString.h" />
   </ItemGroup>

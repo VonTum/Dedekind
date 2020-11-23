@@ -11,6 +11,7 @@
 #include "equivalenceClass.h"
 #include "equivalenceClassMap.h"
 #include "layerDecomposition.h"
+#include "dedekindDecomposition.h"
 #include "layerStack.h"
 #include "toString.h"
 
@@ -151,6 +152,10 @@ valueInt dedekind(int order) {
 	LayerStack layers = generateLayers(order);
 
 	LayerDecomposition curValue = getInitialEquivalenceClasses(layers.layers.back());
+
+	DedekindDecomposition fullDecomposition(order);
+
+
 	for(size_t i = layers.layers.size()-1; i > 0; i--) {
 		curValue = computeNextLayerValues(layers.layers[i-1], layers.layers[i], curValue);
 	}
@@ -228,15 +233,23 @@ Correct numbers
 	9: ????
 */
 
+#include <Windows.h>
+
 int main() {
 	TimeTracker timer;
+	__debugbreak();
+	DedekindDecomposition fullDecomposition(6);
+	Sleep(1000);
+	__debugbreak();
+	return 0;
+
 	/*dedekind(1);
 	dedekind(2);
 	dedekind(3);
 	dedekind(4);
 	dedekind(5);*/
 	//dedekind(6);
-	dedekind(6);
+	dedekind6();
 	/*dedekind(6);
 	dedekind(6);
 	dedekind(6);

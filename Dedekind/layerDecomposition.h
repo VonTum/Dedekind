@@ -28,6 +28,7 @@ struct EquivalenceClassInfo {
 class LayerDecomposition {
 	std::vector<BakedEquivalenceClassMap<EquivalenceClassInfo>> equivalenceClasses;
 public:
+	LayerDecomposition() = default;
 	LayerDecomposition(const FullLayer& fullLayer);
 
 	inline const BakedEquivalenceClassMap<EquivalenceClassInfo>& operator[](size_t i) const {

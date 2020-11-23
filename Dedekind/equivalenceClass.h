@@ -14,7 +14,7 @@ struct VariableOccurence {
 };
 
 struct VariableCoOccurence {
-	std::vector<long long> coOccursWith;
+	std::vector<int> coOccursWith;
 };
 inline bool operator==(const VariableCoOccurence& a, const VariableCoOccurence& b) {
 	return a.coOccursWith == b.coOccursWith;

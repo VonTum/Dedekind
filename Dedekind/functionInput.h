@@ -6,6 +6,8 @@
 
 #define MAX_DEDEKIND 10
 
+#define FUNCINPUT_UNDERLYING_TYPE uint32_t
+
 /*template<typename IntType>
 inline IntType lowerBitsOnes(IntType n) {
 	return (1U << n) - 1;
@@ -16,10 +18,10 @@ inline IntType oneBitInterval(IntType n, IntType offset) {
 }*/
 
 struct FunctionInputIter {
-	uint32_t curFuncInput;
+	FUNCINPUT_UNDERLYING_TYPE curFuncInput;
 	int curIndex;
 
-	FunctionInputIter(uint32_t curFuncInput) : curFuncInput(curFuncInput), curIndex(0) {
+	FunctionInputIter(FUNCINPUT_UNDERLYING_TYPE curFuncInput) : curFuncInput(curFuncInput), curIndex(0) {
 		while((this->curFuncInput & 1) == 0 && this->curFuncInput != 0) {
 			this->curFuncInput >>= 1;
 			curIndex++;
@@ -39,7 +41,7 @@ struct FunctionInputIter {
 };
 
 struct FunctionInput {
-	using underlyingType = uint32_t;
+	using underlyingType = FUNCINPUT_UNDERLYING_TYPE;
 	underlyingType inputBits = 0;
 
 	static FunctionInput allOnes(int count) {
@@ -88,7 +90,7 @@ struct FunctionInput {
 	inline FunctionInput& operator>>=(size_t shift) { this->inputBits >>= shift; return *this; }
 	inline FunctionInput& operator<<=(size_t shift) { this->inputBits <<= shift; return *this; }
 
-	inline operator uint32_t() const { return inputBits; }
+	inline operator FUNCINPUT_UNDERLYING_TYPE() const { return inputBits; }
 	inline operator size_t() const { return static_cast<size_t>(inputBits); }
 
 	inline FunctionInputIter begin() const {
@@ -97,11 +99,11 @@ struct FunctionInput {
 	inline IteratorEnd end() const { return IteratorEnd(); }
 };
 
-inline FunctionInput operator&(FunctionInput a, FunctionInput b) { return FunctionInput{a.inputBits & b.inputBits}; }
-inline FunctionInput operator|(FunctionInput a, FunctionInput b) { return FunctionInput{a.inputBits | b.inputBits}; }
-inline FunctionInput operator^(FunctionInput a, FunctionInput b) { return FunctionInput{a.inputBits ^ b.inputBits}; }
-inline FunctionInput operator>>(FunctionInput a, size_t shift) { return FunctionInput{a.inputBits >> shift}; }
-inline FunctionInput operator<<(FunctionInput a, size_t shift) { return FunctionInput{a.inputBits << shift}; }
+inline FunctionInput operator&(FunctionInput a, FunctionInput b) { return FunctionInput{static_cast<FunctionInput::underlyingType>(a.inputBits & b.inputBits)}; }
+inline FunctionInput operator|(FunctionInput a, FunctionInput b) { return FunctionInput{static_cast<FunctionInput::underlyingType>(a.inputBits | b.inputBits)}; }
+inline FunctionInput operator^(FunctionInput a, FunctionInput b) { return FunctionInput{static_cast<FunctionInput::underlyingType>(a.inputBits ^ b.inputBits)}; }
+inline FunctionInput operator>>(FunctionInput a, size_t shift) { return FunctionInput{static_cast<FunctionInput::underlyingType>(a.inputBits >> shift)}; }
+inline FunctionInput operator<<(FunctionInput a, size_t shift) { return FunctionInput{static_cast<FunctionInput::underlyingType>(a.inputBits << shift)}; }
 
 inline bool operator==(FunctionInput a, FunctionInput b) {
 	return a.inputBits == b.inputBits;
