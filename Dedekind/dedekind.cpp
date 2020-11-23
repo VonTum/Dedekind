@@ -29,16 +29,20 @@ std::ostream& operator<<(std::ostream& os, const EquivalenceClassInfo& info) {
 template<typename Func>
 void forEachSubsetOfInputSet(const FunctionInputSet& availableOptions, const LayerDecomposition& eqClasses, Func func) {
 	for(size_t offCount = 0; offCount <= availableOptions.size(); offCount++) {
-		const EquivalenceClassMap<EquivalenceClassInfo>& relevantSymmetryGroupsOfLayerAbove = eqClasses[offCount];
 		forEachSubgroup(availableOptions, offCount, [&eqClassesOffCnt = eqClasses[offCount], &func](const FunctionInputSet& subGroup) {
 			PreprocessedFunctionInputSet preprocessed = preprocess(subGroup);
-			func(subGroup, eqClassesOffCnt.get(preprocessed).value, 1);
+			func(subGroup, eqClassesOffCnt.get(preprocessed).value.value, 1);
 		});
 	}
 }
 
+template<typename Func>
+void forEachSubClassOfInputSet(const FunctionInputSet& availableOptions, const LayerDecomposition& eqClasses, Func func) {
+	
+}
+
 bigInt computeValueOfClass(const FunctionInputSet& availableOptions, const LayerDecomposition& decomposition) {
-	bigInt totalOptions = 1; // 1 for everything on, no further options
+	bigInt totalOptions = 0; // 1 for everything on, no further options
 
 	forEachSubsetOfInputSet(availableOptions, decomposition, [&totalOptions](const FunctionInputSet& subGroup, valueInt subGroupValue, countInt occurenceCount) {
 		totalOptions += subGroupValue * occurenceCount;
@@ -55,8 +59,8 @@ FunctionInputSet computeAvailableElements(const FunctionInputSet& offInputSet, c
 valueInt getTotalValueForLayer(const LayerDecomposition& eqClassesOfLayer) {
 	valueInt totalValueForFullLayer = 0;
 
-	for(const EquivalenceClassMap<EquivalenceClassInfo>& eqMap : eqClassesOfLayer) {
-		for(const ValuedEquivalenceClass<EquivalenceClassInfo>& classOfPrevLayer : eqMap) {
+	for(const BakedEquivalenceClassMap<EquivalenceClassInfo>& eqMap : eqClassesOfLayer) {
+		for(const BakedValuedEquivalenceClass<EquivalenceClassInfo>& classOfPrevLayer : eqMap) {
 			const EquivalenceClassInfo& info = classOfPrevLayer.value;
 			totalValueForFullLayer += info.count * info.value;
 		}
@@ -69,14 +73,14 @@ static LayerDecomposition computeNextLayerValues(const FullLayer& curLayer, cons
 	DEBUG_PRINT("Normal Next Layer\n");
 	LayerDecomposition decomposition(curLayer);
 	// resulting values of empty set, and full set
-	decomposition[0].get(EquivalenceClass::emptyEquivalenceClass).value = 1;
-	decomposition[curLayer.size()].get(preprocess(curLayer)).value = getTotalValueForLayer(resultOfPrevLayer);
+	decomposition[0].get(EquivalenceClass::emptyEquivalenceClass).value.value = 1;
+	decomposition[curLayer.size()].get(preprocess(curLayer)).value.value = getTotalValueForLayer(resultOfPrevLayer);
 	
 	// for all other group sizes between the empty set and the full set
 	for(size_t setSize = 1; setSize < curLayer.size(); setSize++) {
 		DEBUG_PRINT("Assigning values of " << setSize << "/" << curLayer.size() << "\n");
-		for(ValuedEquivalenceClass<EquivalenceClassInfo>& countedClass : decomposition[setSize]) {
-			FunctionInputSet availableElementsInPrevLayer = computeAvailableElements(countedClass.equivClass.functionInputSet, curLayer, prevLayer);
+		for(BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass : decomposition[setSize]) {
+			FunctionInputSet availableElementsInPrevLayer = computeAvailableElements(countedClass.eqClass.functionInputSet, curLayer, prevLayer);
 
 			valueInt valueOfSG = computeValueOfClass(availableElementsInPrevLayer, resultOfPrevLayer);
 
@@ -101,23 +105,23 @@ static LayerDecomposition computeSkipLayerValues(const FullLayer& curLayer, cons
 
 	LayerDecomposition decomposition(curLayer);
 	// resulting values of empty set, and full set
-	decomposition[0].get(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet).value = 1;
+	decomposition[0].get(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet).value.value = 1;
 	{
 		valueInt totalValueForFinalElement = 0;
-		for(const EquivalenceClassMap<EquivalenceClassInfo>& eqMap : resultOfPrevLayer) {
-			for(const ValuedEquivalenceClass<EquivalenceClassInfo>& countedClass : eqMap) {
+		for(const BakedEquivalenceClassMap<EquivalenceClassInfo>& eqMap : resultOfPrevLayer) {
+			for(const BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass : eqMap) {
 				const EquivalenceClassInfo& info = countedClass.value;
-				int numAvailableInSkippedLayer = getNumberOfAvailableInSkippedLayer(skippedLayer, countedClass.equivClass.functionInputSet);
+				int numAvailableInSkippedLayer = getNumberOfAvailableInSkippedLayer(skippedLayer, countedClass.eqClass.functionInputSet);
 				totalValueForFinalElement += info.count * (info.value << numAvailableInSkippedLayer);
 			}
 		}
-		decomposition[curLayer.size()].get(preprocess(curLayer)).value = totalValueForFinalElement;
+		decomposition[curLayer.size()].get(preprocess(curLayer)).value.value = totalValueForFinalElement;
 	}
 	// for all other group sizes between the empty set and the full set
 	for(size_t setSize = 1; setSize < curLayer.size(); setSize++) {
 		DEBUG_PRINT("Assigning values of " << setSize << "/" << curLayer.size() << "\n");
-		for(ValuedEquivalenceClass<EquivalenceClassInfo>& countedClass : decomposition[setSize]) {
-			FunctionInputSet onInCurLayer = invert(countedClass.equivClass.functionInputSet, curLayer);
+		for(BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass : decomposition[setSize]) {
+			FunctionInputSet onInCurLayer = invert(countedClass.eqClass.functionInputSet, curLayer);
 			FunctionInputSet availableAbove = removeForcedOn(prevLayer, onInCurLayer);
 			FunctionInputSet availableSkipped = removeForcedOn(skippedLayer, onInCurLayer);
 
@@ -232,7 +236,7 @@ int main() {
 	dedekind(4);
 	dedekind(5);*/
 	//dedekind(6);
-	dedekind6();
+	dedekind(6);
 	/*dedekind(6);
 	dedekind(6);
 	dedekind(6);
@@ -293,11 +297,11 @@ int main() {
 }
 
 void printAllSymmetryGroupsForInputSetFast(const FullLayer& inputSet) {
-	LayerDecomposition allSets(inputSet);
+	/*LayerDecomposition allSets(inputSet);
 	std::cout << "Symmetry groups for: " << std::endl << inputSet << std::endl;
 	for(size_t size = 0; size <= inputSet.size(); size++) {
 		std::cout << "Size " << size << " => " << allSets[size].size() << " groups" << std::endl << allSets[size] << std::endl;
-	}
+	}*/
 }
 
 void testPreprocess() {

@@ -3,6 +3,8 @@
 #include "equivalenceClass.h"
 #include "equivalenceClassMap.h"
 
+#include "heapArray.h"
+
 #include <vector>
 
 
@@ -12,26 +14,26 @@ typedef bigInt valueInt;
 
 struct EquivalenceClassInfo {
 	struct AdjacentClass {
-		ValuedEquivalenceClass<EquivalenceClassInfo>* node;
+		size_t nodeIndex;
 		countInt formationCount;
 	};
 
+	AdjacentClass* extendedClasses;
+	size_t numberOfExtendedClasses;
 	countInt count;
-	std::vector<AdjacentClass> superClasses;
-	std::vector<AdjacentClass> subClasses;
 
 	valueInt value;
 };
 
 class LayerDecomposition {
-	std::vector<EquivalenceClassMap<EquivalenceClassInfo>> equivalenceClasses;
+	std::vector<BakedEquivalenceClassMap<EquivalenceClassInfo>> equivalenceClasses;
 public:
 	LayerDecomposition(const FullLayer& fullLayer);
 
-	inline const EquivalenceClassMap<EquivalenceClassInfo>& operator[](size_t i) const {
+	inline const BakedEquivalenceClassMap<EquivalenceClassInfo>& operator[](size_t i) const {
 		return equivalenceClasses[i];
 	}
-	inline EquivalenceClassMap<EquivalenceClassInfo>& operator[](size_t i) {
+	inline BakedEquivalenceClassMap<EquivalenceClassInfo>& operator[](size_t i) {
 		return equivalenceClasses[i];
 	}
 

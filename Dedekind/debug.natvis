@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?> 
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
   <Type Name="PreprocessedFunctionInputSet">
-    <DisplayString Condition="functionInputSet._Mylast - functionInputSet._Myfirst == 1">{functionInputSet._Myfirst}</DisplayString>
     <DisplayString>{functionInputSet}</DisplayString>
   </Type>
   <Type Name="set&lt;*&gt;">
@@ -44,6 +43,27 @@
       <Item Name="Capacity">capacity</Item>
       <ArrayItems>
         <Size>n</Size>
+        <ValuePointer>data</ValuePointer>
+      </ArrayItems>
+    </Expand>
+  </Type>
+  <Type Name="HeapArray&lt;*&gt;">
+    <DisplayString Condition="bufSize==0">{{}}</DisplayString>
+    <DisplayString Condition="bufSize==1">{{{data[0]}}}</DisplayString>
+    <DisplayString Condition="bufSize==2">{{{data[0]},{data[1]}}}</DisplayString>
+    <DisplayString Condition="bufSize==3">{{{data[0]},{data[1]},{data[2]}}}</DisplayString>
+    <DisplayString Condition="bufSize==4">{{{data[0]},{data[1]},{data[2]},{data[3]}}}</DisplayString>
+    <DisplayString Condition="bufSize==5">{{{data[0]},{data[1]},{data[2]},{data[3]},{data[4]}}}</DisplayString>
+    <DisplayString Condition="bufSize==6">{{{data[0]},{data[1]},{data[2]},{data[3]},{data[4]},{data[5]}}}</DisplayString>
+    <DisplayString Condition="bufSize==7">{{{data[0]},{data[1]},{data[2]},{data[3]},{data[4]},{data[5]},{data[6]}}}</DisplayString>
+    <DisplayString Condition="bufSize==8">{{{data[0]},{data[1]},{data[2]},{data[3]},{data[4]},{data[5]},{data[6]},{data[7]}}}</DisplayString>
+    <DisplayString Condition="bufSize==9">{{{data[0]},{data[1]},{data[2]},{data[3]},{data[4]},{data[5]},{data[6]},{data[7]},{data[8]}}}</DisplayString>
+    <DisplayString Condition="bufSize==10">{{{data[0]},{data[1]},{data[2]},{data[3]},{data[4]},{data[5]},{data[6]},{data[7]},{data[8]},{data[9]}}}</DisplayString>
+    <DisplayString>{{size = {bufSize}}}</DisplayString>
+    <Expand>
+      <Item Name="Size">bufSize</Item>
+      <ArrayItems>
+        <Size>bufSize</Size>
         <ValuePointer>data</ValuePointer>
       </ArrayItems>
     </Expand>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "equivalenceClass.h"
+#include "heapArray.h"
 
 template<typename V>
 struct ValuedEquivalenceClass {
@@ -8,8 +9,12 @@ struct ValuedEquivalenceClass {
 	V value;
 };
 
+class LayerDecomposition;
+
 template<typename V>
 class EquivalenceClassMap {
+	friend class LayerDecomposition;
+
 	struct MapNode {
 		MapNode* nextNode;
 		ValuedEquivalenceClass<V> item;
@@ -192,4 +197,80 @@ public:
 	auto begin() { return NonConstEquivalenceClassMapIter(hashTable, buckets); }
 	auto begin() const { return ConstEquivalenceClassMapIter(hashTable, buckets); }
 	auto end() const { return IteratorEnd(); }
+};
+
+template<typename V>
+struct BakedValuedEquivalenceClass {
+	EquivalenceClass eqClass;
+	V value;
+};
+
+template<typename V>
+class BakedEquivalenceClassMap {
+	friend class LayerDecomposition;
+	HeapArray<BakedValuedEquivalenceClass<V>> allClasses;
+	BakedValuedEquivalenceClass<V>** buckets;
+	size_t bucketCount;
+public:
+	BakedEquivalenceClassMap() = default;
+	BakedEquivalenceClassMap(size_t numberOfClasses, size_t bucketCount) :
+		allClasses(numberOfClasses),
+		buckets(new BakedValuedEquivalenceClass<V>*[bucketCount+1]),
+		bucketCount(bucketCount) {
+		buckets[bucketCount] = allClasses.end();
+	}
+
+	BakedEquivalenceClassMap(BakedEquivalenceClassMap&& other) noexcept : 
+		allClasses(std::move(other.allClasses)), 
+		buckets(other.buckets), 
+		bucketCount(other.bucketCount) {
+
+		other.buckets = nullptr;
+		other.bucketCount = 0;
+	}
+	BakedEquivalenceClassMap& operator=(BakedEquivalenceClassMap&& other) noexcept {
+		std::swap(this->allClasses, other.allClasses);
+		std::swap(this->buckets, other.buckets);
+		std::swap(this->bucketCount, other.bucketCount);
+	}
+	~BakedEquivalenceClassMap() {
+		delete[] buckets;
+	}
+
+	BakedValuedEquivalenceClass<V>& get(const PreprocessedFunctionInputSet& f) {
+		size_t index = f.hash() % bucketCount;
+
+		BakedValuedEquivalenceClass<V>* b = buckets[index];
+		BakedValuedEquivalenceClass<V>* bEnd = buckets[index+1];
+
+		for(; b != bEnd; b++) {
+			if(b->eqClass.contains(f)) {
+				return *b;
+			}
+		}
+		assert(false); // Cannot happen, this should be a full decomposition of the entire layer
+	}
+	const BakedValuedEquivalenceClass<V>& get(const PreprocessedFunctionInputSet& f) const {
+		size_t index = f.hash() % bucketCount;
+
+		BakedValuedEquivalenceClass<V>* b = buckets[index];
+		BakedValuedEquivalenceClass<V>* bEnd = buckets[index + 1];
+
+		for(; b != bEnd; b++) {
+			if(b->eqClass.contains(f)) {
+				return *b;
+			}
+		}
+		assert(false); // Cannot happen, this should be a full decomposition of the entire layer
+	}
+
+	BakedValuedEquivalenceClass<V>& operator[](size_t index) { return allClasses[index]; }
+	const BakedValuedEquivalenceClass<V>& operator[](size_t index) const { return allClasses[index]; }
+
+	size_t size() const { return allClasses.size(); }
+
+	BakedValuedEquivalenceClass<V>* begin() { return allClasses.begin(); }
+	const BakedValuedEquivalenceClass<V>* begin() const { return allClasses.begin(); }
+	BakedValuedEquivalenceClass<V>* end() { return allClasses.end(); }
+	const BakedValuedEquivalenceClass<V>* end() const { return allClasses.end(); }
 };
