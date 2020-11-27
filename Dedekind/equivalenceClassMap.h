@@ -24,18 +24,21 @@ class EquivalenceClassMap {
 	size_t buckets;
 	size_t itemCount;
 
-	MapNode** getBucketFor(const PreprocessedFunctionInputSet& functionInputSet) const {
-		uint64_t hash = functionInputSet.hash();
+	MapNode** getBucketFor(uint64_t hash) const {
 		return &hashTable[hash % buckets];
 	}
-	MapNode** getNodeFor(const PreprocessedFunctionInputSet& functionInputSet) const {
-		MapNode** cur = getBucketFor(functionInputSet);
+	MapNode** getNodeFor(const PreprocessedFunctionInputSet& functionInputSet, uint64_t hash) const {
+		MapNode** cur = getBucketFor(hash);
 		for(; *cur != nullptr; cur = &((*cur)->nextNode)) {
-			if((*cur)->item.equivClass.contains(functionInputSet)) {
+			const EquivalenceClass& eqClass = (*cur)->item.equivClass;
+			if(hash == eqClass.hash && eqClass.contains(functionInputSet)) {
 				return cur;
 			}
 		}
 		return cur;
+	}
+	MapNode** getNodeFor(const PreprocessedFunctionInputSet& functionInputSet) const {
+		return getNodeFor(functionInputSet, functionInputSet.hash());
 	}
 	void deleteAllNodes() {
 		for(size_t i = 0; i < buckets; i++) {
@@ -56,7 +59,7 @@ class EquivalenceClassMap {
 		for(size_t i = 0; i < this->buckets; i++) this->hashTable[i] = nullptr;
 		for(size_t i = 0; i < oldBuckets; i++) {
 			for(MapNode* curNode = oldHashTable[i]; curNode != nullptr; ) {
-				MapNode** bucket = getBucketFor(curNode->item.equivClass);
+				MapNode** bucket = getBucketFor(curNode->item.equivClass.hash);
 				MapNode* nextNode = curNode->nextNode;
 				curNode->nextNode = *bucket;
 				*bucket = curNode;
@@ -117,10 +120,11 @@ public:
 		return (*foundNode)->item.value;
 	}
 	ValuedEquivalenceClass<V>& getOrAdd(const PreprocessedFunctionInputSet& preprocessed, const V& defaultForCreate) {
-		MapNode** foundNode = getNodeFor(preprocessed);
+		uint64_t hash = preprocessed.hash();
+		MapNode** foundNode = getNodeFor(preprocessed, hash);
 		MapNode* actualNode = *foundNode;
 		if(actualNode == nullptr) {
-			actualNode = new MapNode{nullptr, ValuedEquivalenceClass<V>{EquivalenceClass(preprocessed), defaultForCreate}};
+			actualNode = new MapNode{nullptr, ValuedEquivalenceClass<V>{EquivalenceClass(preprocessed, hash), defaultForCreate}};
 			*foundNode = actualNode;
 			this->notifyNewItem();
 		}
@@ -128,14 +132,15 @@ public:
 	}
 
 	ValuedEquivalenceClass<V>& add(const PreprocessedFunctionInputSet& preprocessed, const V& value) {
-		MapNode** bucket = getBucketFor(preprocessed);
-		*bucket = new MapNode{*bucket, ValuedEquivalenceClass<V>{EquivalenceClass(preprocessed), value}};
+		uint64_t hash = preprocessed.hash();
+		MapNode** bucket = getBucketFor(hash);
+		*bucket = new MapNode{*bucket, ValuedEquivalenceClass<V>{EquivalenceClass(preprocessed, hash), value}};
 		this->notifyNewItem();
 		return (*bucket)->item;
 	}
 
 	ValuedEquivalenceClass<V>& add(const EquivalenceClass& eqClass, const V& value) {
-		MapNode** bucket = getBucketFor(eqClass);
+		MapNode** bucket = getBucketFor(eqClass.hash);
 		*bucket = new MapNode{*bucket, ValuedEquivalenceClass<V>{eqClass, value}};
 		this->notifyNewItem();
 		return (*bucket)->item;

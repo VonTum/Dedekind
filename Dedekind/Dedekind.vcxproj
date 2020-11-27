@@ -183,8 +183,8 @@
     <ClInclude Include="iteratorFactory.h" />
     <ClInclude Include="layerStack.h" />
     <ClInclude Include="math.h" />
+    <ClInclude Include="parallelIter.h" />
     <ClInclude Include="set.h" />
-    <ClInclude Include="threadPool.h" />
     <ClInclude Include="timeTracker.h" />
     <ClInclude Include="toString.h" />
   </ItemGroup>

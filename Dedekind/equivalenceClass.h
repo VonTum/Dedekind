@@ -70,11 +70,16 @@ PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet);
 
 struct EquivalenceClass : public PreprocessedFunctionInputSet {
 	int_set<FunctionInput, FunctionInput::underlyingType> equalityChecker;
+	uint64_t hash;
 
 	EquivalenceClass() = default;
 	
-	inline EquivalenceClass(const PreprocessedFunctionInputSet& parent) : PreprocessedFunctionInputSet(parent), equalityChecker(1 << parent.spanSize, parent.functionInputSet) {}
-	inline EquivalenceClass(PreprocessedFunctionInputSet&& parent) : PreprocessedFunctionInputSet(parent), equalityChecker(1 << parent.spanSize, parent.functionInputSet) {}
+	inline EquivalenceClass(const PreprocessedFunctionInputSet& parent, uint64_t hash) : PreprocessedFunctionInputSet(parent), equalityChecker(1 << parent.spanSize, parent.functionInputSet), hash(hash) {}
+	inline EquivalenceClass(PreprocessedFunctionInputSet&& parent, uint64_t hash) : PreprocessedFunctionInputSet(parent), equalityChecker(1 << parent.spanSize, parent.functionInputSet), hash(hash) {}
+
+	inline EquivalenceClass(const PreprocessedFunctionInputSet& parent) : EquivalenceClass(parent, parent.hash()) {}
+	inline EquivalenceClass(PreprocessedFunctionInputSet&& parent) : EquivalenceClass(std::move(parent), parent.hash()) {}
+
 
 	static EquivalenceClass emptyEquivalenceClass;
 

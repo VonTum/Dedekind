@@ -18,6 +18,11 @@
 #include "timeTracker.h"
 #include "codeGen.h"
 
+#include "parallelIter.h"
+
+#include <mutex>
+#include <atomic>
+
 
 
 #define DEBUG_PRINT(v) std::cout << v
@@ -108,20 +113,23 @@ static LayerDecomposition computeSkipLayerValues(const FullLayer& curLayer, cons
 	// resulting values of empty set, and full set
 	decomposition[0].get(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet).value.value = 1;
 	{
-		valueInt totalValueForFinalElement = 0;
+		std::atomic<valueInt> totalValueForFinalElement = 0;
 		for(const BakedEquivalenceClassMap<EquivalenceClassInfo>& eqMap : resultOfPrevLayer) {
-			for(const BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass : eqMap) {
+			iterCollectionInParallel(eqMap, [&totalValueForFinalElement,&skippedLayer](const BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass) {
 				const EquivalenceClassInfo& info = countedClass.value;
 				int numAvailableInSkippedLayer = getNumberOfAvailableInSkippedLayer(skippedLayer, countedClass.eqClass.functionInputSet);
 				totalValueForFinalElement += info.count * (info.value << numAvailableInSkippedLayer);
-			}
+			});
 		}
 		decomposition[curLayer.size()].get(preprocess(curLayer)).value.value = totalValueForFinalElement;
 	}
 	// for all other group sizes between the empty set and the full set
 	for(size_t setSize = 1; setSize < curLayer.size(); setSize++) {
 		DEBUG_PRINT("Assigning values of " << setSize << "/" << curLayer.size() << "\n");
+		std::mutex countedClassMutex;
+		//iterCollectionInParallel(decomposition[setSize], [&curLayer, &prevLayer, &skippedLayer, &resultOfPrevLayer, &countedClassMutex](BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass) {
 		for(BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass : decomposition[setSize]) {
+			countedClassMutex.lock();
 			FunctionInputSet onInCurLayer = invert(countedClass.eqClass.functionInputSet, curLayer);
 			FunctionInputSet availableAbove = removeForcedOn(prevLayer, onInCurLayer);
 			FunctionInputSet availableSkipped = removeForcedOn(skippedLayer, onInCurLayer);
@@ -134,7 +142,8 @@ static LayerDecomposition computeSkipLayerValues(const FullLayer& curLayer, cons
 			});
 
 			countedClass.value.value = valueOfSG;
-		}
+			countedClassMutex.unlock();
+		}//);
 	}
 	return decomposition;
 }
@@ -237,11 +246,11 @@ Correct numbers
 
 int main() {
 	TimeTracker timer;
-	__debugbreak();
+	/*__debugbreak();
 	DedekindDecomposition fullDecomposition(6);
 	Sleep(1000);
 	__debugbreak();
-	return 0;
+	return 0;*/
 
 	/*dedekind(1);
 	dedekind(2);

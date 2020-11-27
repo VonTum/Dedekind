@@ -1,6 +1,6 @@
 #include "layerDecomposition.h"
 
-#include "threadPool.h"
+#include "parallelIter.h"
 
 #include <iostream>
 
@@ -35,21 +35,23 @@ static std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(
 	ValuedEquivalenceClass<TempEquivClassInfo>& layer1item = equivalenceClasses[1].add(preprocess(FunctionInputSet{layer[0]}), TempEquivClassInfo{layer.size()}); // equivalence classes of size 1, only one
 	createLinkBetween(layer0item, layer1item, layer.size());
 
-	
-
 	for(size_t groupSize = 2; groupSize < layer.size(); groupSize++) {
 		std::cout << "Looking at size " << groupSize << '/' << layer.size();
 		EquivalenceClassMap<TempEquivClassInfo>& curGroups = equivalenceClasses[groupSize];
 		// try to extend each of the previous groups by 1
-		for(ValuedEquivalenceClass<TempEquivClassInfo>& element : equivalenceClasses[groupSize - 1]) {
+		std::mutex curGroupsMutex;
+		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&curGroupsMutex](ValuedEquivalenceClass<TempEquivClassInfo>& element) {
 			countInt countOfCur = element.value.count;
 			for(FunctionInput newInput : layer) {
 				if(element.equivClass.hasFunctionInput(newInput)) continue; // only try to add new inputs that are not yet part of this
-				ValuedEquivalenceClass<TempEquivClassInfo>& extended = curGroups.getOrAdd(element.equivClass.extendedBy(newInput), TempEquivClassInfo{0});
+				PreprocessedFunctionInputSet resultingPreprocessed = element.equivClass.extendedBy(newInput);
+				curGroupsMutex.lock();
+				ValuedEquivalenceClass<TempEquivClassInfo>& extended = curGroups.getOrAdd(std::move(resultingPreprocessed), TempEquivClassInfo{0});
 				extended.value.count += countOfCur;
 				incrementLinkBetween(element, extended);
+				curGroupsMutex.unlock();
 			}
-		}
+		});
 		// all groups covered, add new groups to list, apply correction and repeat
 		for(ValuedEquivalenceClass<TempEquivClassInfo>& newGroup : curGroups) {
 			assert(newGroup.value.count % groupSize == 0);
