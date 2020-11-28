@@ -3,6 +3,7 @@
 #include "parallelIter.h"
 
 #include <iostream>
+#include <shared_mutex>
 
 struct TempEquivClassInfo {
 	struct AdjacentClass {
@@ -28,6 +29,15 @@ static void incrementLinkBetween(ValuedEquivalenceClass<TempEquivClassInfo>& cl,
 	createLinkBetween(cl, extended, 1);
 }
 
+static ValuedEquivalenceClass<TempEquivClassInfo>* oneOfListContains(const std::vector<ValuedEquivalenceClass<TempEquivClassInfo>*>& list, const PreprocessedFunctionInputSet& preprocessed) {
+	for(ValuedEquivalenceClass<TempEquivClassInfo>* existingClass : list) {
+		if(existingClass->equivClass.contains(preprocessed)) {
+			return existingClass;
+		}
+	}
+	return nullptr;
+}
+
 static std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const FullLayer& layer) {
 	std::vector<EquivalenceClassMap<TempEquivClassInfo>> equivalenceClasses(layer.size() + 1);
 
@@ -39,17 +49,40 @@ static std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(
 		std::cout << "Looking at size " << groupSize << '/' << layer.size();
 		EquivalenceClassMap<TempEquivClassInfo>& curGroups = equivalenceClasses[groupSize];
 		// try to extend each of the previous groups by 1
-		std::mutex curGroupsMutex;
-		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&curGroupsMutex](ValuedEquivalenceClass<TempEquivClassInfo>& element) {
+		std::shared_mutex curGroupsMutex;
+		std::mutex editClassMutex;
+		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&curGroupsMutex,&editClassMutex](ValuedEquivalenceClass<TempEquivClassInfo>& element) {
 			countInt countOfCur = element.value.count;
+			std::vector<ValuedEquivalenceClass<TempEquivClassInfo>*> foundExistingClasses;
+			foundExistingClasses.reserve(3);
 			for(FunctionInput newInput : layer) {
 				if(element.equivClass.hasFunctionInput(newInput)) continue; // only try to add new inputs that are not yet part of this
 				PreprocessedFunctionInputSet resultingPreprocessed = element.equivClass.extendedBy(newInput);
+				uint64_t hash = resultingPreprocessed.hash();
+
+				{// this whole bit is to reduce contention on curGroupsMutex, by finding existing classes earlier and handling them without having to take a write lock
+					curGroupsMutex.lock_shared();
+					curGroups.findAllNodesMatchingHash(hash, foundExistingClasses);
+					curGroupsMutex.unlock_shared();
+
+					ValuedEquivalenceClass<TempEquivClassInfo>* existingClass = oneOfListContains(foundExistingClasses, resultingPreprocessed);
+					if(existingClass != nullptr) {
+						editClassMutex.lock();
+						existingClass->value.count += countOfCur;
+						incrementLinkBetween(element, *existingClass);
+						editClassMutex.unlock();
+						continue;
+					}
+				}
+
 				curGroupsMutex.lock();
-				ValuedEquivalenceClass<TempEquivClassInfo>& extended = curGroups.getOrAdd(std::move(resultingPreprocessed), TempEquivClassInfo{0});
+				ValuedEquivalenceClass<TempEquivClassInfo>& extended = curGroups.getOrAdd(resultingPreprocessed, TempEquivClassInfo{0}, hash);
+				curGroupsMutex.unlock();
+				
+				editClassMutex.lock();
 				extended.value.count += countOfCur;
 				incrementLinkBetween(element, extended);
-				curGroupsMutex.unlock();
+				editClassMutex.unlock();
 			}
 		});
 		// all groups covered, add new groups to list, apply correction and repeat

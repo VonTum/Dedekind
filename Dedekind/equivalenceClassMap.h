@@ -125,8 +125,7 @@ public:
 		assert(*foundNode != nullptr);
 		return (*foundNode)->item.value;
 	}
-	ValuedEquivalenceClass<V>& getOrAdd(const PreprocessedFunctionInputSet& preprocessed, const V& defaultForCreate) {
-		uint64_t hash = preprocessed.hash();
+	ValuedEquivalenceClass<V>& getOrAdd(const PreprocessedFunctionInputSet& preprocessed, const V& defaultForCreate, uint64_t hash) {
 		MapNode** foundNode = getNodeFor(preprocessed, hash);
 		MapNode* actualNode = *foundNode;
 		if(actualNode == nullptr) {
@@ -135,6 +134,19 @@ public:
 			this->notifyNewItem();
 		}
 		return actualNode->item;
+	}
+	ValuedEquivalenceClass<V>& getOrAdd(const PreprocessedFunctionInputSet& preprocessed, const V& defaultForCreate) {
+		uint64_t hash = preprocessed.hash();
+		return getOrAdd(preprocessed, defaultForCreate, hash);
+	}
+
+	void findAllNodesMatchingHash(uint64_t hash, std::vector<ValuedEquivalenceClass<V>*>& foundNodes) {
+		for(MapNode** cur = getBucketFor(hash); *cur != nullptr; cur = &((*cur)->nextNode)) {
+			const EquivalenceClass& eqClass = (*cur)->item.equivClass;
+			if(hash == eqClass.hash) {
+				foundNodes.push_back(&(*cur)->item);
+			}
+		}
 	}
 
 	ValuedEquivalenceClass<V>& add(const PreprocessedFunctionInputSet& preprocessed, const V& value) {
