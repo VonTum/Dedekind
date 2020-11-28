@@ -32,15 +32,16 @@ PreprocessedFunctionInputSet EquivalenceClass::extendedBy(FunctionInput fi) cons
 uint64_t PreprocessedFunctionInputSet::hash() const {
 	uint64_t hsh = spanSize;
 	for(const CountedGroup<VariableCoOccurence>& cg : variableCoOccurences) {
-		uint64_t hshOfCoOccur = 4398042316799ULL; // big prime
+		uint64_t hshOfCoOccur = 1; // big prime
 		int i = 1;
 		for(long long v : cg.group.coOccursWith) {
-			hshOfCoOccur ^= v*i;
+			hshOfCoOccur = hshOfCoOccur * 113 + v*i;
 			i++;
 		}
-		hsh ^= cg.count * 87178291199ULL ^ hshOfCoOccur;// big prime, people use big primes for hashing right?
+		hsh = hsh * 101 + cg.count;
+		hsh = hsh * 101 + hshOfCoOccur;
 	}
-	return hsh ^ (hsh >> 1) ^ (hsh >> 2) ^ (hsh >> 4) ^ (hsh >> 8) ^ (hsh >> 16) ^ (hsh >> 32);
+	return hsh ^ (hsh >> 8) ^ (hsh >> 16) ^ (hsh >> 32);
 }
 
 FunctionInputSet EquivalenceClass::asFunctionInputSet() const {

@@ -56,6 +56,7 @@ static std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(
 			std::vector<ValuedEquivalenceClass<TempEquivClassInfo>*> foundExistingClasses;
 			foundExistingClasses.reserve(3);
 			for(FunctionInput newInput : layer) {
+				foundExistingClasses.clear();
 				if(element.equivClass.hasFunctionInput(newInput)) continue; // only try to add new inputs that are not yet part of this
 				PreprocessedFunctionInputSet resultingPreprocessed = element.equivClass.extendedBy(newInput);
 				uint64_t hash = resultingPreprocessed.hash();
