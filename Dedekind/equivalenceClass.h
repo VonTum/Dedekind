@@ -2,16 +2,14 @@
 
 #include <cassert>
 #include <algorithm>
+#include <bitset>
 
 #include "collectionOperations.h"
 #include "functionInput.h"
 #include "functionInputSet.h"
 #include "intSet.h"
 
-struct VariableOccurence {
-	int index;
-	int count;
-};
+#define MAX_PREPROCESSED 7
 
 struct VariableCoOccurence {
 	std::vector<int> coOccursWith;
@@ -53,9 +51,9 @@ inline bool operator>=(InitialVariableObservations a, InitialVariableObservation
 struct PreprocessedFunctionInputSet {
 	FunctionInputSet functionInputSet;
 	std::vector<InitialVariableObservations> variables;
-	std::vector<int> variableOccurences;
 	std::vector<CountedGroup<VariableCoOccurence>> variableCoOccurences;
-	int spanSize;
+	int8_t spanSize;
+	int8_t variableOccurences[MAX_PREPROCESSED];
 
 	inline size_t size() const { return functionInputSet.size(); }
 
@@ -68,24 +66,49 @@ struct PreprocessedFunctionInputSet {
 
 PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet);
 
-struct EquivalenceClass : public PreprocessedFunctionInputSet {
-	int_set<FunctionInput, FunctionInput::underlyingType> equalityChecker;
+struct EquivalenceClass {
+	std::bitset<(1 << MAX_PREPROCESSED)> functionInputSet;
 	uint64_t hash;
+	int8_t spanSize;
+	int8_t variableOccurences[MAX_PREPROCESSED];
+	InitialVariableObservations variables[MAX_PREPROCESSED];
 
 	EquivalenceClass() = default;
 	
-	inline EquivalenceClass(const PreprocessedFunctionInputSet& parent, uint64_t hash) : PreprocessedFunctionInputSet(parent), equalityChecker(1 << parent.spanSize, parent.functionInputSet), hash(hash) {}
-	inline EquivalenceClass(PreprocessedFunctionInputSet&& parent, uint64_t hash) : PreprocessedFunctionInputSet(parent), equalityChecker(1 << parent.spanSize, parent.functionInputSet), hash(hash) {}
+	inline EquivalenceClass(const PreprocessedFunctionInputSet& prep, uint64_t hash) :
+		functionInputSet(),
+		spanSize(prep.spanSize),
+		variableOccurences(),
+		variables(),
+		hash(hash) {
+		
+		for(int i = 0; i < spanSize; i++) {
+			variables[i] = prep.variables[i];
+			variableOccurences[i] = prep.variableOccurences[i];
+		}
+		for(int i = spanSize; i < MAX_PREPROCESSED; i++) {
+			variableOccurences[i] = -1;
+			variables[i] = InitialVariableObservations{-1,-1};
+		}
+		for(const FunctionInput& fi : prep.functionInputSet) {
+			functionInputSet.set(fi.inputBits);
+		}
+	}
+	
+	inline EquivalenceClass(const PreprocessedFunctionInputSet& prep) : EquivalenceClass(prep, prep.hash()) {}
 
-	inline EquivalenceClass(const PreprocessedFunctionInputSet& parent) : EquivalenceClass(parent, parent.hash()) {}
-	inline EquivalenceClass(PreprocessedFunctionInputSet&& parent) : EquivalenceClass(std::move(parent), parent.hash()) {}
 
-
-	static EquivalenceClass emptyEquivalenceClass;
+	inline size_t size() const { return functionInputSet.count(); }
 
 	bool contains(const PreprocessedFunctionInputSet& b) const;
 
+	PreprocessedFunctionInputSet extendedBy(FunctionInput fi) const;
+
 	inline bool hasFunctionInput(FunctionInput fi) const {
-		return equalityChecker.containsFree(fi);
+		return functionInputSet.test(fi.inputBits);
 	}
+
+	FunctionInputSet asFunctionInputSet() const;
+
+	static EquivalenceClass emptyEquivalenceClass;
 };

@@ -57,7 +57,8 @@ bigInt computeValueOfClass(const FunctionInputSet& availableOptions, const Layer
 	return totalOptions;
 }
 
-FunctionInputSet computeAvailableElements(const FunctionInputSet& offInputSet, const FullLayer& curLayer, const FullLayer& layerAbove) {
+template<size_t Size>
+FunctionInputSet computeAvailableElements(const std::bitset<Size>& offInputSet, const FullLayer& curLayer, const FullLayer& layerAbove) {
 	FunctionInputSet onInputSet = invert(offInputSet, curLayer);
 	return removeForcedOn(layerAbove, onInputSet);
 }
@@ -79,7 +80,7 @@ static LayerDecomposition computeNextLayerValues(const FullLayer& curLayer, cons
 	DEBUG_PRINT("Normal Next Layer\n");
 	LayerDecomposition decomposition(curLayer);
 	// resulting values of empty set, and full set
-	decomposition[0].get(EquivalenceClass::emptyEquivalenceClass).value.value = 1;
+	decomposition[0].get(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet).value.value = 1;
 	decomposition[curLayer.size()].get(preprocess(curLayer)).value.value = getTotalValueForLayer(resultOfPrevLayer);
 	
 	// for all other group sizes between the empty set and the full set
@@ -117,7 +118,7 @@ static LayerDecomposition computeSkipLayerValues(const FullLayer& curLayer, cons
 		for(const BakedEquivalenceClassMap<EquivalenceClassInfo>& eqMap : resultOfPrevLayer) {
 			iterCollectionInParallel(eqMap, [&totalValueForFinalElement,&skippedLayer](const BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass) {
 				const EquivalenceClassInfo& info = countedClass.value;
-				int numAvailableInSkippedLayer = getNumberOfAvailableInSkippedLayer(skippedLayer, countedClass.eqClass.functionInputSet);
+				int numAvailableInSkippedLayer = getNumberOfAvailableInSkippedLayer(skippedLayer, countedClass.eqClass.asFunctionInputSet());
 				totalValueForFinalElement += info.count * (info.value << numAvailableInSkippedLayer);
 			});
 		}
@@ -129,7 +130,7 @@ static LayerDecomposition computeSkipLayerValues(const FullLayer& curLayer, cons
 		std::mutex countedClassMutex;
 		//iterCollectionInParallel(decomposition[setSize], [&curLayer, &prevLayer, &skippedLayer, &resultOfPrevLayer, &countedClassMutex](BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass) {
 		for(BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass : decomposition[setSize]) {
-			countedClassMutex.lock();
+			std::lock_guard<std::mutex> lg(countedClassMutex);
 			FunctionInputSet onInCurLayer = invert(countedClass.eqClass.functionInputSet, curLayer);
 			FunctionInputSet availableAbove = removeForcedOn(prevLayer, onInCurLayer);
 			FunctionInputSet availableSkipped = removeForcedOn(skippedLayer, onInCurLayer);
@@ -142,7 +143,6 @@ static LayerDecomposition computeSkipLayerValues(const FullLayer& curLayer, cons
 			});
 
 			countedClass.value.value = valueOfSG;
-			countedClassMutex.unlock();
 		}//);
 	}
 	return decomposition;
@@ -246,11 +246,11 @@ Correct numbers
 
 int main() {
 	TimeTracker timer;
-	/*__debugbreak();
-	DedekindDecomposition fullDecomposition(6);
-	Sleep(1000);
-	__debugbreak();
-	return 0;*/
+	//__debugbreak();
+	DedekindDecomposition fullDecomposition(7);
+	//Sleep(1000);
+	//__debugbreak();
+	//return 0;
 
 	/*dedekind(1);
 	dedekind(2);
@@ -258,7 +258,7 @@ int main() {
 	dedekind(4);
 	dedekind(5);*/
 	//dedekind(6);
-	dedekind6();
+	//dedekind6();
 	/*dedekind(6);
 	dedekind(6);
 	dedekind(6);

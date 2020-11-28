@@ -13,9 +13,23 @@ typedef bigInt countInt;
 typedef bigInt valueInt;
 
 struct EquivalenceClassInfo {
-	struct AdjacentClass {
-		size_t nodeIndex;
-		countInt formationCount;
+	class AdjacentClass {
+		uint32_t data;
+	public:
+		AdjacentClass() = default;
+		AdjacentClass(size_t nodeIndex, unsigned int formationCount) : data(nodeIndex << 8 | formationCount) {
+			assert(nodeIndex < (1 << 24));
+			assert(formationCount < 256);
+		}
+
+		size_t getNodeIndex() const { return data >> 8; }
+		unsigned int getFormationCount() const { return data & 0xFF; }
+
+		AdjacentClass& operator++() {
+			++data;
+			assert((data & 0xFF) != 0);
+			return *this;
+		}
 	};
 
 	AdjacentClass* extendedClasses;

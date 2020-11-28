@@ -104,6 +104,12 @@ public:
 			}
 		}
 	}
+	~EquivalenceClassMap() {
+		deleteAllNodes();
+		delete[] hashTable;
+		buckets = 0;
+	}
+
 	EquivalenceClassMap& operator=(const EquivalenceClassMap& other) {
 		*this = EquivalenceClassMap(other);
 		return *this;
@@ -149,11 +155,6 @@ public:
 	size_t size() const { return itemCount; }
 	void clear() {
 		deleteAllNodes();
-	}
-	~EquivalenceClassMap() {
-		deleteAllNodes();
-		delete[] hashTable;
-		buckets = 0;
 	}
 
 	struct EquivalenceClassMapIter {

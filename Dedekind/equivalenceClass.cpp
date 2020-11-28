@@ -5,14 +5,28 @@
 #include <iostream>
 
 
-PreprocessedFunctionInputSet PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{}, std::vector<InitialVariableObservations>{}, std::vector<int>{}, std::vector<CountedGroup<VariableCoOccurence>>{}, 0};
+PreprocessedFunctionInputSet PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{}, std::vector<InitialVariableObservations>{}, std::vector<CountedGroup<VariableCoOccurence>>{}, 0};
 EquivalenceClass EquivalenceClass::emptyEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet);
+
 
 // TODO candidate for optimization
 PreprocessedFunctionInputSet PreprocessedFunctionInputSet::extendedBy(FunctionInput inp) const {
 	FunctionInputSet resultingFuncInputSet(this->functionInputSet.size() + 1);
 	for(size_t i = 0; i < this->functionInputSet.size(); i++) resultingFuncInputSet[i] = this->functionInputSet[i];
 	resultingFuncInputSet[this->functionInputSet.size()] = inp;
+	return preprocess(std::move(resultingFuncInputSet));
+}
+
+PreprocessedFunctionInputSet EquivalenceClass::extendedBy(FunctionInput fi) const {
+	size_t size = this->functionInputSet.count();
+	FunctionInputSet resultingFuncInputSet;
+	resultingFuncInputSet.reserve(size + 1);
+	for(FunctionInput::underlyingType i = 0; i < (1 << spanSize); i++) {
+		if(this->functionInputSet.test(i)) {
+			resultingFuncInputSet.push_back(FunctionInput{i});
+		}
+	}
+	resultingFuncInputSet.push_back(fi);
 	return preprocess(std::move(resultingFuncInputSet));
 }
 
@@ -28,6 +42,16 @@ uint64_t PreprocessedFunctionInputSet::hash() const {
 		hsh ^= cg.count * 87178291199ULL ^ hshOfCoOccur;// big prime, people use big primes for hashing right?
 	}
 	return hsh ^ (hsh >> 1) ^ (hsh >> 2) ^ (hsh >> 4) ^ (hsh >> 8) ^ (hsh >> 16) ^ (hsh >> 32);
+}
+
+FunctionInputSet EquivalenceClass::asFunctionInputSet() const {
+	size_t size = functionInputSet.count();
+	FunctionInputSet result;
+	result.reserve(size);
+	for(FunctionInput::underlyingType i = 0; i < size; i++) {
+		if(functionInputSet.test(i)) result.push_back(FunctionInput{i});
+	}
+	return result;
 }
 
 static std::vector<int> computeOccurenceCounts(const FunctionInputSet& inputSet, int spanSize) {
@@ -179,12 +203,6 @@ static RefinedVariableSymmetryGroups refineVariableSymmetryGroups(const std::vec
 	}
 }
 
-struct NormalizeVariablesByOccurenceData {
-	FunctionInputSet funcInputSet;
-	int variableCount;
-	std::vector<VariableOccurence> occurences;
-};
-
 // returns the resulting functionInputSet, and the number of found variables
 static int preprocessRemoveUnusedVariables(FunctionInputSet& inputSet) {
 	int inputIndex = 0;
@@ -231,20 +249,26 @@ PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet) {
 
 	RefinedVariableSymmetryGroups resultingRefinedGroups = refineVariableSymmetryGroups(variables, inputSet);
 
-	return PreprocessedFunctionInputSet{
+	PreprocessedFunctionInputSet result{
 		inputSet,
 		variables,
-		countOccurencesSorted(resultingRefinedGroups.groups),
 		tallyDistinctOrdered(resultingRefinedGroups.coOccurences.begin(), resultingRefinedGroups.coOccurences.end()), 
-		variableCount};
+		variableCount
+	};
+
+	for(size_t i = 0; i < resultingRefinedGroups.groups.size(); i++){
+		result.variableOccurences[i] = resultingRefinedGroups.groups[i];
+	}
+
+	return result;
 }
 
 typedef std::vector<int>::const_iterator vIter;
 
 template<typename Func>
-bool existsSubPermutationRecursive(vIter groupStart, vIter groupEnd, std::vector<int>& permutation, size_t indexInPermutation, size_t itemsLeft, const Func& func) {
+bool existsSubPermutationRecursive(const int8_t* groupStart, const int8_t* groupEnd, std::vector<int>& permutation, size_t indexInPermutation, size_t itemsLeft, const Func& func) {
 	if(itemsLeft == 0) {
-		return existsPermutationOverVariableGroupsRecursive(groupStart + 1, groupEnd, permutation, indexInPermutation, func);
+		return existsPermutationOverVariableGroupsRecursive(groupStart, groupEnd, permutation, indexInPermutation, func);
 	} else {
 		if(existsSubPermutationRecursive(groupStart, groupEnd, permutation, indexInPermutation + 1, itemsLeft - 1, func)) return true;
 		for(size_t i = 1; i < itemsLeft; i++) {
@@ -257,17 +281,23 @@ bool existsSubPermutationRecursive(vIter groupStart, vIter groupEnd, std::vector
 }
 
 template<typename Func>
-bool existsPermutationOverVariableGroupsRecursive(vIter start, vIter end, std::vector<int>& permutation, size_t indexInPermutation, const Func& func) {
+bool existsPermutationOverVariableGroupsRecursive(const int8_t* start, const int8_t* end, std::vector<int>& permutation, size_t indexInPermutation, const Func& func) {
 	if(start != end) {
-		return existsSubPermutationRecursive(start, end, permutation, indexInPermutation, *start, func);
+		int groupSize = 0;
+		int8_t groupID = *start;
+		do {
+			start++;
+			groupSize++;
+		} while(start != end && *start == groupID);
+		return existsSubPermutationRecursive(start, end, permutation, indexInPermutation, groupSize, func);
 	} else {
 		return func(permutation);
 	}
 }
 
 template<typename Func>
-bool existsPermutationOverVariableGroups(const std::vector<int>& groups, std::vector<int> permutation, const Func& func) {
-	return existsPermutationOverVariableGroupsRecursive(groups.begin(), groups.end(), permutation, 0, func);
+bool existsPermutationOverVariableGroups(const int8_t* groups, const int8_t* groupsEnd, std::vector<int> permutation, const Func& func) {
+	return existsPermutationOverVariableGroupsRecursive(groups, groupsEnd, permutation, 0, func);
 }
 
 static const __m256i one = _mm256_set1_epi32(1);
@@ -796,9 +826,20 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 	assert(this->size() == b.size()); // assume we are only comparing functionInputSets with the same number of edges
 
 	if(this->spanSize != b.spanSize) return false;
-	if(this->variables != b.variables) return false;
-	if(this->variableOccurences != b.variableOccurences) return false;
-	if(this->variableCoOccurences != b.variableCoOccurences) return false; // early exit, a and b do not span the same variables, impossible to be isomorphic!
+
+	for(int i = 0; i < spanSize; i++) {
+		if(this->variables[i] != b.variables[i]) {
+			return false;
+		}
+	}
+
+	for(int i = 0; i < spanSize; i++) {
+		if(this->variableOccurences[i] != b.variableOccurences[i]) {
+			return false;
+		}
+	}
+
+	//if(this->variableCoOccurences != b.variableCoOccurences) return false; // early exit, a and b do not span the same variables, impossible to be isomorphic!
 	
 
 	//if(this->functionInputSet == b.functionInputSet) return true;
@@ -874,9 +915,9 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 	}*/
 
 	std::vector<int> permut = generateIntegers(spanSize);
-	bool realResult = existsPermutationOverVariableGroups(this->variableOccurences, std::move(permut), [this, &bp = b.functionInputSet](const std::vector<int>& permutation) {
+	bool realResult = existsPermutationOverVariableGroups(this->variableOccurences, this->variableOccurences + this->spanSize, std::move(permut), [this, &bp = b.functionInputSet](const std::vector<int>& permutation) {
 		for(FunctionInput fn : bp) {
-			if(!equalityChecker.contains(fn.swizzle(permutation))) return false;
+			if(!this->functionInputSet.test(fn.swizzle(permutation).inputBits)) return false;
 		}
 		return true;
 	});

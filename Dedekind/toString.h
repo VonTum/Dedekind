@@ -73,10 +73,6 @@ std::ostream& operator<<(std::ostream& os, FunctionInput f) {
 	return os;
 }
 
-std::ostream& operator<<(std::ostream& os, VariableOccurence vo) {
-	os << char('a' + vo.index) << ':' << vo.count;
-	return os;
-}
 std::ostream& operator<<(std::ostream& os, const VariableCoOccurence& vo) {
 	os << vo.coOccursWith;
 	return os;
@@ -95,7 +91,11 @@ std::ostream& operator<<(std::ostream& os, const PreprocessedFunctionInputSet& s
 }
 
 std::ostream& operator<<(std::ostream& os, const EquivalenceClass& eq) {
-	os << static_cast<const PreprocessedFunctionInputSet&>(eq);
+	os << eq.functionInputSet;
+	os << '.';
+	for(auto occ : eq.variableOccurences) {
+		os << occ;
+	}
 	return os;
 }
 

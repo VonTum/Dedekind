@@ -1,5 +1,7 @@
 #pragma once
 
+#include <bitset>
+
 #include "functionInput.h"
 #include "set.h"
 #include "aligned_set.h"
@@ -65,6 +67,39 @@ inline FunctionInputSet removeForcedOff(const FunctionInputSet& layer, const Fun
 		if(!isForcedOffBy(f, inputSet)) {
 			result.push_back(f);
 		}
+	}
+	return result;
+}
+
+template<size_t Size>
+inline FunctionInputSet invert(const std::bitset<Size>& toInvert, const FullLayer& everything) {
+	FunctionInputSet result;
+	result.reserve(everything.size() - toInvert.count());
+
+	for(FunctionInput fi : everything) {
+		if(!toInvert.test(fi)) {
+			result.push_back(fi);
+		}
+	}
+
+	return result;
+}
+
+template<size_t Size>
+FunctionInputSet bitsetToFunctionInputSet(const std::bitset<Size>& bitSet) {
+	FunctionInputSet result;
+	result.reserve(bitSet.count());
+	for(FunctionInput::underlyingType i = 0; i < Size; i++) {
+		if(bitSet.test(i)) result.push_back(FunctionInput{i});
+	}
+	return result;
+}
+
+template<size_t Size>
+std::bitset<Size> functionInputSetToBitSet(const FunctionInputSet& inputSet) {
+	std::bitset<Size> result;
+	for(FunctionInput fi : inputSet) {
+		result.set(fi.inputBits);
 	}
 	return result;
 }

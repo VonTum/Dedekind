@@ -57,7 +57,7 @@ static std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(
 			assert(newGroup.value.count % groupSize == 0);
 			newGroup.value.count /= groupSize;
 		}
-		std::cout << " done! " << curGroups.size() << " groups found!" << std::endl;
+		std::cout << " done! " << curGroups.size() << " classes found!" << std::endl;
 	}
 	if(layer.size() > 1) {
 		ValuedEquivalenceClass<TempEquivClassInfo>& lastLayer = equivalenceClasses[layer.size()].add(EquivalenceClass(preprocess(layer)), TempEquivClassInfo{1});
@@ -114,8 +114,8 @@ LayerDecomposition::LayerDecomposition(const FullLayer& layer) : equivalenceClas
 				info.numberOfExtendedClasses = oldInfo.extendedClasses.size();
 				curAdj += oldInfo.extendedClasses.size();
 				for(size_t j = 0; j < oldInfo.extendedClasses.size(); j++) {
-					info.extendedClasses[j].nodeIndex = oldInfo.extendedClasses[j].node->value.indexInBaked;
-					info.extendedClasses[j].formationCount = oldInfo.extendedClasses[j].formationCount;
+					EquivalenceClassInfo::AdjacentClass newItem(oldInfo.extendedClasses[j].node->value.indexInBaked, oldInfo.extendedClasses[j].formationCount);
+					info.extendedClasses[j] = newItem;
 				}
 				curIndex++;
 			}
