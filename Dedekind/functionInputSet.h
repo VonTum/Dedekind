@@ -18,7 +18,8 @@ inline FunctionInput span(const FunctionInputSet& inputSet) {
 	return result;
 }
 
-inline void swizzleVector(const std::vector<int>& permutation, const FunctionInputSet& input, FunctionInputSet& output) {
+template<typename PermutationVector>
+inline void swizzleVector(const PermutationVector& permutation, const FunctionInputSet& input, FunctionInputSet& output) {
 	for(size_t i = 0; i < input.size(); i++) {
 		output[i] = input[i].swizzle(permutation);
 	}

@@ -8,11 +8,18 @@
 #include "functionInput.h"
 #include "functionInputSet.h"
 #include "intSet.h"
+#include "smallVector.h"
 
 #define MAX_PREPROCESSED 7
 
+template<typename T>
+using PreprocessSmallVector = SmallVector<T, MAX_PREPROCESSED>;
+template<typename T>
+using LargePreprocessSmallVector = SmallVector<T, 35>;
+
+
 struct VariableCoOccurence {
-	std::vector<int> coOccursWith;
+	LargePreprocessSmallVector<int> coOccursWith;
 };
 inline bool operator==(const VariableCoOccurence& a, const VariableCoOccurence& b) {
 	return a.coOccursWith == b.coOccursWith;
@@ -50,8 +57,8 @@ inline bool operator>=(InitialVariableObservations a, InitialVariableObservation
 
 struct PreprocessedFunctionInputSet {
 	FunctionInputSet functionInputSet;
-	std::vector<InitialVariableObservations> variables;
-	std::vector<CountedGroup<VariableCoOccurence>> variableCoOccurences;
+	PreprocessSmallVector<InitialVariableObservations> variables;
+	PreprocessSmallVector<CountedGroup<VariableCoOccurence>> variableCoOccurences;
 	int8_t spanSize;
 	int8_t variableOccurences[MAX_PREPROCESSED];
 

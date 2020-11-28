@@ -172,9 +172,9 @@ bool operator!=(const CountedGroup<T>& first, const CountedGroup<T>& second) {
 	return first.count != second.count || first.group != second.group;
 }
 
-template<typename ColIterBegin, typename ColIterEnd>
-inline auto tallyDistinctOrdered(ColIterBegin begin, ColIterEnd end) -> std::vector<CountedGroup<typename std::remove_reference<decltype(*begin)>::type>> {
-	std::vector<CountedGroup<typename std::remove_reference<decltype(*begin)>::type>> foundItems;
+template<template<typename> typename OutputCollection, typename ColIterBegin, typename ColIterEnd>
+inline auto tallyDistinctOrdered(ColIterBegin begin, ColIterEnd end) -> OutputCollection<CountedGroup<typename std::remove_reference<decltype(*begin)>::type>> {
+	OutputCollection<CountedGroup<typename std::remove_reference<decltype(*begin)>::type>> foundItems;
 	for(; begin != end; ++begin) {
 		const auto& item = *begin;
 		for(auto& compareTo : foundItems) {
@@ -189,17 +189,15 @@ inline auto tallyDistinctOrdered(ColIterBegin begin, ColIterEnd end) -> std::vec
 	return foundItems;
 }
 
-template<typename Collection, typename Func>
-std::vector<int> getSortPermutation(const Collection& collection, Func compare) {
-	std::vector<int> indices = generateIntegers(collection.size());
+template<typename Collection, typename IntCollection, typename Func>
+void getSortPermutation(const Collection& collection, Func compare, IntCollection& indices) {
 	std::sort(indices.begin(), indices.end(), [&collection, &compare](int first, int second) {
 		return compare(collection[first], collection[second]);
 	});
-	return indices;
 }
 
-template<typename Collection>
-Collection permute(const Collection& col, std::vector<int>& permutation) {
+template<typename Collection, typename PermutationCollection>
+Collection permute(const Collection& col, const PermutationCollection& permutation) {
 	Collection result(permutation.size());
 
 	for(size_t i = 0; i < permutation.size(); i++) {
@@ -213,10 +211,10 @@ Collection permute(const Collection& col, std::vector<int>& permutation) {
 	returns the grouping and the groups
 	example: assignUniqueGroups({1.5, 1.5, 2.0, 1.5, 2.0, 1.7}) = {0, 0, 1, 0, 1, 2}, {1.5, 2.0, 1.7}
 */
-template<typename T>
-static std::pair<std::vector<int>, std::vector<T>> assignUniqueGroups(const std::vector<T>& values) {
-	std::vector<int> result(values.size());
-	std::vector<T> knownValues;
+template<template<typename> typename Collection, typename T>
+static std::pair<Collection<int>, Collection<T>> assignUniqueGroups(const Collection<T>& values) {
+	Collection<int> result(values.size());
+	Collection<T> knownValues;
 	for(size_t i = 0; i < values.size(); i++) {
 		for(int indexInKnownGroups = 0; indexInKnownGroups < knownValues.size(); indexInKnownGroups++) {
 			if(knownValues[indexInKnownGroups] == values[i]) {

@@ -73,7 +73,8 @@ struct FunctionInput {
 	inline bool empty() const {
 		return inputBits == 0;
 	}
-	inline FunctionInput swizzle(const std::vector<int>& swiz) const {
+	template<typename PermutationVector>
+	inline FunctionInput swizzle(const PermutationVector& swiz) const {
 		FunctionInput result{0};
 
 		for(int i = 0; i < swiz.size(); i++) {

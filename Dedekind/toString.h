@@ -6,6 +6,7 @@
 #include "equivalenceClass.h"
 #include "equivalenceClassMap.h"
 #include "layerStack.h"
+#include "smallVector.h"
 
 #include "set.h"
 #include "aligned_set.h"
@@ -42,6 +43,21 @@ std::ostream& operator<<(std::ostream& os, const set<T>& vec) {
 }
 template<typename T, size_t Align>
 std::ostream& operator<<(std::ostream& os, const aligned_set<T, Align>& vec) {
+	os << '{';
+	auto iter = vec.begin();
+	auto iterEnd = vec.end();
+	if(iter != iterEnd) {
+		os << *iter;
+		++iter;
+		for(; iter != iterEnd; ++iter) {
+			os << ',' << *iter;
+		}
+	}
+	os << '}';
+	return os;
+}
+template<typename T, size_t MaxSize>
+std::ostream& operator<<(std::ostream& os, const SmallVector<T, MaxSize>& vec) {
 	os << '{';
 	auto iter = vec.begin();
 	auto iterEnd = vec.end();
