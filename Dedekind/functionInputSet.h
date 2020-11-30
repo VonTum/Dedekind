@@ -52,7 +52,7 @@ inline bool isForcedOffBy(FunctionInput f, const FunctionInputSet& offInputSet) 
 }
 
 // returns a new FunctionInputSet containing all the functionInputs that can still be chosen after 
-inline FunctionInputSet removeForcedOn(const FunctionInputSet& layer, const FunctionInputSet& inputSet) {
+inline FunctionInputSet removeForcedOn(const FullLayer& layer, const FunctionInputSet& inputSet) {
 	FunctionInputSet result;
 	for(FunctionInput f : layer) {
 		if(!isForcedOnBy(f, inputSet)) {
@@ -62,7 +62,7 @@ inline FunctionInputSet removeForcedOn(const FunctionInputSet& layer, const Func
 	return result;
 }
 
-inline FunctionInputSet removeForcedOff(const FunctionInputSet& layer, const FunctionInputSet& inputSet) {
+inline FunctionInputSet removeForcedOff(const FullLayer& layer, const FunctionInputSet& inputSet) {
 	FunctionInputSet result;
 	for(FunctionInput f : layer) {
 		if(!isForcedOffBy(f, inputSet)) {

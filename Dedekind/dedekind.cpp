@@ -42,11 +42,6 @@ void forEachSubsetOfInputSet(const FunctionInputSet& availableOptions, const Lay
 	}
 }
 
-template<typename Func>
-void forEachSubClassOfInputSet(const FunctionInputSet& availableOptions, const LayerDecomposition& eqClasses, Func func) {
-	
-}
-
 bigInt computeValueOfClass(const FunctionInputSet& availableOptions, const LayerDecomposition& decomposition) {
 	bigInt totalOptions = 0; // 1 for everything on, no further options
 
@@ -74,6 +69,14 @@ valueInt getTotalValueForLayer(const LayerDecomposition& eqClassesOfLayer) {
 	}
 
 	return totalValueForFullLayer;
+}
+
+static LayerDecomposition getInitialEquivalenceClasses(const FullLayer& firstLayer) {
+	assert(firstLayer.size() == 1);
+	LayerDecomposition decomposition(firstLayer);
+	(*decomposition[0].begin()).value.value = 1;
+	(*decomposition[1].begin()).value.value = 1;
+	return decomposition;
 }
 
 static LayerDecomposition computeNextLayerValues(const FullLayer& curLayer, const FullLayer& prevLayer, const LayerDecomposition& resultOfPrevLayer) {
@@ -145,14 +148,6 @@ static LayerDecomposition computeSkipLayerValues(const FullLayer& curLayer, cons
 			countedClass.value.value = valueOfSG;
 		}//);
 	}
-	return decomposition;
-}
-
-static LayerDecomposition getInitialEquivalenceClasses(const FullLayer& firstLayer) {
-	assert(firstLayer.size() == 1);
-	LayerDecomposition decomposition(firstLayer);
-	(*decomposition[0].begin()).value.value = 1;
-	(*decomposition[1].begin()).value.value = 1;
 	return decomposition;
 }
 
@@ -247,7 +242,7 @@ Correct numbers
 int main() {
 	TimeTracker timer;
 	//__debugbreak();
-	DedekindDecomposition fullDecomposition(7);
+	DedekindDecomposition fullDecomposition(5);
 	//Sleep(1000);
 	//__debugbreak();
 	//return 0;
@@ -266,6 +261,8 @@ int main() {
 	dedekind(6);*/
 	//dedekind(7);
 	
+	std::cout << "Dedekind 7 = " << fullDecomposition.top().value.value + 1 << std::endl;
+
 	return 0;//*/
 
 	/*LayerStack layers = generateLayers(4);

@@ -114,7 +114,7 @@ LayerDecomposition::LayerDecomposition(const FullLayer& layer) : equivalenceClas
 	size_t totalConnectionCount = 0; // used for finding the size of the final array which will contain the connections between EquivalenceClasses
 	for(size_t i = 0; i < layer.size() + 1; i++) {
 		EquivalenceClassMap<TempEquivClassInfo>& extracting = existingDecomp[i];
-		BakedEquivalenceClassMap<EquivalenceClassInfo>& newMap = equivalenceClasses[i];
+		BakedEquivalenceClassMap<EquivalenceClassInfo>& newMap = this->equivalenceClasses[i];
 		new(&newMap) BakedEquivalenceClassMap<EquivalenceClassInfo>(extracting.size(), extracting.buckets);
 
 		size_t curIndex = 0;
@@ -133,30 +133,46 @@ LayerDecomposition::LayerDecomposition(const FullLayer& layer) : equivalenceClas
 	
 	std::cout << "Baking: constructing extended lists\n";
 
-	EquivalenceClassInfo::AdjacentClass* adjacentBuf = new EquivalenceClassInfo::AdjacentClass[totalConnectionCount];
-	EquivalenceClassInfo::AdjacentClass* curAdj = adjacentBuf;
+	EquivalenceClassInfo::NextClass* nextClassBuf = new EquivalenceClassInfo::NextClass[totalConnectionCount];
+	EquivalenceClassInfo::NextClass* curBufIndex = nextClassBuf;
 	for(size_t i = 0; i < layer.size() + 1; i++) {
 		EquivalenceClassMap<TempEquivClassInfo>& extracting = existingDecomp[i];
-		BakedEquivalenceClassMap<EquivalenceClassInfo>& newMap = equivalenceClasses[i];
+		BakedEquivalenceClassMap<EquivalenceClassInfo>& newMap = this->equivalenceClasses[i];
 
 		size_t curIndex = 0;
 		for(size_t curBucket = 0; curBucket < extracting.buckets; curBucket++) {
 			for(EquivalenceClassMap<TempEquivClassInfo>::MapNode* cur = extracting.hashTable[curBucket]; cur != nullptr; cur = cur->nextNode) {
 				TempEquivClassInfo& oldInfo = cur->item.value;
 				EquivalenceClassInfo& info = newMap[curIndex].value;
-				info.extendedClasses = curAdj;
-				info.numberOfExtendedClasses = oldInfo.extendedClasses.size();
-				curAdj += oldInfo.extendedClasses.size();
+				info.nextClasses = curBufIndex;
+				info.numberOfNextClasses = oldInfo.extendedClasses.size();
+				curBufIndex += oldInfo.extendedClasses.size();
 				for(size_t j = 0; j < oldInfo.extendedClasses.size(); j++) {
-					EquivalenceClassInfo::AdjacentClass newItem(oldInfo.extendedClasses[j].node->value.indexInBaked, oldInfo.extendedClasses[j].formationCount);
-					info.extendedClasses[j] = newItem;
+					EquivalenceClassInfo::NextClass newItem(oldInfo.extendedClasses[j].node->value.indexInBaked, oldInfo.extendedClasses[j].formationCount);
+					info.nextClasses[j] = newItem;
 				}
 				curIndex++;
 			}
 		}
 	}
+	assert(curBufIndex == nextClassBuf + totalConnectionCount);
+
+	std::cout << "Baking: finding inverses\n";
+	for(size_t i = 0; i < layer.size() + 1; i++) {
+		EquivalenceMap& inverseMap = this->equivalenceClasses[layer.size() - i];
+		for(EquivalenceNode& curClass : this->equivalenceClasses[i]) {
+			PreprocessedFunctionInputSet invPrep = preprocess(invert(curClass.eqClass.functionInputSet, layer));
+			curClass.value.inverse = inverseMap.indexOf(invPrep);
+		}
+	}
+	for(size_t i = 0; i < layer.size() + 1; i++) {
+		EquivalenceMap& curMap = this->equivalenceClasses[i];
+		EquivalenceMap& inverseMap = this->equivalenceClasses[layer.size() - i];
+		for(int i = 0; i < curMap.size(); i++) {
+			assert(inverseMap[curMap[i].value.inverse].value.inverse == i);
+		}
+	}
 
 	std::cout << "Baking done!\n";
 
-	assert(curAdj == adjacentBuf + totalConnectionCount);
 }

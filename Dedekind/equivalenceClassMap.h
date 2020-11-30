@@ -291,4 +291,11 @@ public:
 	const BakedValuedEquivalenceClass<V>* begin() const { return allClasses.begin(); }
 	BakedValuedEquivalenceClass<V>* end() { return allClasses.end(); }
 	const BakedValuedEquivalenceClass<V>* end() const { return allClasses.end(); }
+
+	size_t indexOf(const BakedValuedEquivalenceClass<V>& item) const {
+		return &item - allClasses.ptr();
+	}
+	size_t indexOf(const PreprocessedFunctionInputSet& item) const {
+		return &this->get(item) - allClasses.ptr();
+	}
 };

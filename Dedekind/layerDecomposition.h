@@ -12,43 +12,53 @@ typedef uint64_t bigInt;
 typedef bigInt countInt;
 typedef bigInt valueInt;
 
+struct EquivalenceClassIndex {
+	int subLayer : 8;
+	int indexInSubLayer : 24;
+	EquivalenceClassIndex() : subLayer(-1), indexInSubLayer(-1) {}
+	EquivalenceClassIndex(int subLayer, int indexInSubLayer) : subLayer(subLayer), indexInSubLayer(indexInSubLayer) {
+		assert(indexInSubLayer >= 0 && indexInSubLayer < (1 << 24));
+		assert(subLayer >= 0 && subLayer < 256);
+	}
+};
+
 struct EquivalenceClassInfo {
-	class AdjacentClass {
-		uint32_t data;
-	public:
-		AdjacentClass() = default;
-		AdjacentClass(size_t nodeIndex, unsigned int formationCount) : data(nodeIndex << 8 | formationCount) {
-			assert(nodeIndex < (1 << 24));
-			assert(formationCount < 256);
-		}
-
-		size_t getNodeIndex() const { return data >> 8; }
-		unsigned int getFormationCount() const { return data & 0xFF; }
-
-		AdjacentClass& operator++() {
-			++data;
-			assert((data & 0xFF) != 0);
-			return *this;
+	struct NextClass {
+		int nodeIndex : 24;
+		int formationCount : 8;
+		NextClass() : nodeIndex(-1), formationCount(-1) {}
+		NextClass(int nodeIndex, int formationCount) : nodeIndex(nodeIndex), formationCount(formationCount) {
+			assert(nodeIndex >= 0 && nodeIndex < (1 << 24));
+			assert(formationCount >= 0 && formationCount < 256);
 		}
 	};
 
-	AdjacentClass* extendedClasses;
-	size_t numberOfExtendedClasses;
+	NextClass* nextClasses;
+	int numberOfNextClasses;
+	int inverse;
+	EquivalenceClassIndex minimalForcedOnBelow;
+	EquivalenceClassIndex minimalForcedOffAbove;
+	valueInt value;
 	countInt count;
 
-	valueInt value;
 };
 
+typedef BakedEquivalenceClassMap<EquivalenceClassInfo> EquivalenceMap;
+typedef BakedValuedEquivalenceClass<EquivalenceClassInfo> EquivalenceNode;
+
+
 class LayerDecomposition {
-	std::vector<BakedEquivalenceClassMap<EquivalenceClassInfo>> equivalenceClasses;
+	std::vector<EquivalenceMap> equivalenceClasses;
 public:
+	
+
 	LayerDecomposition() = default;
 	LayerDecomposition(const FullLayer& fullLayer);
 
-	inline const BakedEquivalenceClassMap<EquivalenceClassInfo>& operator[](size_t i) const {
+	inline const EquivalenceMap& operator[](size_t i) const {
 		return equivalenceClasses[i];
 	}
-	inline BakedEquivalenceClassMap<EquivalenceClassInfo>& operator[](size_t i) {
+	inline EquivalenceMap& operator[](size_t i) {
 		return equivalenceClasses[i];
 	}
 
@@ -56,4 +66,20 @@ public:
 	auto begin() const { return equivalenceClasses.begin(); }
 	auto end() { return equivalenceClasses.end(); }
 	auto end() const { return equivalenceClasses.end(); }
+
+	EquivalenceNode& empty() { assert(equivalenceClasses.front().size() == 1); return equivalenceClasses.front()[0]; }
+	const EquivalenceNode& empty() const { assert(equivalenceClasses.front().size() == 1); return equivalenceClasses.front()[0]; }
+	EquivalenceNode& full() { assert(equivalenceClasses.back().size() == 1); return equivalenceClasses.back()[0]; }
+	const EquivalenceNode& full() const { assert(equivalenceClasses.back().size() == 1); return equivalenceClasses.back()[0]; }
+
+	size_t getNumberOfFunctionInputs() const {
+		return equivalenceClasses.size() - 1;
+	}
+
+	inline EquivalenceClassIndex indexOf(const PreprocessedFunctionInputSet& prep) const {
+		size_t subLayer = prep.functionInputSet.size();
+		size_t indexInSubLayer = equivalenceClasses[subLayer].indexOf(prep);
+
+		return EquivalenceClassIndex(int(subLayer), int(indexInSubLayer));
+	}
 };

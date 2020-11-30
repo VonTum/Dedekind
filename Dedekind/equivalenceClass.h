@@ -12,6 +12,8 @@
 
 #define MAX_PREPROCESSED 7
 
+typedef std::bitset<(1 << MAX_PREPROCESSED)> InputBitSet;
+
 template<typename T>
 using PreprocessSmallVector = SmallVector<T, MAX_PREPROCESSED>;
 template<typename T>
@@ -74,7 +76,7 @@ struct PreprocessedFunctionInputSet {
 PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet);
 
 struct EquivalenceClass {
-	std::bitset<(1 << MAX_PREPROCESSED)> functionInputSet;
+	InputBitSet functionInputSet;
 	uint64_t hash;
 	int8_t spanSize;
 	int8_t variableOccurences[MAX_PREPROCESSED];

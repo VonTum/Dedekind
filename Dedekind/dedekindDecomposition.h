@@ -17,4 +17,11 @@ public:
 	FullLayer& layer(size_t i) { return layerStack.layers[i]; }
 	const FullLayer& layer(size_t i) const { return layerStack.layers[i]; }
 
+	LayerDecomposition& front() { return layers.front(); }
+	const LayerDecomposition& front() const { return layers.front(); }
+	LayerDecomposition& back() { return layers.back(); }
+	const LayerDecomposition& back() const { return layers.back(); }
+
+	const EquivalenceNode& bottom() const { return layers.front().empty(); }
+	const EquivalenceNode& top() const { return layers.back().full(); }
 };
