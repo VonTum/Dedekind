@@ -251,9 +251,13 @@ public:
 		std::swap(this->buckets, other.buckets);
 		std::swap(this->bucketCount, other.bucketCount);
 	}
+	BakedEquivalenceClassMap(const BakedEquivalenceClassMap&) = delete;
+	BakedEquivalenceClassMap& operator=(const BakedEquivalenceClassMap&) = delete;
+
 	~BakedEquivalenceClassMap() {
 		delete[] buckets;
 	}
+
 
 	BakedValuedEquivalenceClass<V>& get(const PreprocessedFunctionInputSet& f) {
 		size_t index = f.hash() % bucketCount;

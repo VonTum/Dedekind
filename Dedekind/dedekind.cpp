@@ -27,11 +27,6 @@
 
 #define DEBUG_PRINT(v) std::cout << v
 
-std::ostream& operator<<(std::ostream& os, const EquivalenceClassInfo& info) {
-	os << "{c=" << info.count << ",v=" << info.value << "}";
-	return os;
-}
-
 template<typename Func>
 void forEachSubsetOfInputSet(const FunctionInputSet& availableOptions, const LayerDecomposition& eqClasses, Func func) {
 	for(size_t offCount = 0; offCount <= availableOptions.size(); offCount++) {
@@ -242,7 +237,8 @@ Correct numbers
 int main() {
 	TimeTracker timer;
 	//__debugbreak();
-	DedekindDecomposition fullDecomposition(5);
+	int dedekindOrder = 3;
+	DedekindDecomposition fullDecomposition(dedekindOrder);
 	//Sleep(1000);
 	//__debugbreak();
 	//return 0;
@@ -260,8 +256,19 @@ int main() {
 	dedekind(6);
 	dedekind(6);*/
 	//dedekind(7);
+
+	/*FunctionInputSet fi{FunctionInput{0b1}, FunctionInput{0b10},FunctionInput{0b100},FunctionInput{0b1000}};
+	std::cout << fi << "\n";
+	PreprocessedFunctionInputSet pfi = preprocess(fi);
+	std::cout << pfi << "\n";
+	EquivalenceClass eqfi(pfi);
+	std::cout << eqfi.functionInputSet << "\n";
+	FunctionInputSet outFi = eqfi.asFunctionInputSet();
+	std::cout << outFi << "\n";*/
+
 	
-	std::cout << "Dedekind 7 = " << fullDecomposition.top().value.value + 1 << std::endl;
+	std::cout << "Decomposition:\n" << fullDecomposition << "\n";
+	//std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.bottom().value.value + 1 << std::endl;
 
 	return 0;//*/
 

@@ -20,16 +20,18 @@ static valueInt getTotalValueForLayer(const LayerDecomposition& eqClassesOfLayer
 	return totalValueForFullLayer;
 }
 
-static void computeInterLayerConnections(LayerDecomposition& largerLayer, LayerDecomposition& smallerLayer, const FullLayer& fullLargerLayer, const FullLayer& fullSmallerLayer) {
-	for(size_t setSize = 0; setSize <= smallerLayer.getNumberOfFunctionInputs(); setSize++) {
-		for(BakedValuedEquivalenceClass<EquivalenceClassInfo>& smallerClass : smallerLayer[setSize]) {
-			EquivalenceClassIndex index = smallerLayer.indexOf(preprocess(removeForcedOn(fullLargerLayer, smallerClass.eqClass.asFunctionInputSet())));
+static void computeInterLayerConnections(LayerDecomposition& largerClasses, LayerDecomposition& smallerClasses, const FullLayer& fullLargerLayer, const FullLayer& fullSmallerLayer) {
+	for(size_t setSize = 0; setSize <= smallerClasses.getNumberOfFunctionInputs(); setSize++) {
+		for(BakedValuedEquivalenceClass<EquivalenceClassInfo>& smallerClass : smallerClasses[setSize]) {
+			PreprocessedFunctionInputSet preprocessed = preprocess(removeForcedOff(fullLargerLayer, smallerClass.eqClass.asFunctionInputSet()));
+			EquivalenceClassIndex index = largerClasses.indexOf(preprocessed);
 			smallerClass.value.minimalForcedOffAbove = index;
 		}
 	}
-	for(size_t setSize = 0; setSize <= largerLayer.getNumberOfFunctionInputs(); setSize++) {
-		for(BakedValuedEquivalenceClass<EquivalenceClassInfo>& largerClass : largerLayer[setSize]) {
-			EquivalenceClassIndex index = largerLayer.indexOf(preprocess(removeForcedOff(fullSmallerLayer, largerClass.eqClass.asFunctionInputSet())));
+	for(size_t setSize = 0; setSize <= largerClasses.getNumberOfFunctionInputs(); setSize++) {
+		for(BakedValuedEquivalenceClass<EquivalenceClassInfo>& largerClass : largerClasses[setSize]) {
+			PreprocessedFunctionInputSet preprocessed = preprocess(removeForcedOn(fullSmallerLayer, largerClass.eqClass.asFunctionInputSet()));
+			EquivalenceClassIndex index = smallerClasses.indexOf(preprocessed);
 			largerClass.value.minimalForcedOnBelow = index;
 		}
 	}
@@ -43,22 +45,38 @@ static FunctionInputSet computeAvailableElements(const std::bitset<Size>& offInp
 	return removeForcedOn(layerAbove, onInputSet);
 }
 
+template<typename Func>
+static void forEachSubsetOfInputSet(const FunctionInputSet& availableOptions, const LayerDecomposition& eqClasses, Func func) {
+	for(size_t offCount = 0; offCount <= availableOptions.size(); offCount++) {
+		forEachSubgroup(availableOptions, offCount, [&eqClassesOffCnt = eqClasses[offCount], &func](const FunctionInputSet& subGroup) {
+			PreprocessedFunctionInputSet preprocessed = preprocess(subGroup);
+			func(subGroup, eqClassesOffCnt.get(preprocessed).value.value, 1);
+		});
+	}
+}
+
+static valueInt computeValueOfClass(const FunctionInputSet& availableOptions, const LayerDecomposition& decomposition) {
+	valueInt totalOptions = 0; // 1 for everything on, no further options
+
+	forEachSubsetOfInputSet(availableOptions, decomposition, [&totalOptions](const FunctionInputSet& subGroup, valueInt subGroupValue, countInt occurenceCount) {
+		totalOptions += subGroupValue * occurenceCount;
+	});
+
+	return totalOptions;
+}
+
 static void computeNextLayerValues(const LayerDecomposition& prevLayer, LayerDecomposition& curLayer) {
-	LayerDecomposition decomposition(curLayer);
 	// resulting values of empty set, and full set
-	decomposition.empty().value.value = 1;
-	decomposition.full().value.value = getTotalValueForLayer(prevLayer);
+	curLayer.empty().value.value = 1;
+	curLayer.full().value.value = getTotalValueForLayer(prevLayer);
 
 	// for all other group sizes between the empty set and the full set
 	for(size_t setSize = 1; setSize < curLayer.getNumberOfFunctionInputs(); setSize++) {
 		std::cout << "Assigning values of " << setSize << "/" << curLayer.getNumberOfFunctionInputs() << "\n";
-		for(BakedValuedEquivalenceClass<EquivalenceClassInfo>& curClass : decomposition[setSize]) {
+		for(BakedValuedEquivalenceClass<EquivalenceClassInfo>& curClass : curLayer[setSize]) {
+			const BakedValuedEquivalenceClass<EquivalenceClassInfo>& aboveItem = prevLayer[curClass.value.minimalForcedOffAbove];
 
-			BakedValuedEquivalenceClass<EquivalenceClassInfo>& maximalAbove = curClass.value.maximalForcedOnSub
-
-			FunctionInputSet availableElementsInPrevLayer = computeAvailableElements(curClass.eqClass.functionInputSet, curLayer, prevLayer);
-
-			valueInt valueOfSG = computeValueOfClass(availableElementsInPrevLayer, resultOfPrevLayer);
+			valueInt valueOfSG = computeValueOfClass(aboveItem.eqClass.asFunctionInputSet(), prevLayer);
 
 			curClass.value.value = valueOfSG;
 		}
@@ -66,9 +84,12 @@ static void computeNextLayerValues(const LayerDecomposition& prevLayer, LayerDec
 }
 
 DedekindDecomposition::DedekindDecomposition(size_t order) : layers(order + 1), layerStack(generateLayers(order)) {
+	std::cout << "Generating decomposition for layer " << order << "\n";
 	new(&layers[order]) LayerDecomposition(layerStack.layers[order]);
+	std::cout << "Assigning initial values\n";
 	assignInitialValues(layers[order]);
 	for(size_t i = order; i > 0; i--) {
+		std::cout << "Generating decomposition for layer " << i - 1 << "\n";
 		new(&layers[i-1]) LayerDecomposition(layerStack.layers[i-1]);
 		std::cout << "Linking layers " << i << " - " << (i-1) << "\n";
 		computeInterLayerConnections(layers[i], layers[i - 1], layerStack.layers[i], layerStack.layers[i - 1]);

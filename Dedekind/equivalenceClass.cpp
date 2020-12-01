@@ -48,7 +48,7 @@ FunctionInputSet EquivalenceClass::asFunctionInputSet() const {
 	size_t size = functionInputSet.count();
 	FunctionInputSet result;
 	result.reserve(size);
-	for(FunctionInput::underlyingType i = 0; i < size; i++) {
+	for(FunctionInput::underlyingType i = 0; i < (1 << this->spanSize); i++) {
 		if(functionInputSet.test(i)) result.push_back(FunctionInput{i});
 	}
 	return result;

@@ -107,11 +107,7 @@ std::ostream& operator<<(std::ostream& os, const PreprocessedFunctionInputSet& s
 }
 
 std::ostream& operator<<(std::ostream& os, const EquivalenceClass& eq) {
-	os << eq.functionInputSet;
-	os << '.';
-	for(auto occ : eq.variableOccurences) {
-		os << occ;
-	}
+	os << eq.asFunctionInputSet();
 	return os;
 }
 
@@ -128,6 +124,45 @@ std::ostream& operator<<(std::ostream& os, const EquivalenceClassMap<V>& eqMap) 
 
 std::ostream& operator<<(std::ostream& os, const LayerStack& layers) {
 	os << "LayerStack" << layers.layers;
+	return os;
+}
+
+std::ostream& operator<<(std::ostream& os, EquivalenceClassIndex idx) {
+	os << idx.size << '|' << idx.indexInSubLayer;
+	return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const EquivalenceClassInfo& info) {
+	os << "c:" << info.count << " v:" << info.value << " inv:" << info.inverse << " up:" << info.minimalForcedOffAbove << " dn:" << info.minimalForcedOnBelow;
+	return os;
+}
+
+template<typename V>
+std::ostream& operator<<(std::ostream& os, const BakedValuedEquivalenceClass<V>& n) {
+	os << n.eqClass << ": " << n.value;
+	return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const LayerDecomposition& d) {
+	for(size_t size = 0; size <= d.getNumberOfFunctionInputs(); size++) {
+		os << "    [" << size << "] ";
+		const EquivalenceMap& subSizeMap = d[size];
+		for(size_t indexInSubSize = 0; indexInSubSize < subSizeMap.size(); indexInSubSize++) {
+			os << subSizeMap[indexInSubSize];
+			if(indexInSubSize < subSizeMap.size() - 1) os << ",  ";
+		}
+		os << "\n";
+	}
+
+	return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const DedekindDecomposition& d) {
+	for(int layer = d.numLayers()-1; layer >= 0; layer--) {
+		os << "Layer " << layer << "\n";
+		os << d[layer] << "\n";
+	}
+
 	return os;
 }
 
