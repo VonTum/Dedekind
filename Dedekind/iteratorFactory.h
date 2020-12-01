@@ -3,7 +3,7 @@
 #include "iteratorEnd.h"
 
 template<typename Iter>
-struct IteratorFactory {
+struct IteratorFactoryWithEnd {
 	Iter iter;
 
 	Iter begin() const {
@@ -14,5 +14,20 @@ struct IteratorFactory {
 	}
 
 	template<typename... Args>
-	IteratorFactory(Args... args) : iter(args...) {}
+	IteratorFactoryWithEnd(Args... args) : iter(args...) {}
+};
+
+template<typename Iter, typename IterEnd = Iter>
+struct IteratorFactory {
+	Iter iter;
+	IterEnd iterEnd;
+
+	Iter begin() const {
+		return iter;
+	}
+	IterEnd end() const {
+		return iterEnd;
+	}
+
+	IteratorFactory(Iter iter, IterEnd iterEnd) : iter(std::move(iter)), iterEnd(std::move(iterEnd)) {}
 };

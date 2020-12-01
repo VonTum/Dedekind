@@ -4,6 +4,7 @@
 #include "equivalenceClassMap.h"
 
 #include "heapArray.h"
+#include "iteratorFactory.h"
 
 #include <vector>
 
@@ -41,6 +42,12 @@ struct EquivalenceClassInfo {
 	valueInt value;
 	countInt count;
 
+	IteratorFactory<NextClass*> iterNextClasses() {
+		return IteratorFactory<NextClass*>(nextClasses, nextClasses + numberOfNextClasses);
+	}
+	IteratorFactory<const NextClass*> iterNextClasses() const {
+		return IteratorFactory<const NextClass*>(nextClasses, nextClasses + numberOfNextClasses);
+	}
 };
 
 typedef BakedEquivalenceClassMap<EquivalenceClassInfo> EquivalenceMap;
@@ -100,5 +107,70 @@ public:
 	inline const EquivalenceNode& inverseOf(const EquivalenceNode& eq) const {
 		int sizeOfInverse = this->getNumberOfFunctionInputs() - eq.eqClass.size();
 		return this->equivalenceClasses[sizeOfInverse][eq.value.inverse];
+	}
+
+	size_t getMaxWidth() const {
+		return this->equivalenceClasses[this->equivalenceClasses.size() / 2].size();
+	}
+
+	// expects a function void(const EquivalenceNode& cl, countInt occurences)
+	template<typename Func>
+	void forEachSuperClassOfClass(int sizeOfStartingNode, int indexOfStartingNode, Func func) const {
+		std::vector<int> occurencesOfCurClasses(this->getMaxWidth()+1, 0);
+		std::vector<int> occurencesOfNextClasses(this->getMaxWidth()+1, 0);
+
+		std::vector<int> usedCurClasses;
+		std::vector<int> usedNextClasses;
+
+		occurencesOfCurClasses[indexOfStartingNode] = 1;
+		usedCurClasses.push_back(indexOfStartingNode);
+
+		for(int curSize = sizeOfStartingNode; curSize < this->equivalenceClasses.size(); curSize++) {
+			const EquivalenceMap& curMap = this->equivalenceClasses[curSize];
+			for(int item : usedCurClasses) {
+				const EquivalenceNode& currentlyPropagating = curMap[item];
+
+				int occurencesOfCurClass = occurencesOfCurClasses[item];
+				for(const EquivalenceClassInfo::NextClass& nextClass : currentlyPropagating.value.iterNextClasses()) {
+					bool nextClassIsNewlyDiscoveredClass = (occurencesOfNextClasses[nextClass.nodeIndex] == 0);
+					occurencesOfNextClasses[nextClass.nodeIndex] += occurencesOfCurClass * nextClass.formationCount;
+					if(nextClassIsNewlyDiscoveredClass) {
+						usedNextClasses.push_back(nextClass.nodeIndex);
+					}
+				}
+			}
+
+			// clean up and swap for next iteration
+			for(int nextClass : usedNextClasses) {
+				func(this->equivalenceClasses[curSize + 1][nextClass], occurencesOfNextClasses[nextClass]);
+			}
+			for(int curClass : usedCurClasses) {
+				occurencesOfCurClasses[curClass] = 0;
+			}
+			usedCurClasses.clear();
+			std::swap(occurencesOfCurClasses, occurencesOfNextClasses);
+			std::swap(usedCurClasses, usedNextClasses);
+		}
+	}
+
+	// expects a function void(const EquivalenceNode& cl, countInt occurences)
+	template<typename Func>
+	void forEachSuperClassOfClass(const EquivalenceNode& node, Func func) const {
+		int curSize = node.eqClass.size();
+		forEachSuperClassOfClass(curSize, this->equivalenceClasses[curSize].indexOf(node), std::move(func));
+	}
+
+	// expects a function void(const EquivalenceNode& cl, countInt occurences)
+	template<typename Func>
+	void forEachSubClassOfClass(const EquivalenceNode& node, Func func) const {
+		forEachSuperClassOfClass(this->getNumberOfFunctionInputs() - node.eqClass.size(), node.value.inverse, [this, func](const EquivalenceNode& cl, countInt occurences) {
+			func(this->inverseOf(cl), occurences);
+		});
+	}
+
+	// expects a function void(const EquivalenceNode& cl, countInt occurences)
+	template<typename Func>
+	void forEachSubClassOfClass(int sizeOfStartingNode, int indexOfStartingNode, Func func) const {
+		forEachSubClassOfClass(this->equivalenceClasses[sizeOfStartingNode][indexOfStartingNode]);
 	}
 };
