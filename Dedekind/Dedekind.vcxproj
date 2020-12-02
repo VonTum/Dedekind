@@ -162,7 +162,7 @@
     <ClCompile Include="aligned_alloc.cpp" />
     <ClCompile Include="codeGen.cpp" />
     <ClCompile Include="dedekind.cpp" />
-    <ClCompile Include="dedekindDecomposition.cpp" />
+    <ClCompile Include="valuedDecomposition.cpp" />
     <ClCompile Include="equivalenceClass.cpp" />
     <ClCompile Include="layerDecomposition.cpp" />
   </ItemGroup>
@@ -188,6 +188,7 @@
     <ClInclude Include="smallVector.h" />
     <ClInclude Include="timeTracker.h" />
     <ClInclude Include="toString.h" />
+    <ClInclude Include="valuedDecomposition.h" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="functionInput.natvis" />

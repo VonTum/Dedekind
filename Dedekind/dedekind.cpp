@@ -12,6 +12,7 @@
 #include "equivalenceClassMap.h"
 #include "layerDecomposition.h"
 #include "dedekindDecomposition.h"
+#include "valuedDecomposition.h"
 #include "layerStack.h"
 #include "toString.h"
 
@@ -27,17 +28,17 @@
 
 #define DEBUG_PRINT(v) std::cout << v
 
-template<typename Func>
-void forEachSubsetOfInputSet(const FunctionInputSet& availableOptions, const LayerDecomposition& eqClasses, Func func) {
+template<typename ExtraInfo, typename Func>
+void forEachSubsetOfInputSet(const FunctionInputSet& availableOptions, const LayerDecomposition<ExtraInfo>& eqClasses, Func func) {
 	for(size_t offCount = 0; offCount <= availableOptions.size(); offCount++) {
 		forEachSubgroup(availableOptions, offCount, [&eqClassesOffCnt = eqClasses[offCount], &func](const FunctionInputSet& subGroup) {
 			PreprocessedFunctionInputSet preprocessed = preprocess(subGroup);
-			func(subGroup, eqClassesOffCnt.get(preprocessed).value.value, 1);
+			func(subGroup, eqClassesOffCnt.get(preprocessed).value, 1);
 		});
 	}
 }
 
-bigInt computeValueOfClass(const FunctionInputSet& availableOptions, const LayerDecomposition& decomposition) {
+bigInt computeValueOfClass(const FunctionInputSet& availableOptions, const LayerDecomposition<ValueCounted>& decomposition) {
 	bigInt totalOptions = 0; // 1 for everything on, no further options
 
 	forEachSubsetOfInputSet(availableOptions, decomposition, [&totalOptions](const FunctionInputSet& subGroup, valueInt subGroupValue, countInt occurenceCount) {
@@ -53,170 +54,17 @@ FunctionInputSet computeAvailableElements(const std::bitset<Size>& offInputSet, 
 	return removeForcedOn(layerAbove, onInputSet);
 }
 
-valueInt getTotalValueForLayer(const LayerDecomposition& eqClassesOfLayer) {
+valueInt getTotalValueForLayer(const LayerDecomposition<ValueCounted>& eqClassesOfLayer) {
 	valueInt totalValueForFullLayer = 0;
 
-	for(const BakedEquivalenceClassMap<EquivalenceClassInfo>& eqMap : eqClassesOfLayer) {
-		for(const BakedValuedEquivalenceClass<EquivalenceClassInfo>& classOfPrevLayer : eqMap) {
-			const EquivalenceClassInfo& info = classOfPrevLayer.value;
-			totalValueForFullLayer += info.count * info.value;
+	for(const BakedEquivalenceClassMap<EquivalenceClassInfo<ValueCounted>>& eqMap : eqClassesOfLayer) {
+		for(const BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& classOfPrevLayer : eqMap) {
+			totalValueForFullLayer += classOfPrevLayer.count * classOfPrevLayer.value;
 		}
 	}
 
 	return totalValueForFullLayer;
 }
-
-static LayerDecomposition getInitialEquivalenceClasses(const FullLayer& firstLayer) {
-	assert(firstLayer.size() == 1);
-	LayerDecomposition decomposition(firstLayer);
-	(*decomposition[0].begin()).value.value = 1;
-	(*decomposition[1].begin()).value.value = 1;
-	return decomposition;
-}
-
-static LayerDecomposition computeNextLayerValues(const FullLayer& curLayer, const FullLayer& prevLayer, const LayerDecomposition& resultOfPrevLayer) {
-	DEBUG_PRINT("Normal Next Layer\n");
-	LayerDecomposition decomposition(curLayer);
-	// resulting values of empty set, and full set
-	decomposition[0].get(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet).value.value = 1;
-	decomposition[curLayer.size()].get(preprocess(curLayer)).value.value = getTotalValueForLayer(resultOfPrevLayer);
-	
-	// for all other group sizes between the empty set and the full set
-	for(size_t setSize = 1; setSize < curLayer.size(); setSize++) {
-		DEBUG_PRINT("Assigning values of " << setSize << "/" << curLayer.size() << "\n");
-		for(BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass : decomposition[setSize]) {
-			FunctionInputSet availableElementsInPrevLayer = computeAvailableElements(countedClass.eqClass.functionInputSet, curLayer, prevLayer);
-
-			valueInt valueOfSG = computeValueOfClass(availableElementsInPrevLayer, resultOfPrevLayer);
-
-			countedClass.value.value = valueOfSG;
-		}
-	}
-	return decomposition;
-}
-
-static int getNumberOfAvailableInSkippedLayer(const FunctionInputSet& availableElementsInSkippedLayer, const FunctionInputSet& offAbove) {
-	int total = 0;
-	for(FunctionInput fi : availableElementsInSkippedLayer) {
-		if(!isForcedOffBy(fi, offAbove)) {
-			total++;
-		}
-	}
-	return total;
-}
-
-static LayerDecomposition computeSkipLayerValues(const FullLayer& curLayer, const FullLayer& skippedLayer, const FullLayer& prevLayer, const LayerDecomposition& resultOfPrevLayer) {
-	DEBUG_PRINT("SKIP Layer\n");
-
-	LayerDecomposition decomposition(curLayer);
-	// resulting values of empty set, and full set
-	decomposition[0].get(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet).value.value = 1;
-	{
-		std::atomic<valueInt> totalValueForFinalElement = 0;
-		for(const BakedEquivalenceClassMap<EquivalenceClassInfo>& eqMap : resultOfPrevLayer) {
-			iterCollectionInParallel(eqMap, [&totalValueForFinalElement,&skippedLayer](const BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass) {
-				const EquivalenceClassInfo& info = countedClass.value;
-				int numAvailableInSkippedLayer = getNumberOfAvailableInSkippedLayer(skippedLayer, countedClass.eqClass.asFunctionInputSet());
-				totalValueForFinalElement += info.count * (info.value << numAvailableInSkippedLayer);
-			});
-		}
-		decomposition[curLayer.size()].get(preprocess(curLayer)).value.value = totalValueForFinalElement;
-	}
-	// for all other group sizes between the empty set and the full set
-	for(size_t setSize = 1; setSize < curLayer.size(); setSize++) {
-		DEBUG_PRINT("Assigning values of " << setSize << "/" << curLayer.size() << "\n");
-		std::mutex countedClassMutex;
-		//iterCollectionInParallel(decomposition[setSize], [&curLayer, &prevLayer, &skippedLayer, &resultOfPrevLayer, &countedClassMutex](BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass) {
-		for(BakedValuedEquivalenceClass<EquivalenceClassInfo>& countedClass : decomposition[setSize]) {
-			std::lock_guard<std::mutex> lg(countedClassMutex);
-			FunctionInputSet onInCurLayer = invert(countedClass.eqClass.functionInputSet, curLayer);
-			FunctionInputSet availableAbove = removeForcedOn(prevLayer, onInCurLayer);
-			FunctionInputSet availableSkipped = removeForcedOn(skippedLayer, onInCurLayer);
-
-			valueInt valueOfSG = 0;
-
-			forEachSubsetOfInputSet(availableAbove, resultOfPrevLayer, [&valueOfSG, &availableSkipped](const FunctionInputSet& chosenOffAbove, valueInt subSetValue, countInt occurenceCount) {
-				int numAvailableInSkippedLayer = getNumberOfAvailableInSkippedLayer(availableSkipped, chosenOffAbove);
-				valueOfSG += occurenceCount * (subSetValue << numAvailableInSkippedLayer);
-			});
-
-			countedClass.value.value = valueOfSG;
-		}//);
-	}
-	return decomposition;
-}
-
-valueInt dedekind(int order) {
-	std::cout << "dedekind(" << order << ") = \n";
-	LayerStack layers = generateLayers(order);
-
-	LayerDecomposition curValue = getInitialEquivalenceClasses(layers.layers.back());
-
-	DedekindDecomposition fullDecomposition(order);
-
-
-	for(size_t i = layers.layers.size()-1; i > 0; i--) {
-		curValue = computeNextLayerValues(layers.layers[i-1], layers.layers[i], curValue);
-	}
-
-	valueInt result = getTotalValueForLayer(curValue);
-
-	std::cout << result << std::endl;
-
-	return result;
-}
-
-valueInt dedekind7() {
-	std::cout << "dedicated dedekind(7) = \n";
-	LayerStack layers = generateLayers(7);
-
-	LayerDecomposition curValue = getInitialEquivalenceClasses(layers.layers[7]);
-	curValue = computeSkipLayerValues(layers.layers[5], layers.layers[6], layers.layers[7], curValue);
-	curValue = computeSkipLayerValues(layers.layers[3], layers.layers[4], layers.layers[5], curValue);
-	curValue = computeSkipLayerValues(layers.layers[1], layers.layers[2], layers.layers[3], curValue);
-	curValue = computeNextLayerValues(layers.layers[0], layers.layers[1], curValue);
-
-	valueInt result = getTotalValueForLayer(curValue);
-
-	std::cout << result << std::endl;
-
-	return result;
-}
-
-valueInt dedekind6() {
-	std::cout << "dedicated dedekind(6) = \n";
-	LayerStack layers = generateLayers(6);
-
-	LayerDecomposition curValue = getInitialEquivalenceClasses(layers.layers[6]);
-	curValue = computeSkipLayerValues(layers.layers[4], layers.layers[5], layers.layers[6], curValue);
-	curValue = computeSkipLayerValues(layers.layers[2], layers.layers[3], layers.layers[4], curValue);
-	curValue = computeSkipLayerValues(layers.layers[0], layers.layers[1], layers.layers[2], curValue);
-
-	valueInt result = getTotalValueForLayer(curValue);
-
-	std::cout << result << std::endl;
-
-	return result;
-}
-
-valueInt dedekind4() {
-	std::cout << "dedicated dedekind(4) = \n";
-	LayerStack layers = generateLayers(4);
-
-	LayerDecomposition curValue = getInitialEquivalenceClasses(layers.layers[4]);
-	curValue = computeNextLayerValues(layers.layers[3], layers.layers[4], curValue);
-	curValue = computeSkipLayerValues(layers.layers[1], layers.layers[2], layers.layers[3], curValue);
-	//curValue = computeNextLayerValues(layers.layers[2], layers.layers[3], curValue);
-	//curValue = computeNextLayerValues(layers.layers[1], layers.layers[2], curValue);
-	curValue = computeNextLayerValues(layers.layers[0], layers.layers[1], curValue);
-
-	valueInt result = getTotalValueForLayer(curValue);
-
-	std::cout << result << std::endl;
-
-	return result;
-}
-
 
 /*
 Correct numbers
@@ -238,7 +86,8 @@ int main() {
 	TimeTracker timer;
 	//__debugbreak();
 	int dedekindOrder = 4;
-	DedekindDecomposition fullDecomposition(dedekindOrder);
+	DedekindDecomposition<ValueCounted> fullDecomposition(dedekindOrder);
+	assignValues(fullDecomposition);
 	//Sleep(1000);
 	//__debugbreak();
 	//return 0;
@@ -268,7 +117,7 @@ int main() {
 
 	
 	std::cout << "Decomposition:\n" << fullDecomposition << "\n";
-	std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.bottom().value.value + 1 << std::endl;
+	//std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.bottom().value + 1 << std::endl;
 
 	return 0;//*/
 
