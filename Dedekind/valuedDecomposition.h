@@ -8,5 +8,4 @@ struct ValueCounted {
 	valueInt value;
 };
 
-
 void assignValues(DedekindDecomposition<ValueCounted>& decomp);

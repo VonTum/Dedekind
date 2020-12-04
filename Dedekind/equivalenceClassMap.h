@@ -7,6 +7,11 @@ template<typename V>
 struct ValuedEquivalenceClass {
 	EquivalenceClass equivClass;
 	V value;
+
+	ValuedEquivalenceClass(const ValuedEquivalenceClass&) = delete;
+	ValuedEquivalenceClass& operator=(const ValuedEquivalenceClass&) = delete;
+	ValuedEquivalenceClass(const ValuedEquivalenceClass&&) = delete;
+	ValuedEquivalenceClass& operator=(const ValuedEquivalenceClass&&) = delete;
 };
 
 template<typename ExtraInfo>
@@ -18,6 +23,8 @@ public:
 	struct MapNode {
 		MapNode* nextNode;
 		ValuedEquivalenceClass<V> item;
+
+		//MapNode(MapNode* nextNode, const EquivalenceClass& equivClass, const V& value) : nextNode(nextNode), item{equivClass, value} {}
 	};
 
 	MapNode** hashTable;
@@ -130,7 +137,7 @@ public:
 		MapNode** foundNode = getNodeFor(preprocessed, hash);
 		MapNode* actualNode = *foundNode;
 		if(actualNode == nullptr) {
-			actualNode = new MapNode{nullptr, ValuedEquivalenceClass<V>{EquivalenceClass(preprocessed, hash), defaultForCreate}};
+			actualNode = new MapNode{nullptr, {EquivalenceClass(preprocessed, hash), defaultForCreate}};
 			*foundNode = actualNode;
 			this->notifyNewItem();
 		}
@@ -153,14 +160,14 @@ public:
 	ValuedEquivalenceClass<V>& add(const PreprocessedFunctionInputSet& preprocessed, const V& value) {
 		uint64_t hash = preprocessed.hash();
 		MapNode** bucket = getBucketFor(hash);
-		*bucket = new MapNode{*bucket, ValuedEquivalenceClass<V>{EquivalenceClass(preprocessed, hash), value}};
+		*bucket = new MapNode{*bucket, {EquivalenceClass(preprocessed, hash), value}};
 		this->notifyNewItem();
 		return (*bucket)->item;
 	}
 
 	ValuedEquivalenceClass<V>& add(const EquivalenceClass& eqClass, const V& value) {
 		MapNode** bucket = getBucketFor(eqClass.hash);
-		*bucket = new MapNode{*bucket, ValuedEquivalenceClass<V>{eqClass, value}};
+		*bucket = new MapNode{*bucket, {eqClass, value}};
 		this->notifyNewItem();
 		return (*bucket)->item;
 	}

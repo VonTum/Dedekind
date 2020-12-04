@@ -16,7 +16,7 @@ void finishIterInParallel(Iter iter, IterEnd iterEnd, Func funcToRun) {
 		while(true) {
 			iterMutex.lock();
 			if(iter != iterEnd) {
-				auto item = *iter;
+				auto& item = *iter;
 				++iter;
 				iterMutex.unlock();
 

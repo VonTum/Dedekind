@@ -5,8 +5,10 @@
 
 #include "heapArray.h"
 #include "iteratorFactory.h"
+#include "parallelIter.h"
 
 #include <vector>
+#include <assert.h>
 
 
 typedef uint64_t bigInt;
@@ -78,6 +80,18 @@ public:
 
 		std::vector<EquivalenceClassMap<TempEquivClassInfo>> existingDecomp = createDecomposition(layer);
 
+#ifndef NDEBUG
+		for(size_t i = 0; i < existingDecomp.size(); i++) {
+			for(ValuedEquivalenceClass<TempEquivClassInfo>& cl : existingDecomp[i]) {
+				if(i < existingDecomp.size() - 1) {
+					assert(cl.value.extendedClasses.size() >= 1);
+				} else {
+					assert(cl.value.extendedClasses.size() == 0);
+				}
+			}
+		}
+#endif
+
 		std::cout << "Baking: copying over\n";
 
 		// convert to Baked map
@@ -93,9 +107,9 @@ public:
 				for(EquivalenceClassMap<TempEquivClassInfo>::MapNode* cur = extracting.hashTable[curBucket]; cur != nullptr; cur = cur->nextNode) {
 					TempEquivClassInfo& oldInfo = cur->item.value;
 					new(&newMap[curIndex].eqClass) EquivalenceClass(std::move(cur->item.equivClass));
-					curIndex++;
-					totalConnectionCount += oldInfo.extendedClasses.size();
 					oldInfo.indexInBaked = curIndex;
+					totalConnectionCount += oldInfo.extendedClasses.size();
+					curIndex++;
 				}
 			}
 		}
@@ -129,11 +143,12 @@ public:
 		std::cout << "Baking: finding inverses\n";
 		for(size_t i = 0; i < layer.size() + 1; i++) {
 			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& inverseMap = this->equivalenceClasses[layer.size() - i];
-			for(BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& curClass : this->equivalenceClasses[i]) {
+			iterCollectionInParallel(this->equivalenceClasses[i], [&inverseMap, &layer](BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& curClass) {
 				PreprocessedFunctionInputSet invPrep = preprocess(invert(curClass.eqClass.functionInputSet, layer));
 				curClass.inverse = inverseMap.indexOf(invPrep);
-			}
+			});
 		}
+#ifndef NDEBUG
 		for(size_t i = 0; i < layer.size() + 1; i++) {
 			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& curMap = this->equivalenceClasses[i];
 			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& inverseMap = this->equivalenceClasses[layer.size() - i];
@@ -141,7 +156,7 @@ public:
 				assert(inverseMap[curMap[i].inverse].inverse == i);
 			}
 		}
-
+#endif
 		std::cout << "Baking done!\n";
 
 	}
@@ -198,20 +213,24 @@ public:
 	}
 
 	size_t getMaxWidth() const {
-		return this->equivalenceClasses[this->equivalenceClasses.size() / 2].size();
+		const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& biggestMap = this->equivalenceClasses[this->equivalenceClasses.size() / 2];
+		return biggestMap.size();
 	}
 
 	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
 	template<typename Func>
 	void forEachSuperClassOfClass(int sizeOfStartingNode, int indexOfStartingNode, Func func) const {
-		std::vector<int> occurencesOfCurClasses(this->getMaxWidth()+1, 0);
-		std::vector<int> occurencesOfNextClasses(this->getMaxWidth()+1, 0);
+		size_t maxNumClasses = this->getMaxWidth();
+		std::vector<int> occurencesOfCurClasses(maxNumClasses, 0);
+		std::vector<int> occurencesOfNextClasses(maxNumClasses, 0);
 
 		std::vector<int> usedCurClasses;
 		std::vector<int> usedNextClasses;
 
 		occurencesOfCurClasses[indexOfStartingNode] = 1;
 		usedCurClasses.push_back(indexOfStartingNode);
+
+		int numberOfDuplicateChoices = 1;
 
 		for(int curSize = sizeOfStartingNode; curSize < this->equivalenceClasses.size(); curSize++) {
 			const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& curMap = this->equivalenceClasses[curSize];
@@ -230,6 +249,7 @@ public:
 
 			// clean up and swap for next iteration
 			for(int nextClass : usedNextClasses) {
+				occurencesOfNextClasses[nextClass] /= numberOfDuplicateChoices;
 				func(this->equivalenceClasses[curSize + 1][nextClass], occurencesOfNextClasses[nextClass]);
 			}
 			for(int curClass : usedCurClasses) {
@@ -238,6 +258,8 @@ public:
 			usedCurClasses.clear();
 			std::swap(occurencesOfCurClasses, occurencesOfNextClasses);
 			std::swap(usedCurClasses, usedNextClasses);
+
+			numberOfDuplicateChoices++;
 		}
 	}
 

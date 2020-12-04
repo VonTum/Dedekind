@@ -85,8 +85,9 @@ Correct numbers
 int main() {
 	TimeTracker timer;
 	//__debugbreak();
-	int dedekindOrder = 4;
+	int dedekindOrder = 7;
 	DedekindDecomposition<ValueCounted> fullDecomposition(dedekindOrder);
+	//std::cout << "Decomposition:\n" << fullDecomposition << "\n";
 	assignValues(fullDecomposition);
 	//Sleep(1000);
 	//__debugbreak();
@@ -116,8 +117,9 @@ int main() {
 	std::cout << outFi << "\n";*/
 
 	
-	std::cout << "Decomposition:\n" << fullDecomposition << "\n";
-	//std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.bottom().value + 1 << std::endl;
+	//std::cout << "Decomposition:\n" << fullDecomposition << "\n";
+	std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.bottom().value + 1 << std::endl;
+
 
 	return 0;//*/
 

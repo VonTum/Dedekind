@@ -40,7 +40,7 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 		// try to extend each of the previous groups by 1
 		std::shared_mutex curGroupsMutex;
 		std::mutex editClassMutex;
-		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&curGroupsMutex,&editClassMutex](ValuedEquivalenceClass<TempEquivClassInfo>& element) {
+		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&curGroupsMutex,&editClassMutex,    &equivalenceClasses,&groupSize](ValuedEquivalenceClass<TempEquivClassInfo>& element) {
 			std::vector<ValuedEquivalenceClass<TempEquivClassInfo>*> foundExistingClasses;
 			foundExistingClasses.reserve(3);
 			for(FunctionInput newInput : layer) {
@@ -72,6 +72,11 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 				editClassMutex.unlock();
 			}
 		});
+#ifndef NDEBUG
+		for(const auto& item : equivalenceClasses[groupSize - 1]) {
+			assert(item.value.extendedClasses.size() >= 1);
+		}
+#endif
 		std::cout << " done! " << curGroups.size() << " classes found!" << std::endl;
 	}
 	if(layer.size() > 1) {
