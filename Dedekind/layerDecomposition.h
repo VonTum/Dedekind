@@ -217,50 +217,81 @@ public:
 		return biggestMap.size();
 	}
 
-	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
-	template<typename Func>
-	void forEachSuperClassOfClass(int sizeOfStartingNode, int indexOfStartingNode, Func func) const {
-		size_t maxNumClasses = this->getMaxWidth();
-		std::vector<int> occurencesOfCurClasses(maxNumClasses, 0);
-		std::vector<int> occurencesOfNextClasses(maxNumClasses, 0);
+	struct ForEachBuffer {
+		std::vector<int> occurencesOfCurClasses;
+		std::vector<int> occurencesOfNextClasses;
 
 		std::vector<int> usedCurClasses;
 		std::vector<int> usedNextClasses;
 
-		occurencesOfCurClasses[indexOfStartingNode] = 1;
-		usedCurClasses.push_back(indexOfStartingNode);
+		ForEachBuffer(size_t maxNumClasses) : 
+			occurencesOfCurClasses(maxNumClasses, 0), 
+			occurencesOfNextClasses(maxNumClasses, 0), 
+			usedCurClasses(), 
+			usedNextClasses() {
+			usedCurClasses.reserve(maxNumClasses);
+			usedNextClasses.reserve(maxNumClasses);
+		}
+	};
 
+	inline ForEachBuffer makeForEachBuffer() const {
+		return ForEachBuffer(this->getMaxWidth());
+	}
+
+	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
+	template<typename Func>
+	void forEachSuperClassOfClass(int sizeOfStartingNode, int indexOfStartingNode, ForEachBuffer& buf, Func func) const {
+		buf.occurencesOfCurClasses[indexOfStartingNode] = 1;
+		buf.usedCurClasses.push_back(indexOfStartingNode);
+
+		/*
+			Duplicate choices:
+			You start at some FunctionInputSet s, with a number of active elements, we add one, so we have one choice of where to put it
+			We add a second one, we could have put it at the end, or we could have put it before the first, 2 choices
+			and so on
+		*/
 		int numberOfDuplicateChoices = 1;
 
 		for(int curSize = sizeOfStartingNode; curSize < this->equivalenceClasses.size(); curSize++) {
 			const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& curMap = this->equivalenceClasses[curSize];
-			for(int item : usedCurClasses) {
+			for(int item : buf.usedCurClasses) {
 				const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& currentlyPropagating = curMap[item];
 
-				int occurencesOfCurClass = occurencesOfCurClasses[item];
+				int occurencesOfCurClass = buf.occurencesOfCurClasses[item];
 				for(const NextClass& nextClass : currentlyPropagating.iterNextClasses()) {
-					bool nextClassIsNewlyDiscoveredClass = (occurencesOfNextClasses[nextClass.nodeIndex] == 0);
-					occurencesOfNextClasses[nextClass.nodeIndex] += occurencesOfCurClass * nextClass.formationCount;
+					bool nextClassIsNewlyDiscoveredClass = (buf.occurencesOfNextClasses[nextClass.nodeIndex] == 0);
+					buf.occurencesOfNextClasses[nextClass.nodeIndex] += occurencesOfCurClass * nextClass.formationCount;
 					if(nextClassIsNewlyDiscoveredClass) {
-						usedNextClasses.push_back(nextClass.nodeIndex);
+						buf.usedNextClasses.push_back(nextClass.nodeIndex);
 					}
 				}
 			}
 
+			// run function on every count that's been found
+			for(int nextClass : buf.usedNextClasses) {
+				buf.occurencesOfNextClasses[nextClass] /= numberOfDuplicateChoices;
+				func(this->equivalenceClasses[curSize + 1][nextClass], buf.occurencesOfNextClasses[nextClass]);
+			}
+
 			// clean up and swap for next iteration
-			for(int nextClass : usedNextClasses) {
-				occurencesOfNextClasses[nextClass] /= numberOfDuplicateChoices;
-				func(this->equivalenceClasses[curSize + 1][nextClass], occurencesOfNextClasses[nextClass]);
+			for(int curClass : buf.usedCurClasses) {
+				buf.occurencesOfCurClasses[curClass] = 0;
 			}
-			for(int curClass : usedCurClasses) {
-				occurencesOfCurClasses[curClass] = 0;
-			}
-			usedCurClasses.clear();
-			std::swap(occurencesOfCurClasses, occurencesOfNextClasses);
-			std::swap(usedCurClasses, usedNextClasses);
+			buf.usedCurClasses.clear();
+			std::swap(buf.occurencesOfCurClasses, buf.occurencesOfNextClasses);
+			std::swap(buf.usedCurClasses, buf.usedNextClasses);
 
 			numberOfDuplicateChoices++;
 		}
+		for(int curClass : buf.usedCurClasses) {
+			buf.occurencesOfCurClasses[curClass] = 0;
+		}
+		buf.usedCurClasses.clear();
+	}
+	template<typename Func>
+	void forEachSuperClassOfClass(int sizeOfStartingNode, int indexOfStartingNode, Func func) const {
+		ForEachBuffer buf = this->makeForEachBuffer();
+		forEachSuperClassOfClass(sizeOfStartingNode, indexOfStartingNode, buf, std::move(func));
 	}
 
 	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
@@ -273,7 +304,7 @@ public:
 	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
 	template<typename Func>
 	void forEachSubClassOfClass(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& node, Func func) const {
-		forEachSuperClassOfClass(this->getNumberOfFunctionInputs() - node.eqClass.size(), node.inverse, [this, func](const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences) {
+		forEachSuperClassOfClass(this->getNumberOfFunctionInputs() - node.eqClass.size(), node.inverse, [this, &func](const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences) {
 			func(this->inverseOf(cl), occurences);
 		});
 	}
@@ -281,6 +312,29 @@ public:
 	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
 	template<typename Func>
 	void forEachSubClassOfClass(int sizeOfStartingNode, int indexOfStartingNode, Func func) const {
-		forEachSubClassOfClass(this->equivalenceClasses[sizeOfStartingNode][indexOfStartingNode]);
+		forEachSubClassOfClass(this->equivalenceClasses[sizeOfStartingNode][indexOfStartingNode], std::move(func));
+	}
+
+
+
+	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
+	template<typename Func>
+	void forEachSuperClassOfClass(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& node, ForEachBuffer& buf, Func func) const {
+		int curSize = node.eqClass.size();
+		forEachSuperClassOfClass(curSize, this->equivalenceClasses[curSize].indexOf(node), buf, std::move(func));
+	}
+
+	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
+	template<typename Func>
+	void forEachSubClassOfClass(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& node, ForEachBuffer& buf, Func func) const {
+		forEachSuperClassOfClass(this->getNumberOfFunctionInputs() - node.eqClass.size(), node.inverse, buf, [this, &func](const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences) {
+			func(this->inverseOf(cl), occurences);
+		});
+	}
+
+	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
+	template<typename Func>
+	void forEachSubClassOfClass(int sizeOfStartingNode, int indexOfStartingNode, ForEachBuffer& buf, Func func) const {
+		forEachSubClassOfClass(this->equivalenceClasses[sizeOfStartingNode][indexOfStartingNode], buf, std::move(func));
 	}
 };

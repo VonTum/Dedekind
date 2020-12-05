@@ -1,5 +1,7 @@
 #pragma once
 
+#include "parallelIter.h"
+
 #include "layerDecomposition.h"
 #include "layerStack.h"
 
@@ -26,24 +28,24 @@ public:
 			const FullLayer& fullSmallerLayer = layerStack.layers[i - 1];
 			const FullLayer& fullLargerLayer = layerStack.layers[i];
 			for(size_t setSize = 0; setSize <= smallerClasses.getNumberOfFunctionInputs(); setSize++) {
-				for(BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& smallerClass : smallerClasses[setSize]) {
+				iterCollectionInParallel(smallerClasses[setSize], [&fullSmallerLayer, &fullLargerLayer, &largerClasses](BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& smallerClass) {
 					FunctionInputSet smallerOnElems = smallerClass.eqClass.asFunctionInputSet();
 					FunctionInputSet smallerOffElems = invert(smallerOnElems, fullSmallerLayer);
 					FunctionInputSet largerOffRemoved = removeForcedOn(fullLargerLayer, smallerOffElems);
 					PreprocessedFunctionInputSet preprocessed = preprocess(std::move(largerOffRemoved));
 					EquivalenceClassIndex index = largerClasses.indexOf(preprocessed);
 					smallerClass.minimalForcedOffAbove = index;
-				}
+				});
 			}
 			for(size_t setSize = 0; setSize <= largerClasses.getNumberOfFunctionInputs(); setSize++) {
-				for(BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& largerClass : largerClasses[setSize]) {
+				iterCollectionInParallel(largerClasses[setSize], [&fullSmallerLayer, &fullLargerLayer, &smallerClasses](BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& largerClass) {
 					FunctionInputSet largerOnElems = largerClass.eqClass.asFunctionInputSet();
 					FunctionInputSet largerOffElems = invert(largerOnElems, fullLargerLayer);
 					FunctionInputSet smallerOnRemoved = removeForcedOff(fullSmallerLayer, largerOffElems);
 					PreprocessedFunctionInputSet preprocessed = preprocess(std::move(smallerOnRemoved));
 					EquivalenceClassIndex index = smallerClasses.indexOf(preprocessed);
 					largerClass.minimalForcedOnBelow = index;
-				}
+				});
 			}
 		}
 	}

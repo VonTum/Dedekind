@@ -67,25 +67,6 @@ static void forEachSubsetOfInputSet(const FunctionInputSet& availableOptions, co
 //#include "toString.h"
 //#include <iostream>
 
-static valueInt computeValueOfClass(const BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& availableOptions, const LayerDecomposition<ValueCounted>& decomposition) {
-	valueInt totalOptions = 0; // 1 for everything on, no further options
-
-	/*forEachSubsetOfInputSet(availableOptions.eqClass.asFunctionInputSet(), decomposition, [&totalOptions](const FunctionInputSet& subGroup, valueInt subGroupValue) {
-		totalOptions += subGroupValue;
-	});*/
-
-	totalOptions += availableOptions.value;
-
-	//std::cout << "Processing " << availableOptions.eqClass.asFunctionInputSet() << ":\n";
-	decomposition.forEachSubClassOfClass(availableOptions, [&totalOptions](const BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& cl, countInt occurences) {
-		//std::cout << "  " << cl.eqClass.asFunctionInputSet() << " x" << occurences << "\n";
-		totalOptions += occurences * cl.value;
-	});
-
-
-	return totalOptions;
-}
-
 static void computeNextLayerValues(const LayerDecomposition<ValueCounted>& prevLayer, LayerDecomposition<ValueCounted>& curLayer) {
 	// resulting values of empty set, and full set
 	curLayer.empty().value = 1;
@@ -94,13 +75,18 @@ static void computeNextLayerValues(const LayerDecomposition<ValueCounted>& prevL
 	// for all other group sizes between the empty set and the full set
 	for(size_t setSize = 1; setSize < curLayer.getNumberOfFunctionInputs(); setSize++) {
 		std::cout << "Assigning values of " << setSize << "/" << curLayer.getNumberOfFunctionInputs() << "\n";
-		iterCollectionInParallel(curLayer[setSize], [&prevLayer](BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& curClass) {
-			const BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& aboveItem = prevLayer[curClass.minimalForcedOffAbove];
+		iterCollectionInParallelWithPerThreadBuffer(curLayer[setSize], [&prevLayer]() {return prevLayer.makeForEachBuffer(); },
+			[&prevLayer](BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& curClass, LayerDecomposition<ValueCounted>::ForEachBuffer& buf) {
+				const BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& aboveItem = prevLayer[curClass.minimalForcedOffAbove];
 
-			valueInt valueOfSG = computeValueOfClass(aboveItem, prevLayer);
+				valueInt valueOfSG = aboveItem.value;
+				prevLayer.forEachSubClassOfClass(aboveItem, buf, [&valueOfSG](const BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& cl, countInt occurences) {
+					valueOfSG += occurences * cl.value;
+				});
 
-			curClass.value = valueOfSG;
-		});
+				curClass.value = valueOfSG;
+			}
+		);
 	}
 }
 
