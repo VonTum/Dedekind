@@ -8,6 +8,10 @@
 #include "layerStack.h"
 #include "smallVector.h"
 
+#include "dedekindDecomposition.h"
+#include "valuedDecomposition.h"
+#include "intervalDecomposition.h"
+
 #include "set.h"
 #include "aligned_set.h"
 
@@ -138,6 +142,11 @@ inline std::ostream& operator<<(std::ostream& os, NoExtraInfo) {
 
 inline std::ostream& operator<<(std::ostream& os, ValueCounted vc) {
 	os << "c: " << vc.count << " v:" << vc.value;
+	return os;
+}
+
+inline std::ostream& operator<<(std::ostream& os, IntervalSize is) {
+	os << "is: " << is.intervalSizeToBottom;
 	return os;
 }
 

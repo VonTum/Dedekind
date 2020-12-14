@@ -10,14 +10,15 @@
 #include "intSet.h"
 #include "smallVector.h"
 
-#define MAX_PREPROCESSED 7
+constexpr int MAX_PREPROCESSED = 7;
+constexpr int MAX_LAYER_SIZE = 35;
 
 typedef std::bitset<(1 << MAX_PREPROCESSED)> InputBitSet;
 
 template<typename T>
 using PreprocessSmallVector = SmallVector<T, MAX_PREPROCESSED>;
 template<typename T>
-using LargePreprocessSmallVector = SmallVector<T, 35>;
+using LargePreprocessSmallVector = SmallVector<T, MAX_LAYER_SIZE>;
 
 
 struct VariableCoOccurence {

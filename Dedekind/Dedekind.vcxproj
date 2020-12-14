@@ -162,6 +162,7 @@
     <ClCompile Include="aligned_alloc.cpp" />
     <ClCompile Include="codeGen.cpp" />
     <ClCompile Include="dedekind.cpp" />
+    <ClCompile Include="intervalDecomposition.cpp" />
     <ClCompile Include="valuedDecomposition.cpp" />
     <ClCompile Include="equivalenceClass.cpp" />
     <ClCompile Include="layerDecomposition.cpp" />
@@ -175,6 +176,7 @@
     <ClInclude Include="equivalenceClassMap.h" />
     <ClInclude Include="dedekindDecomposition.h" />
     <ClInclude Include="heapArray.h" />
+    <ClInclude Include="intervalDecomposition.h" />
     <ClInclude Include="layerDecomposition.h" />
     <ClInclude Include="functionInput.h" />
     <ClInclude Include="functionInputSet.h" />

@@ -5,6 +5,7 @@
 #include "functionInput.h"
 #include "set.h"
 #include "aligned_set.h"
+#include "collectionOperations.h"
 
 typedef aligned_set<FunctionInput, 32> FunctionInputSet;
 
@@ -18,6 +19,12 @@ inline FunctionInput span(const FunctionInputSet& inputSet) {
 	return result;
 }
 
+inline bool isNormalized(const FunctionInputSet& fis) {
+	FunctionInput sp = span(fis);
+
+	return sp.getHighestEnabled() == sp.getNumberEnabled()-1;
+}
+
 template<typename PermutationVector>
 inline void swizzleVector(const PermutationVector& permutation, const FunctionInputSet& input, FunctionInputSet& output) {
 	for(size_t i = 0; i < input.size(); i++) {
@@ -29,6 +36,7 @@ struct FullLayer : public FunctionInputSet {
 	//using FunctionInputSet::FunctionInputSet;
 	FullLayer() = default;
 	explicit FullLayer(const FunctionInputSet& fi) : FunctionInputSet(fi) {}
+	explicit FullLayer(FunctionInputSet&& fi) : FunctionInputSet(std::move(fi)) {}
 };
 
 // returns true if there is an item in onInputSet which is a superset of f
@@ -67,6 +75,35 @@ inline FunctionInputSet removeForcedOff(const FullLayer& layer, const FunctionIn
 	for(FunctionInput f : layer) {
 		if(!isForcedOffBy(f, inputSet)) {
 			result.push_back(f);
+		}
+	}
+	return result;
+}
+
+// returns true if there is an element in the dominating input set which contains f
+inline bool isDominatedBy(FunctionInput f, const FunctionInputSet& dominatingInputSet) {
+	for(FunctionInput fi : dominatingInputSet) {
+		if(isSubSet(f, fi)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+inline FunctionInputSet getDominatedElements(const FullLayer& layer, const FunctionInputSet& dominator) {
+	FunctionInputSet result;
+	for(FunctionInput fi : layer) {
+		if(isDominatedBy(fi, dominator)) {
+			result.push_back(fi);
+		}
+	}
+	return result;
+}
+inline FunctionInputSet getNonDominatedElements(const FullLayer& layer, const FunctionInputSet& dominator) {
+	FunctionInputSet result;
+	for(FunctionInput fi : layer) {
+		if(!isDominatedBy(fi, dominator)) {
+			result.push_back(fi);
 		}
 	}
 	return result;
@@ -116,4 +153,21 @@ inline FunctionInputSet invert(const FunctionInputSet& toInvert, const FullLayer
 	}
 
 	return result;
+}
+
+// both FunctionInputSets must have been normalized (eg no unused variables)
+inline FunctionInputSet findSubSetPermutation(const FunctionInputSet& set, const FunctionInputSet& subSet) {
+	assert(isNormalized(set));
+	assert(isNormalized(subSet));
+	std::vector<int> permutation = generateIntegers(span(subSet).getNumberEnabled());
+
+	FunctionInputSet permutedSubSet(permutation.size());
+	bool found = existsPermutationForWhich(permutation, [&set, &subSet, &permutedSubSet](const std::vector<int>& permut) {
+		permuteIntoExistingBuf(subSet, permut, permutedSubSet);
+		return isSubSet(permutedSubSet.begin(), permutedSubSet.end(), set.begin(), set.end());
+	});
+
+	assert(found);
+
+	return permutedSubSet;
 }

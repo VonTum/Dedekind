@@ -149,6 +149,15 @@ public:
 		return false;
 	}
 
+	bool containsAll(const aligned_set<T>& other) {
+		for(const T& item : other) {
+			if(!this->contains()) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	size_t size() const { return n; }
 	void reserve(size_t newSize) { expandIfNeeded(newSize); }
 	T* getData() { return data; }

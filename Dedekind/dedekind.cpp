@@ -24,48 +24,6 @@
 #include <mutex>
 #include <atomic>
 
-
-
-#define DEBUG_PRINT(v) std::cout << v
-
-template<typename ExtraInfo, typename Func>
-void forEachSubsetOfInputSet(const FunctionInputSet& availableOptions, const LayerDecomposition<ExtraInfo>& eqClasses, Func func) {
-	for(size_t offCount = 0; offCount <= availableOptions.size(); offCount++) {
-		forEachSubgroup(availableOptions, offCount, [&eqClassesOffCnt = eqClasses[offCount], &func](const FunctionInputSet& subGroup) {
-			PreprocessedFunctionInputSet preprocessed = preprocess(subGroup);
-			func(subGroup, eqClassesOffCnt.get(preprocessed).value, 1);
-		});
-	}
-}
-
-bigInt computeValueOfClass(const FunctionInputSet& availableOptions, const LayerDecomposition<ValueCounted>& decomposition) {
-	bigInt totalOptions = 0; // 1 for everything on, no further options
-
-	forEachSubsetOfInputSet(availableOptions, decomposition, [&totalOptions](const FunctionInputSet& subGroup, valueInt subGroupValue, countInt occurenceCount) {
-		totalOptions += subGroupValue * occurenceCount;
-	});
-
-	return totalOptions;
-}
-
-template<size_t Size>
-FunctionInputSet computeAvailableElements(const std::bitset<Size>& offInputSet, const FullLayer& curLayer, const FullLayer& layerAbove) {
-	FunctionInputSet onInputSet = invert(offInputSet, curLayer);
-	return removeForcedOn(layerAbove, onInputSet);
-}
-
-valueInt getTotalValueForLayer(const LayerDecomposition<ValueCounted>& eqClassesOfLayer) {
-	valueInt totalValueForFullLayer = 0;
-
-	for(const BakedEquivalenceClassMap<EquivalenceClassInfo<ValueCounted>>& eqMap : eqClassesOfLayer) {
-		for(const BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& classOfPrevLayer : eqMap) {
-			totalValueForFullLayer += classOfPrevLayer.count * classOfPrevLayer.value;
-		}
-	}
-
-	return totalValueForFullLayer;
-}
-
 /*
 Correct numbers
 	0: 2
@@ -77,19 +35,16 @@ Correct numbers
 	6: 7828354
 	7: 2414682040998
 	8: 56130437228687557907788
-	9: ????
+	9: ??????????????????????????????????????????
 */
-
-#include <Windows.h>
 
 int main() {
 	TimeTracker timer;
 	//__debugbreak();
-	int dedekindOrder = 7;
+	int dedekindOrder = 6;
 	DedekindDecomposition<ValueCounted> fullDecomposition(dedekindOrder);
 	//std::cout << "Decomposition:\n" << fullDecomposition << "\n";
 	assignValues(fullDecomposition);
-	//Sleep(1000);
 	//__debugbreak();
 	//return 0;
 

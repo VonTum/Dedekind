@@ -15,6 +15,8 @@ void forEachSubgroupRecurse(const Collection& collection, const Func& func, Coll
 		func(output);
 	}
 }
+
+// expects a function of type: void func(const Collection& subSet)
 template<typename Collection, typename Func>
 void forEachSubgroup(const Collection& collection, size_t groupSize, const Func& func) {
 	Collection subGroup(groupSize);
@@ -22,8 +24,60 @@ void forEachSubgroup(const Collection& collection, size_t groupSize, const Func&
 	forEachSubgroupRecurse(collection, func, subGroup, 0, 0);
 }
 
+// expects a function of type: void func(const Collection& subSet)
+// does not run the function on the collection itself, nor on the empty group
+template<typename Collection, typename Func>
+void forEachStrictSubgroup(const Collection& collection, const Func& func) {
+	for(size_t i = 1; i < collection.size() - 1; i++) {
+		forEachSubgroup(collection, i, func);
+	}
+}
+
+template<typename Collection, typename Func>
+inline void forEachSplitRecursive(const Collection& collection, size_t indexInCollection, const Func& func, Collection& firstBuf, Collection& secondBuf) {
+	if(indexInCollection == collection.size()) {
+		func(const_cast<const Collection&>(firstBuf), const_cast<const Collection&>(secondBuf));
+	} else {
+		const auto& item = collection[indexInCollection];
+		firstBuf.push_back(item);
+		forEachSplitRecursive(collection, indexInCollection + 1, func, firstBuf, secondBuf);
+		firstBuf.pop_back();
+		secondBuf.push_back(item);
+		forEachSplitRecursive(collection, indexInCollection + 1, func, firstBuf, secondBuf);
+		secondBuf.pop_back();
+	}
+}
+
+// expects a function of type: void func(const Collection& a, const Collection& b)
+template<typename Collection, typename Func>
+inline void forEachSplit(const Collection& collection, const Func& func) {
+	Collection firstBuf;
+	Collection secondBuf;
+
+	forEachSplitRecursive(collection, 0, func, firstBuf, secondBuf);
+}
+
+
+// returns true iff all items in a also appear in b, eg a is a subset of b
+template<typename SubSetIter, typename SetIter>
+bool isSubSet(SubSetIter aIter, SubSetIter aEnd, SetIter bStart, SetIter bEnd) {
+	while(aIter != aEnd) {
+		for(auto bIter = bStart; bIter != bEnd; ++bIter) {
+			if(*aIter == *bIter) {
+				// found
+				goto nextItem;
+			}
+		}
+		return false; // no corresponding element in b found for item
+		nextItem:
+		++aIter;
+	}
+	return true; // all elements matched
+}
+
 template<typename Collection>
 Collection removeAll(const Collection& vec, const Collection& toRemove) {
+	assert(isSubSet(toRemove, vec));
 	Collection result;
 	result.reserve(vec.size() - toRemove.size());
 
@@ -85,13 +139,13 @@ bool existsPermutationForWhichRecurse(Collection& vecToPermute, size_t keepBefor
 }
 // runs the given function on all permutations of 
 template<typename Collection, typename F> // pass by value, we're messing with this vector in forEachPermutationRecurse
-bool existsPermutationForWhich(Collection vecToPermute, const F& funcToRun) {
+bool existsPermutationForWhich(Collection& vecToPermute, const F& funcToRun) {
 	return existsPermutationForWhichRecurse(vecToPermute, 0, funcToRun);
 }
 
 // destroys b
 template<typename AIter, typename BIter>
-bool unordered_contains_all(AIter aIter, AIter aEnd, BIter bStart, BIter bEnd) {
+bool destructiveIsSubSetWithDuplicates(AIter aIter, AIter aEnd, BIter bStart, BIter bEnd) {
 	while(aIter != aEnd) {
 		for(auto bIter = bStart; bIter != bEnd; ++bIter) {
 			if(*aIter == *bIter) {
@@ -197,12 +251,20 @@ void getSortPermutation(const Collection& collection, Func compare, IntCollectio
 }
 
 template<typename Collection, typename PermutationCollection>
-Collection permute(const Collection& col, const PermutationCollection& permutation) {
-	Collection result(permutation.size());
+void permuteIntoExistingBuf(const Collection& col, const PermutationCollection& permutation, Collection& result) {
+	assert(result.size() == permutation.size());
 
 	for(size_t i = 0; i < permutation.size(); i++) {
 		result[i] = col[permutation[i]];
 	}
+}
+
+template<typename Collection, typename PermutationCollection>
+Collection permute(const Collection& col, const PermutationCollection& permutation) {
+	Collection result(permutation.size());
+
+	permuteIntoExistingBuf(col, permutation, result);
+
 	return result;
 }
 

@@ -63,6 +63,11 @@ struct TempEquivClassInfo {
 };
 
 std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const FullLayer& layer);
+
+
+template<typename ExtraData>
+using EqClass = BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>;
+
 /*
 struct TestClassThing {};
 #define ExtraInfo TestClassThing
