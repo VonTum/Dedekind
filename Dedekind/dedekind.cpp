@@ -39,12 +39,13 @@ Correct numbers
 */
 
 int main() {
+	std::cout << "Detected " << std::thread::hardware_concurrency() << " available threads!\n";
 	TimeTracker timer;
 	//__debugbreak();
 	int dedekindOrder = 6;
-	DedekindDecomposition<ValueCounted> fullDecomposition(dedekindOrder);
+	DedekindDecomposition<IntervalSize> fullDecomposition(dedekindOrder);
 	//std::cout << "Decomposition:\n" << fullDecomposition << "\n";
-	assignValues(fullDecomposition);
+	assignIntervalSizes(fullDecomposition);
 	//__debugbreak();
 	//return 0;
 
@@ -72,8 +73,8 @@ int main() {
 	std::cout << outFi << "\n";*/
 
 	
-	//std::cout << "Decomposition:\n" << fullDecomposition << "\n";
-	std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.bottom().value + 1 << std::endl;
+	std::cout << "Decomposition:\n" << fullDecomposition << "\n";
+	std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.fullTop().intervalSizeToBottom << std::endl;
 
 
 	return 0;//*/

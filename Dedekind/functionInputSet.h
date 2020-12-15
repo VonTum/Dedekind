@@ -90,7 +90,7 @@ inline bool isDominatedBy(FunctionInput f, const FunctionInputSet& dominatingInp
 	return false;
 }
 
-inline FunctionInputSet getDominatedElements(const FullLayer& layer, const FunctionInputSet& dominator) {
+inline FunctionInputSet getDominatedElements(const FunctionInputSet& layer, const FunctionInputSet& dominator) {
 	FunctionInputSet result;
 	for(FunctionInput fi : layer) {
 		if(isDominatedBy(fi, dominator)) {
@@ -99,7 +99,7 @@ inline FunctionInputSet getDominatedElements(const FullLayer& layer, const Funct
 	}
 	return result;
 }
-inline FunctionInputSet getNonDominatedElements(const FullLayer& layer, const FunctionInputSet& dominator) {
+inline FunctionInputSet getNonDominatedElements(const FunctionInputSet& layer, const FunctionInputSet& dominator) {
 	FunctionInputSet result;
 	for(FunctionInput fi : layer) {
 		if(!isDominatedBy(fi, dominator)) {

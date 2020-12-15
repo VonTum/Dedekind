@@ -58,19 +58,19 @@ public:
 			new(&item) T();
 		}
 	}
-	aligned_set(size_t size, const T& val) : aligned_set(size, nextAligned(size)) {
+	aligned_set(size_t size, const T& val) : aligned_set(size) {
 		for(size_t i = 0; i < size; i++) {
 			new(data + i) T(val);
 		}
 	}
-	aligned_set(std::initializer_list<T> lst) : aligned_set(lst.size(), nextAligned(lst.size())) {
+	aligned_set(std::initializer_list<T> lst) : aligned_set(lst.size()) {
 		T* cur = data;
 		for(const T& item : lst) {
 			new(cur) T(item);
 			cur++;
 		}
 	}
-	aligned_set(const std::vector<T>& vec) : aligned_set(vec.size(), nextAligned(vec.size())) {
+	aligned_set(const std::vector<T>& vec) : aligned_set(vec.size()) {
 		for(size_t i = 0; i < n; i++) {
 			new(data + i) T(vec[i]);
 		}
@@ -82,7 +82,7 @@ public:
 		data = nullptr;
 	}
 
-	aligned_set(const aligned_set& other) : aligned_set(other.n, nextAligned(other.n)) {
+	aligned_set(const aligned_set& other) : aligned_set(other.n) {
 		for(size_t i = 0; i < nextAligned(other.n); i++) {
 			data[i] = other.data[i];
 		}
@@ -121,6 +121,10 @@ public:
 		expandIfNeeded(n + 1);
 		new(data + n) T(newItem);
 		n++;
+	}
+	void pop_back() {
+		n--;
+		data[n].~T();
 	}
 	void remove(size_t index) {
 		assert(index < n);

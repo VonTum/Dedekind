@@ -58,6 +58,8 @@ public:
 	FullLayer& layer(size_t i) { return layerStack.layers[i]; }
 	const FullLayer& layer(size_t i) const { return layerStack.layers[i]; }
 
-	const BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& bottom() const { return layers.front().full(); }
-	const BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& top() const { return layers.back().empty(); }
+	const BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& emptyBottom() const { return layers.front().empty(); }
+	const BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& fullBottom() const { return layers.front().full(); }
+	const BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& emptyTop() const { return layers.back().empty(); }
+	const BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& fullTop() const { return layers.back().full(); }
 };

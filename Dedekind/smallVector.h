@@ -34,6 +34,11 @@ public:
 		return buf[sz++];
 	}
 
+	T& front() { assert(sz > 0); return buf[0]; }
+	const T& front() const { assert(sz > 0); return buf[0]; }
+	T& back() { assert(sz > 0); return buf[sz-1]; }
+	const T& back() const { assert(sz > 0); return buf[sz - 1]; }
+
 	size_t size() const { return sz; }
 	void resize(size_t newSize) { assert(newSize <= MaxSize); this->sz = newSize; }
 

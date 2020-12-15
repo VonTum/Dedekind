@@ -25,6 +25,30 @@ struct EquivalenceClassIndex {
 	}
 };
 
+inline bool operator==(const EquivalenceClassIndex& a, const EquivalenceClassIndex& b) {
+	return a.size == b.size && a.indexInSubLayer == b.indexInSubLayer;
+}
+inline bool operator!=(const EquivalenceClassIndex& a, const EquivalenceClassIndex& b) {
+	return a.size != b.size || a.indexInSubLayer != b.indexInSubLayer;
+}
+inline bool operator<(const EquivalenceClassIndex& a, const EquivalenceClassIndex& b) {
+	if(a.size != b.size) {
+		return a.size < b.size;
+	} else {
+		return a.indexInSubLayer < b.indexInSubLayer;
+	}
+}
+inline bool operator>(const EquivalenceClassIndex& a, const EquivalenceClassIndex& b) {
+	return b < a;
+}
+inline bool operator>=(const EquivalenceClassIndex& a, const EquivalenceClassIndex& b) {
+	return !(a < b);
+}
+inline bool operator<=(const EquivalenceClassIndex& a, const EquivalenceClassIndex& b) {
+	return !(b < a);
+}
+
+
 struct NextClass {
 	int nodeIndex : 24;
 	int formationCount : 8;

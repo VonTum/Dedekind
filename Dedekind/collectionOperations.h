@@ -32,6 +32,19 @@ void forEachStrictSubgroup(const Collection& collection, const Func& func) {
 		forEachSubgroup(collection, i, func);
 	}
 }
+// expects a function of type: void func(const Collection& subSet)
+// does not run the function on the collection itself, nor on the empty group
+template<typename Collection, typename Func>
+void forEachSubgroup(const Collection& collection, const Func& func) {
+	Collection emptyCol;
+	func(emptyCol);
+	if(collection.size() >= 1) {
+		for(size_t i = 1; i < collection.size(); i++) {
+			forEachSubgroup(collection, i, func);
+		}
+		func(collection);
+	}
+}
 
 template<typename Collection, typename Func>
 inline void forEachSplitRecursive(const Collection& collection, size_t indexInCollection, const Func& func, Collection& firstBuf, Collection& secondBuf) {
