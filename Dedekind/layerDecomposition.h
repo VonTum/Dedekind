@@ -11,7 +11,7 @@
 #include <assert.h>
 
 
-typedef uint64_t bigInt;
+typedef int64_t bigInt;
 typedef bigInt countInt;
 typedef bigInt valueInt;
 

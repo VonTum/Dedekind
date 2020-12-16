@@ -187,6 +187,7 @@
     <ClInclude Include="math.h" />
     <ClInclude Include="parallelIter.h" />
     <ClInclude Include="set.h" />
+    <ClInclude Include="sharedLockGuard.h" />
     <ClInclude Include="smallVector.h" />
     <ClInclude Include="timeTracker.h" />
     <ClInclude Include="toString.h" />

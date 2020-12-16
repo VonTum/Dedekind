@@ -73,7 +73,7 @@ int main() {
 	std::cout << outFi << "\n";*/
 
 	
-	std::cout << "Decomposition:\n" << fullDecomposition << "\n";
+	//std::cout << "Decomposition:\n" << fullDecomposition << "\n";
 	std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.fullTop().intervalSizeToBottom << std::endl;
 
 

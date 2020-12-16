@@ -27,9 +27,12 @@ void forEachSubgroup(const Collection& collection, size_t groupSize, const Func&
 // expects a function of type: void func(const Collection& subSet)
 // does not run the function on the collection itself, nor on the empty group
 template<typename Collection, typename Func>
-void forEachStrictSubgroup(const Collection& collection, const Func& func) {
-	for(size_t i = 1; i < collection.size() - 1; i++) {
-		forEachSubgroup(collection, i, func);
+void forEachNonEmptySubgroup(const Collection& collection, const Func& func) {
+	if(collection.size() >= 1) {
+		for(size_t i = 1; i < collection.size(); i++) {
+			forEachSubgroup(collection, i, func);
+		}
+		func(collection);
 	}
 }
 // expects a function of type: void func(const Collection& subSet)
@@ -38,12 +41,7 @@ template<typename Collection, typename Func>
 void forEachSubgroup(const Collection& collection, const Func& func) {
 	Collection emptyCol;
 	func(emptyCol);
-	if(collection.size() >= 1) {
-		for(size_t i = 1; i < collection.size(); i++) {
-			forEachSubgroup(collection, i, func);
-		}
-		func(collection);
-	}
+	forEachNonEmptySubgroup(collection, func);
 }
 
 template<typename Collection, typename Func>

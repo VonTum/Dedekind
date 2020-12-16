@@ -6,6 +6,7 @@
 
 template<typename Iter, typename IterEnd, typename Func>
 void finishIterInParallel(Iter iter, IterEnd iterEnd, Func funcToRun) {
+#ifndef NO_MULTITHREAD
 	unsigned int processorCount = std::thread::hardware_concurrency();
 	if(processorCount > 1) {
 		std::vector<std::thread> workers(processorCount - 1);
@@ -36,7 +37,9 @@ void finishIterInParallel(Iter iter, IterEnd iterEnd, Func funcToRun) {
 			worker.join();
 		}
 	}
-	else {
+	else 
+#endif
+	{
 		for(; iter != iterEnd; ++iter) {
 			funcToRun(*iter);
 		}
@@ -58,6 +61,7 @@ void iterCollectionInParallel(Collection& col, Func funcToRun) {
 // bufferProducer = Buffer()
 template<typename Iter, typename IterEnd, typename BufferFunc, typename Func>
 void finishIterInParallelWithPerThreadBuffer(Iter iter, IterEnd iterEnd, BufferFunc bufferProducer, Func funcToRun) {
+#ifndef NO_MULTITHREAD
 	unsigned int processorCount = std::thread::hardware_concurrency();
 	if(processorCount > 1) {
 		std::vector<std::thread> workers(processorCount - 1);
@@ -88,7 +92,9 @@ void finishIterInParallelWithPerThreadBuffer(Iter iter, IterEnd iterEnd, BufferF
 		for(std::thread& worker : workers) {
 			worker.join();
 		}
-	} else {
+	} else
+#endif
+	{
 		auto buffer = bufferProducer();
 		for(; iter != iterEnd; ++iter) {
 			funcToRun(*iter, buffer);
