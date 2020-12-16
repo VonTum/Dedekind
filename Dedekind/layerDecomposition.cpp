@@ -73,7 +73,7 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 			}
 		});
 #ifndef NDEBUG
-		for(const auto& item : equivalenceClasses[groupSize - 1]) {
+		for(const auto& item : subSizeMaps[groupSize - 1]) {
 			assert(item.value.extendedClasses.size() >= 1);
 		}
 #endif

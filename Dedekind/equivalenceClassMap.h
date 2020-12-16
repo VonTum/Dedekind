@@ -233,20 +233,23 @@ struct BakedEquivalenceClass : public Value {
 template<typename V>
 class BakedEquivalenceClassMap {
 public:
-	HeapArray<BakedEquivalenceClass<V>> allClasses;
+	BakedEquivalenceClass<V>* allClasses;
+	size_t numberOfClasses;
 	BakedEquivalenceClass<V>** buckets;
 	size_t bucketCount;
 public:
 	BakedEquivalenceClassMap() = default;
-	BakedEquivalenceClassMap(size_t numberOfClasses, size_t bucketCount) :
-		allClasses(numberOfClasses),
+	BakedEquivalenceClassMap(BakedEquivalenceClass<V>* classesBuf, size_t numberOfClasses, size_t bucketCount) :
+		allClasses(classesBuf),
+		numberOfClasses(numberOfClasses),
 		buckets(new BakedEquivalenceClass<V>*[bucketCount+1]),
 		bucketCount(bucketCount) {
-		buckets[bucketCount] = allClasses.end();
+		buckets[bucketCount] = allClasses + numberOfClasses;
 	}
 
 	BakedEquivalenceClassMap(BakedEquivalenceClassMap&& other) noexcept : 
-		allClasses(std::move(other.allClasses)), 
+		allClasses(other.allClasses), 
+		numberOfClasses(other.numberOfClasses),
 		buckets(other.buckets), 
 		bucketCount(other.bucketCount) {
 
@@ -255,6 +258,7 @@ public:
 	}
 	BakedEquivalenceClassMap& operator=(BakedEquivalenceClassMap&& other) noexcept {
 		std::swap(this->allClasses, other.allClasses);
+		std::swap(this->numberOfClasses, other.numberOfClasses);
 		std::swap(this->buckets, other.buckets);
 		std::swap(this->bucketCount, other.bucketCount);
 	}
@@ -293,20 +297,20 @@ public:
 		assert(false); // Cannot happen, this should be a full decomposition of the entire layer
 	}
 
-	BakedEquivalenceClass<V>& operator[](size_t index) { return allClasses[index]; }
-	const BakedEquivalenceClass<V>& operator[](size_t index) const { return allClasses[index]; }
+	BakedEquivalenceClass<V>& operator[](size_t index) { assert(index >= 0 && index < numberOfClasses); return allClasses[index]; }
+	const BakedEquivalenceClass<V>& operator[](size_t index) const { assert(index >= 0 && index < numberOfClasses); return allClasses[index]; }
 
-	size_t size() const { return allClasses.size(); }
+	size_t size() const { return numberOfClasses; }
 
-	BakedEquivalenceClass<V>* begin() { return allClasses.begin(); }
-	const BakedEquivalenceClass<V>* begin() const { return allClasses.begin(); }
-	BakedEquivalenceClass<V>* end() { return allClasses.end(); }
-	const BakedEquivalenceClass<V>* end() const { return allClasses.end(); }
+	BakedEquivalenceClass<V>* begin() { return allClasses; }
+	const BakedEquivalenceClass<V>* begin() const { return allClasses; }
+	BakedEquivalenceClass<V>* end() { return allClasses + numberOfClasses; }
+	const BakedEquivalenceClass<V>* end() const { return allClasses + numberOfClasses; }
 
 	size_t indexOf(const BakedEquivalenceClass<V>& item) const {
-		return &item - allClasses.ptr();
+		return &item - allClasses;
 	}
 	size_t indexOf(const PreprocessedFunctionInputSet& item) const {
-		return &this->get(item) - allClasses.ptr();
+		return &this->get(item) - allClasses;
 	}
 };

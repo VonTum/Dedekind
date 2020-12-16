@@ -7,7 +7,7 @@
 #include <iostream>
 #include "toString.h"
 
-using AvailableChoices = SmallVector<EquivalenceClassIndex, MAX_PREPROCESSED+1>;
+using AvailableChoices = SmallVector<eqClassIndexInt, MAX_PREPROCESSED+1>;
 using AvailableChoiceFis = SmallVector<FunctionInputSet, MAX_PREPROCESSED+1>;
 
 struct EquivClassIndexCmp {
@@ -126,7 +126,7 @@ void IntervalSize::populate(DedekindDecomposition<IntervalSize>& decomp) {
 		LayerDecomposition<IntervalSize>& curLayer = decomp[curLayerIndex];
 		for(size_t setSize = 1; setSize <= curLayer.getNumberOfFunctionInputs(); setSize++) {
 			std::cout << "Assigning interval sizes of " << setSize << "/" << curLayer.getNumberOfFunctionInputs() << "\n";
-			iterCollectionInParallel(curLayer[setSize], [&](EqClass<IntervalSize>& curClass) {
+			iterCollectionInParallel(curLayer.subSizeMap(setSize), [&](EqClass<IntervalSize>& curClass) {
 				curClass.intervalSizeToBottom = computeIntervalSizeToBottom(decomp, curLayerIndex, curClass, memoMap) + 1;
 			});
 		}

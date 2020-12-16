@@ -1,28 +1,10 @@
 
 #include <iostream>
-#include <cassert>
-#include <vector>
-#include <cstdint>
-#include <cstddef>
-#include <algorithm>
-
-#include "functionInput.h"
-#include "functionInputSet.h"
-#include "equivalenceClass.h"
-#include "equivalenceClassMap.h"
-#include "layerDecomposition.h"
 #include "dedekindDecomposition.h"
 #include "valuedDecomposition.h"
-#include "layerStack.h"
 #include "toString.h"
 
 #include "timeTracker.h"
-#include "codeGen.h"
-
-#include "parallelIter.h"
-
-#include <mutex>
-#include <atomic>
 
 /*
 Correct numbers
@@ -47,6 +29,5 @@ int main() {
 	//std::cout << "Decomposition:\n" << fullDecomposition << "\n";
 
 	std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.getDedekind() << std::endl;
-
 	return 0;
 }

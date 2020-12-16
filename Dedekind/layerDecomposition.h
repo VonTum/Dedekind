@@ -15,39 +15,22 @@ typedef int64_t bigInt;
 typedef bigInt countInt;
 typedef bigInt valueInt;
 
-struct EquivalenceClassIndex {
-	int size : 8;
-	int indexInSubLayer : 24;
-	EquivalenceClassIndex() : size(-1), indexInSubLayer(-1) {}
-	EquivalenceClassIndex(size_t size, size_t indexInSubLayer) : size(int(size)), indexInSubLayer(int(indexInSubLayer)) {
-		assert(indexInSubLayer >= 0 && indexInSubLayer < (1 << 24));
-		assert(size >= 0 && size < 256);
-	}
-};
 
-inline bool operator==(const EquivalenceClassIndex& a, const EquivalenceClassIndex& b) {
-	return a.size == b.size && a.indexInSubLayer == b.indexInSubLayer;
-}
-inline bool operator!=(const EquivalenceClassIndex& a, const EquivalenceClassIndex& b) {
-	return a.size != b.size || a.indexInSubLayer != b.indexInSubLayer;
-}
-inline bool operator<(const EquivalenceClassIndex& a, const EquivalenceClassIndex& b) {
-	if(a.size != b.size) {
-		return a.size < b.size;
-	} else {
-		return a.indexInSubLayer < b.indexInSubLayer;
-	}
-}
-inline bool operator>(const EquivalenceClassIndex& a, const EquivalenceClassIndex& b) {
-	return b < a;
-}
-inline bool operator>=(const EquivalenceClassIndex& a, const EquivalenceClassIndex& b) {
-	return !(a < b);
-}
-inline bool operator<=(const EquivalenceClassIndex& a, const EquivalenceClassIndex& b) {
-	return !(b < a);
-}
 
+/*
+	Layer Sizes for Dedekind 7:
+
+	2        (1,1)
+	8        (1,1,1,1,1,1,1,1)
+	1044     (1,1,2,5,10,21,41,65,97,131,148,148,131,97,65,41,21,10,5,2,1,1)
+	7013320  (1,1,3,10,38,137,509,1760,5557,15709,39433,87659,172933,303277,473827,660950,824410,920446,920446,824410,660950,473827,303277,172933,87659,39433,15709,5557,1760,509,137,38,10,3,1,1)
+	7013320  (1,1,3,10,38,137,509,1760,5557,15709,39433,87659,172933,303277,473827,660950,824410,920446,920446,824410,660950,473827,303277,172933,87659,39433,15709,5557,1760,509,137,38,10,3,1,1)
+	1044     (1,1,2,5,10,21,41,65,97,131,148,148,131,97,65,41,21,10,5,2,1,1)
+	8        (1,1,1,1,1,1,1,1)
+	2        (1,1)
+*/
+typedef int32_t eqClassIndexInt;
+typedef int32_t inverseIndexInt;
 
 struct NextClass {
 	int nodeIndex : 24;
@@ -63,9 +46,9 @@ template<typename Value>
 struct EquivalenceClassInfo : public Value {
 	NextClass* nextClasses;
 	int numberOfNextClasses;
-	int inverse;
-	EquivalenceClassIndex minimalForcedOnBelow;
-	EquivalenceClassIndex minimalForcedOffAbove;
+	inverseIndexInt inverse; // 20 bits
+	eqClassIndexInt minimalForcedOnBelow; // 23 bits
+	eqClassIndexInt minimalForcedOffAbove; // 23 bits
 
 	IteratorFactory<NextClass*> iterNextClasses() {
 		return IteratorFactory<NextClass*>(nextClasses, nextClasses + numberOfNextClasses);
@@ -74,7 +57,6 @@ struct EquivalenceClassInfo : public Value {
 		return IteratorFactory<const NextClass*>(nextClasses, nextClasses + numberOfNextClasses);
 	}
 };
-
 
 struct TempEquivClassInfo {
 	struct AdjacentClass {
@@ -98,12 +80,13 @@ struct TestClassThing {};
 */
 template<typename ExtraInfo>
 class LayerDecomposition {
-	std::vector<BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>> equivalenceClasses;
+	HeapArray<BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>> eqClassBuf;
+	std::vector<BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>> subSizeMaps;
 public:
 
 	LayerDecomposition() = default;
 
-	LayerDecomposition(const FullLayer& layer) : equivalenceClasses(layer.size() + 1) {
+	LayerDecomposition(const FullLayer& layer) : subSizeMaps(layer.size() + 1) {
 
 		std::cout << "Creating Layer decomposition for layer size " << layer.size() << "\n";
 
@@ -121,18 +104,31 @@ public:
 		}
 #endif
 
+		size_t totalNumClasses = 0;
+		for(size_t i = 0; i < layer.size() + 1; i++) {
+			const EquivalenceClassMap<TempEquivClassInfo>& extracting = existingDecomp[i];
+			totalNumClasses += extracting.size();
+		}
+		std::cout << "Baking: Total number of EqClasses: " << totalNumClasses << "\n"; 
+
+		new(&this->eqClassBuf) HeapArray<BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>>(totalNumClasses);
 		std::cout << "Baking: copying over\n";
+
+		BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>* curClassBufIndex = this->eqClassBuf.ptr();
 
 		// convert to Baked map
 		size_t totalConnectionCount = 0; // used for finding the size of the final array which will contain the connections between EquivalenceClasses
 		for(size_t i = 0; i < layer.size() + 1; i++) {
 			EquivalenceClassMap<TempEquivClassInfo>& extracting = existingDecomp[i];
-			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& newMap = this->equivalenceClasses[i];
-			new(&newMap) BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>(extracting.size(), extracting.buckets);
+			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& newMap = this->subSizeMaps[i];
+			
+			new(&newMap) BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>(curClassBufIndex, extracting.size(), extracting.buckets);
+			curClassBufIndex += extracting.size();
+
 
 			size_t curIndex = 0;
 			for(size_t curBucket = 0; curBucket < extracting.buckets; curBucket++) {
-				newMap.buckets[curBucket] = newMap.allClasses.ptr() + curIndex;
+				newMap.buckets[curBucket] = newMap.allClasses + curIndex;
 				for(EquivalenceClassMap<TempEquivClassInfo>::MapNode* cur = extracting.hashTable[curBucket]; cur != nullptr; cur = cur->nextNode) {
 					TempEquivClassInfo& oldInfo = cur->item.value;
 					new(&newMap[curIndex].eqClass) EquivalenceClass(std::move(cur->item.equivClass));
@@ -142,23 +138,24 @@ public:
 				}
 			}
 		}
+		assert(curClassBufIndex == this->eqClassBuf.end());
 
 		std::cout << "Baking: constructing extended lists\n";
 
 		NextClass* nextClassBuf = new NextClass[totalConnectionCount];
-		NextClass* curBufIndex = nextClassBuf;
+		NextClass* curNextBufIndex = nextClassBuf;
 		for(size_t i = 0; i < layer.size() + 1; i++) {
 			EquivalenceClassMap<TempEquivClassInfo>& extracting = existingDecomp[i];
-			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& newMap = this->equivalenceClasses[i];
+			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& newMap = this->subSizeMaps[i];
 
 			size_t curIndex = 0;
 			for(size_t curBucket = 0; curBucket < extracting.buckets; curBucket++) {
 				for(EquivalenceClassMap<TempEquivClassInfo>::MapNode* cur = extracting.hashTable[curBucket]; cur != nullptr; cur = cur->nextNode) {
 					TempEquivClassInfo& oldInfo = cur->item.value;
 					BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl = newMap[curIndex];
-					cl.nextClasses = curBufIndex;
+					cl.nextClasses = curNextBufIndex;
 					cl.numberOfNextClasses = oldInfo.extendedClasses.size();
-					curBufIndex += oldInfo.extendedClasses.size();
+					curNextBufIndex += oldInfo.extendedClasses.size();
 					for(size_t j = 0; j < oldInfo.extendedClasses.size(); j++) {
 						NextClass newItem(oldInfo.extendedClasses[j].node->value.indexInBaked, oldInfo.extendedClasses[j].formationCount);
 						cl.nextClasses[j] = newItem;
@@ -167,20 +164,20 @@ public:
 				}
 			}
 		}
-		assert(curBufIndex == nextClassBuf + totalConnectionCount);
+		assert(curNextBufIndex == nextClassBuf + totalConnectionCount);
 
 		std::cout << "Baking: finding inverses\n";
 		for(size_t i = 0; i < layer.size() + 1; i++) {
-			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& inverseMap = this->equivalenceClasses[layer.size() - i];
-			iterCollectionInParallel(this->equivalenceClasses[i], [&inverseMap, &layer](BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& curClass) {
+			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& inverseMap = this->subSizeMaps[layer.size() - i];
+			iterCollectionInParallel(this->subSizeMaps[i], [&inverseMap, &layer](BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& curClass) {
 				PreprocessedFunctionInputSet invPrep = preprocess(invert(curClass.eqClass.functionInputSet, layer));
 				curClass.inverse = inverseMap.indexOf(invPrep);
 			});
 		}
 #ifndef NDEBUG
 		for(size_t i = 0; i < layer.size() + 1; i++) {
-			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& curMap = this->equivalenceClasses[i];
-			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& inverseMap = this->equivalenceClasses[layer.size() - i];
+			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& curMap = this->subSizeMaps[i];
+			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& inverseMap = this->subSizeMaps[layer.size() - i];
 			for(int i = 0; i < curMap.size(); i++) {
 				assert(inverseMap[curMap[i].inverse].inverse == i);
 			}
@@ -198,51 +195,47 @@ public:
 	LayerDecomposition(const LayerDecomposition&) = delete;
 	LayerDecomposition& operator=(const LayerDecomposition&) = delete;
 
-	inline const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& operator[](size_t i) const {
-		return equivalenceClasses[i];
+	inline const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& subSizeMap(size_t i) const {
+		return subSizeMaps[i];
 	}
-	inline BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& operator[](size_t i) {
-		return equivalenceClasses[i];
+	inline BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& subSizeMap(size_t i) {
+		return subSizeMaps[i];
 	}
-	inline BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& operator[](EquivalenceClassIndex index) {
-		BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& map = equivalenceClasses[index.size];
-		return map[index.indexInSubLayer];
+	inline BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& operator[](eqClassIndexInt index) {
+		return eqClassBuf[index];
 	}
-	inline const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& operator[](EquivalenceClassIndex index) const {
-		const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& map = equivalenceClasses[index.size];
-		return map[index.indexInSubLayer];
+	inline const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& operator[](eqClassIndexInt index) const {
+		return eqClassBuf[index];
 	}
 
-	inline auto begin() { return equivalenceClasses.begin(); }
-	inline auto begin() const { return equivalenceClasses.begin(); }
-	inline auto end() { return equivalenceClasses.end(); }
-	inline auto end() const { return equivalenceClasses.end(); }
+	inline auto begin() { return subSizeMaps.begin(); }
+	inline auto begin() const { return subSizeMaps.begin(); }
+	inline auto end() { return subSizeMaps.end(); }
+	inline auto end() const { return subSizeMaps.end(); }
 
-	inline BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& empty() { assert(equivalenceClasses.front().size() == 1); return equivalenceClasses.front()[0]; }
-	inline const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& empty() const { assert(equivalenceClasses.front().size() == 1); return equivalenceClasses.front()[0]; }
-	inline BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& full() { assert(equivalenceClasses.back().size() == 1); return equivalenceClasses.back()[0]; }
-	inline const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& full() const { assert(equivalenceClasses.back().size() == 1); return equivalenceClasses.back()[0]; }
+	inline BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& empty() { assert(subSizeMaps.front().size() == 1); return subSizeMaps.front()[0]; }
+	inline const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& empty() const { assert(subSizeMaps.front().size() == 1); return subSizeMaps.front()[0]; }
+	inline BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& full() { assert(subSizeMaps.back().size() == 1); return subSizeMaps.back()[0]; }
+	inline const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& full() const { assert(subSizeMaps.back().size() == 1); return subSizeMaps.back()[0]; }
 
-	inline size_t getNumberOfFunctionInputs() const { return equivalenceClasses.size() - 1; }
+	inline size_t getNumberOfFunctionInputs() const { return subSizeMaps.size() - 1; }
 
-	inline EquivalenceClassIndex indexOf(const PreprocessedFunctionInputSet& prep) const {
+	inline eqClassIndexInt indexOf(const PreprocessedFunctionInputSet& prep) const {
 		size_t subLayer = prep.functionInputSet.size();
-		size_t indexInSubLayer = equivalenceClasses[subLayer].indexOf(prep);
-
-		return EquivalenceClassIndex(subLayer, indexInSubLayer);
+		return &subSizeMaps[subLayer].get(prep) - eqClassBuf.ptr();
 	}
 
 	inline BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& inverseOf(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& eq) {
 		int sizeOfInverse = this->getNumberOfFunctionInputs() - eq.eqClass.size();
-		return this->equivalenceClasses[sizeOfInverse][eq.inverse];
+		return this->subSizeMaps[sizeOfInverse][eq.inverse];
 	}
 	inline const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& inverseOf(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& eq) const {
 		int sizeOfInverse = this->getNumberOfFunctionInputs() - eq.eqClass.size();
-		return this->equivalenceClasses[sizeOfInverse][eq.inverse];
+		return this->subSizeMaps[sizeOfInverse][eq.inverse];
 	}
 
 	size_t getMaxWidth() const {
-		const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& biggestMap = this->equivalenceClasses[this->equivalenceClasses.size() / 2];
+		const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& biggestMap = this->subSizeMaps[this->subSizeMaps.size() / 2];
 		return biggestMap.size();
 	}
 
@@ -281,8 +274,8 @@ public:
 		*/
 		int numberOfDuplicateChoices = 1;
 
-		for(int curSize = sizeOfStartingNode; curSize < this->equivalenceClasses.size(); curSize++) {
-			const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& curMap = this->equivalenceClasses[curSize];
+		for(int curSize = sizeOfStartingNode; curSize < this->subSizeMaps.size(); curSize++) {
+			const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& curMap = this->subSizeMaps[curSize];
 			for(int item : buf.usedCurClasses) {
 				const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& currentlyPropagating = curMap[item];
 
@@ -299,7 +292,7 @@ public:
 			// run function on every count that's been found
 			for(int nextClass : buf.usedNextClasses) {
 				buf.occurencesOfNextClasses[nextClass] /= numberOfDuplicateChoices;
-				func(this->equivalenceClasses[curSize + 1][nextClass], buf.occurencesOfNextClasses[nextClass]);
+				func(this->subSizeMaps[curSize + 1][nextClass], buf.occurencesOfNextClasses[nextClass]);
 			}
 
 			// clean up and swap for next iteration
@@ -327,7 +320,7 @@ public:
 	template<typename Func>
 	void forEachSuperClassOfClass(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& node, Func func) const {
 		int curSize = node.eqClass.size();
-		forEachSuperClassOfClass(curSize, this->equivalenceClasses[curSize].indexOf(node), std::move(func));
+		forEachSuperClassOfClass(curSize, this->subSizeMaps[curSize].indexOf(node), std::move(func));
 	}
 
 	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
@@ -341,7 +334,7 @@ public:
 	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
 	template<typename Func>
 	void forEachSubClassOfClass(int sizeOfStartingNode, int indexOfStartingNode, Func func) const {
-		forEachSubClassOfClass(this->equivalenceClasses[sizeOfStartingNode][indexOfStartingNode], std::move(func));
+		forEachSubClassOfClass(this->subSizeMaps[sizeOfStartingNode][indexOfStartingNode], std::move(func));
 	}
 
 
@@ -350,7 +343,7 @@ public:
 	template<typename Func>
 	void forEachSuperClassOfClass(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& node, ForEachBuffer& buf, Func func) const {
 		int curSize = node.eqClass.size();
-		forEachSuperClassOfClass(curSize, this->equivalenceClasses[curSize].indexOf(node), buf, std::move(func));
+		forEachSuperClassOfClass(curSize, this->subSizeMaps[curSize].indexOf(node), buf, std::move(func));
 	}
 
 	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
@@ -364,6 +357,6 @@ public:
 	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
 	template<typename Func>
 	void forEachSubClassOfClass(int sizeOfStartingNode, int indexOfStartingNode, ForEachBuffer& buf, Func func) const {
-		forEachSubClassOfClass(this->equivalenceClasses[sizeOfStartingNode][indexOfStartingNode], buf, std::move(func));
+		forEachSubClassOfClass(this->subSizeMaps[sizeOfStartingNode][indexOfStartingNode], buf, std::move(func));
 	}
 };

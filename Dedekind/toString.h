@@ -131,11 +131,6 @@ inline std::ostream& operator<<(std::ostream& os, const LayerStack& layers) {
 	return os;
 }
 
-inline std::ostream& operator<<(std::ostream& os, EquivalenceClassIndex idx) {
-	os << idx.size << '|' << idx.indexInSubLayer;
-	return os;
-}
-
 inline std::ostream& operator<<(std::ostream& os, NoExtraData) {
 	return os;
 }
@@ -172,7 +167,7 @@ template<typename ExtraInfo>
 inline std::ostream& operator<<(std::ostream& os, const LayerDecomposition<ExtraInfo>& d) {
 	for(size_t size = 0; size <= d.getNumberOfFunctionInputs(); size++) {
 		os << "    [" << size << "] ";
-		const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& subSizeMap = d[size];
+		const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& subSizeMap = d.subSizeMap(size);
 		for(size_t indexInSubSize = 0; indexInSubSize < subSizeMap.size(); indexInSubSize++) {
 			os << subSizeMap[indexInSubSize];
 			if(indexInSubSize < subSizeMap.size() - 1) os << ",  ";

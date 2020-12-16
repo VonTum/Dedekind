@@ -8,8 +8,8 @@
 
 
 static void assignInitialCounts(LayerDecomposition<ValueCounted>& initialLayer) {
-	(*initialLayer[0].begin()).count = 1;
-	(*initialLayer[1].begin()).count = 1;
+	(*initialLayer.subSizeMap(0).begin()).count = 1;
+	(*initialLayer.subSizeMap(1).begin()).count = 1;
 }
 
 static void computeLayerCounts(LayerDecomposition<ValueCounted>& curLayer) {
@@ -18,22 +18,22 @@ static void computeLayerCounts(LayerDecomposition<ValueCounted>& curLayer) {
 			classOfCurLayer.count = 0;
 		}
 	}
-	(*curLayer[0].begin()).count = 1;
+	(*curLayer.subSizeMap(0).begin()).count = 1;
 	for(size_t curSize = 0; curSize < curLayer.getNumberOfFunctionInputs(); curSize++) {
-		for(const BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& classOfCurSize : curLayer[curSize]) {
+		for(const BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& classOfCurSize : curLayer.subSizeMap(curSize)) {
 			for(const NextClass& nx : classOfCurSize.iterNextClasses()) {
-				curLayer[curSize + 1][nx.nodeIndex].count += classOfCurSize.count * nx.formationCount;
+				curLayer.subSizeMap(curSize + 1)[nx.nodeIndex].count += classOfCurSize.count * nx.formationCount;
 			}
 		}
-		for(BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& classOfNextSize : curLayer[curSize + 1]) {
+		for(BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& classOfNextSize : curLayer.subSizeMap(curSize + 1)) {
 			classOfNextSize.count /= curSize + 1;
 		}
 	}
 }
 
 static void assignInitialValues(LayerDecomposition<ValueCounted>& initialLayer) {
-	(*initialLayer[0].begin()).value = 1;
-	(*initialLayer[1].begin()).value = 1;
+	(*initialLayer.subSizeMap(0).begin()).value = 1;
+	(*initialLayer.subSizeMap(1).begin()).value = 1;
 }
 
 static valueInt getTotalValueForLayer(const LayerDecomposition<ValueCounted>& eqClassesOfLayer) {
@@ -75,7 +75,7 @@ static void computeNextLayerValues(const LayerDecomposition<ValueCounted>& prevL
 	// for all other group sizes between the empty set and the full set
 	for(size_t setSize = 1; setSize < curLayer.getNumberOfFunctionInputs(); setSize++) {
 		std::cout << "Assigning values of " << setSize << "/" << curLayer.getNumberOfFunctionInputs() << "\n";
-		iterCollectionInParallelWithPerThreadBuffer(curLayer[setSize], [&prevLayer]() {return prevLayer.makeForEachBuffer(); },
+		iterCollectionInParallelWithPerThreadBuffer(curLayer.subSizeMap(setSize), [&prevLayer]() {return prevLayer.makeForEachBuffer(); },
 			[&prevLayer](BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& curClass, LayerDecomposition<ValueCounted>::ForEachBuffer& buf) {
 				const BakedEquivalenceClass<EquivalenceClassInfo<ValueCounted>>& aboveItem = prevLayer[curClass.minimalForcedOffAbove];
 
