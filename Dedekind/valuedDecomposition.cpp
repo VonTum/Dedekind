@@ -90,9 +90,7 @@ static void computeNextLayerValues(const LayerDecomposition<ValueCounted>& prevL
 	}
 }
 
-
-
-void assignValues(DedekindDecomposition<ValueCounted>& decomp) {
+void ValueCounted::populate(DedekindDecomposition<ValueCounted>& decomp) {
 	std::cout << "Assigning initial values for layer " << decomp.numLayers() - 1 << "\n";
 	assignInitialCounts(decomp[decomp.numLayers() - 1]);
 	assignInitialValues(decomp[decomp.numLayers() - 1]);
@@ -102,4 +100,7 @@ void assignValues(DedekindDecomposition<ValueCounted>& decomp) {
 		computeLayerCounts(decomp[i - 1]);
 		computeNextLayerValues(decomp[i], decomp[i - 1]);
 	}
+}
+valueInt ValueCounted::getDedekind(const DedekindDecomposition<ValueCounted>& decomp) {
+	return decomp.fullBottom().value + 1;
 }

@@ -5,9 +5,9 @@
 #include "layerDecomposition.h"
 #include "layerStack.h"
 
-struct NoExtraInfo {};
+struct NoExtraData;
 
-template<typename ExtraData = NoExtraInfo>
+template<typename ExtraData = NoExtraData>
 class DedekindDecomposition {
 	std::vector<LayerDecomposition<ExtraData>> layers;
 	LayerStack layerStack;
@@ -48,6 +48,9 @@ public:
 				});
 			}
 		}
+
+		std::cout << "Populating...\n";
+		ExtraData::populate(*this);
 	}
 
 	inline size_t numLayers() const { return layers.size(); }
@@ -62,4 +65,14 @@ public:
 	const BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& fullBottom() const { return layers.front().full(); }
 	const BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& emptyTop() const { return layers.back().empty(); }
 	const BakedEquivalenceClass<EquivalenceClassInfo<ExtraData>>& fullTop() const { return layers.back().full(); }
+
+	valueInt getDedekind() const {
+		return ExtraData::getDedekind(*this);
+	}
+};
+
+struct NoExtraData {
+	// for ExtraInfo implementations
+	static void populate(DedekindDecomposition<NoExtraData>& decomp) {}
+	static valueInt getDedekind(const DedekindDecomposition<NoExtraData>& decomp) { throw "Not implemented!"; }
 };

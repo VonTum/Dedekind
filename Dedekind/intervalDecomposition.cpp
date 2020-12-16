@@ -119,7 +119,7 @@ static valueInt computeIntervalSizeToBottom(const DedekindDecomposition<Interval
 	return getRecursiveChoices(decomp, forcedInPrevLayers, memoMap);
 }
 
-void assignIntervalSizes(DedekindDecomposition<IntervalSize>& decomp) {
+void IntervalSize::populate(DedekindDecomposition<IntervalSize>& decomp) {
 	MemoizedRecursiveChoices memoMap;
 	decomp[0].full().intervalSizeToBottom = 2;
 	for(size_t curLayerIndex = 1; curLayerIndex < decomp.numLayers(); curLayerIndex++) {
@@ -131,4 +131,8 @@ void assignIntervalSizes(DedekindDecomposition<IntervalSize>& decomp) {
 			});
 		}
 	}
+}
+
+valueInt IntervalSize::getDedekind(const DedekindDecomposition<IntervalSize>& decomp) {
+	return decomp.fullTop().intervalSizeToBottom;
 }

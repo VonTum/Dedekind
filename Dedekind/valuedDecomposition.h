@@ -6,6 +6,7 @@
 struct ValueCounted {
 	countInt count;
 	valueInt value;
-};
 
-void assignValues(DedekindDecomposition<ValueCounted>& decomp);
+	static void populate(DedekindDecomposition<ValueCounted>& decomp);
+	static valueInt getDedekind(const DedekindDecomposition<ValueCounted>& decomp);
+};

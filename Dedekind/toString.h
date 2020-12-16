@@ -136,7 +136,7 @@ inline std::ostream& operator<<(std::ostream& os, EquivalenceClassIndex idx) {
 	return os;
 }
 
-inline std::ostream& operator<<(std::ostream& os, NoExtraInfo) {
+inline std::ostream& operator<<(std::ostream& os, NoExtraData) {
 	return os;
 }
 

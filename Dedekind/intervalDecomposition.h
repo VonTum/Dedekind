@@ -4,6 +4,7 @@
 
 struct IntervalSize {
 	valueInt intervalSizeToBottom;
-};
 
-void assignIntervalSizes(DedekindDecomposition<IntervalSize>& decomp);
+	static void populate(DedekindDecomposition<IntervalSize>& decomp);
+	static valueInt getDedekind(const DedekindDecomposition<IntervalSize>& decomp);
+};
