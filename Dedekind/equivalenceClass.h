@@ -70,6 +70,7 @@ struct PreprocessedFunctionInputSet {
 	PreprocessedFunctionInputSet extendedBy(FunctionInput inp) const;
 
 	static PreprocessedFunctionInputSet emptyPreprocessedFunctionInputSet;
+	static PreprocessedFunctionInputSet bottomPreprocessedFunctionInputSet; // only has one FunctionInput: {/}
 
 	uint64_t hash() const;
 };
@@ -121,4 +122,5 @@ struct EquivalenceClass {
 	FunctionInputSet asFunctionInputSet() const;
 
 	static EquivalenceClass emptyEquivalenceClass;
+	static EquivalenceClass bottomEquivalenceClass;
 };

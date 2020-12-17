@@ -7,6 +7,8 @@
 PreprocessedFunctionInputSet PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{}, PreprocessSmallVector<InitialVariableObservations>{}, PreprocessSmallVector<CountedGroup<VariableCoOccurence>>{}, 0};
 EquivalenceClass EquivalenceClass::emptyEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet);
 
+PreprocessedFunctionInputSet PreprocessedFunctionInputSet::bottomPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{FunctionInput{0}}, PreprocessSmallVector<InitialVariableObservations>{}, PreprocessSmallVector<CountedGroup<VariableCoOccurence>>{}, 0};
+EquivalenceClass EquivalenceClass::bottomEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::bottomPreprocessedFunctionInputSet);
 
 // TODO candidate for optimization
 PreprocessedFunctionInputSet PreprocessedFunctionInputSet::extendedBy(FunctionInput inp) const {
@@ -237,8 +239,10 @@ static PreprocessSmallVector<T> sortSwizzle(const PreprocessSmallVector<T>& coll
 }
 
 PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet) {
-	if(inputSet.size() == 0 || inputSet[0].empty()) {
+	if(inputSet.size() == 0) {
 		return PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet;
+	} else if(inputSet[0].empty()) {
+		return PreprocessedFunctionInputSet::bottomPreprocessedFunctionInputSet;
 	}
 	int variableCount = preprocessRemoveUnusedVariables(inputSet);
 

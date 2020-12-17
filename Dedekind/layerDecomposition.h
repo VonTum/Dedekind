@@ -10,7 +10,6 @@
 #include <vector>
 #include <assert.h>
 
-
 typedef int64_t bigInt;
 typedef bigInt countInt;
 typedef bigInt valueInt;

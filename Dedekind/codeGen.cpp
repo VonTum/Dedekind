@@ -179,5 +179,22 @@ void genCodeForAllPermut() {
 	}
 }
 
+void genCodeForNatvis() {
+	std::ofstream os("natvisCode.txt");
 
+	int N = 50;
+	/*	<DisplayString Condition = "n==0">{ {}}< / DisplayString>
+		<DisplayString Condition = "n==1">{ { { data[0] } }}< / DisplayString>
+		<DisplayString Condition = "n==2">{ { { data[0] }, {data[1]} }}< / DisplayString>
+		*/
+	os << "<DisplayString Condition=\"sz==0\">{{}}</DisplayString>\n";
+	for(int row = 1; row < N; row++) {
+		os << "<DisplayString Condition=\"sz==" << row << "\">{{{buf[0]}";
+
+		for(int col = 1; col < row; col++) {
+			os << ", {buf[" << col << "]}";
+		}
+		os << "}}</DisplayString>\n";
+	}
+}
 

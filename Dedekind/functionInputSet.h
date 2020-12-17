@@ -4,10 +4,11 @@
 
 #include "functionInput.h"
 #include "set.h"
-#include "aligned_set.h"
 #include "collectionOperations.h"
+#include "smallVector.h"
 
-typedef aligned_set<FunctionInput, 32> FunctionInputSet;
+//static_assert(MAX_PREPROCESSED == 7, "This size is the largest possible layer. ");
+typedef SmallVector<FunctionInput, 35> FunctionInputSet;
 
 inline FunctionInput span(const FunctionInputSet& inputSet) {
 	FunctionInput result{0};

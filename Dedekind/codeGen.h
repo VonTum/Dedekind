@@ -2,3 +2,4 @@
 
 void genCodeForEquivClass();
 void genCodeForAllPermut();
+void genCodeForNatvis();
