@@ -5,6 +5,7 @@
 #include "toString.h"
 
 #include "timeTracker.h"
+#include "codeGen.h"
 
 /*
 Correct numbers
@@ -21,9 +22,12 @@ Correct numbers
 */
 
 int main() {
+	genGraphVisCode(3);
+	return 0;
+
 	std::cout << "Detected " << std::thread::hardware_concurrency() << " available threads!\n";
 	TimeTracker timer;
-	int dedekindOrder = 6;
+	int dedekindOrder = 7;
 	DedekindDecomposition<IntervalSize> fullDecomposition(dedekindOrder);
 	
 	//std::cout << "Decomposition:\n" << fullDecomposition << "\n";

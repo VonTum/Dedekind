@@ -112,7 +112,7 @@ inline bool operator==(FunctionInput a, FunctionInput b) {
 inline bool operator!=(FunctionInput a, FunctionInput b) {
 	return a.inputBits != b.inputBits;
 }
-// returns true if all true inputs in a are also true in b
+// returns true if all true inputs in a are also true in b (a <= b)
 inline bool isSubSet(FunctionInput a, FunctionInput b) {
 	return (a.inputBits & b.inputBits) == a.inputBits;
 }

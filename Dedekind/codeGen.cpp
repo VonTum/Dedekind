@@ -2,6 +2,8 @@
 #include "codeGen.h"
 
 #include "collectionOperations.h"
+#include "layerStack.h"
+#include "toString.h"
 
 #include <fstream>
 #include <algorithm>
@@ -197,4 +199,22 @@ void genCodeForNatvis() {
 		os << "}}</DisplayString>\n";
 	}
 }
+
+void genGraphVisCode(size_t numLayers) {
+	LayerStack layerStack = generateLayers(numLayers);
+	std::ofstream os("graphVisCode.txt");
+	for(size_t l = layerStack.layers.size() - 1; l > 0; l--) {
+		const FullLayer& layerAbove = layerStack.layers[l];
+		const FullLayer& layerBelow = layerStack.layers[l - 1];
+
+		for(FunctionInput fi : layerAbove) {
+			for(FunctionInput fiB : layerBelow) {
+				if(isSubSet(fiB, fi)) {
+					os << fi << "->" << fiB << "\n";
+				}
+			}
+		}
+	}
+}
+
 

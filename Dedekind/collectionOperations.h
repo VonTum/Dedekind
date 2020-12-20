@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <type_traits>
+#include <cassert>
 
 template<typename Collection, typename Func>
 void forEachSubgroupRecurse(const Collection& collection, const Func& func, Collection& output, size_t startFrom, size_t indexInOutput) {
@@ -69,7 +70,7 @@ inline void forEachSplit(const Collection& collection, const Func& func) {
 }
 
 
-// returns true iff all items in a also appear in b, eg a is a subset of b
+// returns true iff all items in a also appear in b, eg a is a subset of b (a <= b)
 template<typename SubSetIter, typename SetIter>
 bool isSubSet(SubSetIter aIter, SubSetIter aEnd, SetIter bStart, SetIter bEnd) {
 	while(aIter != aEnd) {
