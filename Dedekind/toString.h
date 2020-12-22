@@ -3,6 +3,8 @@
 #include <vector>
 #include <ostream>
 #include "functionInput.h"
+#include "functionInputSet.h"
+#include "functionInputBitSet.h"
 #include "equivalenceClass.h"
 #include "equivalenceClassMap.h"
 #include "layerStack.h"
@@ -90,6 +92,23 @@ inline std::ostream& operator<<(std::ostream& os, FunctionInput f) {
 			curIndex++;
 		}
 	}
+	return os;
+}
+
+template<int Variables>
+inline std::ostream& operator<<(std::ostream& os, const FunctionInputBitSet<Variables>& fis) {
+	os << '{';
+	bool isFirst = true;
+	for(unsigned int i = 0; i < fis.size(); i++) {
+		if(fis.contains(FunctionInput{i})) {
+			if(!isFirst) {
+				os << ',';
+			}
+			os << FunctionInput{i};
+			isFirst = false;
+		}
+	}
+	os << '}';
 	return os;
 }
 

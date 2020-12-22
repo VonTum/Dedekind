@@ -6,5 +6,5 @@ Debug/
 Dedekind/.gitattributes
 Dedekind/x86/
 Dedekind/x64/
-Release/
-Debug/
+x64/
+x86/

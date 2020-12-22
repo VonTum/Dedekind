@@ -11,6 +11,10 @@ Global
 		Debug|x86 = Debug|x86
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
+		Tests Debug|x64 = Tests Debug|x64
+		Tests Debug|x86 = Tests Debug|x86
+		Tests Release|x64 = Tests Release|x64
+		Tests Release|x86 = Tests Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{6BE56828-35B7-4941-8970-9EC0FEC407D9}.Debug|x64.ActiveCfg = Debug|x64
@@ -21,6 +25,14 @@ Global
 		{6BE56828-35B7-4941-8970-9EC0FEC407D9}.Release|x64.Build.0 = Release|x64
 		{6BE56828-35B7-4941-8970-9EC0FEC407D9}.Release|x86.ActiveCfg = Release|Win32
 		{6BE56828-35B7-4941-8970-9EC0FEC407D9}.Release|x86.Build.0 = Release|Win32
+		{6BE56828-35B7-4941-8970-9EC0FEC407D9}.Tests Debug|x64.ActiveCfg = Tests Debug|x64
+		{6BE56828-35B7-4941-8970-9EC0FEC407D9}.Tests Debug|x64.Build.0 = Tests Debug|x64
+		{6BE56828-35B7-4941-8970-9EC0FEC407D9}.Tests Debug|x86.ActiveCfg = Tests Debug|Win32
+		{6BE56828-35B7-4941-8970-9EC0FEC407D9}.Tests Debug|x86.Build.0 = Tests Debug|Win32
+		{6BE56828-35B7-4941-8970-9EC0FEC407D9}.Tests Release|x64.ActiveCfg = Tests Release|x64
+		{6BE56828-35B7-4941-8970-9EC0FEC407D9}.Tests Release|x64.Build.0 = Tests Release|x64
+		{6BE56828-35B7-4941-8970-9EC0FEC407D9}.Tests Release|x86.ActiveCfg = Tests Release|Win32
+		{6BE56828-35B7-4941-8970-9EC0FEC407D9}.Tests Release|x86.Build.0 = Tests Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
