@@ -43,5 +43,5 @@ struct SetResetTestBitAuxTester {
 };
 
 TEST_CASE(testSetResetTestBit) {
-	runFunctionRange<6, 9, SetResetTestBitAuxTester>();
+	runFunctionRange<1, 9, SetResetTestBitAuxTester>();
 }
