@@ -95,7 +95,7 @@ inline std::ostream& operator<<(std::ostream& os, FunctionInput f) {
 	return os;
 }
 
-template<int Variables>
+/*template<int Variables>
 inline std::ostream& operator<<(std::ostream& os, const FunctionInputBitSet<Variables>& fis) {
 	os << '{';
 	bool isFirst = true;
@@ -109,6 +109,22 @@ inline std::ostream& operator<<(std::ostream& os, const FunctionInputBitSet<Vari
 		}
 	}
 	os << '}';
+	return os;
+}*/
+
+template<int Variables>
+inline std::ostream& operator<<(std::ostream& os, const FunctionInputBitSet<Variables>& fis) {
+	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::size(); i++) {
+		os << fis.contains(FunctionInput{FunctionInputBitSet<Variables>::size() - i - 1}) ? '1' : '0';
+	}
+	return os;
+}
+
+template<>
+inline std::ostream& operator<<(std::ostream& os, const std::vector<bool>& fis) {
+	for(FunctionInput::underlyingType i = 0; i < fis.size(); i++) {
+		os << fis[fis.size() - i - 1] ? '1' : '0';
+	}
 	return os;
 }
 

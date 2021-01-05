@@ -23,17 +23,17 @@ Correct numbers
 
 #ifndef RUN_TESTS
 int main() {
-	genGraphVisCode(3);
-	return 0;
+	//genGraphVisCode(7);
+	//return 0;
 
 	std::cout << "Detected " << std::thread::hardware_concurrency() << " available threads!\n";
 	TimeTracker timer;
-	int dedekindOrder = 7;
+	int dedekindOrder = 6;
 	DedekindDecomposition<IntervalSize> fullDecomposition(dedekindOrder);
 	
 	//std::cout << "Decomposition:\n" << fullDecomposition << "\n";
 
-	std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.getDedekind() << std::endl;
-	return 0;
+	//std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.getDedekind() << std::endl;
+	//return 0;
 }
 #endif
