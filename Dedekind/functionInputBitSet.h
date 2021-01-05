@@ -44,6 +44,9 @@ public:
 		this->bitset ^= other.bitset;
 		return *this;
 	}
+	constexpr FunctionInputBitSet operator~() const {
+		return FunctionInputBitSet(~this->bitset);
+	}
 	constexpr FunctionInputBitSet& operator<<=(unsigned int shift) {
 		this->bitset <<= shift;
 		return *this;
@@ -51,6 +54,12 @@ public:
 	constexpr FunctionInputBitSet& operator>>=(unsigned int shift) {
 		this->bitset >>= shift;
 		return *this;
+	}
+	bool operator==(const FunctionInputBitSet& other) const {
+		return this->bitset == other.bitset;
+	}
+	bool operator!=(const FunctionInputBitSet& other) const {
+		return this->bitset != other.bitset;
 	}
 
 	static constexpr FunctionInputBitSet empty() {
@@ -120,12 +129,40 @@ public:
 		assert(!this->hasVariable(destination));
 
 		FunctionInputBitSet<Variables> originalMask = FunctionInputBitSet<Variables>::varMask(original);
-		FunctionInputBitSet<Variables> destinationMask = FunctionInputBitSet<Variables>::varMask(destination);
+		
+		// shift amount
+		// assuming source < destination (moving a lower variable to a higher spot)
+		// so for example, every source element will be 000s0000 -> 0d000000
+		// + 1<<d - 1<<s
 
-		FunctionInputBitSet<Variables> maskedOriginal = *this & originalMask;
-		FunctionInputBitSet<Variables> maskedDestination = *this & originalMask;
+		if(original < destination) {
+			unsigned int shift = (1 << destination) - (1 << original);
 
-		TODODODODO
+			return ((*this & originalMask) << shift) | (*this & ~originalMask);
+		} else {
+			unsigned int shift = (1 << original) - (1 << destination);
+
+			return ((*this & originalMask) >> shift) | (*this & ~originalMask);
+		}
+	}
+
+	FunctionInputBitSet<Variables> swapVars(unsigned int var1, unsigned int var2) const {
+		assert(!this->hasVariable(destination));
+
+		FunctionInputBitSet<Variables> mask1 = FunctionInputBitSet<Variables>::varMask(var1);
+		FunctionInputBitSet<Variables> mask2 = FunctionInputBitSet<Variables>::varMask(var2);
+
+		FunctionInputBitSet<Variables> stayingElems = *this & (~mask1 & ~mask2 | mask1 & mask2);
+
+		if(var1 < var2) {
+			unsigned int shift = (1 << var2) - (1 << var1);
+
+			return ((*this & mask1 & ~mask2) << shift) | ((*this & mask2 & ~mask1) >> shift) | stayingElems;
+		} else {
+			unsigned int shift = (1 << var1) - (1 << var2);
+
+			return ((*this & mask2 & ~mask1) << shift) | ((*this & mask1 & ~mask2) >> shift) | stayingElems;
+		}
 	}
 };
 

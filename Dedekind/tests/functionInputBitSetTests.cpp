@@ -65,7 +65,7 @@ static std::vector<bool> toVector(const FunctionInputBitSet<Variables>& fibs) {
 }
 
 template<int Variables>
-struct SetResetTestBitAuxTester {
+struct SetResetTest {
 	static void run() {
 		FunctionInputBitSet<Variables> fis = FunctionInputBitSet<Variables>::empty();
 		std::vector<bool> expectedState(fis.size(), false);
@@ -89,7 +89,7 @@ struct SetResetTestBitAuxTester {
 };
 
 template<int Variables>
-struct ShiftLeftTestBitAuxTester {
+struct ShiftLeftTest {
 	static void run() {
 		for(size_t iter = 0; iter < 1000; iter++) {
 			FunctionInputBitSet<Variables> fis = generateFibs<Variables>();
@@ -114,7 +114,7 @@ struct ShiftLeftTestBitAuxTester {
 };
 
 template<int Variables>
-struct ShiftRightTestBitAuxTester {
+struct ShiftRightTest {
 	static void run() {
 		for(size_t iter = 0; iter < 1000; iter++) {
 			FunctionInputBitSet<Variables> fis = generateFibs<Variables>();
@@ -139,7 +139,7 @@ struct ShiftRightTestBitAuxTester {
 };
 
 template<int Variables>
-struct VarMaskTestBitAuxTester {
+struct VarMaskTest {
 	static void run() {
 		for(unsigned int var = 0; var < Variables; var++) {
 			FunctionInputBitSet<Variables> result = FunctionInputBitSet<Variables>::varMask(var);
@@ -154,18 +154,113 @@ struct VarMaskTestBitAuxTester {
 	}
 };
 
+template<int Variables>
+struct MoveVariableTest {
+	static void run() {
+		std::vector<unsigned int> funcInputs;
+		funcInputs.reserve(1 << Variables);
+		for(unsigned int var1 = 0; var1 < Variables; var1++) {
+			for(unsigned int var2 = 0; var2 < Variables; var2++) {
+				FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
+
+				fibs &= ~FunctionInputBitSet<Variables>::varMask(var2);
+
+				logStream << "Moving " << var1 << " to " << var2 << " in " << fibs << "\n";
+
+
+				for(unsigned int i = 0; i < fibs.size(); i++) {
+					if(fibs.contains(FunctionInput{i})) {
+						funcInputs.push_back(i);
+					}
+				}
+
+
+				// do operation on both
+				FunctionInputBitSet<Variables> movedFibs = fibs.moveVariable(var1, var2);
+				for(unsigned int& item : funcInputs) {
+					if(item & (1 << var1)) {
+						item &= ~(1 << var1);
+						item |= 1 << var2;
+					}
+				}
+
+				FunctionInputBitSet<Variables> checkFibs;
+				for(unsigned int item : funcInputs) {
+					checkFibs.add(item);
+				}
+
+				ASSERT(movedFibs == checkFibs);
+
+				funcInputs.clear();
+			}
+		}
+	}
+};
+
+template<int Variables>
+struct SwapVariableTest {
+	static void run() {
+		std::vector<unsigned int> funcInputs;
+		funcInputs.reserve(1 << Variables);
+		for(unsigned int var1 = 0; var1 < Variables; var1++) {
+			for(unsigned int var2 = 0; var2 < Variables; var2++) {
+				FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
+
+				logStream << "Swapping " << var1 << " and " << var2 << " in " << fibs << "\n";
+
+
+				for(unsigned int i = 0; i < fibs.size(); i++) {
+					if(fibs.contains(FunctionInput{i})) {
+						funcInputs.push_back(i);
+					}
+				}
+
+
+				// do operation on both
+				FunctionInputBitSet<Variables> swappedFibs = fibs.swapVars(var1, var2);
+				for(unsigned int& item : funcInputs) {
+					bool isVar1Active = item & (1 << var1);
+					bool isVar2Active = item & (1 << var2);
+
+					item = item & ~(1 << var1) & ~(1 << var2);
+
+					if(isVar1Active) item |= (1 << var2);
+					if(isVar2Active) item |= (1 << var1);
+				}
+
+				FunctionInputBitSet<Variables> checkFibs;
+				for(unsigned int item : funcInputs) {
+					checkFibs.add(item);
+				}
+
+				ASSERT(swappedFibs == checkFibs);
+
+				funcInputs.clear();
+			}
+		}
+	}
+};
+
 TEST_CASE(testSetResetTestBit) {
-	runFunctionRange<1, 9, SetResetTestBitAuxTester>();
+	runFunctionRange<1, 9, SetResetTest>();
 }
 
 TEST_CASE(testShiftLeft) {
-	runFunctionRange<1, 9, ShiftLeftTestBitAuxTester>();
+	runFunctionRange<1, 9, ShiftLeftTest>();
 }
 
 TEST_CASE(testShiftRight) {
-	runFunctionRange<1, 9, ShiftRightTestBitAuxTester>();
+	runFunctionRange<1, 9, ShiftRightTest>();
 }
 
 TEST_CASE(testFullVar) {
-	runFunctionRange<1, 9, VarMaskTestBitAuxTester>();
+	runFunctionRange<1, 9, VarMaskTest>();
+}
+
+TEST_CASE(testMoveVar) {
+	runFunctionRange<1, 9, MoveVariableTest>();
+}
+
+TEST_CASE(testSwapVar) {
+	runFunctionRange<4, 9, SwapVariableTest>();
 }

@@ -68,7 +68,13 @@ public:
 		}
 		return *this;
 	}
-
+	constexpr BitSet operator~() const {
+		BitSet result;
+		for(size_t block = 0; block < BLOCK_COUNT; block++) {
+			result.data[block] = ~this->data[block];
+		}
+		return result;
+	}
 	constexpr BitSet& operator<<=(unsigned int shift) {
 		int blockOffset = shift >> 6;
 
@@ -115,6 +121,23 @@ public:
 		}
 
 		return *this;
+	}
+
+	constexpr bool operator==(const BitSet& other) const {
+		for(size_t block = 0; block < BLOCK_COUNT; block++) {
+			if(this->data[block] != other.data[block]) {
+				return false;
+			}
+		}
+		return true;
+	}
+	constexpr bool operator!=(const BitSet& other) const {
+		for(size_t block = 0; block < BLOCK_COUNT; block++) {
+			if(this->data[block] != other.data[block]) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	constexpr bool isEmpty() const {
@@ -188,7 +211,11 @@ public:
 		this->data ^= other.data;
 		return *this;
 	}
-
+	constexpr BitSet operator~() const {
+		BitSet result;
+		result.data = ~this->data;
+		return result;
+	}
 	constexpr BitSet& operator<<=(unsigned int shift) {
 		assert(shift < size());
 		this->data <<= shift;
@@ -198,6 +225,12 @@ public:
 		assert(shift < size());
 		this->data >>= shift;
 		return *this;
+	}
+	constexpr bool operator==(const BitSet& other) const {
+		return this->data == other.data;
+	}
+	constexpr bool operator!=(const BitSet& other) const {
+		return this->data != other.data;
 	}
 
 	constexpr bool isEmpty() const {
@@ -261,6 +294,11 @@ public:
 		this->data ^= other.data;
 		return *this;
 	}
+	constexpr BitSet operator~() const {
+		BitSet result;
+		result.data = ~this->data;
+		return result;
+	}
 
 	constexpr BitSet& operator<<=(unsigned int shift) {
 		assert(shift < size());
@@ -271,6 +309,12 @@ public:
 		assert(shift < size());
 		this->data >>= shift;
 		return *this;
+	}
+	constexpr bool operator==(const BitSet& other) const {
+		return this->data == other.data;
+	}
+	constexpr bool operator!=(const BitSet& other) const {
+		return this->data != other.data;
 	}
 
 	constexpr bool isEmpty() const {
@@ -334,7 +378,11 @@ public:
 		this->data ^= other.data;
 		return *this;
 	}
-
+	constexpr BitSet operator~() const {
+		BitSet result;
+		result.data = ~this->data;
+		return result;
+	}
 	constexpr BitSet& operator<<=(unsigned int shift) {
 		assert(shift < size());
 		this->data <<= shift;
@@ -344,6 +392,12 @@ public:
 		assert(shift < size());
 		this->data >>= shift;
 		return *this;
+	}
+	constexpr bool operator==(const BitSet& other) const {
+		return this->data == other.data;
+	}
+	constexpr bool operator!=(const BitSet& other) const {
+		return this->data != other.data;
 	}
 
 	constexpr bool isEmpty() const {
@@ -407,7 +461,11 @@ public:
 		this->data ^= other.data;
 		return *this;
 	}
-
+	constexpr BitSet operator~() const {
+		BitSet result;
+		result.data = ~this->data;
+		return result;
+	}
 	constexpr BitSet& operator<<=(unsigned int shift) {
 		assert(shift < size());
 		this->data <<= shift;
@@ -417,6 +475,12 @@ public:
 		assert(shift < size());
 		this->data >>= shift;
 		return *this;
+	}
+	constexpr bool operator==(const BitSet& other) const {
+		return this->data == other.data;
+	}
+	constexpr bool operator!=(const BitSet& other) const {
+		return this->data != other.data;
 	}
 
 	constexpr bool isEmpty() const {
@@ -480,7 +544,11 @@ public:
 		this->data ^= other.data;
 		return *this;
 	}
-
+	constexpr BitSet operator~() const {
+		BitSet result;
+		result.data = ~this->data;
+		return result;
+	}
 	constexpr BitSet& operator<<=(unsigned int shift) {
 		assert(shift < size());
 		this->data <<= shift;
@@ -490,6 +558,12 @@ public:
 		assert(shift < size());
 		this->data >>= shift;
 		return *this;
+	}
+	constexpr bool operator==(const BitSet& other) const {
+		return this->data == other.data;
+	}
+	constexpr bool operator!=(const BitSet& other) const {
+		return this->data != other.data;
 	}
 
 	constexpr bool isEmpty() const {
@@ -513,27 +587,27 @@ public:
 };
 
 template<size_t Size>
-BitSet<Size> operator|(BitSet<Size> result, const BitSet<Size>& b) {
+constexpr BitSet<Size> operator|(BitSet<Size> result, const BitSet<Size>& b) {
 	result |= b;
 	return result;
 }
 template<size_t Size>
-BitSet<Size> operator&(BitSet<Size> result, const BitSet<Size>& b) {
+constexpr BitSet<Size> operator&(BitSet<Size> result, const BitSet<Size>& b) {
 	result &= b;
 	return result;
 }
 template<size_t Size>
-BitSet<Size> operator^(BitSet<Size> result, const BitSet<Size>& b) {
+constexpr BitSet<Size> operator^(BitSet<Size> result, const BitSet<Size>& b) {
 	result ^= b;
 	return result;
 }
 template<size_t Size>
-BitSet<Size> operator<<(BitSet<Size> result, unsigned int shift) {
+constexpr BitSet<Size> operator<<(BitSet<Size> result, unsigned int shift) {
 	result <<= shift;
 	return result;
 }
 template<size_t Size>
-BitSet<Size> operator>>(BitSet<Size> result, unsigned int shift) {
+constexpr BitSet<Size> operator>>(BitSet<Size> result, unsigned int shift) {
 	result >>= shift;
 	return result;
 }
