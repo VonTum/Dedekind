@@ -7,13 +7,14 @@
 #include "collectionOperations.h"
 #include "functionInput.h"
 #include "functionInputSet.h"
+#include "functionInputBitSet.h"
 #include "intSet.h"
 #include "smallVector.h"
 
 constexpr int MAX_PREPROCESSED = 7;
 constexpr int MAX_LAYER_SIZE = 35;
 
-typedef std::bitset<(1 << MAX_PREPROCESSED)> InputBitSet;
+typedef FunctionInputBitSet<MAX_PREPROCESSED> InputBitSet;
 
 template<typename T>
 using PreprocessSmallVector = SmallVector<T, MAX_PREPROCESSED>;
@@ -59,11 +60,11 @@ inline bool operator>(InitialVariableObservations a, InitialVariableObservations
 inline bool operator>=(InitialVariableObservations a, InitialVariableObservations b) { return b <= a; }
 
 struct PreprocessedFunctionInputSet {
-	FunctionInputSet functionInputSet;
-	PreprocessSmallVector<InitialVariableObservations> variables;
+	InputBitSet functionInputSet;
+	/*PreprocessSmallVector<InitialVariableObservations> variables;
 	PreprocessSmallVector<CountedGroup<VariableCoOccurence>> variableCoOccurences;
 	int8_t spanSize;
-	int8_t variableOccurences[MAX_PREPROCESSED];
+	int8_t variableOccurences[MAX_PREPROCESSED];*/
 
 	inline size_t size() const { return functionInputSet.size(); }
 
@@ -80,13 +81,13 @@ PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet);
 struct EquivalenceClass {
 	InputBitSet functionInputSet;
 	uint64_t hash;
-	int8_t spanSize;
+	/*int8_t spanSize;
 	int8_t variableOccurences[MAX_PREPROCESSED];
-	InitialVariableObservations variables[MAX_PREPROCESSED];
+	InitialVariableObservations variables[MAX_PREPROCESSED];*/
 
 	EquivalenceClass() = default;
 	
-	inline EquivalenceClass(const PreprocessedFunctionInputSet& prep, uint64_t hash) :
+	/*inline EquivalenceClass(const PreprocessedFunctionInputSet& prep, uint64_t hash) :
 		functionInputSet(),
 		spanSize(prep.spanSize),
 		variableOccurences(),
@@ -104,19 +105,22 @@ struct EquivalenceClass {
 		for(const FunctionInput& fi : prep.functionInputSet) {
 			functionInputSet.set(fi.inputBits);
 		}
-	}
+	}*/
+	inline EquivalenceClass(const PreprocessedFunctionInputSet& prep, uint64_t hash) :
+		functionInputSet(prep.functionInputSet),
+		hash(hash) {}
 	
 	inline EquivalenceClass(const PreprocessedFunctionInputSet& prep) : EquivalenceClass(prep, prep.hash()) {}
 
 
-	inline size_t size() const { return functionInputSet.count(); }
+	inline size_t size() const { return functionInputSet.size(); }
 
 	bool contains(const PreprocessedFunctionInputSet& b) const;
 
 	PreprocessedFunctionInputSet extendedBy(FunctionInput fi) const;
 
 	inline bool hasFunctionInput(FunctionInput fi) const {
-		return functionInputSet.test(fi.inputBits);
+		return functionInputSet.contains(fi.inputBits);
 	}
 
 	FunctionInputSet asFunctionInputSet() const;

@@ -3,23 +3,32 @@
 #include <immintrin.h>
 
 #include <iostream>
-
+/*
 PreprocessedFunctionInputSet PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{}, PreprocessSmallVector<InitialVariableObservations>{}, PreprocessSmallVector<CountedGroup<VariableCoOccurence>>{}, 0};
 EquivalenceClass EquivalenceClass::emptyEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet);
 
 PreprocessedFunctionInputSet PreprocessedFunctionInputSet::bottomPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{FunctionInput{0}}, PreprocessSmallVector<InitialVariableObservations>{}, PreprocessSmallVector<CountedGroup<VariableCoOccurence>>{}, 0};
 EquivalenceClass EquivalenceClass::bottomEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::bottomPreprocessedFunctionInputSet);
+*/
+PreprocessedFunctionInputSet PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{}};
+EquivalenceClass EquivalenceClass::emptyEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet);
+
+PreprocessedFunctionInputSet PreprocessedFunctionInputSet::bottomPreprocessedFunctionInputSet = PreprocessedFunctionInputSet{FunctionInputSet{FunctionInput{0}}};
+EquivalenceClass EquivalenceClass::bottomEquivalenceClass = EquivalenceClass(PreprocessedFunctionInputSet::bottomPreprocessedFunctionInputSet);
 
 // TODO candidate for optimization
-PreprocessedFunctionInputSet PreprocessedFunctionInputSet::extendedBy(FunctionInput inp) const {
-	FunctionInputSet resultingFuncInputSet(this->functionInputSet.size() + 1);
+PreprocessedFunctionInputSet PreprocessedFunctionInputSet::extendedBy(FunctionInput fi) const {
+	/*FunctionInputSet resultingFuncInputSet(this->functionInputSet.size() + 1);
 	for(size_t i = 0; i < this->functionInputSet.size(); i++) resultingFuncInputSet[i] = this->functionInputSet[i];
-	resultingFuncInputSet[this->functionInputSet.size()] = inp;
-	return preprocess(std::move(resultingFuncInputSet));
+	resultingFuncInputSet[this->functionInputSet.size()] = fi;
+	return preprocess(std::move(resultingFuncInputSet));*/
+	InputBitSet result = this->functionInputSet;
+	result.add(fi);
+	return PreprocessedFunctionInputSet{result.canonize()};
 }
 
 PreprocessedFunctionInputSet EquivalenceClass::extendedBy(FunctionInput fi) const {
-	size_t size = this->functionInputSet.count();
+	/*size_t size = this->functionInputSet.count();
 	FunctionInputSet resultingFuncInputSet;
 	resultingFuncInputSet.reserve(size + 1);
 	for(FunctionInput::underlyingType i = 0; i < (1 << spanSize); i++) {
@@ -28,11 +37,15 @@ PreprocessedFunctionInputSet EquivalenceClass::extendedBy(FunctionInput fi) cons
 		}
 	}
 	resultingFuncInputSet.push_back(fi);
-	return preprocess(std::move(resultingFuncInputSet));
+	return preprocess(std::move(resultingFuncInputSet));*/
+	InputBitSet result = this->functionInputSet;
+	result.add(fi);
+	return PreprocessedFunctionInputSet{result.canonize()};
 }
 
 uint64_t PreprocessedFunctionInputSet::hash() const {
-	uint64_t hsh = spanSize;
+	return functionInputSet.hash();
+	/*uint64_t hsh = spanSize;
 	for(const CountedGroup<VariableCoOccurence>& cg : variableCoOccurences) {
 		uint64_t hshOfCoOccur = 1; // big prime
 		int i = 1;
@@ -43,15 +56,15 @@ uint64_t PreprocessedFunctionInputSet::hash() const {
 		hsh = hsh * 101 + cg.count;
 		hsh = hsh * 101 + hshOfCoOccur;
 	}
-	return hsh ^ (hsh >> 8) ^ (hsh >> 16) ^ (hsh >> 32);
+	return hsh ^ (hsh >> 8) ^ (hsh >> 16) ^ (hsh >> 32);*/
 }
 
 FunctionInputSet EquivalenceClass::asFunctionInputSet() const {
-	size_t size = functionInputSet.count();
 	FunctionInputSet result;
-	result.reserve(size);
-	for(FunctionInput::underlyingType i = 0; i < (1 << this->spanSize); i++) {
-		if(functionInputSet.test(i)) result.push_back(FunctionInput{i});
+	unsigned int sp = this->functionInputSet.span();
+	assert(sp == 0 || sp == (1U << __popcnt(sp)) - 1);
+	for(FunctionInput::underlyingType i = 0; i <= sp; i++) {
+		if(functionInputSet.contains(i)) result.push_back(FunctionInput{i});
 	}
 	return result;
 }
@@ -239,7 +252,7 @@ static PreprocessSmallVector<T> sortSwizzle(const PreprocessSmallVector<T>& coll
 }
 
 PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet) {
-	if(inputSet.size() == 0) {
+	/*if(inputSet.size() == 0) {
 		return PreprocessedFunctionInputSet::emptyPreprocessedFunctionInputSet;
 	} else if(inputSet[0].empty()) {
 		return PreprocessedFunctionInputSet::bottomPreprocessedFunctionInputSet;
@@ -267,7 +280,9 @@ PreprocessedFunctionInputSet preprocess(FunctionInputSet inputSet) {
 		result.variableOccurences[i] = resultingRefinedGroups.groups[i];
 	}
 
-	return result;
+	return result;*/
+
+	return PreprocessedFunctionInputSet{InputBitSet(inputSet).canonize()};
 }
 
 template<typename Func>
@@ -306,9 +321,14 @@ bool existsPermutationOverVariableGroups(const int8_t* groups, const int8_t* gro
 }
 
 bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
-	assert(this->size() == b.size()); // assume we are only comparing functionInputSets with the same number of edges
+	return this->functionInputSet == b.functionInputSet;
 
-	if(this->spanSize != b.spanSize) return false;
+
+	//assert(this->size() == b.size()); // assume we are only comparing functionInputSets with the same number of edges
+
+	
+
+	/*if(this->spanSize != b.spanSize) return false;
 
 	for(int i = 0; i < spanSize; i++) {
 		if(this->variables[i] != b.variables[i]) {
@@ -320,7 +340,7 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 		if(this->variableOccurences[i] != b.variableOccurences[i]) {
 			return false;
 		}
-	}
+	}*/
 
 	//if(this->variableCoOccurences != b.variableCoOccurences) return false; // early exit, a and b do not span the same variables, impossible to be isomorphic!
 	
@@ -397,17 +417,17 @@ bool EquivalenceClass::contains(const PreprocessedFunctionInputSet& b) const {
 		});
 	}*/
 
-	std::vector<int> permut = generateIntegers(spanSize);
+	/*std::vector<int> permut = generateIntegers(spanSize);
 	bool realResult = existsPermutationOverVariableGroups(this->variableOccurences, this->variableOccurences + this->spanSize, std::move(permut), [this, &bp = b.functionInputSet](const std::vector<int>& permutation) {
 		for(FunctionInput fn : bp) {
 			if(!this->functionInputSet.test(fn.swizzle(permutation).inputBits)) return false;
 		}
 		return true;
-	});
+	});*/
 
 	/*if(realResult == false) {
 		__debugbreak();
 		//throw "normalization is imperfect, multiple FunctionInputSets are mapped to the same Normalized HyperGraph";
 	}*/
-	return realResult;
+	//return realResult;
 }

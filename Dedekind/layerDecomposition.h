@@ -180,7 +180,7 @@ public:
 		for(size_t i = 0; i < layer.size() + 1; i++) {
 			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& inverseMap = this->subSizeMaps[layer.size() - i];
 			iterCollectionInParallel(this->subSizeMaps[i], [&inverseMap, &layer](BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& curClass) {
-				PreprocessedFunctionInputSet invPrep = preprocess(invert(curClass.eqClass.functionInputSet, layer));
+				PreprocessedFunctionInputSet invPrep = preprocess(invert(curClass.eqClass.asFunctionInputSet(), layer));
 				curClass.inverse = inverseMap.indexOf(invPrep);
 			});
 		}

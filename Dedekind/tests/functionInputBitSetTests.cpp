@@ -18,7 +18,7 @@ void runFunctionRange() {
 
 template<int Variables>
 static bool operator==(const FunctionInputBitSet<Variables>& fibs, const std::vector<bool>& expectedState) {
-	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::size(); i++) {
+	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::maxSize(); i++) {
 		if(expectedState[i] != fibs.contains(FunctionInput{i})) return false;
 	}
 	return true;
@@ -44,7 +44,7 @@ template<int Variables>
 static FunctionInputBitSet<Variables> generateFibs() {
 	FunctionInputBitSet<Variables> fis = FunctionInputBitSet<Variables>::empty();
 	
-	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::size(); i++) {
+	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::maxSize(); i++) {
 		if(genBool()) {
 			fis.add(FunctionInput{i});
 		}
@@ -55,9 +55,9 @@ static FunctionInputBitSet<Variables> generateFibs() {
 
 template<int Variables>
 static std::vector<bool> toVector(const FunctionInputBitSet<Variables>& fibs) {
-	std::vector<bool> result(FunctionInputBitSet<Variables>::size());
+	std::vector<bool> result(FunctionInputBitSet<Variables>::maxSize());
 
-	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::size(); i++) {
+	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::maxSize(); i++) {
 		result[i] = fibs.contains(FunctionInput{i});
 	}
 
@@ -68,12 +68,12 @@ template<int Variables>
 struct SetResetTest {
 	static void run() {
 		FunctionInputBitSet<Variables> fis = FunctionInputBitSet<Variables>::empty();
-		std::vector<bool> expectedState(fis.size(), false);
+		std::vector<bool> expectedState(fis.maxSize(), false);
 
 		ASSERT(fis == expectedState);
 
 		for(size_t iter = 0; iter < 1000; iter++) {
-			FunctionInput::underlyingType index = rand() % FunctionInputBitSet<Variables>::size();
+			FunctionInput::underlyingType index = rand() % FunctionInputBitSet<Variables>::maxSize();
 			
 			if(expectedState[index]) {
 				fis.remove(FunctionInput{index});
@@ -92,23 +92,23 @@ template<int Variables>
 struct ShiftLeftTest {
 	static void run() {
 		for(size_t iter = 0; iter < 1000; iter++) {
-			FunctionInputBitSet<Variables> fis = generateFibs<Variables>();
-			std::vector<bool> expectedState = toVector(fis);
+			FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
+			std::vector<bool> expectedState = toVector(fibs);
 
-			int shift = rand() % FunctionInputBitSet<Variables>::size();
+			int shift = rand() % FunctionInputBitSet<Variables>::maxSize();
 
-			logStream << "Original: " << fis << "\n";
+			logStream << "Original: " << fibs << "\n";
 			logStream << "Shift: " << shift << "\n";
 
-			fis <<= shift;
-			for(int i = expectedState.size() - 1; i >= shift; i--) {
+			fibs <<= shift;
+			for(int i = fibs.maxSize() - 1; i >= shift; i--) {
 				expectedState[i] = expectedState[i - shift];
 			}
 			for(int i = 0; i < shift; i++) {
 				expectedState[i] = false;
 			}
 
-			ASSERT(fis == expectedState);
+			ASSERT(fibs == expectedState);
 		}
 	}
 };
@@ -120,16 +120,16 @@ struct ShiftRightTest {
 			FunctionInputBitSet<Variables> fis = generateFibs<Variables>();
 			std::vector<bool> expectedState = toVector(fis);
 
-			int shift = rand() % FunctionInputBitSet<Variables>::size();
+			int shift = rand() % FunctionInputBitSet<Variables>::maxSize();
 
 			logStream << "Original: " << fis << "\n";
 			logStream << "Shift: " << shift << "\n";
 
 			fis >>= shift;
-			for(int i = 0; i < FunctionInputBitSet<Variables>::size() - shift; i++) {
+			for(int i = 0; i < FunctionInputBitSet<Variables>::maxSize() - shift; i++) {
 				expectedState[i] = expectedState[i + shift];
 			}
-			for(int i = FunctionInputBitSet<Variables>::size() - shift; i < FunctionInputBitSet<Variables>::size(); i++) {
+			for(int i = FunctionInputBitSet<Variables>::maxSize() - shift; i < FunctionInputBitSet<Variables>::maxSize(); i++) {
 				expectedState[i] = false;
 			}
 
@@ -142,11 +142,11 @@ template<int Variables>
 struct VarMaskTest {
 	static void run() {
 		for(unsigned int var = 0; var < Variables; var++) {
-			FunctionInputBitSet<Variables> result = FunctionInputBitSet<Variables>::varMask(var);
+			FunctionInputBitSet<Variables> result(FunctionInputBitSet<Variables>::varMask(var));
 
 			logStream << result << "\n";
 
-			for(FunctionInput::underlyingType i = 0; i < result.size(); i++) {
+			for(FunctionInput::underlyingType i = 0; i < result.maxSize(); i++) {
 				bool shouldBeEnabled = (i & (1 << var)) != 0;
 				ASSERT(result.contains(i) == shouldBeEnabled);
 			}
@@ -163,12 +163,12 @@ struct MoveVariableTest {
 			for(unsigned int var2 = 0; var2 < Variables; var2++) {
 				FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
 
-				fibs &= ~FunctionInputBitSet<Variables>::varMask(var2);
+				fibs &= FunctionInputBitSet<Variables>(~FunctionInputBitSet<Variables>::varMask(var2));
 
 				logStream << "Moving " << var1 << " to " << var2 << " in " << fibs << "\n";
 
 
-				for(unsigned int i = 0; i < fibs.size(); i++) {
+				for(unsigned int i = 0; i < fibs.maxSize(); i++) {
 					if(fibs.contains(FunctionInput{i})) {
 						funcInputs.push_back(i);
 					}
@@ -176,7 +176,7 @@ struct MoveVariableTest {
 
 
 				// do operation on both
-				FunctionInputBitSet<Variables> movedFibs = fibs.moveVariable(var1, var2);
+				fibs.move(var1, var2);
 				for(unsigned int& item : funcInputs) {
 					if(item & (1 << var1)) {
 						item &= ~(1 << var1);
@@ -189,7 +189,7 @@ struct MoveVariableTest {
 					checkFibs.add(item);
 				}
 
-				ASSERT(movedFibs == checkFibs);
+				ASSERT(fibs == checkFibs);
 
 				funcInputs.clear();
 			}
@@ -209,7 +209,7 @@ struct SwapVariableTest {
 				logStream << "Swapping " << var1 << " and " << var2 << " in " << fibs << "\n";
 
 
-				for(unsigned int i = 0; i < fibs.size(); i++) {
+				for(unsigned int i = 0; i < fibs.maxSize(); i++) {
 					if(fibs.contains(FunctionInput{i})) {
 						funcInputs.push_back(i);
 					}
@@ -217,7 +217,7 @@ struct SwapVariableTest {
 
 
 				// do operation on both
-				FunctionInputBitSet<Variables> swappedFibs = fibs.swapVars(var1, var2);
+				fibs.swap(var1, var2);
 				for(unsigned int& item : funcInputs) {
 					bool isVar1Active = item & (1 << var1);
 					bool isVar2Active = item & (1 << var2);
@@ -233,7 +233,7 @@ struct SwapVariableTest {
 					checkFibs.add(item);
 				}
 
-				ASSERT(swappedFibs == checkFibs);
+				ASSERT(fibs == checkFibs);
 
 				funcInputs.clear();
 			}
@@ -262,5 +262,5 @@ TEST_CASE(testMoveVar) {
 }
 
 TEST_CASE(testSwapVar) {
-	runFunctionRange<4, 9, SwapVariableTest>();
+	runFunctionRange<1, 9, SwapVariableTest>();
 }

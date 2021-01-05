@@ -114,8 +114,8 @@ inline std::ostream& operator<<(std::ostream& os, const FunctionInputBitSet<Vari
 
 template<int Variables>
 inline std::ostream& operator<<(std::ostream& os, const FunctionInputBitSet<Variables>& fis) {
-	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::size(); i++) {
-		os << fis.contains(FunctionInput{FunctionInputBitSet<Variables>::size() - i - 1}) ? '1' : '0';
+	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::maxSize(); i++) {
+		os << fis.contains(FunctionInput{FunctionInputBitSet<Variables>::maxSize() - i - 1}) ? '1' : '0';
 	}
 	return os;
 }
@@ -138,10 +138,10 @@ inline std::ostream& operator<<(std::ostream& os, const InitialVariableObservati
 }
 inline std::ostream& operator<<(std::ostream& os, const PreprocessedFunctionInputSet& s) {
 	os << s.functionInputSet;
-	os << '.';
+	/*os << '.';
 	for(auto occ : s.variableOccurences) {
 		os << occ;
-	}
+	}*/
 	return os;
 }
 
