@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <immintrin.h>
 
 template<size_t Size>
 class BitSet {
@@ -30,6 +31,14 @@ public:
 
 	static constexpr size_t size() {
 		return Size;
+	}
+
+	constexpr size_t count() {
+		size_t result = 0;
+		for(size_t block = 0; block < BLOCK_COUNT; block++) {
+			result += __popcnt64(this->data[block]);
+		}
+		return result;
 	}
 
 	constexpr bool get(size_t index) const {
@@ -139,6 +148,38 @@ public:
 		}
 		return false;
 	}
+	constexpr bool operator<(const BitSet& other) const {
+		for(size_t i = size(); i > 0; i--) { // check Most Significant Bits first
+			if(this->data[i] != other.data[i]) {
+				return this->data[i] < other.data[i];
+			}
+		}
+		return false; // equality
+	}
+	constexpr bool operator>(const BitSet& other) const {
+		for(size_t i = size(); i > 0; i--) { // check Most Significant Bits first
+			if(this->data[i] != other.data[i]) {
+				return this->data[i] > other.data[i];
+			}
+		}
+		return false; // equality
+	}
+	constexpr bool operator<=(const BitSet& other) const {
+		for(size_t i = size(); i > 0; i--) { // check Most Significant Bits first
+			if(this->data[i] != other.data[i]) {
+				return this->data[i] < other.data[i];
+			}
+		}
+		return true; // equality
+	}
+	constexpr bool operator>=(const BitSet& other) const {
+		for(size_t i = size(); i > 0; i--) { // check Most Significant Bits first
+			if(this->data[i] != other.data[i]) {
+				return this->data[i] > other.data[i];
+			}
+		}
+		return true; // equality
+	}
 
 	constexpr bool isEmpty() const {
 		for(uint64_t item : this->data) {
@@ -183,6 +224,9 @@ public:
 	static constexpr size_t size() {
 		return 32;
 	}
+	constexpr size_t count() const {
+		return __popcnt(this->data);
+	}
 
 	constexpr bool get(size_t index) const {
 		assert(index < size());
@@ -231,6 +275,18 @@ public:
 	}
 	constexpr bool operator!=(const BitSet& other) const {
 		return this->data != other.data;
+	}
+	constexpr bool operator<(const BitSet& other) const {
+		return this->data < other.data;
+	}
+	constexpr bool operator>(const BitSet& other) const {
+		return this->data > other.data;
+	}
+	constexpr bool operator<=(const BitSet& other) const {
+		return this->data <= other.data;
+	}
+	constexpr bool operator>=(const BitSet& other) const {
+		return this->data >= other.data;
 	}
 
 	constexpr bool isEmpty() const {
@@ -266,6 +322,9 @@ public:
 	static constexpr size_t size() {
 		return 16;
 	}
+	constexpr size_t count() const {
+		return __popcnt16(this->data);
+	}
 
 	constexpr bool get(size_t index) const {
 		assert(index < size());
@@ -315,6 +374,18 @@ public:
 	}
 	constexpr bool operator!=(const BitSet& other) const {
 		return this->data != other.data;
+	}
+	constexpr bool operator<(const BitSet& other) const {
+		return this->data < other.data;
+	}
+	constexpr bool operator>(const BitSet& other) const {
+		return this->data > other.data;
+	}
+	constexpr bool operator<=(const BitSet& other) const {
+		return this->data <= other.data;
+	}
+	constexpr bool operator>=(const BitSet& other) const {
+		return this->data >= other.data;
 	}
 
 	constexpr bool isEmpty() const {
@@ -350,6 +421,9 @@ public:
 	static constexpr size_t size() {
 		return 8;
 	}
+	constexpr size_t count() const {
+		return __popcnt16(static_cast<uint16_t>(this->data));
+	}
 
 	constexpr bool get(size_t index) const {
 		assert(index < size());
@@ -398,6 +472,18 @@ public:
 	}
 	constexpr bool operator!=(const BitSet& other) const {
 		return this->data != other.data;
+	}
+	constexpr bool operator<(const BitSet& other) const {
+		return this->data < other.data;
+	}
+	constexpr bool operator>(const BitSet& other) const {
+		return this->data > other.data;
+	}
+	constexpr bool operator<=(const BitSet& other) const {
+		return this->data <= other.data;
+	}
+	constexpr bool operator>=(const BitSet& other) const {
+		return this->data >= other.data;
 	}
 
 	constexpr bool isEmpty() const {
@@ -482,6 +568,18 @@ public:
 	constexpr bool operator!=(const BitSet& other) const {
 		return this->data != other.data;
 	}
+	constexpr bool operator<(const BitSet& other) const {
+		return this->data < other.data;
+	}
+	constexpr bool operator>(const BitSet& other) const {
+		return this->data > other.data;
+	}
+	constexpr bool operator<=(const BitSet& other) const {
+		return this->data <= other.data;
+	}
+	constexpr bool operator>=(const BitSet& other) const {
+		return this->data >= other.data;
+	}
 
 	constexpr bool isEmpty() const {
 		return this->data == 0b0000;
@@ -564,6 +662,18 @@ public:
 	}
 	constexpr bool operator!=(const BitSet& other) const {
 		return this->data != other.data;
+	}
+	constexpr bool operator<(const BitSet& other) const {
+		return this->data < other.data;
+	}
+	constexpr bool operator>(const BitSet& other) const {
+		return this->data > other.data;
+	}
+	constexpr bool operator<=(const BitSet& other) const {
+		return this->data <= other.data;
+	}
+	constexpr bool operator>=(const BitSet& other) const {
+		return this->data >= other.data;
 	}
 
 	constexpr bool isEmpty() const {

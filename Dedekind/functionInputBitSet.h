@@ -164,6 +164,31 @@ public:
 			return ((*this & mask2 & ~mask1) << shift) | ((*this & mask1 & ~mask2) >> shift) | stayingElems;
 		}
 	}
+
+
+	template<typename Func>
+	void forEachPermutation(unsigned int fromVar, unsigned int toVar, const Func& func) {
+		if(fromVar == toVar) {
+			func(static_cast<const FunctionInputBitSet&>(*this));
+		} else {
+			forEachPermutation(fromVar + 1, toVar, func);
+			for(unsigned int swapping = fromVar + 1; swapping < toVar; swapping++) {
+				swapVars(fromVar, swapping);
+				forEachPermutation(fromVar + 1, toVar, func);
+				swapVars(fromVar, swapping);
+			}
+		}
+	}
+
+	FunctionInputBitSet canonize() const {
+		FunctionInputBitSet copy = *this;
+		FunctionInputBitSet best = *this;
+		copy.forEachPermutation(0, Variables, [&best](const FunctionInputBitSet<Variables>& permut) {
+			if(permut.bitset < best.bitset) {
+				best = permut;
+			}
+		});
+	}
 };
 
 template<unsigned int Variables>
@@ -191,3 +216,4 @@ FunctionInputBitSet<Variables> operator>>(FunctionInputBitSet<Variables> result,
 	result >>= shift;
 	return result;
 }
+
