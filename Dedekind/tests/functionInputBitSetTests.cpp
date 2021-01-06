@@ -7,6 +7,7 @@
 
 
 #include <random>
+#include <iostream>
 
 template<int Start, int End, template<int> typename FuncClass>
 void runFunctionRange() {
@@ -241,7 +242,23 @@ struct SwapVariableTest {
 	}
 };
 
-TEST_CASE(testSetResetTestBit) {
+template<int Variables>
+struct CanonizeTest {
+	static void run() {
+		for(int iter = 0; iter < 100; iter++) {
+			std::cout << ".";
+			FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
+
+			FunctionInputBitSet<Variables> canonizedFibs = fibs.canonize();
+
+			fibs.forEachPermutation(0, Variables, [&canonizedFibs](const FunctionInputBitSet<Variables>& permut) {
+				ASSERT(permut.canonize() == canonizedFibs);
+			});
+		}
+	}
+};
+
+/*TEST_CASE(testSetResetTestBit) {
 	runFunctionRange<1, 9, SetResetTest>();
 }
 
@@ -263,4 +280,8 @@ TEST_CASE(testMoveVar) {
 
 TEST_CASE(testSwapVar) {
 	runFunctionRange<1, 9, SwapVariableTest>();
+}*/
+
+TEST_CASE(testCanonize) {
+	runFunctionRange<1, 7, CanonizeTest>();
 }

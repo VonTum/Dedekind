@@ -206,6 +206,25 @@ public:
 		}
 	}
 
+	template<typename Func>
+	void forEachPermutationInGroups(unsigned int fromVar, unsigned int toVar, unsigned int* nextGroup, unsigned int* groupsEnd, const Func& func) {
+		assert(fromVar <= toVar && toVar <= Variables);
+		if(fromVar == toVar) {
+			if(nextGroup == groupsEnd) {
+				func(*this);
+			} else {
+				forEachPermutationInGroups(toVar, toVar + *nextGroup, nextGroup + 1, groupsEnd, func);
+			}
+		} else {
+			this->forEachPermutationInGroups(fromVar + 1, toVar, nextGroup, groupsEnd, func);
+			for(unsigned int swapping = fromVar + 1; swapping < toVar; swapping++) {
+				this->swap(fromVar, swapping);
+				this->forEachPermutationInGroups(fromVar + 1, toVar, nextGroup, groupsEnd, func);
+				this->swap(fromVar, swapping);
+			}
+		}
+	}
+
 	FunctionInputBitSet canonize() const {
 		FunctionInputBitSet copy = *this;
 
@@ -230,6 +249,7 @@ public:
 			}
 			nextVar:;
 		}
+		// varIdx is now number of variables
 
 		// Assign groups
 		struct Group {
@@ -253,9 +273,9 @@ public:
 
 		std::sort(groups, groups + groupCount, [](const Group& a, const Group& b) {
 			if(a.groupSize != b.groupSize) {
-				return a.groupSize > b.groupSize;
+				return a.groupSize < b.groupSize;
 			} else {
-				return a.value > b.value;
+				return a.value < b.value;
 			}
 		});
 
@@ -275,9 +295,8 @@ public:
 		}
 
 		unsigned int numberOfSize1Groups = 0;
-		for(unsigned int i = groupCount; i > 0; i--) {
-			if(groups[i].groupSize != 1) break;
-			numberOfSize1Groups++;
+		for(; numberOfSize1Groups < groupCount; numberOfSize1Groups++) {
+			if(groups[numberOfSize1Groups].groupSize != 1) break;
 		}
 
 		// assert is correct
@@ -296,27 +315,18 @@ public:
 			std::cout << groups[i].groupSize << ":" << groups[i].value << ",";
 		}*/
 
-		/*unsigned int offset = 0;
-		for(unsigned int g = 0; g < groupCount; g++) {
+		if(numberOfSize1Groups < groupCount) {
+			unsigned int groupSizeBuffer[Variables];
+			for(unsigned int i = 0; i < groupCount; i++) groupSizeBuffer[i] = groups[i].groupSize;
+
 			FunctionInputBitSet best = copy;
-			// varIdx is number of variables
-			copy.forEachPermutation(offset, offset + groups[g].groupSize, [&best](const FunctionInputBitSet& permut) {
+			copy.forEachPermutationInGroups(numberOfSize1Groups, numberOfSize1Groups + groupSizeBuffer[numberOfSize1Groups], groupSizeBuffer + 1 + numberOfSize1Groups, groupSizeBuffer + groupCount, [&best](const FunctionInputBitSet& permut) {
 				if(permut.bitset < best.bitset) {
 					best = permut;
 				}
 			});
 			copy = best;
-			offset += groups[g].groupSize;
-		}*/
-
-		FunctionInputBitSet best = copy;
-		// varIdx is number of variables
-		copy.forEachPermutation(0, varIdx - numberOfSize1Groups, [&best](const FunctionInputBitSet& permut) {
-			if(permut.bitset < best.bitset) {
-				best = permut;
-			}
-		});
-		copy = best;
+		}
 
 		return copy;
 	}
