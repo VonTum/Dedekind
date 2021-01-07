@@ -28,7 +28,7 @@ int main() {
 
 	std::cout << "Detected " << std::thread::hardware_concurrency() << " available threads!\n";
 	TimeTracker timer;
-	int dedekindOrder = 6;
+	int dedekindOrder = 7;
 	DedekindDecomposition<ValueCounted> fullDecomposition(dedekindOrder);
 	
 	//std::cout << "Decomposition:\n" << fullDecomposition << "\n";

@@ -245,7 +245,7 @@ struct SwapVariableTest {
 template<int Variables>
 struct CanonizeTest {
 	static void run() {
-		for(int iter = 0; iter < 100; iter++) {
+		for(int iter = 0; iter < 1000; iter++) {
 			std::cout << ".";
 			FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
 

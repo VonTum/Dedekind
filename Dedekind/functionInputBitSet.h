@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <iostream>
 
 #include "functionInput.h"
 #include "bitSet.h"
@@ -226,6 +227,8 @@ public:
 	}
 
 	FunctionInputBitSet canonize() const {
+		if(this->bitset.isEmpty() || this->bitset.get(0) == 1 && this->bitset.count() == 1) return *this;
+
 		FunctionInputBitSet copy = *this;
 
 		unsigned int counts[Variables];
@@ -253,25 +256,32 @@ public:
 
 		// Assign groups
 		struct Group {
-			unsigned int value;
+			unsigned int value; // represents 'occurences' in the first half, and 'cooccurences' in the second. Just a temporary to sort by
 			unsigned int groupSize;
+			BitSet<(1 << Variables)> mask;
+			unsigned int associatedVariables[Variables];
 		} groups[Variables];
-		unsigned int groupCount = 0;
+		Group* groupsEnd = groups;
 
+		// assign groups for values
 		for(unsigned int i = 0; i < varIdx; i++) {
 			unsigned int occ = counts[i];
-			for(unsigned int g = 0; g < groupCount; g++) {
-				if(groups[g].value == occ) {
-					groups[g].groupSize++;
+			for(Group* grp = groups; grp < groupsEnd; grp++) {
+				if(grp->value == occ) {
+					grp->associatedVariables[grp->groupSize] = i;
+					grp->groupSize++;
+					grp->mask |= varMask(i);
 					goto groupFound; // group found
 				}
 			}
 			// group not found, add new
-			groups[groupCount++] = Group{occ, 1};
+			*groupsEnd = Group{occ, 1, varMask(i), {i}};
+			groupsEnd++;
 			groupFound:;
 		}
 
-		std::sort(groups, groups + groupCount, [](const Group& a, const Group& b) {
+		// unique sorting
+		std::sort(groups, groupsEnd, [](const Group& a, const Group& b) {
 			if(a.groupSize != b.groupSize) {
 				return a.groupSize < b.groupSize;
 			} else {
@@ -279,7 +289,118 @@ public:
 			}
 		});
 
-		unsigned int sortedTop = 0;
+		// all groups should be deterministic now
+		
+		Group* recheckUpTo = groups;
+		Group* g = groups;
+		do {
+			// can't split group of size 1
+			if(g->groupSize > 1) {
+				BitSet<(1 << Variables)> compareToMask = varMask(*g->associatedVariables);
+				for(Group* otherGroup = groups; otherGroup < groupsEnd; otherGroup++) {
+					if(otherGroup == g) continue;
+					g->value = (copy.bitset & compareToMask & otherGroup->mask).count();
+					Group* newGroups = groupsEnd;
+					Group* newGroupsEnd = newGroups;
+					for(unsigned int* varInGroup = g->associatedVariables + 1; varInGroup < g->associatedVariables + g->groupSize; ) {
+						BitSet<(1 << Variables)> vm = varMask(*varInGroup);
+						unsigned int cooccurences = (copy.bitset & vm & otherGroup->mask).count();
+						if(g->value != cooccurences) {
+							// split off
+							for(Group* newGroup = newGroups; newGroup < newGroupsEnd; newGroup++) {
+								// add to new group
+								if(newGroup->value == cooccurences) {
+									// add to this group
+									newGroup->associatedVariables[newGroup->groupSize] = *varInGroup;
+									newGroup->groupSize++;
+									newGroup->mask |= vm;
+
+									goto newGroupFound;
+								}
+							}
+							// create new group
+							*newGroupsEnd = Group{cooccurences, 1, vm, {*varInGroup}};
+							groupsEnd++;
+							newGroupsEnd++;
+							newGroupFound:;
+							g->groupSize--;
+							*varInGroup = g->associatedVariables[g->groupSize];
+
+						} else {
+							varInGroup++;
+						}
+					}
+
+					if(newGroups != newGroupsEnd) {
+						// a split has happened
+						// recalculate mask
+						g->mask = varMask(g->associatedVariables[0]);
+						for(unsigned int* varInGroup = g->associatedVariables + 1; varInGroup < g->associatedVariables + g->groupSize; varInGroup++) {
+							g->mask |= varMask(*varInGroup);
+						}
+
+						// include split group into sort, smallest cooccur will be new original group. Deterministic as all cooccur are unique
+						Group* minimalCoOccurGroup = newGroups;
+						for(Group* testGroup = newGroups + 1; testGroup < newGroupsEnd; testGroup++) {
+							if(testGroup->value < minimalCoOccurGroup->value) {
+								minimalCoOccurGroup = testGroup;
+							}
+						}
+						if(minimalCoOccurGroup->value < g->value) {
+							// swap out the original group
+							std::swap(*g, *minimalCoOccurGroup);
+						}
+
+						// sort groups
+						std::sort(newGroups, newGroupsEnd, [](const Group& a, const Group& b) {
+							return a.value < b.value;
+						});
+
+						// all groups should be deterministic now
+
+						recheckUpTo = g;
+						break;
+					}
+				}
+			}
+			g++;
+			if(g == groupsEnd) {
+				g = groups;
+			}
+		} while(g != recheckUpTo);
+
+		// all groups should be deterministic now
+
+		std::stable_sort(groups, groupsEnd, [](const Group& a, const Group& b) {
+			return a.groupSize < b.groupSize;
+		});
+		
+		unsigned int newVariableOrder[Variables];
+		unsigned int* newVariableOrderEnd = newVariableOrder;
+		for(Group* grp = groups; grp < groupsEnd; grp++) {
+			for(unsigned int* v = grp->associatedVariables; v < grp->associatedVariables + grp->groupSize; v++) {
+				*newVariableOrderEnd = *v;
+				newVariableOrderEnd++;
+			}
+		}
+
+		for(unsigned int v = 0; v < varIdx; v++){
+			// skip if already in place
+			if(newVariableOrder[v] != v) {
+				for(unsigned int foundV = v + 1; foundV < varIdx; foundV++) {
+					if(newVariableOrder[foundV] == v) {
+						copy.swap(v, newVariableOrder[v]);
+						std::swap(newVariableOrder[v], newVariableOrder[foundV]);
+						goto foundTheV;
+					}
+				}
+				throw "unreachable";
+				foundTheV:;
+			}
+		}
+	
+		unsigned int groupCount = groupsEnd - groups;
+		/*unsigned int sortedTop = 0;
 		for(unsigned int g = 0; g < groupCount; g++) {
 			unsigned int occ = groups[g].value;
 			for(unsigned int v = sortedTop; v < varIdx; v++) {
@@ -292,28 +413,12 @@ public:
 					sortedTop++;
 				}
 			}
-		}
+		}*/
 
 		unsigned int numberOfSize1Groups = 0;
-		for(; numberOfSize1Groups < groupCount; numberOfSize1Groups++) {
+		for(; groups + numberOfSize1Groups < groupsEnd; numberOfSize1Groups++) {
 			if(groups[numberOfSize1Groups].groupSize != 1) break;
 		}
-
-		// assert is correct
-		for(unsigned int v = 0; v < Variables; v++) {
-			assert(counts[v] == copy.countVariableOccurences(v));
-		}
-		unsigned int curTestOffset = 0;
-		for(unsigned int g = 0; g < groupCount; g++) {
-			for(unsigned int i = 0; i < groups[g].groupSize; i++) {
-				groups[g].value = copy.countVariableOccurences(curTestOffset++);
-			}
-		}
-
-		/*std::cout << "groupCount: " << groupCount << "\n";
-		for(int i = 0; i < groupCount; i++) {
-			std::cout << groups[i].groupSize << ":" << groups[i].value << ",";
-		}*/
 
 		if(numberOfSize1Groups < groupCount) {
 			unsigned int groupSizeBuffer[Variables];
