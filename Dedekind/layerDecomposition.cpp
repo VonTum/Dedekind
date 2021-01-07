@@ -39,26 +39,19 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 		EquivalenceClassMap<TempEquivClassInfo>& curGroups = equivalenceClasses[groupSize];
 		// try to extend each of the previous groups by 1
 		std::shared_mutex curGroupsMutex;
-		std::mutex editClassMutex;
-		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&curGroupsMutex,&editClassMutex,    &equivalenceClasses,&groupSize](ValuedEquivalenceClass<TempEquivClassInfo>& element) {
-			std::vector<ValuedEquivalenceClass<TempEquivClassInfo>*> foundExistingClasses;
-			foundExistingClasses.reserve(3);
+		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&curGroupsMutex,&equivalenceClasses,&groupSize](ValuedEquivalenceClass<TempEquivClassInfo>& element) {
 			for(FunctionInput newInput : layer) {
-				foundExistingClasses.clear();
 				if(element.equivClass.hasFunctionInput(newInput)) continue; // only try to add new inputs that are not yet part of this
 				PreprocessedFunctionInputSet resultingPreprocessed = element.equivClass.extendedBy(newInput);
 				uint64_t hash = resultingPreprocessed.hash();
 
 				{// this whole bit is to reduce contention on curGroupsMutex, by finding existing classes earlier and handling them without having to take a write lock
 					curGroupsMutex.lock_shared();
-					curGroups.findAllNodesMatchingHash(hash, foundExistingClasses);
+					ValuedEquivalenceClass<TempEquivClassInfo>* existingClass = curGroups.find(resultingPreprocessed, hash);
 					curGroupsMutex.unlock_shared();
 
-					ValuedEquivalenceClass<TempEquivClassInfo>* existingClass = oneOfListContains(foundExistingClasses, resultingPreprocessed);
 					if(existingClass != nullptr) {
-						editClassMutex.lock();
 						incrementLinkBetween(element, *existingClass);
-						editClassMutex.unlock();
 						continue;
 					}
 				}
@@ -67,9 +60,7 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 				ValuedEquivalenceClass<TempEquivClassInfo>& extended = curGroups.getOrAdd(resultingPreprocessed, TempEquivClassInfo{}, hash);
 				curGroupsMutex.unlock();
 				
-				editClassMutex.lock();
 				incrementLinkBetween(element, extended);
-				editClassMutex.unlock();
 			}
 		});
 #ifndef NDEBUG

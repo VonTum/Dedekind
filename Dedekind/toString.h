@@ -127,21 +127,8 @@ inline std::ostream& operator<<(std::ostream& os, const std::vector<bool>& fis) 
 	}
 	return os;
 }
-
-inline std::ostream& operator<<(std::ostream& os, const VariableCoOccurence& vo) {
-	os << vo.coOccursWith;
-	return os;
-}
-inline std::ostream& operator<<(std::ostream& os, const InitialVariableObservations& obs) {
-	os << "{occ:" << obs.occurenceCount << ",subGraph:" << obs.subGraphSize << '}';
-	return os;
-}
 inline std::ostream& operator<<(std::ostream& os, const PreprocessedFunctionInputSet& s) {
 	os << s.functionInputSet;
-	/*os << '.';
-	for(auto occ : s.variableOccurences) {
-		os << occ;
-	}*/
 	return os;
 }
 

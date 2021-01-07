@@ -84,9 +84,45 @@ public:
 		return FunctionInputBitSet(BitSet<size_t(1) << Variables>::full());
 	}
 
+	struct VarMaskCache {
+		BitSet<(1 << Variables)> masks[Variables];
+
+		constexpr VarMaskCache() {
+			constexpr uint64_t varPattern[6]{0xaaaaaaaaaaaaaaaa, 0xcccccccccccccccc, 0xF0F0F0F0F0F0F0F0, 0xFF00FF00FF00FF00, 0xFFFF0000FFFF0000, 0xFFFFFFFF00000000};
+			
+			if constexpr(Variables <= 6) {
+				for(unsigned int var = 0; var < Variables; var++) {
+					masks[var].data = static_cast<decltype(masks[var].data)>(varPattern[var]);
+				}
+			} else {
+				for(unsigned int var = 0; var < 6; var ++) {
+					for(size_t j = 0; j < BitSet<(1 << Variables)>::BLOCK_COUNT; j++) {
+						masks[var].data[j] = varPattern[var];
+					}
+				}
+				for(unsigned int var = 6; var < Variables; var++) {
+					size_t stepSize = size_t(1) << (var - 6);
+					assert(stepSize > 0);
+					for(size_t curIndex = 0; curIndex < BitSet<(1 << Variables)>::BLOCK_COUNT; curIndex += stepSize * 2) {
+						for(size_t indexInStep = 0; indexInStep < stepSize; indexInStep++) {
+							masks[var].data[curIndex + indexInStep] = 0x0000000000000000;
+						}
+						for(size_t indexInStep = 0; indexInStep < stepSize; indexInStep++) {
+							masks[var].data[curIndex + stepSize + indexInStep] = 0xFFFFFFFFFFFFFFFF;
+						}
+					}
+				}
+			}
+		}
+	};
+	static inline const VarMaskCache varMaskCache = VarMaskCache();
+
 	static constexpr BitSet<(1 << Variables)> varMask(unsigned int var) {
 		assert(var < Variables);
 
+		return FunctionInputBitSet<Variables>::varMaskCache.masks[var];
+
+		/*
 		constexpr uint64_t varPattern[6]{0xaaaaaaaaaaaaaaaa, 0xcccccccccccccccc, 0xF0F0F0F0F0F0F0F0, 0xFF00FF00FF00FF00, 0xFFFF0000FFFF0000, 0xFFFFFFFF00000000};
 
 		BitSet<(1 << Variables)> result;
@@ -121,7 +157,7 @@ public:
 			result.data = uint8_t(0b10);
 		}
 
-		return result;
+		return result;*/
 	}
 
 	size_t countVariableOccurences(unsigned int var) const {
