@@ -38,17 +38,14 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 		std::cout << "Looking at size " << groupSize << '/' << layer.size();
 		EquivalenceClassMap<TempEquivClassInfo>& curGroups = equivalenceClasses[groupSize];
 		// try to extend each of the previous groups by 1
-		std::shared_mutex curGroupsMutex;
-		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&curGroupsMutex,&equivalenceClasses,&groupSize](ValuedEquivalenceClass<TempEquivClassInfo>& element) {
+		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&equivalenceClasses,&groupSize](ValuedEquivalenceClass<TempEquivClassInfo>& element) {
 			for(FunctionInput newInput : layer) {
 				if(element.equivClass.hasFunctionInput(newInput)) continue; // only try to add new inputs that are not yet part of this
 				PreprocessedFunctionInputSet resultingPreprocessed = element.equivClass.extendedBy(newInput);
 				uint64_t hash = resultingPreprocessed.hash();
 
-				{// this whole bit is to reduce contention on curGroupsMutex, by finding existing classes earlier and handling them without having to take a write lock
-					curGroupsMutex.lock_shared();
+				{// this whole bit is to reduce contention on the modifyMutex of the curGroups map, by finding existing classes earlier and handling them without having to take a write lock
 					ValuedEquivalenceClass<TempEquivClassInfo>* existingClass = curGroups.find(resultingPreprocessed, hash);
-					curGroupsMutex.unlock_shared();
 
 					if(existingClass != nullptr) {
 						incrementLinkBetween(element, *existingClass);
@@ -56,9 +53,7 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 					}
 				}
 
-				curGroupsMutex.lock();
 				ValuedEquivalenceClass<TempEquivClassInfo>& extended = curGroups.getOrAdd(resultingPreprocessed, TempEquivClassInfo{}, hash);
-				curGroupsMutex.unlock();
 				
 				incrementLinkBetween(element, extended);
 			}

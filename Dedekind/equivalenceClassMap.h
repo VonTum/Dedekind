@@ -3,6 +3,11 @@
 #include "equivalenceClass.h"
 #include "heapArray.h"
 
+#include <atomic>
+#include <shared_mutex>
+#include <mutex>
+#include "sharedLockGuard.h"
+
 template<typename V>
 struct ValuedEquivalenceClass {
 	EquivalenceClass equivClass;
@@ -21,34 +26,61 @@ template<typename V>
 class EquivalenceClassMap {
 public:
 	struct MapNode {
-		MapNode* nextNode;
 		ValuedEquivalenceClass<V> item;
+		std::atomic<MapNode*> nextNode;
 
 		//MapNode(MapNode* nextNode, const EquivalenceClass& equivClass, const V& value) : nextNode(nextNode), item{equivClass, value} {}
 	};
 
-	MapNode** hashTable;
+	std::atomic<std::atomic<MapNode*>*> hashTable;
 	size_t bucketsIndex;
 	size_t buckets;
 	size_t itemCount;
 private:
 
-	MapNode** getBucketFor(uint64_t hash) const {
-		return &hashTable[hash % buckets];
+	mutable std::shared_mutex bucketLock;
+	mutable std::mutex modifyLock;
+
+	// These are NOT locked, locking should be done by CALLER
+	std::atomic<MapNode*>* getBucketFor(uint64_t hash) const {
+		return hashTable.load() + hash % buckets;
 	}
-	MapNode** getNodeFor(const PreprocessedFunctionInputSet& functionInputSet, uint64_t hash) const {
-		MapNode** cur = getBucketFor(hash);
-		for(; *cur != nullptr; cur = &((*cur)->nextNode)) {
-			const EquivalenceClass& eqClass = (*cur)->item.equivClass;
+	std::atomic<MapNode*>* getNodeFor(const PreprocessedFunctionInputSet& functionInputSet, uint64_t hash) const {
+		std::atomic<MapNode*>* cur = getBucketFor(hash);
+		for(; *cur != nullptr; cur = &(cur->load()->nextNode)) {
+			const EquivalenceClass& eqClass = cur->load()->item.equivClass;
 			if(eqClass.contains(functionInputSet)) {
 				return cur;
 			}
 		}
 		return cur;
 	}
-	MapNode** getNodeFor(const PreprocessedFunctionInputSet& functionInputSet) const {
+	std::atomic<MapNode*>* getNodeFor(const PreprocessedFunctionInputSet& functionInputSet) const {
 		return getNodeFor(functionInputSet, functionInputSet.hash());
 	}
+
+	// These are protected by bucketLock
+	MapNode* getReadOnlyBucket(uint64_t hash) const {
+		shared_lock_guard lg(bucketLock);
+		return hashTable.load()[hash % buckets].load();
+	}
+	MapNode* getReadOnlyNode(const PreprocessedFunctionInputSet& functionInputSet, uint64_t hash) const {
+		MapNode* curNode = getReadOnlyBucket(hash);
+		while(curNode != nullptr) {
+			if(curNode->item.equivClass.contains(functionInputSet)) {
+				return curNode;
+			} else {
+				curNode = curNode->nextNode.load();
+			}
+		}
+		return nullptr;
+	}
+	MapNode* getReadOnlyNode(const PreprocessedFunctionInputSet& fis) const {
+		return getReadOnlyNode(fis, fis.hash());
+	}
+
+
+
 	void deleteAllNodes() {
 		for(size_t i = 0; i < buckets; i++) {
 			for(MapNode* curNode = hashTable[i]; curNode != nullptr; ) {
@@ -61,21 +93,23 @@ private:
 		itemCount = 0;
 	}
 	void rehash(size_t newBuckets) {
-		MapNode** oldHashTable = this->hashTable;
+		bucketLock.lock();
+		std::atomic<MapNode*>* oldHashTable = this->hashTable.load();
 		size_t oldBuckets = this->buckets;
-		this->hashTable = new MapNode*[newBuckets];
+		this->hashTable = new std::atomic<MapNode*>[newBuckets];
 		this->buckets = newBuckets;
 		for(size_t i = 0; i < this->buckets; i++) this->hashTable[i] = nullptr;
 		for(size_t i = 0; i < oldBuckets; i++) {
 			for(MapNode* curNode = oldHashTable[i]; curNode != nullptr; ) {
-				MapNode** bucket = getBucketFor(curNode->item.equivClass.hash());
-				MapNode* nextNode = curNode->nextNode;
-				curNode->nextNode = *bucket;
-				*bucket = curNode;
+				std::atomic<MapNode*>& bucket = hashTable.load()[curNode->item.equivClass.hash() % buckets];
+				MapNode* nextNode = curNode->nextNode.load();
+				MapNode* oldBucketNode = bucket.exchange(curNode);
+				curNode->nextNode.store(oldBucketNode);
 				curNode = nextNode;
 			}
 		}
 		delete[] oldHashTable;
+		bucketLock.unlock();
 	}
 	void notifyNewItem() {
 		itemCount++;
@@ -85,7 +119,7 @@ private:
 			rehash(newBuckets);
 		}
 	}
-	EquivalenceClassMap(size_t buckets) : hashTable(new MapNode* [buckets]), buckets(buckets), bucketsIndex(0), itemCount(0) {
+	EquivalenceClassMap(size_t buckets) : hashTable(new std::atomic<MapNode*>[buckets]), buckets(buckets), bucketsIndex(0), itemCount(0) {
 		for(size_t i = 0; i < buckets; i++) {
 			hashTable[i] = nullptr;
 		}
@@ -93,7 +127,12 @@ private:
 public:
 	EquivalenceClassMap() : EquivalenceClassMap(INITIAL_BUCKETS) {}
 
-	EquivalenceClassMap(EquivalenceClassMap&& other) : hashTable(other.hashTable), buckets(other.buckets), bucketsIndex(0), itemCount(other.itemCount) {
+	EquivalenceClassMap(const EquivalenceClassMap&& other) = delete;
+	EquivalenceClassMap& operator=(const EquivalenceClassMap&& other) = delete;
+	EquivalenceClassMap(const EquivalenceClassMap& other) = delete;
+	EquivalenceClassMap& operator=(const EquivalenceClassMap& other) = delete;
+
+	/*EquivalenceClassMap(EquivalenceClassMap&& other) : hashTable(other.hashTable), buckets(other.buckets), bucketsIndex(0), itemCount(other.itemCount) {
 		other.hashTable = new MapNode*[INITIAL_BUCKETS];
 		other.buckets = INITIAL_BUCKETS;
 		other.bucketsIndex = 0;
@@ -118,7 +157,7 @@ public:
 	EquivalenceClassMap& operator=(const EquivalenceClassMap& other) {
 		*this = EquivalenceClassMap(other);
 		return *this;
-	}
+	}*/
 	~EquivalenceClassMap() {
 		deleteAllNodes();
 		delete[] hashTable;
@@ -126,29 +165,30 @@ public:
 	}
 
 	ValuedEquivalenceClass<V>* find(const PreprocessedFunctionInputSet& preprocessed, uint64_t hash) {
-		MapNode** foundNode = getNodeFor(preprocessed, hash);
-		if(*foundNode == nullptr) {
+		MapNode* foundNode = getReadOnlyNode(preprocessed, hash);
+		if(foundNode == nullptr) {
 			return nullptr;
 		} else {
-			return &(**foundNode).item;
+			return &foundNode->item;
 		}
 	}
 	V& get(const PreprocessedFunctionInputSet& preprocessed) {
-		MapNode** foundNode = getNodeFor(preprocessed);
-		assert(*foundNode != nullptr);
-		return (**foundNode).item.value;
+		MapNode* foundNode = getReadOnlyNode(preprocessed);
+		assert(foundNode != nullptr);
+		return foundNode->item.value;
 	}
 	const V& get(const PreprocessedFunctionInputSet& preprocessed) const {
-		MapNode** foundNode = getNodeFor(preprocessed);
-		assert(*foundNode != nullptr);
-		return (**foundNode).item.value;
+		MapNode* foundNode = getReadOnlyNode(preprocessed);
+		assert(foundNode != nullptr);
+		return foundNode->item.value;
 	}
 	ValuedEquivalenceClass<V>& getOrAdd(const PreprocessedFunctionInputSet& preprocessed, const V& defaultForCreate, uint64_t hash) {
-		MapNode** foundNode = getNodeFor(preprocessed, hash);
+		std::lock_guard<std::mutex> lg(modifyLock);
+		std::atomic<MapNode*>* foundNode = getNodeFor(preprocessed, hash);
 		MapNode* actualNode = *foundNode;
 		if(actualNode == nullptr) {
-			actualNode = new MapNode{nullptr, {EquivalenceClass(preprocessed), defaultForCreate}};
-			*foundNode = actualNode;
+			actualNode = new MapNode{{EquivalenceClass(preprocessed), defaultForCreate}, nullptr};
+			foundNode->store(actualNode);
 			this->notifyNewItem();
 		}
 		return actualNode->item;
@@ -158,28 +198,22 @@ public:
 		return getOrAdd(preprocessed, defaultForCreate, hash);
 	}
 
-	void findAllNodesMatchingHash(uint64_t hash, std::vector<ValuedEquivalenceClass<V>*>& foundNodes) {
-		for(MapNode** cur = getBucketFor(hash); *cur != nullptr; cur = &((*cur)->nextNode)) {
-			const EquivalenceClass& eqClass = (*cur)->item.equivClass;
-			if(hash == eqClass.hash) {
-				foundNodes.push_back(&(*cur)->item);
-			}
-		}
-	}
-
-	ValuedEquivalenceClass<V>& add(const PreprocessedFunctionInputSet& preprocessed, const V& value) {
-		uint64_t hash = preprocessed.hash();
-		MapNode** bucket = getBucketFor(hash);
-		*bucket = new MapNode{*bucket, {EquivalenceClass(preprocessed), value}};
+	ValuedEquivalenceClass<V>& add(const EquivalenceClass& eqClass, const V& value, uint64_t hash) {
+		std::lock_guard<std::mutex> lg(modifyLock);
+		std::atomic<MapNode*>& bucket = *getBucketFor(hash);
+		MapNode* newNode = new MapNode{{eqClass, value}, bucket.load()};
+		bucket.store(newNode);
 		this->notifyNewItem();
-		return (*bucket)->item;
+		return newNode->item;
 	}
 
 	ValuedEquivalenceClass<V>& add(const EquivalenceClass& eqClass, const V& value) {
-		MapNode** bucket = getBucketFor(eqClass.hash());
-		*bucket = new MapNode{*bucket, {eqClass, value}};
-		this->notifyNewItem();
-		return (*bucket)->item;
+		return this->add(eqClass, value, eqClass.hash());
+	}
+
+	ValuedEquivalenceClass<V>& add(const PreprocessedFunctionInputSet& preprocessed, const V& value) {
+		EquivalenceClass eqClass = EquivalenceClass(preprocessed);
+		return this->add(eqClass, value, eqClass.hash());
 	}
 
 	size_t size() const { return itemCount; }
@@ -189,12 +223,12 @@ public:
 
 	struct EquivalenceClassMapIter {
 	protected:
-		MapNode** curBucket;
-		MapNode** hashTableEnd;
+		std::atomic<MapNode*>* curBucket;
+		std::atomic<MapNode*>* hashTableEnd;
 		MapNode* curNode;
 
 	public:
-		EquivalenceClassMapIter(MapNode** hashTable, size_t buckets) : curBucket(hashTable), hashTableEnd(hashTable + buckets) {
+		EquivalenceClassMapIter(std::atomic<MapNode*>* hashTable, size_t buckets) : curBucket(hashTable), hashTableEnd(hashTable + buckets) {
 			while(*curBucket == nullptr && curBucket != hashTableEnd) {
 				curBucket++;
 			}
