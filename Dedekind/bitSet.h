@@ -156,14 +156,6 @@ public:
 		}
 		return false;
 	}
-	constexpr bool operator<(const BitSet& other) const {
-		for(size_t i = BLOCK_COUNT; i > 0; i--) { // check Most Significant Bits first
-			if(this->data[i-1] != other.data[i-1]) {
-				return this->data[i-1] < other.data[i-1];
-			}
-		}
-		return false; // equality
-	}
 	constexpr bool operator>(const BitSet& other) const {
 		for(size_t i = BLOCK_COUNT; i > 0; i--) { // check Most Significant Bits first
 			if(this->data[i-1] != other.data[i-1]) {
@@ -172,22 +164,10 @@ public:
 		}
 		return false; // equality
 	}
-	constexpr bool operator<=(const BitSet& other) const {
-		for(size_t i = BLOCK_COUNT; i > 0; i--) { // check Most Significant Bits first
-			if(this->data[i] != other.data[i]) {
-				return this->data[i] < other.data[i];
-			}
-		}
-		return true; // equality
-	}
-	constexpr bool operator>=(const BitSet& other) const {
-		for(size_t i = BLOCK_COUNT; i > 0; i--) { // check Most Significant Bits first
-			if(this->data[i] != other.data[i]) {
-				return this->data[i] > other.data[i];
-			}
-		}
-		return true; // equality
-	}
+	constexpr bool operator<(const BitSet& other) const { return other > *this; }
+	constexpr bool operator<=(const BitSet& other) const { return !(*this >other); }
+	constexpr bool operator>=(const BitSet& other) const { return !(other > *this); }
+	
 
 	constexpr bool isEmpty() const {
 		for(uint64_t item : this->data) {
@@ -215,6 +195,141 @@ public:
 		for(uint64_t& item : result.data) {
 			item = 0xFFFFFFFFFFFFFFFF;
 		}
+		return result;
+	}
+};
+
+// SSE implementation
+template<>
+class BitSet<128> {
+	static __m128i makeMask(size_t index) {
+		if(index >= 64) {
+			return _mm_set_epi64x(uint64_t(1) << (index & 0b111111U), uint64_t(0));
+		} else {
+			return _mm_set_epi64x(uint64_t(0), uint64_t(1) << index);
+		}
+	}
+public:
+	__m128i data;
+
+
+	BitSet() : data(_mm_setzero_si128()) {}
+
+	static constexpr size_t size() {
+		return 128;
+	}
+	size_t count() const {
+		return __popcnt64(_mm_extract_epi64(this->data, 0)) + __popcnt64(_mm_extract_epi64(this->data, 1));
+	}
+	uint64_t hash() const {
+		return _mm_extract_epi64(this->data, 0) ^ _mm_extract_epi64(this->data, 1);
+	}
+
+	bool get(size_t index) const {
+		assert(index < size());
+		if(index >= 64) {
+			return (_mm_extract_epi64(this->data, 1) & (uint64_t(1) << (index & 0b111111U))) != 0;
+		} else {
+			return (_mm_extract_epi64(this->data, 0) & (uint64_t(1) << index)) != 0;
+		}
+	}
+
+	void set(size_t index) {
+		assert(index < size());
+		this->data = _mm_or_si128(this->data, makeMask(index));
+	}
+
+	void reset(size_t index) {
+		assert(index < size());
+		this->data = _mm_andnot_si128(makeMask(index), this->data);
+	}
+
+	BitSet& operator|=(const BitSet& other) {
+		this->data = _mm_or_si128(this->data, other.data);
+		return *this;
+	}
+	BitSet& operator&=(const BitSet& other) {
+		this->data = _mm_and_si128(this->data, other.data);
+		return *this;
+	}
+	BitSet& operator^=(const BitSet& other) {
+		this->data = _mm_xor_si128(this->data, other.data);
+		return *this;
+	}
+	BitSet operator~() const {
+		BitSet result;
+		// very weird, there is no intrinsic for 'not'
+		result.data = _mm_xor_si128(this->data, _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_setzero_si128()));
+		return result;
+	}
+	BitSet& operator<<=(unsigned int shift) {
+		assert(shift < size());
+
+		__m128i shifted64 = _mm_slli_si128(this->data, 8);
+		if(shift < 64) {
+			__m128i shiftedInParts = _mm_sll_epi64(this->data, _mm_set1_epi64x(shift));
+			__m128i backShifted = _mm_srl_epi64(shifted64, _mm_set1_epi64x(64 - int(shift)));
+			this->data = _mm_or_si128(shiftedInParts, backShifted);
+		} else {
+			this->data = _mm_sll_epi64(shifted64, _mm_set1_epi64x(shift & 0b111111U));
+		}
+		return *this;
+	}
+	BitSet& operator>>=(unsigned int shift) {
+		assert(shift < size());
+		__m128i shifted64 = _mm_srli_si128(this->data, 8);
+		if(shift < 64) {
+			__m128i shiftedInParts = _mm_srl_epi64(this->data, _mm_set1_epi64x(shift));
+			__m128i backShifted = _mm_sll_epi64(shifted64, _mm_set1_epi64x(64 - int(shift)));
+			this->data = _mm_or_si128(shiftedInParts, backShifted);
+		} else {
+			this->data = _mm_srl_epi64(shifted64, _mm_set1_epi64x(shift & 0b111111U));
+		}
+		return *this;
+	}
+	bool operator==(const BitSet& other) const {
+		__m128i isEq = _mm_cmpeq_epi64(this->data, other.data);
+		return _mm_movemask_epi8(isEq) == 0xFFFF;
+	}
+	bool operator!=(const BitSet& other) const {
+		__m128i isEq = _mm_cmpeq_epi64(this->data, other.data);
+		return _mm_movemask_epi8(isEq) != 0xFFFF;
+	}
+	bool operator>(const BitSet& other) const {
+		__m128i isGt = _mm_cmpgt_epi64(this->data, other.data);
+		if(_mm_extract_epi64(isGt, 1)) {
+			return true;
+		} else {
+			__m128i isEq = _mm_cmpeq_epi64(this->data, other.data);
+			if(_mm_extract_epi64(isEq, 1)) {
+				return _mm_extract_epi64(isGt, 0);
+			} else {
+				return false;
+			}
+		}
+	}
+	bool operator<(const BitSet& other) const { return other > *this; }
+	bool operator<=(const BitSet& other) const { return !(*this > other); }
+	bool operator>=(const BitSet& other) const { return !(other > *this); }
+	
+	bool isEmpty() const {
+		__m128i isEq = _mm_cmpeq_epi64(this->data, _mm_setzero_si128());
+		return _mm_movemask_epi8(isEq) == 0xFFFF;
+	}
+	bool isFull() const {
+		__m128i isEq = _mm_cmpeq_epi64(this->data, _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_setzero_si128()));
+		return _mm_movemask_epi8(isEq) == 0xFFFF;
+	}
+
+	static BitSet empty() {
+		BitSet result;
+		result.data = _mm_setzero_si128();
+		return result;
+	}
+
+	static BitSet full() {
+		BitSet result;
+		result.data = _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_setzero_si128());
 		return result;
 	}
 };

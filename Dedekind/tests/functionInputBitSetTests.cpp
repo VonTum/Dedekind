@@ -9,7 +9,11 @@
 #include <random>
 #include <iostream>
 
-template<int Start, int End, template<int> typename FuncClass>
+#define TEST_FROM 7
+#define TEST_UPTO 9
+#define ITER 1000
+
+template<unsigned int Start, unsigned int End, template<unsigned int> typename FuncClass>
 void runFunctionRange() {
 	if constexpr(Start <= End) {
 		FuncClass<Start>::run();
@@ -17,22 +21,22 @@ void runFunctionRange() {
 	}
 }
 
-template<int Variables>
+template<unsigned int Variables>
 static bool operator==(const FunctionInputBitSet<Variables>& fibs, const std::vector<bool>& expectedState) {
 	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::maxSize(); i++) {
 		if(expectedState[i] != fibs.contains(FunctionInput{i})) return false;
 	}
 	return true;
 }
-template<int Variables>
+template<unsigned int Variables>
 static bool operator!=(const FunctionInputBitSet<Variables>& fibs, const std::vector<bool>& expectedState) {
 	return !(fibs == expectedState);
 }
-template<int Variables>
+template<unsigned int Variables>
 static bool operator==(const std::vector<bool>& expectedState, const FunctionInputBitSet<Variables>& fibs) {
 	return fibs == expectedState;
 }
-template<int Variables>
+template<unsigned int Variables>
 static bool operator!=(const std::vector<bool>& expectedState, const FunctionInputBitSet<Variables>& fibs) {
 	return fibs != expectedState;
 }
@@ -41,20 +45,25 @@ bool genBool() {
 	return rand() % 2 == 1;
 }
 
-template<int Variables>
-static FunctionInputBitSet<Variables> generateFibs() {
-	FunctionInputBitSet<Variables> fis = FunctionInputBitSet<Variables>::empty();
-	
-	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::maxSize(); i++) {
+template<size_t Size>
+static BitSet<Size> generateBitSet() {
+	BitSet<Size> bs;
+
+	for(size_t i = 0; i < Size; i++) {
 		if(genBool()) {
-			fis.add(FunctionInput{i});
+			bs.set(i);
 		}
 	}
 
-	return fis;
+	return bs;
 }
 
-template<int Variables>
+template<unsigned int Variables>
+static FunctionInputBitSet<Variables> generateFibs() {
+	return FunctionInputBitSet<Variables>(generateBitSet<(1 << Variables)>());
+}
+
+template<unsigned int Variables>
 static std::vector<bool> toVector(const FunctionInputBitSet<Variables>& fibs) {
 	std::vector<bool> result(FunctionInputBitSet<Variables>::maxSize());
 
@@ -65,7 +74,7 @@ static std::vector<bool> toVector(const FunctionInputBitSet<Variables>& fibs) {
 	return result;
 }
 
-template<int Variables>
+template<unsigned int Variables>
 struct SetResetTest {
 	static void run() {
 		FunctionInputBitSet<Variables> fis = FunctionInputBitSet<Variables>::empty();
@@ -73,9 +82,15 @@ struct SetResetTest {
 
 		ASSERT(fis == expectedState);
 
-		for(size_t iter = 0; iter < 1000; iter++) {
+		for(size_t iter = 0; iter < ITER; iter++) {
 			FunctionInput::underlyingType index = rand() % FunctionInputBitSet<Variables>::maxSize();
 			
+			if constexpr(Variables == 7) {
+				logStream << "data: " << std::hex << fis.bitset.data.m128i_i64[0] << ", " << fis.bitset.data.m128i_i64[1] << std::dec << " ";
+			}
+
+			logStream << "index: " << index << "\n";
+
 			if(expectedState[index]) {
 				fis.remove(FunctionInput{index});
 				expectedState[index] = false;
@@ -89,14 +104,18 @@ struct SetResetTest {
 	}
 };
 
-template<int Variables>
+template<unsigned int Variables>
 struct ShiftLeftTest {
 	static void run() {
-		for(size_t iter = 0; iter < 1000; iter++) {
+		for(size_t iter = 0; iter < ITER; iter++) {
 			FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
 			std::vector<bool> expectedState = toVector(fibs);
 
 			int shift = rand() % FunctionInputBitSet<Variables>::maxSize();
+
+			if constexpr(Variables == 7) {
+				logStream << "data: " << std::hex << fibs.bitset.data.m128i_i64[0] << ", " << fibs.bitset.data.m128i_i64[1] << std::dec << " ";
+			}
 
 			logStream << "Original: " << fibs << "\n";
 			logStream << "Shift: " << shift << "\n";
@@ -114,10 +133,10 @@ struct ShiftLeftTest {
 	}
 };
 
-template<int Variables>
+template<unsigned int Variables>
 struct ShiftRightTest {
 	static void run() {
-		for(size_t iter = 0; iter < 1000; iter++) {
+		for(size_t iter = 0; iter < ITER; iter++) {
 			FunctionInputBitSet<Variables> fis = generateFibs<Variables>();
 			std::vector<bool> expectedState = toVector(fis);
 
@@ -139,7 +158,73 @@ struct ShiftRightTest {
 	}
 };
 
-template<int Variables>
+// not explicitly needed
+// compare need only be transitive, no other requirements
+/*template<unsigned int Variables>
+struct CompareBitsTest {
+	static void run() {
+		for(size_t bit = 0; bit < (1 << Variables) - 1; bit++) {
+			BitSet<(1 << Variables)> a;
+			BitSet<(1 << Variables)> b;
+
+			a.set(bit);
+			b.set(bit + 1);
+
+			logStream << "bit: " << bit << "\n";
+
+			ASSERT(a < b);
+			ASSERT(a <= b);
+			ASSERT(a != b);
+			ASSERT(!(a > b));
+			ASSERT(!(a >= b));
+			ASSERT(!(a == b));
+		}
+	}
+};*/
+
+template<unsigned int Variables>
+struct CompareTransitiveTest {
+	static void run() {
+		for(size_t iter = 0; iter < ITER; iter++) {
+			constexpr size_t Size = (1 << Variables);
+			BitSet<Size> a = generateBitSet<Size>();
+			BitSet<Size> b = generateBitSet<Size>();
+			BitSet<Size> c = generateBitSet<Size>();
+
+			if(a < b && b < c) {
+				ASSERT(a < c);
+			}
+			if(a <= b && b <= c) {
+				ASSERT(a <= c);
+			}
+		}
+	}
+};
+
+
+template<unsigned int Variables>
+struct CompareTest {
+	static void run() {
+		for(size_t iter = 0; iter < ITER; iter++) {
+			constexpr size_t Size = (1 << Variables);
+			BitSet<Size> a = generateBitSet<Size>();
+			BitSet<Size> b = generateBitSet<Size>();
+			
+			logStream << "a: " << a << "\nb: " << b << "\n";
+
+			ASSERT((a < b) == (b > a));
+			ASSERT((a <= b) == (b >= a));
+			if(a < b) {
+				ASSERT(!(b < a));
+				ASSERT(a <= b);
+			} else {
+				ASSERT(a >= b);
+			}
+		}
+	}
+};
+
+template<unsigned int Variables>
 struct VarMaskTest {
 	static void run() {
 		for(unsigned int var = 0; var < Variables; var++) {
@@ -155,7 +240,7 @@ struct VarMaskTest {
 	}
 };
 
-template<int Variables>
+template<unsigned int Variables>
 struct MoveVariableTest {
 	static void run() {
 		std::vector<unsigned int> funcInputs;
@@ -198,7 +283,7 @@ struct MoveVariableTest {
 	}
 };
 
-template<int Variables>
+template<unsigned int Variables>
 struct SwapVariableTest {
 	static void run() {
 		std::vector<unsigned int> funcInputs;
@@ -242,10 +327,10 @@ struct SwapVariableTest {
 	}
 };
 
-template<int Variables>
+template<unsigned int Variables>
 struct CanonizeTest {
 	static void run() {
-		for(int iter = 0; iter < 1000; iter++) {
+		for(int iter = 0; iter < ITER; iter++) {
 			std::cout << ".";
 			FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
 
@@ -258,30 +343,42 @@ struct CanonizeTest {
 	}
 };
 
-/*TEST_CASE(testSetResetTestBit) {
-	runFunctionRange<1, 9, SetResetTest>();
+TEST_CASE(testSetResetTestBit) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, SetResetTest>();
 }
 
 TEST_CASE(testShiftLeft) {
-	runFunctionRange<1, 9, ShiftLeftTest>();
+	runFunctionRange<TEST_FROM, TEST_UPTO, ShiftLeftTest>();
 }
 
 TEST_CASE(testShiftRight) {
-	runFunctionRange<1, 9, ShiftRightTest>();
+	runFunctionRange<TEST_FROM, TEST_UPTO, ShiftRightTest>();
+}
+
+/*TEST_CASE(testBitsCompare) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, CompareBitsTest>();
+}*/
+
+TEST_CASE(testCompareTransitive) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, CompareTransitiveTest>();
+}
+
+TEST_CASE(testCompare) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, CompareTest>();
 }
 
 TEST_CASE(testFullVar) {
-	runFunctionRange<1, 9, VarMaskTest>();
+	runFunctionRange<TEST_FROM, TEST_UPTO, VarMaskTest>();
 }
 
 TEST_CASE(testMoveVar) {
-	runFunctionRange<1, 9, MoveVariableTest>();
+	runFunctionRange<TEST_FROM, TEST_UPTO, MoveVariableTest>();
 }
 
 TEST_CASE(testSwapVar) {
-	runFunctionRange<1, 9, SwapVariableTest>();
-}*/
+	runFunctionRange<TEST_FROM, TEST_UPTO, SwapVariableTest>();
+}
 
 TEST_CASE(testCanonize) {
-	runFunctionRange<1, 7, CanonizeTest>();
+	runFunctionRange<TEST_FROM, 7, CanonizeTest>();
 }

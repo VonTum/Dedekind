@@ -95,28 +95,17 @@ inline std::ostream& operator<<(std::ostream& os, FunctionInput f) {
 	return os;
 }
 
-/*template<int Variables>
-inline std::ostream& operator<<(std::ostream& os, const FunctionInputBitSet<Variables>& fis) {
-	os << '{';
-	bool isFirst = true;
-	for(unsigned int i = 0; i < fis.size(); i++) {
-		if(fis.contains(FunctionInput{i})) {
-			if(!isFirst) {
-				os << ',';
-			}
-			os << FunctionInput{i};
-			isFirst = false;
-		}
+template<size_t Size>
+inline std::ostream& operator<<(std::ostream& os, const BitSet<Size>& bitset) {
+	for(size_t i = 0; i < Size; i++) {
+		os << bitset.get(Size - i - 1) ? '1' : '0';
 	}
-	os << '}';
 	return os;
-}*/
+}
 
-template<int Variables>
+template<unsigned int Variables>
 inline std::ostream& operator<<(std::ostream& os, const FunctionInputBitSet<Variables>& fis) {
-	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::maxSize(); i++) {
-		os << fis.contains(FunctionInput{FunctionInputBitSet<Variables>::maxSize() - i - 1}) ? '1' : '0';
-	}
+	os << fis.bitset;
 	return os;
 }
 

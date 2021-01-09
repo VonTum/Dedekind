@@ -10,8 +10,8 @@ template<unsigned int Variables>
 class FunctionInputBitSet {
 	static_assert(Variables >= 1, "Cannot make 0 variable FunctionInputBitSet");
 
-	BitSet<size_t(1) << Variables> bitset;
 public:
+	BitSet<size_t(1) << Variables> bitset;
 
 	FunctionInputBitSet() : bitset() {}
 	FunctionInputBitSet(const BitSet<size_t(1) << Variables>& bitset) : bitset(bitset) {}
@@ -94,6 +94,11 @@ public:
 				for(unsigned int var = 0; var < Variables; var++) {
 					masks[var].data = static_cast<decltype(masks[var].data)>(varPattern[var]);
 				}
+			} else if constexpr(Variables == 7) {
+				for(unsigned int var = 0; var < 6; var++) {
+					masks[var].data = _mm_set1_epi64x(varPattern[var]);
+				}
+				masks[6].data = _mm_set_epi64x(0xFFFFFFFFFFFFFFFF, 0x0000000000000000);
 			} else {
 				for(unsigned int var = 0; var < 6; var ++) {
 					for(size_t j = 0; j < BitSet<(1 << Variables)>::BLOCK_COUNT; j++) {
@@ -121,43 +126,6 @@ public:
 		assert(var < Variables);
 
 		return FunctionInputBitSet<Variables>::varMaskCache.masks[var];
-
-		/*
-		constexpr uint64_t varPattern[6]{0xaaaaaaaaaaaaaaaa, 0xcccccccccccccccc, 0xF0F0F0F0F0F0F0F0, 0xFF00FF00FF00FF00, 0xFFFF0000FFFF0000, 0xFFFFFFFF00000000};
-
-		BitSet<(1 << Variables)> result;
-
-		if constexpr(Variables >= 7) {
-			if(var < 6) {
-				uint64_t chosenPattern = varPattern[var];
-				for(uint64_t& item : result.data) {
-					item = chosenPattern;
-				}
-			} else {
-				size_t stepSize = size_t(1) << (var - 6);
-				assert(stepSize > 0);
-				for(size_t curIndex = 0; curIndex < result.BLOCK_COUNT; curIndex += stepSize * 2) {
-					for(size_t indexInStep = 0; indexInStep < stepSize; indexInStep++) {
-						result.data[curIndex + indexInStep] = 0x0000000000000000;
-					}
-					for(size_t indexInStep = 0; indexInStep < stepSize; indexInStep++) {
-						result.data[curIndex + stepSize + indexInStep] = 0xFFFFFFFFFFFFFFFF;
-					}
-				}
-			}
-		} else if constexpr(Variables >= 3) {
-			result.data = static_cast<decltype(result.data)>(varPattern[var]);
-		} else if constexpr(Variables == 2) {
-			if(var == 0) {
-				result.data = uint8_t(0b1010);
-			} else {
-				result.data = uint8_t(0b1100);
-			}
-		} else if constexpr(Variables == 1) {
-			result.data = uint8_t(0b10);
-		}
-
-		return result;*/
 	}
 
 	size_t countVariableOccurences(unsigned int var) const {
