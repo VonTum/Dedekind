@@ -67,6 +67,12 @@ public:
 		subPart &= ~makeMask(index);
 	}
 
+	constexpr void toggle(size_t index) {
+		assert(index < size());
+		uint64_t& subPart = getBlock(index);
+		subPart ^= makeMask(index);
+	}
+
 	constexpr BitSet& operator|=(const BitSet& other) {
 		for(size_t i = 0; i < BLOCK_COUNT; i++) {
 			this->data[i] |= other.data[i];
@@ -236,12 +242,17 @@ public:
 
 	void set(size_t index) {
 		assert(index < size());
-		this->data = _mm_or_si128(this->data, makeMask(index));
+		this->data = _mm_or_si128(makeMask(index), this->data);
 	}
 
 	void reset(size_t index) {
 		assert(index < size());
 		this->data = _mm_andnot_si128(makeMask(index), this->data);
+	}
+
+	void toggle(size_t index) {
+		assert(index < size());
+		this->data = _mm_xor_si128(makeMask(index), this->data);
 	}
 
 	BitSet& operator|=(const BitSet& other) {
@@ -369,6 +380,11 @@ public:
 		this->data &= ~makeMask(index);
 	}
 
+	constexpr void toggle(size_t index) {
+		assert(index < size());
+		this->data ^= makeMask(index);
+	}
+
 	constexpr BitSet& operator|=(const BitSet& other) {
 		this->data |= other.data;
 		return *this;
@@ -470,6 +486,11 @@ public:
 		this->data &= ~makeMask(index);
 	}
 
+	constexpr void toggle(size_t index) {
+		assert(index < size());
+		this->data ^= makeMask(index);
+	}
+
 	constexpr BitSet& operator|=(const BitSet& other) {
 		this->data |= other.data;
 		return *this;
@@ -569,6 +590,11 @@ public:
 	constexpr void reset(size_t index) {
 		assert(index < size());
 		this->data &= ~makeMask(index);
+	}
+
+	constexpr void toggle(size_t index) {
+		assert(index < size());
+		this->data ^= makeMask(index);
 	}
 
 	constexpr BitSet& operator|=(const BitSet& other) {
@@ -673,6 +699,11 @@ public:
 		this->data &= ~makeMask(index);
 	}
 
+	constexpr void toggle(size_t index) {
+		assert(index < size());
+		this->data ^= makeMask(index);
+	}
+
 	constexpr BitSet& operator|=(const BitSet& other) {
 		this->data |= other.data;
 		return *this;
@@ -774,6 +805,11 @@ public:
 		this->data &= ~makeMask(index);
 	}
 
+	constexpr void toggle(size_t index) {
+		assert(index < size());
+		this->data ^= makeMask(index);
+	}
+
 	constexpr BitSet& operator|=(const BitSet& other) {
 		this->data |= other.data;
 		return *this;
@@ -788,7 +824,7 @@ public:
 	}
 	constexpr BitSet operator~() const {
 		BitSet result;
-		result.data = ~this->data;
+		result.data = ~this->data & 0b1111;
 		return result;
 	}
 	constexpr BitSet& operator<<=(unsigned int shift) {
@@ -829,13 +865,13 @@ public:
 
 	static constexpr BitSet empty() {
 		BitSet result;
-		result.data = 0x00;
+		result.data = 0b0000;
 		return result;
 	}
 
 	static constexpr BitSet full() {
 		BitSet result;
-		result.data = 0xFF;
+		result.data = 0b1111;
 		return result;
 	}
 };
@@ -875,6 +911,11 @@ public:
 		this->data &= ~makeMask(index);
 	}
 
+	constexpr void toggle(size_t index) {
+		assert(index < size());
+		this->data ^= makeMask(index);
+	}
+
 	constexpr BitSet& operator|=(const BitSet& other) {
 		this->data |= other.data;
 		return *this;
@@ -889,7 +930,7 @@ public:
 	}
 	constexpr BitSet operator~() const {
 		BitSet result;
-		result.data = ~this->data;
+		result.data = ~this->data & 0b11;
 		return result;
 	}
 	constexpr BitSet& operator<<=(unsigned int shift) {
@@ -930,13 +971,13 @@ public:
 
 	static constexpr BitSet empty() {
 		BitSet result;
-		result.data = 0x00;
+		result.data = 0b00;
 		return result;
 	}
 
 	static constexpr BitSet full() {
 		BitSet result;
-		result.data = 0xFF;
+		result.data = 0b11;
 		return result;
 	}
 };
@@ -956,6 +997,18 @@ constexpr BitSet<Size> operator^(BitSet<Size> result, const BitSet<Size>& b) {
 	result ^= b;
 	return result;
 }
+// computes a & ~b
+template<size_t Size>
+constexpr BitSet<Size> andnot(const BitSet<Size>& a, const BitSet<Size>& b) {
+	if constexpr(Size == 128) {
+		BitSet<Size> result;
+		result.data = _mm_andnot_si128(b.data, a.data); // for some reason this does ~first & second, but the methods swaps this around as it is more logical
+		return result;
+	} else {
+		return a & ~b;
+	}
+}
+
 template<size_t Size>
 constexpr BitSet<Size> operator<<(BitSet<Size> result, unsigned int shift) {
 	result <<= shift;

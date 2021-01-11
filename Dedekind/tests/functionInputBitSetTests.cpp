@@ -9,9 +9,11 @@
 #include <random>
 #include <iostream>
 
-#define TEST_FROM 7
+#define TEST_FROM 1
 #define TEST_UPTO 9
-#define ITER 1000
+#define SMALL_ITER 50
+#define LARGE_ITER 1000
+
 
 template<unsigned int Start, unsigned int End, template<unsigned int> typename FuncClass>
 void runFunctionRange() {
@@ -64,6 +66,53 @@ static FunctionInputBitSet<Variables> generateFibs() {
 }
 
 template<unsigned int Variables>
+static FunctionInputBitSet<Variables> generateMBF() {
+	FunctionInputBitSet<Variables> result = FunctionInputBitSet<Variables>::empty();
+
+	unsigned int numberOfSeeds = rand() % (Variables * 2);
+
+	for(unsigned int i = 0; i < numberOfSeeds; i++) {
+		result.bitset.set(rand() % (1 << Variables));
+	}
+
+	for(unsigned int i = 0; i < Variables + 1; i++) {
+		result = result.prev() | result;
+	}
+
+	return result;
+}
+
+template<unsigned int Variables>
+static FunctionInputBitSet<Variables> generateLayer(unsigned int layer) {
+	FunctionInputBitSet<Variables> result = generateFibs<Variables>();
+
+	result &= FunctionInputBitSet<Variables>::layerMask(layer);
+
+	return result;
+}
+
+
+template<unsigned int Variables>
+bool isMonotonic(const FunctionInputBitSet<Variables>& fibs) {
+	for(size_t i = 0; i < (1 << Variables); i++) {
+		if(fibs.bitset.get(i)) {
+			for(size_t j = 0; j < (1 << Variables); j++) {
+				if((j & i) == j) { // j is subset of i
+					if(fibs.bitset.get(j) == false) return false;
+				}
+			}
+		} else {
+			for(size_t j = 0; j < (1 << Variables); j++) {
+				if((i & j) == i) { // j is superset of i
+					if(fibs.bitset.get(j) == true) return false;
+				}
+			}
+		}
+	}
+	return true;
+}
+
+template<unsigned int Variables>
 static std::vector<bool> toVector(const FunctionInputBitSet<Variables>& fibs) {
 	std::vector<bool> result(FunctionInputBitSet<Variables>::maxSize());
 
@@ -82,7 +131,7 @@ struct SetResetTest {
 
 		ASSERT(fis == expectedState);
 
-		for(size_t iter = 0; iter < ITER; iter++) {
+		for(size_t iter = 0; iter < LARGE_ITER; iter++) {
 			FunctionInput::underlyingType index = rand() % FunctionInputBitSet<Variables>::maxSize();
 			
 			if constexpr(Variables == 7) {
@@ -107,7 +156,7 @@ struct SetResetTest {
 template<unsigned int Variables>
 struct ShiftLeftTest {
 	static void run() {
-		for(size_t iter = 0; iter < ITER; iter++) {
+		for(size_t iter = 0; iter < LARGE_ITER; iter++) {
 			FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
 			std::vector<bool> expectedState = toVector(fibs);
 
@@ -136,7 +185,7 @@ struct ShiftLeftTest {
 template<unsigned int Variables>
 struct ShiftRightTest {
 	static void run() {
-		for(size_t iter = 0; iter < ITER; iter++) {
+		for(size_t iter = 0; iter < LARGE_ITER; iter++) {
 			FunctionInputBitSet<Variables> fis = generateFibs<Variables>();
 			std::vector<bool> expectedState = toVector(fis);
 
@@ -185,7 +234,7 @@ struct CompareBitsTest {
 template<unsigned int Variables>
 struct CompareTransitiveTest {
 	static void run() {
-		for(size_t iter = 0; iter < ITER; iter++) {
+		for(size_t iter = 0; iter < LARGE_ITER; iter++) {
 			constexpr size_t Size = (1 << Variables);
 			BitSet<Size> a = generateBitSet<Size>();
 			BitSet<Size> b = generateBitSet<Size>();
@@ -205,7 +254,7 @@ struct CompareTransitiveTest {
 template<unsigned int Variables>
 struct CompareTest {
 	static void run() {
-		for(size_t iter = 0; iter < ITER; iter++) {
+		for(size_t iter = 0; iter < LARGE_ITER; iter++) {
 			constexpr size_t Size = (1 << Variables);
 			BitSet<Size> a = generateBitSet<Size>();
 			BitSet<Size> b = generateBitSet<Size>();
@@ -330,7 +379,7 @@ struct SwapVariableTest {
 template<unsigned int Variables>
 struct CanonizeTest {
 	static void run() {
-		for(int iter = 0; iter < ITER; iter++) {
+		for(int iter = 0; iter < SMALL_ITER; iter++) {
 			std::cout << ".";
 			FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
 
@@ -343,6 +392,70 @@ struct CanonizeTest {
 	}
 };
 
+template<unsigned int Variables>
+struct MBFTest {
+	static void run() {
+		for(int iter = 0; iter < SMALL_ITER; iter++) {
+			std::cout << ".";
+			FunctionInputBitSet<Variables> mfibs = generateMBF<Variables>();
+
+			logStream << mfibs << "\n";
+
+			ASSERT(isMonotonic(mfibs));
+			ASSERT(mfibs.isMonotonic());
+
+			for(size_t i = 0; i < (1 << Variables); i++) {
+				FunctionInputBitSet<Variables> copy = mfibs;
+				copy.bitset.toggle(i);
+				logStream << "+" << copy << "\n";
+
+				ASSERT(isMonotonic(copy) == copy.isMonotonic());
+			}
+		}
+	}
+};
+
+template<unsigned int Variables>
+struct LayerWiseTest {
+	static void run() {
+		for(unsigned int layer = 0; layer < Variables + 1; layer++) {
+			for(int iter = 0; iter < SMALL_ITER; iter++) {
+				std::cout << ".";
+				FunctionInputBitSet<Variables> layerFibs = generateLayer<Variables>(layer);
+
+				if(layerFibs.isEmpty()) continue;
+
+				logStream << layerFibs << "\n";
+
+				ASSERT(layerFibs.isLayer());
+
+				FunctionInputBitSet<Variables> n = layerFibs.next();
+				FunctionInputBitSet<Variables> p = layerFibs.prev();
+
+				logStream << " p:" << p << " n:" << n << "\n";
+
+				ASSERT(p.isLayer());
+				ASSERT(n.isLayer());
+
+				for(unsigned int i = 0; i < (1 << Variables); i++) {
+					FunctionInputBitSet<Variables> copy = layerFibs;
+					copy.bitset.set(i);
+					logStream << "+" << copy;
+
+					bool shouldBeLayer = __popcnt(i) == layer;
+
+					ASSERT(shouldBeLayer == copy.isLayer());
+				}
+			}
+		}
+	}
+};
+
+
+/*TEST_CASE(testBitsCompare) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, CompareBitsTest>();
+}*/
+
 TEST_CASE(testSetResetTestBit) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, SetResetTest>();
 }
@@ -354,10 +467,6 @@ TEST_CASE(testShiftLeft) {
 TEST_CASE(testShiftRight) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, ShiftRightTest>();
 }
-
-/*TEST_CASE(testBitsCompare) {
-	runFunctionRange<TEST_FROM, TEST_UPTO, CompareBitsTest>();
-}*/
 
 TEST_CASE(testCompareTransitive) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, CompareTransitiveTest>();
@@ -381,4 +490,12 @@ TEST_CASE(testSwapVar) {
 
 TEST_CASE(testCanonize) {
 	runFunctionRange<TEST_FROM, 7, CanonizeTest>();
+}
+
+TEST_CASE(testMBF) {
+	runFunctionRange<TEST_FROM, 7, MBFTest>();
+}
+
+TEST_CASE(testLayerWise) {
+	runFunctionRange<TEST_FROM, 7, LayerWiseTest>();
 }

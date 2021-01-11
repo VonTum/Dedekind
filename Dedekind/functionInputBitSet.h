@@ -11,10 +11,13 @@ class FunctionInputBitSet {
 	static_assert(Variables >= 1, "Cannot make 0 variable FunctionInputBitSet");
 
 public:
-	BitSet<size_t(1) << Variables> bitset;
+	using Bits = BitSet<(size_t(1) << Variables)>;
+
+
+	Bits bitset;
 
 	FunctionInputBitSet() : bitset() {}
-	FunctionInputBitSet(const BitSet<size_t(1) << Variables>& bitset) : bitset(bitset) {}
+	FunctionInputBitSet(const Bits& bitset) : bitset(bitset) {}
 	FunctionInputBitSet(const FunctionInputSet& inputSet) : bitset() {
 		for(FunctionInput fi : inputSet) {
 			bitset.set(fi.inputBits);
@@ -77,15 +80,15 @@ public:
 	}
 
 	static constexpr FunctionInputBitSet empty() {
-		return FunctionInputBitSet(BitSet<size_t(1) << Variables>::empty());
+		return FunctionInputBitSet(Bits::empty());
 	}
 
 	static constexpr FunctionInputBitSet full() {
-		return FunctionInputBitSet(BitSet<size_t(1) << Variables>::full());
+		return FunctionInputBitSet(Bits::full());
 	}
 
 	struct VarMaskCache {
-		BitSet<(1 << Variables)> masks[Variables];
+		Bits masks[Variables];
 
 		constexpr VarMaskCache() {
 			constexpr uint64_t varPattern[6]{0xaaaaaaaaaaaaaaaa, 0xcccccccccccccccc, 0xF0F0F0F0F0F0F0F0, 0xFF00FF00FF00FF00, 0xFFFF0000FFFF0000, 0xFFFFFFFF00000000};
@@ -101,14 +104,14 @@ public:
 				masks[6].data = _mm_set_epi64x(0xFFFFFFFFFFFFFFFF, 0x0000000000000000);
 			} else {
 				for(unsigned int var = 0; var < 6; var ++) {
-					for(size_t j = 0; j < BitSet<(1 << Variables)>::BLOCK_COUNT; j++) {
+					for(size_t j = 0; j < Bits::BLOCK_COUNT; j++) {
 						masks[var].data[j] = varPattern[var];
 					}
 				}
 				for(unsigned int var = 6; var < Variables; var++) {
 					size_t stepSize = size_t(1) << (var - 6);
 					assert(stepSize > 0);
-					for(size_t curIndex = 0; curIndex < BitSet<(1 << Variables)>::BLOCK_COUNT; curIndex += stepSize * 2) {
+					for(size_t curIndex = 0; curIndex < Bits::BLOCK_COUNT; curIndex += stepSize * 2) {
 						for(size_t indexInStep = 0; indexInStep < stepSize; indexInStep++) {
 							masks[var].data[curIndex + indexInStep] = 0x0000000000000000;
 						}
@@ -120,12 +123,34 @@ public:
 			}
 		}
 	};
-	static inline const VarMaskCache varMaskCache = VarMaskCache();
+	
+	struct LayerMaskCache {
+		Bits masks[Variables+1];
 
-	static constexpr BitSet<(1 << Variables)> varMask(unsigned int var) {
+		LayerMaskCache() {
+			for(Bits& b : masks) {
+				b = Bits::empty();
+			}
+
+			for(unsigned int i = 0; i < (1 << Variables); i++) {
+				unsigned int layer = __popcnt(i);
+				masks[layer].set(i);
+			}
+		}
+	};
+
+	static inline const VarMaskCache varMaskCache = VarMaskCache();
+	static inline const LayerMaskCache layerMaskCache = LayerMaskCache();
+
+	static constexpr Bits varMask(unsigned int var) {
 		assert(var < Variables);
 
 		return FunctionInputBitSet<Variables>::varMaskCache.masks[var];
+	}
+	static constexpr Bits layerMask(unsigned int layer) {
+		assert(layer < Variables + 1);
+
+		return FunctionInputBitSet<Variables>::layerMaskCache.masks[layer];
 	}
 
 	size_t countVariableOccurences(unsigned int var) const {
@@ -161,7 +186,7 @@ public:
 	void move(unsigned int original, unsigned int destination) {
 		assert(!this->hasVariable(destination));
 
-		BitSet<(1 << Variables)> originalMask = FunctionInputBitSet::varMask(original);
+		Bits originalMask = FunctionInputBitSet::varMask(original);
 
 		// shift amount
 		// assuming source < destination (moving a lower variable to a higher spot)
@@ -171,31 +196,33 @@ public:
 		if(original < destination) {
 			unsigned int shift = (1 << destination) - (1 << original);
 
-			bitset = ((bitset & originalMask) << shift) | (bitset & ~originalMask);
+			bitset = ((bitset & originalMask) << shift) | andnot(bitset, originalMask);
 		} else {
 			unsigned int shift = (1 << original) - (1 << destination);
 
-			bitset = ((bitset & originalMask) >> shift) | (bitset & ~originalMask);
+			bitset = ((bitset & originalMask) >> shift) | andnot(bitset, originalMask);
 		}
 	}
 
 	void swap(unsigned int var1, unsigned int var2) {
-		BitSet<(1 << Variables)> mask1 = FunctionInputBitSet::varMask(var1);
-		BitSet<(1 << Variables)> mask2 = FunctionInputBitSet::varMask(var2);
+		if(var1 > var2) std::swap(var1, var2);
+		// var1 <= var2
+		Bits mask1 = FunctionInputBitSet::varMask(var1);
+		Bits mask2 = FunctionInputBitSet::varMask(var2);
 
-		BitSet<(1 << Variables)> stayingElems = bitset & (~mask1 & ~mask2 | mask1 & mask2);
+		Bits stayingElems;
 
-		if(var1 < var2) {
-			unsigned int shift = (1 << var2) - (1 << var1);
-
-			bitset = ((bitset & mask1 & ~mask2) << shift) | ((bitset & mask2 & ~mask1) >> shift) | stayingElems;
+		if constexpr(Variables <= 6) {
+			stayingElems = bitset & (~(mask1 | mask2) | mask1 & mask2);
 		} else {
-			unsigned int shift = (1 << var1) - (1 << var2);
-
-			bitset = ((bitset & mask2 & ~mask1) << shift) | ((bitset & mask1 & ~mask2) >> shift) | stayingElems;
+			// andnot is a more efficient operation for SIMD than complement
+			stayingElems = andnot(bitset, andnot(mask1 | mask2, mask1 & mask2));
 		}
-	}
 
+		unsigned int shift = (1 << var2) - (1 << var1);
+
+		bitset = ((bitset & andnot(mask1, mask2)) << shift) | ((bitset & andnot(mask2, mask1)) >> shift) | stayingElems;
+	}
 
 	template<typename Func>
 	void forEachPermutation(unsigned int fromVar, unsigned int toVar, const Func& func) {
@@ -230,6 +257,63 @@ public:
 		}
 	}
 
+	bool isLayer() const {
+		for(unsigned int i = 0; i < Variables + 1; i++) {
+			Bits everythingInLayer = this->bitset & FunctionInputBitSet<Variables>::layerMask(i);
+
+			if(!everythingInLayer.isEmpty()) {
+				Bits everythingButLayer = andnot(this->bitset, FunctionInputBitSet<Variables>::layerMask(i));
+				return everythingButLayer.isEmpty();
+			}
+		}
+		// empty fis can also be layer, layer is unknown
+		return true;
+	}
+
+	FunctionInputBitSet getLayer(unsigned int layer) const {
+		return FunctionInputBitSet(this->bitset & layerMask(layer));
+	}
+
+	// returns a FIBS where all elements which have a '1' superset above them are '1'
+	FunctionInputBitSet prev() const {
+		// remove a variable for every item and OR the results
+
+		Bits forced = Bits::empty();
+
+		for(unsigned int var = 0; var < Variables; var++) {
+			Bits whereVarActive = this->bitset & varMask(var);
+			Bits varRemoved = whereVarActive >> (1 << var);
+			forced |= varRemoved;
+		}
+
+		return FunctionInputBitSet(forced);
+	}
+
+	// returns a FIBS where all elements which have a '0' subset below them are '0'
+	FunctionInputBitSet next() const {
+		// add a variable to every item and AND the results
+
+		Bits forced = Bits::empty();
+
+		for(unsigned int var = 0; var < Variables; var++) {
+			Bits whereVarNotActive = this->bitset & ~varMask(var);
+			Bits varAdded = whereVarNotActive << (1 << var);
+			forced |= varAdded; // anding by zeros is the forced spaces
+		}
+
+		return FunctionInputBitSet(forced);
+	}
+
+	// checks if the given FIBS represents a Monotonic Function, where higher layers are towards '0' and lower layers towards '1'
+	bool isMonotonic() const {
+		FunctionInputBitSet p = prev();
+		FunctionInputBitSet n = next();
+		n.bitset.set(0);
+		return ((p | *this) == *this) && ((n & *this) == *this);
+	}
+
+
+
 	FunctionInputBitSet canonize() const {
 		if(this->bitset.isEmpty() || this->bitset.get(0) == 1 && this->bitset.count() == 1) return *this;
 
@@ -262,7 +346,7 @@ public:
 		struct Group {
 			unsigned int value; // represents 'occurences' in the first half, and 'cooccurences' in the second. Just a temporary to sort by
 			unsigned int groupSize;
-			BitSet<(1 << Variables)> mask;
+			Bits mask;
 			unsigned int associatedVariables[Variables];
 		} groups[Variables];
 		Group* groupsEnd = groups;
@@ -300,14 +384,14 @@ public:
 		do {
 			// can't split group of size 1
 			if(g->groupSize > 1) {
-				BitSet<(1 << Variables)> compareToMask = varMask(*g->associatedVariables);
+				Bits compareToMask = varMask(*g->associatedVariables);
 				for(Group* otherGroup = groups; otherGroup < groupsEnd; otherGroup++) {
 					if(otherGroup == g) continue;
 					g->value = (copy.bitset & compareToMask & otherGroup->mask).count();
 					Group* newGroups = groupsEnd;
 					Group* newGroupsEnd = newGroups;
 					for(unsigned int* varInGroup = g->associatedVariables + 1; varInGroup < g->associatedVariables + g->groupSize; ) {
-						BitSet<(1 << Variables)> vm = varMask(*varInGroup);
+						Bits vm = varMask(*varInGroup);
 						unsigned int cooccurences = (copy.bitset & vm & otherGroup->mask).count();
 						if(g->value != cooccurences) {
 							// split off
@@ -404,25 +488,31 @@ public:
 		}
 	
 		unsigned int groupCount = groupsEnd - groups;
-		/*unsigned int sortedTop = 0;
-		for(unsigned int g = 0; g < groupCount; g++) {
-			unsigned int occ = groups[g].value;
-			for(unsigned int v = sortedTop; v < varIdx; v++) {
-				if(counts[v] == occ) {
-					// skip if already in place
-					if(v != sortedTop) {
-						std::swap(counts[v], counts[sortedTop]);
-						copy.swap(v, sortedTop);
-					}
-					sortedTop++;
-				}
-			}
-		}*/
-
 		unsigned int numberOfSize1Groups = 0;
 		for(; groups + numberOfSize1Groups < groupsEnd; numberOfSize1Groups++) {
 			if(groups[numberOfSize1Groups].groupSize != 1) break;
 		}
+
+		/*
+			Possible splits for Variables==7:
+
+			7
+			1-6
+			2-5
+			1-1-5
+			3-4
+			1-2-4
+			1-1-1-4
+			1-3-3
+			2-2-3
+			1-1-2-3
+			1-1-1-1-3
+			1-2-2-2
+			1-1-1-2-2
+			1-1-1-1-1-2
+			1-1-1-1-1-1-1
+		*/
+
 
 		if(numberOfSize1Groups < groupCount) {
 			unsigned int groupSizeBuffer[Variables];
