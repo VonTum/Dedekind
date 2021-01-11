@@ -34,6 +34,10 @@ static const size_t layer7Sizes[]{
 std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const FullLayer& layer) {
 	std::vector<EquivalenceClassMap<TempEquivClassInfo>> equivalenceClasses(layer.size() + 1);
 
+	equivalenceClasses[0].reserveWithClear(1);
+	equivalenceClasses[1].reserveWithClear(1);
+	equivalenceClasses[layer.size()].reserveWithClear(1);
+
 	ValuedEquivalenceClass<TempEquivClassInfo>& layer0item = equivalenceClasses[0].add(EquivalenceClass::emptyEquivalenceClass, TempEquivClassInfo{}); // equivalence classes of size 0, only one
 	ValuedEquivalenceClass<TempEquivClassInfo>& layer1item = equivalenceClasses[1].add(preprocess(FunctionInputSet{layer[0]}), TempEquivClassInfo{}); // equivalence classes of size 1, only one
 	createLinkBetween(layer0item, layer1item, layer.size());
@@ -42,9 +46,9 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 		std::cout << "Looking at size " << groupSize << '/' << layer.size();
 		EquivalenceClassMap<TempEquivClassInfo>& curGroups = equivalenceClasses[groupSize];
 		if(layer.size() == 35) { // One of the big middle layers
-			curGroups.reserve(layer7Sizes[groupSize]);
+			curGroups.reserveWithClear(layer7Sizes[groupSize]);
 		} else {
-			curGroups.reserve(1044); // could be more fine-grained, but this is fine
+			curGroups.reserveWithClear(1044); // could be more fine-grained, but this is fine
 		}
 		std::mutex modifyLock;
 		// try to extend each of the previous groups by 1

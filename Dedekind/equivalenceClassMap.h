@@ -4,9 +4,6 @@
 #include "heapArray.h"
 
 #include <atomic>
-/*#include <shared_mutex>
-#include <mutex>
-#include "sharedLockGuard.h"*/
 
 template<typename V>
 struct ValuedEquivalenceClass {
@@ -28,22 +25,17 @@ public:
 	struct MapNode {
 		ValuedEquivalenceClass<V> item;
 		std::atomic<MapNode*> nextNode;
-
-		//MapNode(MapNode* nextNode, const EquivalenceClass& equivClass, const V& value) : nextNode(nextNode), item{equivClass, value} {}
 	};
 
-	std::atomic<std::atomic<MapNode*>*> hashTable;
-	size_t bucketsIndex;
+	std::atomic<MapNode*>* hashTable;
+	MapNode* nodeBuffer;
 	size_t buckets;
 	size_t itemCount;
 private:
 
-	//mutable std::shared_mutex bucketLock;
-	//mutable std::mutex modifyLock;
-
 	// These are NOT locked, locking should be done by CALLER
 	std::atomic<MapNode*>* getBucketFor(uint64_t hash) const {
-		return hashTable.load() + hash % buckets;
+		return hashTable + hash % buckets;
 	}
 	std::atomic<MapNode*>* getNodeFor(const PreprocessedFunctionInputSet& functionInputSet, uint64_t hash) const {
 		std::atomic<MapNode*>* cur = getBucketFor(hash);
@@ -62,7 +54,7 @@ private:
 	// These are protected by bucketLock
 	MapNode* getReadOnlyBucket(uint64_t hash) const {
 		//shared_lock_guard lg(bucketLock);
-		return hashTable.load()[hash % buckets].load();
+		return hashTable[hash % buckets].load();
 	}
 	MapNode* getReadOnlyNode(const PreprocessedFunctionInputSet& functionInputSet, uint64_t hash) const {
 		MapNode* curNode = getReadOnlyBucket(hash);
@@ -79,29 +71,16 @@ private:
 		return getReadOnlyNode(fis, fis.hash());
 	}
 
-
-
-	void deleteAllNodes() {
-		for(size_t i = 0; i < buckets; i++) {
-			for(MapNode* curNode = hashTable[i]; curNode != nullptr; ) {
-				MapNode* nodeToDelete = curNode;
-				curNode = curNode->nextNode;
-				delete nodeToDelete;
-			}
-			hashTable[i] = nullptr;
-		}
-		itemCount = 0;
-	}
 	void rehash(size_t newBuckets) {
 		//std::lock_guard<std::mutex> lg(bucketLock);
-		std::atomic<MapNode*>* oldHashTable = this->hashTable.load();
+		std::atomic<MapNode*>* oldHashTable = this->hashTable;
 		size_t oldBuckets = this->buckets;
 		this->hashTable = new std::atomic<MapNode*>[newBuckets];
 		this->buckets = newBuckets;
 		for(size_t i = 0; i < this->buckets; i++) this->hashTable[i] = nullptr;
 		for(size_t i = 0; i < oldBuckets; i++) {
 			for(MapNode* curNode = oldHashTable[i]; curNode != nullptr; ) {
-				std::atomic<MapNode*>& bucket = hashTable.load()[curNode->item.equivClass.hash() % buckets];
+				std::atomic<MapNode*>& bucket = hashTable[curNode->item.equivClass.hash() % buckets];
 				MapNode* nextNode = curNode->nextNode.load();
 				MapNode* oldBucketNode = bucket.exchange(curNode);
 				curNode->nextNode.store(oldBucketNode);
@@ -123,77 +102,62 @@ public:
 		rehash(bestBucketSize);
 
 	}
-	void reserve(size_t newSize) {
-		size_t bestBucketSize;
+	static size_t getNumberOfBucketsForSize(size_t size) {
+		size_t lastBp;
 		for(const size_t& bp : hashMapPrimes) {
-			if(bp > newSize * 3) {
-				bestBucketSize = bp;
-				break;
+			if(bp > size * 3) {
+				return bp;
 			}
+			lastBp = bp;
 		}
-		bestBucketSize = newSize * 3; // too large, use builtin value
-		rehash(bestBucketSize);
-
+		return lastBp;
 	}
-private:
-	void notifyNewItem() {
-		itemCount++;
-
-		/*if(itemCount * 3 >= buckets) {
-			size_t newBuckets = hashMapPrimes[++bucketsIndex];
-			rehash(newBuckets);
-		}*/
+	void clear() {
+		for(size_t i = 0; i < this->itemCount; i++) {
+			this->nodeBuffer[i].~MapNode();
+		}
+		for(size_t i = 0; i < this->buckets; i++) {
+			this->hashTable[i] = nullptr;
+		}
 	}
-public:
-	EquivalenceClassMap(size_t buckets) : hashTable(new std::atomic<MapNode*>[buckets]), buckets(buckets), bucketsIndex(), itemCount(0) {
-		for(size_t i = 0; i < buckets; i++) {
+	void reserveWithClear(size_t newSize) {
+		this->clear();
+		delete[] this->nodeBuffer;
+		this->nodeBuffer = new MapNode[newSize];
+		delete[] this->hashTable;
+		this->buckets = getNumberOfBucketsForSize(newSize);
+		this->hashTable = new std::atomic<MapNode*>[this->buckets];
+		for(size_t i = 0; i < this->buckets; i++) {
+			this->hashTable[i] = nullptr;
+		}
+	}
+	EquivalenceClassMap(size_t capacity) : hashTable(new std::atomic<MapNode*>[getNumberOfBucketsForSize(capacity)]), buckets(getNumberOfBucketsForSize(capacity)), nodeBuffer(new MapNode[capacity]), itemCount(0) {
+		for(size_t i = 0; i < this->buckets; i++) {
 			hashTable[i] = nullptr;
 		}
-		for(const size_t& bp : hashMapPrimes) {
-			if(bp > buckets) {
-				this->bucketsIndex = &bp - hashMapPrimes;
-				return;
-			}
-		}
-		this->bucketsIndex = 99999999; // bad unused value
 	}
-	EquivalenceClassMap() : EquivalenceClassMap(INITIAL_BUCKETS) {}
+	EquivalenceClassMap() : hashTable(nullptr), buckets(0), nodeBuffer(nullptr), itemCount(0) {}
 
-	EquivalenceClassMap(const EquivalenceClassMap&& other) = delete;
-	EquivalenceClassMap& operator=(const EquivalenceClassMap&& other) = delete;
-	EquivalenceClassMap(const EquivalenceClassMap& other) = delete;
-	EquivalenceClassMap& operator=(const EquivalenceClassMap& other) = delete;
-	
-	/*EquivalenceClassMap(EquivalenceClassMap&& other) : hashTable(other.hashTable), buckets(other.buckets), bucketsIndex(0), itemCount(other.itemCount) {
-		other.hashTable = new MapNode*[INITIAL_BUCKETS];
-		other.buckets = INITIAL_BUCKETS;
-		other.bucketsIndex = 0;
+	EquivalenceClassMap(EquivalenceClassMap&& other) : hashTable(other.hashTable), buckets(other.buckets), nodeBuffer(other.nodeBuffer), itemCount(other.itemCount) {
+		other.hashTable = nullptr;
+		other.buckets = 0;
+		other.nodeBuffer = nullptr;
 		other.itemCount = 0;
 	}
 	EquivalenceClassMap& operator=(EquivalenceClassMap&& other) noexcept {
 		std::swap(this->hashTable, other.hashTable);
 		std::swap(this->buckets, other.buckets);
+		std::swap(this->nodeBuffer, other.nodeBuffer);
 		std::swap(this->itemCount, other.itemCount);
 		return *this;
 	}
-	EquivalenceClassMap(const EquivalenceClassMap& other) : EquivalenceClassMap(other.buckets) {
-		itemCount = other.itemCount;
-		for(size_t i = 0; i < buckets; i++) {
-			MapNode** curNodeInNewMap = &(this->hashTable[i]);
-			for(MapNode* curNode = other.hashTable[i]; curNode != nullptr; curNode = curNode->nextNode) {
-				*curNodeInNewMap = new MapNode(*curNode);
-				curNodeInNewMap = &(*curNodeInNewMap)->nextNode;
-			}
-		}
-	}
-	EquivalenceClassMap& operator=(const EquivalenceClassMap& other) {
-		*this = EquivalenceClassMap(other);
-		return *this;
-	}*/
+
 	~EquivalenceClassMap() {
-		deleteAllNodes();
+		this->clear();
 		delete[] hashTable;
 		buckets = 0;
+		delete[] nodeBuffer;
+		itemCount = 0;
 	}
 
 	ValuedEquivalenceClass<V>* find(const PreprocessedFunctionInputSet& preprocessed, uint64_t hash) {
@@ -215,13 +179,13 @@ public:
 		return foundNode->item.value;
 	}
 	ValuedEquivalenceClass<V>& getOrAdd(const PreprocessedFunctionInputSet& preprocessed, const V& defaultForCreate, uint64_t hash) {
-		//std::lock_guard<std::mutex> lg(modifyLock);
 		std::atomic<MapNode*>* foundNode = getNodeFor(preprocessed, hash);
 		MapNode* actualNode = *foundNode;
 		if(actualNode == nullptr) {
-			actualNode = new MapNode{{EquivalenceClass(preprocessed), defaultForCreate}, nullptr};
+			actualNode = this->nodeBuffer + this->itemCount;
+			new(actualNode) MapNode{{EquivalenceClass(preprocessed), defaultForCreate}, nullptr};
 			foundNode->store(actualNode);
-			this->notifyNewItem();
+			this->itemCount++;
 		}
 		return actualNode->item;
 	}
@@ -231,11 +195,11 @@ public:
 	}
 
 	ValuedEquivalenceClass<V>& add(const EquivalenceClass& eqClass, const V& value, uint64_t hash) {
-		//std::lock_guard<std::mutex> lg(modifyLock);
 		std::atomic<MapNode*>& bucket = *getBucketFor(hash);
-		MapNode* newNode = new MapNode{{eqClass, value}, bucket.load()};
+		MapNode* newNode = this->nodeBuffer + this->itemCount;
+		new(newNode) MapNode{{eqClass, value}, bucket.load()};
 		bucket.store(newNode);
-		this->notifyNewItem();
+		this->itemCount++;
 		return newNode->item;
 	}
 
@@ -249,10 +213,7 @@ public:
 	}
 
 	size_t size() const { return itemCount; }
-	void clear() {
-		deleteAllNodes();
-	}
-
+	
 	struct EquivalenceClassMapIter {
 	protected:
 		std::atomic<MapNode*>* curBucket;

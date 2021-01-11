@@ -456,7 +456,7 @@ struct LayerWiseTest {
 	runFunctionRange<TEST_FROM, TEST_UPTO, CompareBitsTest>();
 }*/
 
-TEST_CASE(testSetResetTestBit) {
+/*TEST_CASE(testSetResetTestBit) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, SetResetTest>();
 }
 
@@ -498,4 +498,17 @@ TEST_CASE(testMBF) {
 
 TEST_CASE(testLayerWise) {
 	runFunctionRange<TEST_FROM, 7, LayerWiseTest>();
+}*/
+
+TEST_CASE(benchCanonize) {
+	FunctionInputBitSet<7> nonOptimizer;
+	size_t canonCount = 10000000;
+	FunctionInputBitSet<7> fibs = generateFibs<7>();
+	for(size_t iter = 0; iter < canonCount; iter++) {
+		fibs = fibs << 1 ^ fibs;
+		if(iter % 50 == 0) fibs ^= generateFibs<7>();
+		nonOptimizer ^= fibs.canonize();
+	}
+	std::cout << nonOptimizer << "\n";
+	std::cout << "Ran " << canonCount << " canonisations! ";
 }
