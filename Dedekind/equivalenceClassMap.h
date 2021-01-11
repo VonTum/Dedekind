@@ -4,9 +4,9 @@
 #include "heapArray.h"
 
 #include <atomic>
-#include <shared_mutex>
+/*#include <shared_mutex>
 #include <mutex>
-#include "sharedLockGuard.h"
+#include "sharedLockGuard.h"*/
 
 template<typename V>
 struct ValuedEquivalenceClass {
@@ -38,8 +38,8 @@ public:
 	size_t itemCount;
 private:
 
-	mutable std::shared_mutex bucketLock;
-	mutable std::mutex modifyLock;
+	//mutable std::shared_mutex bucketLock;
+	//mutable std::mutex modifyLock;
 
 	// These are NOT locked, locking should be done by CALLER
 	std::atomic<MapNode*>* getBucketFor(uint64_t hash) const {
@@ -61,7 +61,7 @@ private:
 
 	// These are protected by bucketLock
 	MapNode* getReadOnlyBucket(uint64_t hash) const {
-		shared_lock_guard lg(bucketLock);
+		//shared_lock_guard lg(bucketLock);
 		return hashTable.load()[hash % buckets].load();
 	}
 	MapNode* getReadOnlyNode(const PreprocessedFunctionInputSet& functionInputSet, uint64_t hash) const {
@@ -93,7 +93,7 @@ private:
 		itemCount = 0;
 	}
 	void rehash(size_t newBuckets) {
-		bucketLock.lock();
+		//std::lock_guard<std::mutex> lg(bucketLock);
 		std::atomic<MapNode*>* oldHashTable = this->hashTable.load();
 		size_t oldBuckets = this->buckets;
 		this->hashTable = new std::atomic<MapNode*>[newBuckets];
@@ -109,29 +109,61 @@ private:
 			}
 		}
 		delete[] oldHashTable;
-		bucketLock.unlock();
 	}
+public:
+	void shrink() {
+		size_t bestBucketSize;
+		for(const size_t& bp : hashMapPrimes) {
+			if(bp > this->itemCount * 2) {
+				bestBucketSize = bp;
+				break;
+			}
+		}
+		bestBucketSize = this->itemCount * 2; // too large, use builtin value
+		rehash(bestBucketSize);
+
+	}
+	void reserve(size_t newSize) {
+		size_t bestBucketSize;
+		for(const size_t& bp : hashMapPrimes) {
+			if(bp > newSize * 3) {
+				bestBucketSize = bp;
+				break;
+			}
+		}
+		bestBucketSize = newSize * 3; // too large, use builtin value
+		rehash(bestBucketSize);
+
+	}
+private:
 	void notifyNewItem() {
 		itemCount++;
 
-		if(itemCount * 3 >= buckets) {
+		/*if(itemCount * 3 >= buckets) {
 			size_t newBuckets = hashMapPrimes[++bucketsIndex];
 			rehash(newBuckets);
-		}
+		}*/
 	}
-	EquivalenceClassMap(size_t buckets) : hashTable(new std::atomic<MapNode*>[buckets]), buckets(buckets), bucketsIndex(0), itemCount(0) {
+public:
+	EquivalenceClassMap(size_t buckets) : hashTable(new std::atomic<MapNode*>[buckets]), buckets(buckets), bucketsIndex(), itemCount(0) {
 		for(size_t i = 0; i < buckets; i++) {
 			hashTable[i] = nullptr;
 		}
+		for(const size_t& bp : hashMapPrimes) {
+			if(bp > buckets) {
+				this->bucketsIndex = &bp - hashMapPrimes;
+				return;
+			}
+		}
+		this->bucketsIndex = 99999999; // bad unused value
 	}
-public:
 	EquivalenceClassMap() : EquivalenceClassMap(INITIAL_BUCKETS) {}
 
 	EquivalenceClassMap(const EquivalenceClassMap&& other) = delete;
 	EquivalenceClassMap& operator=(const EquivalenceClassMap&& other) = delete;
 	EquivalenceClassMap(const EquivalenceClassMap& other) = delete;
 	EquivalenceClassMap& operator=(const EquivalenceClassMap& other) = delete;
-
+	
 	/*EquivalenceClassMap(EquivalenceClassMap&& other) : hashTable(other.hashTable), buckets(other.buckets), bucketsIndex(0), itemCount(other.itemCount) {
 		other.hashTable = new MapNode*[INITIAL_BUCKETS];
 		other.buckets = INITIAL_BUCKETS;
@@ -183,7 +215,7 @@ public:
 		return foundNode->item.value;
 	}
 	ValuedEquivalenceClass<V>& getOrAdd(const PreprocessedFunctionInputSet& preprocessed, const V& defaultForCreate, uint64_t hash) {
-		std::lock_guard<std::mutex> lg(modifyLock);
+		//std::lock_guard<std::mutex> lg(modifyLock);
 		std::atomic<MapNode*>* foundNode = getNodeFor(preprocessed, hash);
 		MapNode* actualNode = *foundNode;
 		if(actualNode == nullptr) {
@@ -199,7 +231,7 @@ public:
 	}
 
 	ValuedEquivalenceClass<V>& add(const EquivalenceClass& eqClass, const V& value, uint64_t hash) {
-		std::lock_guard<std::mutex> lg(modifyLock);
+		//std::lock_guard<std::mutex> lg(modifyLock);
 		std::atomic<MapNode*>& bucket = *getBucketFor(hash);
 		MapNode* newNode = new MapNode{{eqClass, value}, bucket.load()};
 		bucket.store(newNode);

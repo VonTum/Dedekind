@@ -27,6 +27,10 @@ static ValuedEquivalenceClass<TempEquivClassInfo>* oneOfListContains(const std::
 	return nullptr;
 }
 
+static const size_t layer7Sizes[]{
+	1,1,3,10,38,137,509,1760,5557,15709,39433,87659,172933,303277,473827,660950,824410,920446,920446,824410,660950,473827,303277,172933,87659,39433,15709,5557,1760,509,137,38,10,3,1,1
+};
+
 std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const FullLayer& layer) {
 	std::vector<EquivalenceClassMap<TempEquivClassInfo>> equivalenceClasses(layer.size() + 1);
 
@@ -37,8 +41,14 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 	for(size_t groupSize = 2; groupSize < layer.size(); groupSize++) {
 		std::cout << "Looking at size " << groupSize << '/' << layer.size();
 		EquivalenceClassMap<TempEquivClassInfo>& curGroups = equivalenceClasses[groupSize];
+		if(layer.size() == 35) { // One of the big middle layers
+			curGroups.reserve(layer7Sizes[groupSize]);
+		} else {
+			curGroups.reserve(1044); // could be more fine-grained, but this is fine
+		}
+		std::mutex modifyLock;
 		// try to extend each of the previous groups by 1
-		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&equivalenceClasses,&groupSize](ValuedEquivalenceClass<TempEquivClassInfo>& element) {
+		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&modifyLock,&equivalenceClasses,&groupSize](ValuedEquivalenceClass<TempEquivClassInfo>& element) {
 			for(FunctionInput newInput : layer) {
 				if(element.equivClass.hasFunctionInput(newInput)) continue; // only try to add new inputs that are not yet part of this
 				PreprocessedFunctionInputSet resultingPreprocessed = element.equivClass.extendedBy(newInput);
@@ -53,11 +63,14 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 					}
 				}
 
+				modifyLock.lock();
 				ValuedEquivalenceClass<TempEquivClassInfo>& extended = curGroups.getOrAdd(resultingPreprocessed, TempEquivClassInfo{}, hash);
-				
+				modifyLock.unlock();
+
 				incrementLinkBetween(element, extended);
 			}
 		});
+		curGroups.shrink();
 #ifndef NDEBUG
 		for(const auto& item : equivalenceClasses[groupSize - 1]) {
 			assert(item.value.extendedClasses.size() >= 1);
