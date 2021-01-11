@@ -208,20 +208,41 @@ public:
 		if(var1 > var2) std::swap(var1, var2);
 		// var1 <= var2
 		Bits mask1 = FunctionInputBitSet::varMask(var1);
-		Bits mask2 = FunctionInputBitSet::varMask(var2);
+		if constexpr(Variables == 7) {
+			if(var2 != 6) {
+				Bits mask2 = FunctionInputBitSet::varMask(var2);
 
-		Bits stayingElems;
+				// andnot is a more efficient operation for SIMD than complement
+				Bits stayingElems = andnot(bitset, andnot(mask1 | mask2, mask1 & mask2));
 
-		if constexpr(Variables <= 6) {
-			stayingElems = bitset & (~(mask1 | mask2) | mask1 & mask2);
+				unsigned int shift = (1 << var2) - (1 << var1);
+				
+				__m128i shiftReg = _mm_set1_epi64x(shift);
+
+				__m128i shiftedLeft = _mm_sll_epi64(_mm_and_si128(bitset.data, _mm_andnot_si128(mask2.data, mask1.data)), shiftReg);
+				__m128i shiftedRight = _mm_srl_epi64(_mm_and_si128(bitset.data, _mm_andnot_si128(mask1.data, mask2.data)), shiftReg);
+
+				bitset.data = _mm_or_si128(shiftedRight, _mm_or_si128(shiftedLeft, stayingElems.data));
+			} else {
+				// mask2 is just the upper 64 bits of the register, can just shift
+				
+				unsigned int relshift = 1 << var1; // shift == 64 - relshift
+				
+				__m128i shiftReg = _mm_set1_epi64x(relshift);
+
+				__m128i stayingElems = _mm_blend_epi32(_mm_and_si128(mask1.data, bitset.data), _mm_andnot_si128(mask1.data, bitset.data), 0b0011);
+				
+				__m128i shiftedLeft = _mm_srl_epi64(_mm_slli_si128(_mm_and_si128(mask1.data, bitset.data), 8), shiftReg);
+				__m128i shiftedRight = _mm_sll_epi64(_mm_srli_si128(_mm_andnot_si128(mask1.data, bitset.data), 8), shiftReg);
+
+				bitset.data = _mm_or_si128(shiftedRight, _mm_or_si128(shiftedLeft, stayingElems));
+			}
 		} else {
-			// andnot is a more efficient operation for SIMD than complement
-			stayingElems = andnot(bitset, andnot(mask1 | mask2, mask1 & mask2));
+			Bits mask2 = FunctionInputBitSet::varMask(var2);
+			Bits stayingElems = bitset & (~(mask1 | mask2) | mask1 & mask2);
+			unsigned int shift = (1 << var2) - (1 << var1);
+			bitset = ((bitset & andnot(mask1, mask2)) << shift) | ((bitset & andnot(mask2, mask1)) >> shift) | stayingElems;
 		}
-
-		unsigned int shift = (1 << var2) - (1 << var1);
-
-		bitset = ((bitset & andnot(mask1, mask2)) << shift) | ((bitset & andnot(mask2, mask1)) >> shift) | stayingElems;
 	}
 
 	template<typename Func>
@@ -341,6 +362,8 @@ public:
 			nextVar:;
 		}
 		// varIdx is now number of variables
+
+
 
 		// Assign groups
 		struct Group {
