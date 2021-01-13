@@ -109,6 +109,26 @@ inline std::ostream& operator<<(std::ostream& os, const FunctionInputBitSet<Vari
 	return os;
 }
 
+template<size_t Size>
+inline std::ostream& printHex(std::ostream& os, const BitSet<Size>& bitset) {
+	char hexDigits[16]{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+	for(size_t i = 0; i < Size; i += 4) {
+		int total = 0;
+		for(unsigned int b = 0; b < 4; b++) {
+			if(bitset.get(Size - i - 4 + b)) {
+				total |= 1 << b;
+			}
+		}
+		os << hexDigits[total];
+	}
+	return os;
+}
+template<unsigned int Variables>
+inline std::ostream& printHex(std::ostream& os, const FunctionInputBitSet<Variables>& fis) {
+	printHex(os, fis.bitset);
+	return os;
+}
+
 template<>
 inline std::ostream& operator<<(std::ostream& os, const std::vector<bool>& fis) {
 	for(FunctionInput::underlyingType i = 0; i < fis.size(); i++) {
@@ -130,11 +150,11 @@ inline std::ostream& operator<<(std::ostream& os, const TempEquivClassInfo& item
 	return os;
 }
 
-template<typename V>
-inline std::ostream& operator<<(std::ostream& os, const EquivalenceClassMap<V>& eqMap) {
+template<typename Key, typename Value>
+inline std::ostream& operator<<(std::ostream& os, const BufferedMap<Key, Value>& eqMap) {
 	bool isFirst = true;
-	for(const ValuedEquivalenceClass<V>& item : eqMap) {
-		os << (isFirst ? '{' : ',') << item.equivClass << ": " << item.value;
+	for(const BufferedMap<Key, Value>::KeyValue& item : eqMap) {
+		os << (isFirst ? '{' : ',') << item.key << ": " << item.value;
 		isFirst = false;
 	}
 	os << '}';

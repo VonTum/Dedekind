@@ -70,7 +70,7 @@ struct EquivalenceClassInfo : public Value {
 
 struct TempEquivClassInfo {
 	struct AdjacentClass {
-		ValuedEquivalenceClass<TempEquivClassInfo>* node;
+		EquivalenceClassMap<TempEquivClassInfo>::KeyValue* node;
 		countInt formationCount;
 	};
 
@@ -102,18 +102,6 @@ public:
 
 		std::vector<EquivalenceClassMap<TempEquivClassInfo>> existingDecomp = createDecomposition(layer);
 
-#ifndef NDEBUG
-		for(size_t i = 0; i < existingDecomp.size(); i++) {
-			for(ValuedEquivalenceClass<TempEquivClassInfo>& cl : existingDecomp[i]) {
-				if(i < existingDecomp.size() - 1) {
-					assert(cl.value.extendedClasses.size() >= 1);
-				} else {
-					assert(cl.value.extendedClasses.size() == 0);
-				}
-			}
-		}
-#endif
-
 		size_t totalNumClasses = 0;
 		for(size_t i = 0; i < layer.size() + 1; i++) {
 			const EquivalenceClassMap<TempEquivClassInfo>& extracting = existingDecomp[i];
@@ -125,6 +113,7 @@ public:
 		std::cout << "Baking: copying over\n";
 
 		BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>* curClassBufIndex = this->eqClassBuf.ptr();
+
 
 		// convert to Baked map
 		size_t totalConnectionCount = 0; // used for finding the size of the final array which will contain the connections between EquivalenceClasses
@@ -139,9 +128,9 @@ public:
 			size_t curIndex = 0;
 			for(size_t curBucket = 0; curBucket < extracting.buckets; curBucket++) {
 				newMap.buckets[curBucket] = newMap.allClasses + curIndex;
-				for(EquivalenceClassMap<TempEquivClassInfo>::MapNode* cur = extracting.hashTable[curBucket]; cur != nullptr; cur = cur->nextNode) {
-					TempEquivClassInfo& oldInfo = cur->item.value;
-					new(&newMap[curIndex].eqClass) EquivalenceClass(std::move(cur->item.equivClass));
+				for(unsigned int cur = extracting.hashTable[curBucket].load(); cur != extracting.BAD_INDEX; cur = extracting.nextNodeBuffer[cur].load()) {
+					TempEquivClassInfo& oldInfo = extracting.keyValueBuffer[cur].value;
+					new(&newMap[curIndex].eqClass) EquivalenceClass(std::move(extracting.keyValueBuffer[cur].key));
 					oldInfo.indexInBaked = curIndex;
 					totalConnectionCount += oldInfo.extendedClasses.size();
 					curIndex++;
@@ -160,8 +149,8 @@ public:
 
 			size_t curIndex = 0;
 			for(size_t curBucket = 0; curBucket < extracting.buckets; curBucket++) {
-				for(EquivalenceClassMap<TempEquivClassInfo>::MapNode* cur = extracting.hashTable[curBucket]; cur != nullptr; cur = cur->nextNode) {
-					TempEquivClassInfo& oldInfo = cur->item.value;
+				for(unsigned int cur = extracting.hashTable[curBucket].load(); cur != extracting.BAD_INDEX; cur = extracting.nextNodeBuffer[cur].load()) {
+					TempEquivClassInfo& oldInfo = extracting.keyValueBuffer[cur].value;
 					BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl = newMap[curIndex];
 					cl.nextClasses = curNextBufIndex;
 					cl.numberOfNextClasses = oldInfo.extendedClasses.size();

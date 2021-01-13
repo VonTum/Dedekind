@@ -54,3 +54,7 @@ struct EquivalenceClass {
 	static EquivalenceClass emptyEquivalenceClass;
 	static EquivalenceClass bottomEquivalenceClass;
 };
+
+inline bool operator==(const EquivalenceClass& a, const EquivalenceClass& b) {
+	return a.functionInputSet == b.functionInputSet;
+}

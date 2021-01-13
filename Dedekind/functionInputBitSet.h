@@ -24,6 +24,12 @@ public:
 		}
 	}
 
+	template<unsigned int OtherVariables>
+	FunctionInputBitSet(const FunctionInputBitSet<OtherVariables>& other) : bitset(other.bitset) {}
+
+	template<unsigned int OtherVariables>
+	FunctionInputBitSet& operator=(const FunctionInputBitSet<OtherVariables>& other) { this->bitset = other.bitset; }
+
 	static constexpr FunctionInput::underlyingType maxSize() {
 		return FunctionInput::underlyingType(1) << Variables;
 	}
@@ -292,10 +298,11 @@ public:
 	}
 
 	FunctionInputBitSet getLayer(unsigned int layer) const {
+		assert(layer < Variables + 1);
 		return FunctionInputBitSet(this->bitset & layerMask(layer));
 	}
 
-	// returns a FIBS where all elements which have a '1' superset above them are '1'
+	// returns a FIBS where all elements which have a '0' where there is no superset above them that is '1'
 	FunctionInputBitSet prev() const {
 		// remove a variable for every item and OR the results
 
@@ -310,16 +317,16 @@ public:
 		return FunctionInputBitSet(forced);
 	}
 
-	// returns a FIBS where all elements which have a '0' subset below them are '0'
+	// returns a FIBS where all elements which have a '1' where there is no subset below them that is '0'
 	FunctionInputBitSet next() const {
 		// add a variable to every item and AND the results
 
-		Bits forced = Bits::empty();
+		Bits forced = Bits::full();
 
 		for(unsigned int var = 0; var < Variables; var++) {
-			Bits whereVarNotActive = this->bitset & ~varMask(var);
+			Bits whereVarNotActive = (~this->bitset) & ~varMask(var);
 			Bits varAdded = whereVarNotActive << (1 << var);
-			forced |= varAdded; // anding by zeros is the forced spaces
+			forced &= ~varAdded; // anding by zeros is the forced spaces
 		}
 
 		return FunctionInputBitSet(forced);
@@ -579,4 +586,38 @@ FunctionInputBitSet<Variables> operator>>(FunctionInputBitSet<Variables> result,
 	result >>= shift;
 	return result;
 }
+
+// returns the end of the buffer
+template<unsigned int Variables>
+uint8_t* serialize(const FunctionInputBitSet<Variables>& fibs, uint8_t* outputBuf) {
+	typename FunctionInputBitSet<Variables>::Bits bs = fibs.bitset;
+	if constexpr(Variables <= 3) {
+		*outputBuf++ = bs.data;
+	} else if constexpr(Variables <= 6) {
+		for(size_t i = FunctionInputBitSet<Variables>::Bits::size(); i > 0; i-=8) {
+			*outputBuf++ = static_cast<uint8_t>(bs.data >> (i - 8));
+		}
+	} else if constexpr(Variables == 7) {
+		uint64_t firstHalf = _mm_extract_epi64(bs.data, 1);
+		for(size_t i = 0; i < 8; i++) {
+			*outputBuf++ = static_cast<uint8_t>(firstHalf >> (56 - i * 8));
+		}
+		uint64_t secondHalf = _mm_extract_epi64(bs.data, 0);
+		for(size_t i = 0; i < 8; i++) {
+			*outputBuf++ = static_cast<uint8_t>(secondHalf >> (56 - i * 8));
+		}
+	} else {
+		for(size_t i = FunctionInputBitSet<Variables>::Bits::size(); i > 0; i -= 8) {
+			uint8_t curChar = 0;
+			for(int bit = 0; bit < 8; bit++) {
+				if(bs.get((i - 8) + bit)) {
+					curChar |= 1 << bit;
+				}
+			}
+			*outputBuf++ = curChar;
+		}
+	}
+	return outputBuf;
+}
+
 

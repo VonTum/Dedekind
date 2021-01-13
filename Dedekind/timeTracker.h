@@ -20,6 +20,7 @@ public:
 		} else {
 			std::cout << message << nanos / 60.0e-9 << "min";
 		}
+		std::cout << "\n";
 	}
 };
 

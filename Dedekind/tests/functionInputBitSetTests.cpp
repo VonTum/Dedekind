@@ -9,7 +9,7 @@
 #include <random>
 #include <iostream>
 
-#define TEST_FROM 1
+#define TEST_FROM 3
 #define TEST_UPTO 9
 #define SMALL_ITER 50
 #define LARGE_ITER 1000
@@ -43,7 +43,7 @@ static bool operator!=(const std::vector<bool>& expectedState, const FunctionInp
 	return fibs != expectedState;
 }
 
-bool genBool() {
+static bool genBool() {
 	return rand() % 2 == 1;
 }
 
@@ -451,6 +451,70 @@ struct LayerWiseTest {
 	}
 };
 
+template<unsigned int Variables>
+struct PrevTest {
+	static void run() {
+		for(int iter = 0; iter < LARGE_ITER; iter++) {
+			std::cout << ".";
+			FunctionInputBitSet<Variables> mbf = generateMBF<Variables>();
+			FunctionInputBitSet<Variables> prev = mbf.prev();
+			//prev.bitset.set(0); // 0 is undefined
+
+			logStream << "mbf: " << mbf << "\n";
+			logStream << "prev: " << prev << "\n";
+
+			FunctionInputBitSet<Variables> correctPrev = FunctionInputBitSet<Variables>::empty();
+
+			for(size_t checkBit = 0; checkBit < FunctionInputBitSet<Variables>::maxSize(); checkBit++) {
+				for(size_t forcingBit = 0; forcingBit < FunctionInputBitSet<Variables>::maxSize(); forcingBit++) {
+					if(forcingBit == checkBit) continue;
+					if(checkBit == (checkBit & forcingBit)) { // checkBit is subSet of forcingBit
+						if(mbf.bitset.get(forcingBit) == true) {
+							correctPrev.bitset.set(checkBit);
+							break;
+						}
+					}
+				}
+			}
+			logStream << "correctPrev: " << correctPrev << "\n";
+
+			ASSERT(prev == correctPrev);
+		}
+	}
+};
+
+template<unsigned int Variables>
+struct NextTest {
+	static void run() {
+		for(int iter = 0; iter < LARGE_ITER; iter++) {
+			std::cout << ".";
+			FunctionInputBitSet<Variables> mbf = generateMBF<Variables>();
+			FunctionInputBitSet<Variables> next = mbf.next();
+			next.bitset.set(0); // 0 is undefined
+
+			logStream << "mbf: " << mbf << "\n";
+			logStream << "next: " << next << "\n";
+
+			FunctionInputBitSet<Variables> correctNext = FunctionInputBitSet<Variables>::full();
+
+			for(size_t checkBit = 0; checkBit < FunctionInputBitSet<Variables>::maxSize(); checkBit++) {
+				for(size_t forcingBit = 0; forcingBit < FunctionInputBitSet<Variables>::maxSize(); forcingBit++) {
+					if(forcingBit == checkBit) continue;
+					if(forcingBit == (checkBit & forcingBit)) { // forcingBit is subSet of checkBit
+						if(mbf.bitset.get(forcingBit) == false) {
+							correctNext.bitset.reset(checkBit);
+							break;
+						}
+					}
+				}
+			}
+			logStream << "correctNext: " << correctNext << "\n";
+
+			ASSERT(next == correctNext);
+		}
+	}
+};
+
 
 /*TEST_CASE(testBitsCompare) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, CompareBitsTest>();
@@ -500,7 +564,21 @@ TEST_CASE(testLayerWise) {
 	runFunctionRange<TEST_FROM, 7, LayerWiseTest>();
 }*/
 
-TEST_CASE(benchCanonize) {
+TEST_CASE(testPrev) {
+	runFunctionRange<TEST_FROM, 7, PrevTest>();
+}
+
+TEST_CASE(testNext) {
+	rand();
+	rand();
+	rand();
+	rand();
+	rand();
+	rand();
+	runFunctionRange<TEST_FROM, 7, NextTest>();
+}
+
+/*TEST_CASE(benchCanonize) {
 	FunctionInputBitSet<7> nonOptimizer;
 	size_t canonCount = 10000000;
 	FunctionInputBitSet<7> fibs = generateFibs<7>();
@@ -511,4 +589,4 @@ TEST_CASE(benchCanonize) {
 	}
 	std::cout << nonOptimizer << "\n";
 	std::cout << "Ran " << canonCount << " canonisations! ";
-}
+}*/

@@ -29,6 +29,40 @@ public:
 		}
 	}
 
+	template<size_t OtherSize>
+	BitSet(const BitSet<OtherSize>& other) : data{} {
+		if constexpr(OtherSize <= 64) {
+			this->data[0] = static_cast<uint64_t>(other.data);
+			for(size_t i = 1; i < BLOCK_COUNT; i++) {
+				this->data[i] = 0;
+			}
+		} else if constexpr(OtherSize == 128) {
+			this->data[0] = _mm_extract_epi64(other.data, 0);
+			this->data[1] = _mm_extract_epi64(other.data, 1);
+			for(size_t i = 2; i < BLOCK_COUNT; i++) {
+				this->data[i] = 0;
+			}
+		} else {
+			if(this->BLOCK_COUNT >= other.BLOCK_COUNT) {
+				for(size_t i = 0; i < other.BLOCK_COUNT; i++) {
+					this->data[i] = 0;
+				}
+				for(size_t i = other.BLOCK_COUNT; i < BLOCK_COUNT; i++) {
+					this->data[i] = 0;
+				}
+			} else {
+				for(size_t i = 0; i < this->BLOCK_COUNT; i++) {
+					this->data[i] = 0;
+				}
+			}
+		}
+	}
+
+	template<size_t OtherSize>
+	BitSet& operator=(const BitSet<OtherSize>& other) {
+		*this = BitSet(other);
+	}
+
 	static constexpr size_t size() {
 		return Size;
 	}
@@ -221,6 +255,22 @@ public:
 
 	BitSet() : data(_mm_setzero_si128()) {}
 
+	template<size_t OtherSize>
+	BitSet(const BitSet<OtherSize>& other) : data{} {
+		if constexpr(OtherSize <= 64) {
+			this->data = _mm_set_epi64(0, other.data);
+		} else if constexpr(OtherSize == 128) {
+			this->data = other.data;
+		} else {
+			this->data = _mm_set_epi64(other.data[1], other.data[0]);
+		}
+	}
+
+	template<size_t OtherSize>
+	BitSet& operator=(const BitSet<OtherSize>& other) {
+		*this = BitSet(other);
+	}
+
 	static constexpr size_t size() {
 		return 128;
 	}
@@ -355,6 +405,22 @@ public:
 
 	constexpr BitSet() : data{0} {}
 
+	template<size_t OtherSize>
+	BitSet(const BitSet<OtherSize>& other) : data{} {
+		if constexpr(OtherSize <= 64) {
+			this->data = static_cast<uint64_t>(other.data);
+		} else if constexpr(OtherSize == 128) {
+			this->data = static_cast<uint64_t>(_mm_extract_epi64(other.data, 0));
+		} else {
+			this->data = static_cast<uint64_t>(other.data[0]);
+		}
+	}
+
+	template<size_t OtherSize>
+	BitSet& operator=(const BitSet<OtherSize>& other) {
+		*this = BitSet(other);
+	}
+
 	static constexpr size_t size() {
 		return 64;
 	}
@@ -461,6 +527,22 @@ public:
 
 	constexpr BitSet() : data{0} {}
 
+	template<size_t OtherSize>
+	BitSet(const BitSet<OtherSize>& other) : data{} {
+		if constexpr(OtherSize <= 64) {
+			this->data = static_cast<uint32_t>(other.data);
+		} else if constexpr(OtherSize == 128) {
+			this->data = static_cast<uint32_t>(_mm_extract_epi64(other.data, 0));
+		} else {
+			this->data = static_cast<uint32_t>(other.data[0]);
+		}
+	}
+
+	template<size_t OtherSize>
+	BitSet& operator=(const BitSet<OtherSize>& other) {
+		*this = BitSet(other);
+	}
+
 	static constexpr size_t size() {
 		return 32;
 	}
@@ -566,6 +648,22 @@ public:
 	uint16_t data;
 
 	constexpr BitSet() : data{0} {}
+
+	template<size_t OtherSize>
+	BitSet(const BitSet<OtherSize>& other) : data{} {
+		if constexpr(OtherSize <= 64) {
+			this->data = static_cast<uint16_t>(other.data);
+		} else if constexpr(OtherSize == 128) {
+			this->data = static_cast<uint16_t>(_mm_extract_epi64(other.data, 0));
+		} else {
+			this->data = static_cast<uint16_t>(other.data[0]);
+		}
+	}
+
+	template<size_t OtherSize>
+	BitSet& operator=(const BitSet<OtherSize>& other) {
+		*this = BitSet(other);
+	}
 
 	static constexpr size_t size() {
 		return 16;
@@ -674,6 +772,22 @@ public:
 
 	constexpr BitSet() : data{0} {}
 
+	template<size_t OtherSize>
+	BitSet(const BitSet<OtherSize>& other) : data{} {
+		if constexpr(OtherSize <= 64) {
+			this->data = static_cast<uint8_t>(other.data);
+		} else if constexpr(OtherSize == 128) {
+			this->data = static_cast<uint8_t>(_mm_extract_epi64(other.data, 0));
+		} else {
+			this->data = static_cast<uint8_t>(other.data[0]);
+		}
+	}
+
+	template<size_t OtherSize>
+	BitSet& operator=(const BitSet<OtherSize>& other) {
+		*this = BitSet(other);
+	}
+
 	static constexpr size_t size() {
 		return 8;
 	}
@@ -780,6 +894,22 @@ public:
 
 	constexpr BitSet() : data{0} {}
 
+	template<size_t OtherSize>
+	BitSet(const BitSet<OtherSize>& other) : data{} {
+		if constexpr(OtherSize <= 64) {
+			this->data = static_cast<uint8_t>(other.data) & 0b1111;
+		} else if constexpr(OtherSize == 128) {
+			this->data = static_cast<uint8_t>(_mm_extract_epi64(other.data, 0)) & 0b1111;
+		} else {
+			this->data = static_cast<uint8_t>(other.data[0]) & 0b1111;
+		}
+	}
+
+	template<size_t OtherSize>
+	BitSet& operator=(const BitSet<OtherSize>& other) {
+		*this = BitSet(other);
+	}
+
 	static constexpr size_t size() {
 		return 4;
 	}
@@ -885,6 +1015,22 @@ public:
 	uint8_t data;
 
 	constexpr BitSet() : data{0} {}
+
+	template<size_t OtherSize>
+	BitSet(const BitSet<OtherSize>& other) : data{} {
+		if constexpr(OtherSize <= 64) {
+			this->data = static_cast<uint8_t>(other.data) & 0b11;
+		} else if constexpr(OtherSize == 128) {
+			this->data = static_cast<uint8_t>(_mm_extract_epi64(other.data, 0)) & 0b11;
+		} else {
+			this->data = static_cast<uint8_t>(other.data[0]) & 0b11;
+		}
+	}
+
+	template<size_t OtherSize>
+	BitSet& operator=(const BitSet<OtherSize>& other) {
+		*this = BitSet(other);
+	}
 
 	static constexpr size_t size() {
 		return 2;
