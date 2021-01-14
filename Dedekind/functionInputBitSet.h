@@ -341,6 +341,26 @@ public:
 	}
 
 
+	// takes a function of the form void(size_t bits)
+	template<typename Func>
+	void forEachOne(const Func& func) const {
+		for(size_t i = 0; i < (size_t(1) << Variables); i++) {
+			if(bitset.get(i) == true) {
+				func(i);
+			}
+		}
+	}
+
+	// takes a function of the form void(size_t bits)
+	template<typename Func>
+	void forEachZero(const Func& func) const {
+		for(size_t i = 0; i < (size_t(1) << Variables); i++) {
+			if(bitset.get(i) == false) {
+				func(i);
+			}
+		}
+	}
+
 
 	FunctionInputBitSet canonize() const {
 		if(this->bitset.isEmpty() || this->bitset.get(0) == 1 && this->bitset.count() == 1) return *this;

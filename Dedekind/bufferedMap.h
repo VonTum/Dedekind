@@ -8,40 +8,37 @@ constexpr size_t hashMapPrimes[]{
 	12582917,25165843,50331653,100663319,201326611,402653189,805306457,1610612741
 };
 
-template<typename Key, typename Value>
-class BufferedMap {
+template<typename T>
+class HashBase {
 public:
-	struct KeyValue {
-		Key key;
-		Value value;
-	};
-
 	constexpr static unsigned int BAD_INDEX = ~static_cast<unsigned int>(0);
 
 	std::atomic<unsigned int>* hashTable;
-	KeyValue* keyValueBuffer;
 	std::atomic<unsigned int>* nextNodeBuffer;
 	size_t buckets;
+	T* data;
 	size_t itemCount;
-private:
 
+public:
 	// These are NOT locked, locking should be done by CALLER
 	std::atomic<unsigned int>* getBucketFor(uint64_t hash) const {
 		return hashTable + hash % buckets;
 	}
-	std::pair<KeyValue*, std::atomic<unsigned int>*> getNodeFor(const Key& lookingFor, uint64_t hash) const {
+	template<typename KeyType>
+	std::pair<T*, std::atomic<unsigned int>*> getNodeFor(const KeyType& lookingFor, uint64_t hash) const {
 		std::atomic<unsigned int>* cur = getBucketFor(hash);
 		unsigned int index = cur->load();
 		for(; index != BAD_INDEX; index = nextNodeBuffer[index].load()) {
-			KeyValue& item = keyValueBuffer[index];
-			if(item.key == lookingFor) {
+			T& item = data[index];
+			if(item == lookingFor) {
 				return std::make_pair(&item, cur);
 			}
 			cur = &nextNodeBuffer[index];
 		}
 		return std::make_pair(nullptr, cur);
 	}
-	std::pair<KeyValue*, std::atomic<unsigned int>*> getNodeFor(const Key& lookingFor) const {
+	template<typename KeyType>
+	std::pair<T*, std::atomic<unsigned int>*> getNodeFor(const KeyType& lookingFor) const {
 		return getNodeFor(lookingFor, lookingFor.hash());
 	}
 
@@ -50,11 +47,12 @@ private:
 		//shared_lock_guard lg(bucketLock);
 		return hashTable[hash % buckets].load();
 	}
-	KeyValue* getReadOnlyNode(const Key& lookingFor, uint64_t hash) const {
+	template<typename KeyType>
+	T* getReadOnlyNode(const KeyType& lookingFor, uint64_t hash) const {
 		unsigned int curIndex = getReadOnlyBucket(hash);
 		while(curIndex != BAD_INDEX) {
-			KeyValue& item = keyValueBuffer[curIndex];
-			if(item.key == lookingFor) {
+			T& item = data[curIndex];
+			if(item == lookingFor) {
 				return &item;
 			} else {
 				curIndex = nextNodeBuffer[curIndex].load();
@@ -62,7 +60,8 @@ private:
 		}
 		return nullptr;
 	}
-	KeyValue* getReadOnlyNode(const Key& lookingFor) const {
+	template<typename KeyType>
+	T* getReadOnlyNode(const KeyType& lookingFor) const {
 		return getReadOnlyNode(lookingFor, lookingFor.hash());
 	}
 
@@ -75,7 +74,7 @@ private:
 		for(size_t i = 0; i < this->buckets; i++) this->hashTable[i].store(BAD_INDEX);
 		for(size_t i = 0; i < oldBuckets; i++) {
 			for(unsigned int curNode = oldHashTable[i].load(); curNode != BAD_INDEX; ) {
-				std::atomic<unsigned int>& bucket = hashTable[keyValueBuffer[curNode].key.hash() % buckets];
+				std::atomic<unsigned int>& bucket = hashTable[this->data[curNode].hash() % buckets];
 				unsigned int nextNode = nextNodeBuffer[curNode].load();
 				unsigned int oldBucketNode = bucket.exchange(curNode);
 				nextNodeBuffer[curNode].store(oldBucketNode);
@@ -84,7 +83,6 @@ private:
 		}
 		delete[] oldHashTable;
 	}
-public:
 	void shrink() {
 		size_t bestBucketSize;
 		for(const size_t& bp : hashMapPrimes) {
@@ -100,7 +98,7 @@ public:
 	static size_t getNumberOfBucketsForSize(size_t size) {
 		size_t lastBp;
 		for(const size_t& bp : hashMapPrimes) {
-			if(bp > size * 3) {
+			if(bp > size) {
 				return bp;
 			}
 			lastBp = bp;
@@ -109,7 +107,7 @@ public:
 	}
 	void clear() {
 		for(size_t i = 0; i < this->itemCount; i++) {
-			this->keyValueBuffer[i].~KeyValue();
+			this->data[i].~T();
 		}
 		for(size_t i = 0; i < this->itemCount; i++) {
 			this->nextNodeBuffer[i].store(BAD_INDEX);
@@ -123,8 +121,8 @@ public:
 		this->clear();
 		delete[] this->nextNodeBuffer;
 		this->nextNodeBuffer = new std::atomic<unsigned int>[newSize];
-		delete[] this->keyValueBuffer;
-		this->keyValueBuffer = new KeyValue[newSize];
+		delete[] this->data;
+		this->data = new T[newSize];
 		delete[] this->hashTable;
 		this->buckets = getNumberOfBucketsForSize(newSize);
 		this->hashTable = new std::atomic<unsigned int>[this->buckets];
@@ -135,7 +133,7 @@ public:
 			this->nextNodeBuffer[i].store(BAD_INDEX);
 		}
 	}
-	BufferedMap(size_t capacity) : hashTable(new std::atomic<unsigned int>[getNumberOfBucketsForSize(capacity)]), nextNodeBuffer(new std::atomic<unsigned int>[capacity]), keyValueBuffer(new KeyValue[capacity]), buckets(getNumberOfBucketsForSize(capacity)), itemCount(0) {
+	HashBase(size_t capacity) : hashTable(new std::atomic<unsigned int>[getNumberOfBucketsForSize(capacity)]), nextNodeBuffer(new std::atomic<unsigned int>[capacity]), data(new T[capacity]), buckets(getNumberOfBucketsForSize(capacity)), itemCount(0) {
 		for(size_t i = 0; i < this->buckets; i++) {
 			this->hashTable[i].store(BAD_INDEX);
 		}
@@ -143,145 +141,157 @@ public:
 			this->nextNodeBuffer[i].store(BAD_INDEX);
 		}
 	}
-	BufferedMap() : hashTable(nullptr), nextNodeBuffer(nullptr), keyValueBuffer(nullptr), buckets(0), itemCount(0) {}
+	HashBase() : hashTable(nullptr), nextNodeBuffer(nullptr), data(nullptr), buckets(0), itemCount(0) {}
 
-	BufferedMap(BufferedMap&& other) : hashTable(other.hashTable), nextNodeBuffer(other.nextNodeBuffer), keyValueBuffer(other.keyValueBuffer), buckets(other.buckets), itemCount(other.itemCount) {
+	HashBase(HashBase&& other) noexcept : hashTable(other.hashTable), nextNodeBuffer(other.nextNodeBuffer), data(other.data), buckets(other.buckets), itemCount(other.itemCount) {
 		other.hashTable = nullptr;
 		other.buckets = 0;
 		other.nextNodeBuffer = nullptr;
-		other.keyValueBuffer = nullptr;
+		other.data = nullptr;
 		other.itemCount = 0;
 	}
-	BufferedMap& operator=(BufferedMap&& other) noexcept {
+	HashBase& operator=(HashBase&& other) noexcept {
 		std::swap(this->hashTable, other.hashTable);
 		std::swap(this->buckets, other.buckets);
 		std::swap(this->nextNodeBuffer, other.nextNodeBuffer);
-		std::swap(this->keyValueBuffer, other.keyValueBuffer);
+		std::swap(this->data, other.data);
 		std::swap(this->itemCount, other.itemCount);
 		return *this;
 	}
 
-	~BufferedMap() {
+	~HashBase() {
 		this->clear();
 		delete[] hashTable;
 		delete[] nextNodeBuffer;
-		delete[] keyValueBuffer;
+		delete[] data;
 		buckets = 0;
 		itemCount = 0;
 	}
 
-	KeyValue* find(const Key& key, uint64_t hash) {
+	T& operator[](size_t index) { return data[index]; }
+	const T& operator[](size_t index) const { return data[index]; }
+
+	size_t size() const { return itemCount; }
+
+	template<typename KeyType>
+	T* find(const KeyType& key, uint64_t hash) {
 		return getReadOnlyNode(key, hash);
 	}
-	KeyValue* find(const Key& key) {
+	template<typename KeyType>
+	T* find(const KeyType& key) {
 		return this->find(key, key.hash());
 	}
-	const KeyValue* find(const Key& key, uint64_t hash) const {
+	template<typename KeyType>
+	const T* find(const KeyType& key, uint64_t hash) const {
 		return getReadOnlyNode(key, hash);
 	}
-	const KeyValue* find(const Key& key) const {
+	template<typename KeyType>
+	const T* find(const KeyType& key) const {
 		return this->find(key, key.hash());
 	}
 
-	Value& get(const Key& key) {
-		KeyValue* foundNode = getReadOnlyNode(key);
+	template<typename KeyType>
+	T& get(const KeyType& key) {
+		T* foundNode = this->getReadOnlyNode(key);
 		assert(foundNode != nullptr);
-		return foundNode->value;
+		return *foundNode;
 	}
-	const Value& get(const Key& key) const {
-		KeyValue* foundNode = getReadOnlyNode(key);
+	template<typename KeyType>
+	const T& get(const KeyType& key) const {
+		T* foundNode = this->getReadOnlyNode(key);
 		assert(foundNode != nullptr);
-		return foundNode->value;
+		return *foundNode;
 	}
-	KeyValue& getOrAdd(const Key& key, const Value& defaultForCreate, uint64_t hash) {
-		std::pair<KeyValue*, std::atomic<unsigned int>*> foundNode = getNodeFor(key, hash);
-		KeyValue* foundKeyValue = foundNode.first;
+	T& getOrAdd(const T& item, uint64_t hash) {
+		std::pair<T*, std::atomic<unsigned int>*> foundNode = this->getNodeFor(item, hash);
+		T* foundKeyValue = foundNode.first;
 		std::atomic<unsigned int>& referer = *foundNode.second;
 		if(foundKeyValue == nullptr) { // not found
-			unsigned int newNodeIdx = this->itemCount;
-			new(&keyValueBuffer[newNodeIdx]) KeyValue{key, defaultForCreate};
+			unsigned int newNodeIdx = this->size();
+			data[newNodeIdx] = item;
 			nextNodeBuffer[newNodeIdx].store(BAD_INDEX);
 			referer.store(newNodeIdx);
 			this->itemCount++;
-			return keyValueBuffer[newNodeIdx];
+			return data[newNodeIdx];
 		} else {
 			return *foundKeyValue;
 		}
 	}
-	KeyValue& getOrAdd(const Key& key, const Value& defaultForCreate) {
-		uint64_t hash = key.hash();
-		return getOrAdd(key, defaultForCreate, hash);
+	T& getOrAdd(const T& item) {
+		uint64_t hash = item.hash();
+		return getOrAdd(item, hash);
 	}
 
-	KeyValue& add(const Key& key, const Value& value, uint64_t hash) {
-		std::atomic<unsigned int>& bucket = *getBucketFor(hash);
-		unsigned int newNodeIdx = this->itemCount;
-		new(&keyValueBuffer[newNodeIdx]) KeyValue{key, value};
-		unsigned int oldBucketValue = bucket.load();
-		nextNodeBuffer[newNodeIdx].store(oldBucketValue);
-		assert(oldBucketValue == -1 || oldBucketValue < newNodeIdx);
-		bucket.store(newNodeIdx);
+	// returns wasAdded
+	bool add(const T& item, uint64_t hash) {
+		std::atomic<unsigned int>* cur = this->getBucketFor(hash);
+		unsigned int index = cur->load();
+		while(index != BAD_INDEX) {
+			if(this->data[index] == item) {
+				return false;
+			}
+			cur = &this->nextNodeBuffer[index];
+
+			index = cur->load();
+		}
+		unsigned int newNodeIdx = this->size();
+		data[newNodeIdx] = item;
+		nextNodeBuffer[newNodeIdx].store(index);
+		assert(index == -1 || index < newNodeIdx);
+		cur->store(newNodeIdx);
 		this->itemCount++;
-		return keyValueBuffer[newNodeIdx];
+		return true;
 	}
 
-	KeyValue& add(const Key& key, const Value& value) {
-		return this->add(key, value, key.hash());
+	// returns wasAdded
+	bool add(const T& item) {
+		return this->add(item, item.hash());
 	}
 
-	size_t size() const { return itemCount; }
+	T* begin() { return data; }
+	const T* begin() const { return data; }
+	T* end() { return data + itemCount; }
+	const T* end() const { return data + itemCount; }
+};
 
-	KeyValue* begin() { return keyValueBuffer; }
-	const KeyValue* begin() const { return keyValueBuffer; }
-	const KeyValue* end() const { return keyValueBuffer + itemCount; }
-	KeyValue* end() { return keyValueBuffer + itemCount; }
+
+template<typename Key, typename Value>
+struct KeyValue {
+	Key key;
+	Value value;
+
+	uint64_t hash() const { return key.hash(); }
+	bool operator==(const Key& otherKey) const { return this->key == otherKey; }
+	bool operator==(const KeyValue& other) const { return this->key == other.key; }
+};
+
+template<typename Key, typename Value>
+class BufferedMap : public HashBase<KeyValue<Key, Value>> {
+public:
+	using HashBase<KeyValue<Key, Value>>::HashBase;
+
+	KeyValue<Key, Value>& getOrAdd(const Key& k, const Value& v) {
+		return HashBase<KeyValue<Key, Value>>::getOrAdd(KeyValue<Key, Value>{k, v});
+	}
+	KeyValue<Key, Value>& getOrAdd(const Key& k, const Value& v, uint64_t hash) {
+		return HashBase<KeyValue<Key, Value>>::getOrAdd(KeyValue<Key, Value>{k, v}, hash);
+	}
+	// returns wasAdded
+	bool add(const Key& k, const Value& v) {
+		return HashBase<KeyValue<Key, Value>>::add(KeyValue<Key, Value>{k, v});
+	}
+	// returns wasAdded
+	bool add(const Key& k, const Value& v, uint64_t hash) {
+		return HashBase<KeyValue<Key, Value>>::add(KeyValue<Key, Value>{k, v}, hash);
+	}
 };
 
 template<typename T>
-class BufferedSet {
-	struct EmptyValue {};
-	BufferedMap<T, EmptyValue> underlyingMap;
-
+class BufferedSet : public HashBase<T> {
 public:
-	BufferedSet() : underlyingMap() {}
-	BufferedSet(size_t size) : underlyingMap(size) {}
+	using HashBase<T>::HashBase;
 
-	T& add(const T& item) {
-		return underlyingMap.getOrAdd(item, EmptyValue{}).key;
-	}
 	bool contains(const T& item) const {
-		return underlyingMap.find(item) != nullptr;
+		return HashBase<T>::find(item) != nullptr;
 	}
-	void clear() {
-		underlyingMap.clear();
-	}
-	void resizeWithClear(size_t newSize) {
-		underlyingMap.resizeWithClear(newSize);
-	}
-	size_t size() const {
-		return underlyingMap.size();
-	}
-
-	/*struct SetIter {
-		BufferedMap<T, EmptyValue>::unsigned int cur;
-
-		SetIter& operator++() {
-			cur++;
-			return *this;
-		}
-
-		bool operator==(const SetIter& other) const {
-			return cur == other.cur;
-		}
-		bool operator!=(const SetIter& other) const {
-			return cur != other.cur;
-		}
-
-		T& operator*() {
-			return cur->item.key;
-		}
-	};*/
-	using SetNode = typename BufferedMap<T, EmptyValue>::KeyValue;
-	SetNode* begin() { return underlyingMap.keyValueBuffer; }
-	SetNode* end() { return underlyingMap.keyValueBuffer + underlyingMap.itemCount; }
 };

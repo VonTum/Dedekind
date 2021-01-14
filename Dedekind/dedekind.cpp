@@ -55,30 +55,66 @@ static FunctionInputBitSet<Variables> generateFibs() {
 
 template<unsigned int Variables>
 void runGenAllMBFs() {
-	FunctionInputBitSet<Variables>* allFibs;
-	FunctionInputBitSet<Variables>* allFibsEnd;
+	std::pair<BufferedSet<FunctionInputBitSet<Variables>>, size_t> resultPair;
 	{
 		TimeTracker timer;
-		auto pair = generateAllMBFs<Variables>();
-		allFibs = pair.first;
-		allFibsEnd = pair.second;
+		resultPair = generateAllMBFsFast<Variables>();
+	}
+	BufferedSet<FunctionInputBitSet<Variables>>& result = resultPair.first;
+	size_t numberOfLinks = resultPair.second;
+	{
+		std::cout << "Sorting\n";
+		TimeTracker timer;
+		std::sort(result.begin(), result.end(), [](FunctionInputBitSet<Variables>& a, FunctionInputBitSet<Variables>& b) -> bool {return a.size() < b.size(); });
 	}
 
-	std::cout << "R(" << Variables << ") == " << (allFibsEnd - allFibs) << "\n";
 
-	std::string name = "allUniqueMBF";
-	name.append(std::to_string(Variables));
-	name.append(".mbf");
-	std::ofstream file(name, std::ios::binary);
-
-	uint8_t buf[(1 << Variables) / 8];
-	for(FunctionInputBitSet<Variables>* item = allFibs; item != allFibsEnd; item++) {
-		serialize(*item, buf);
-		file.write(reinterpret_cast<char*>(buf), (1 << Variables) / 8);
+	uint64_t sizeCounts[(1 << Variables) + 1];
+	for(size_t i = 0; i < (1 << Variables) + 1; i++) {
+		sizeCounts[i] = 0;
 	}
-	file.close();
+	for(const FunctionInputBitSet<Variables>& item : result) {
+		sizeCounts[item.size()]++;
+	}
+
+	std::cout << "R(" << Variables << ") == " << result.size() << "\n";
+
+	{
+		std::string name = "allUniqueMBF";
+		name.append(std::to_string(Variables));
+		name.append(".mbf");
+		std::ofstream file(name, std::ios::binary);
+
+		uint8_t buf[(1 << Variables) / 8];
+		for(const FunctionInputBitSet<Variables>& item : result) {
+			serialize(item, buf);
+			file.write(reinterpret_cast<char*>(buf), (1 << Variables) / 8);
+		}
+		file.close();
+	}
+
+	{
+		std::string name = "allUniqueMBF";
+		name.append(std::to_string(Variables));
+		name.append("info.txt");
+		std::ofstream file(name);
+
+
+		file << "R(" << Variables << ") == " << result.size() << "\n";
+
+		std::cout << "numberOfLinks: " << numberOfLinks << "\n";
+		file << "numberOfLinks: " << numberOfLinks << "\n";
+
+		//std::cout << "classesPerSize: " << sizeCounts[0];
+		file << "classesPerSize: " << sizeCounts[0];
+		for(size_t i = 1; i < (1 << Variables) + 1; i++) {
+			//std::cout << ", " << sizeCounts[i] << "\n";
+			file << ", " << sizeCounts[i];
+		}
+		file << "\n";
+		file.close();
+	}
 }
-
 void runGenLayerDecomposition() {
 	std::cout << "Detected " << std::thread::hardware_concurrency() << " available threads!\n";
 	TimeTracker timer;

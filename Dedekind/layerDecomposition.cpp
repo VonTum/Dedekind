@@ -5,10 +5,10 @@
 #include <iostream>
 #include <shared_mutex>
 
-static void createLinkBetween(EquivalenceClassMap<TempEquivClassInfo>::KeyValue& cl, EquivalenceClassMap<TempEquivClassInfo>::KeyValue& extended, countInt count) {
+static void createLinkBetween(KeyValue<EquivalenceClass, TempEquivClassInfo>& cl, KeyValue<EquivalenceClass, TempEquivClassInfo>& extended, countInt count) {
 	cl.value.extendedClasses.push_back(TempEquivClassInfo::AdjacentClass{&extended, count});
 }
-static void incrementLinkBetween(EquivalenceClassMap<TempEquivClassInfo>::KeyValue& cl, EquivalenceClassMap<TempEquivClassInfo>::KeyValue& extended) {
+static void incrementLinkBetween(KeyValue<EquivalenceClass, TempEquivClassInfo>& cl, KeyValue<EquivalenceClass, TempEquivClassInfo>& extended) {
 	for(auto& existingElem : cl.value.extendedClasses) {
 		if(existingElem.node == &extended) {
 			existingElem.formationCount++;
@@ -18,8 +18,8 @@ static void incrementLinkBetween(EquivalenceClassMap<TempEquivClassInfo>::KeyVal
 	createLinkBetween(cl, extended, 1);
 }
 
-static EquivalenceClassMap<TempEquivClassInfo>::KeyValue* oneOfListContains(const std::vector<EquivalenceClassMap<TempEquivClassInfo>::KeyValue*>& list, const PreprocessedFunctionInputSet& preprocessed) {
-	for(EquivalenceClassMap<TempEquivClassInfo>::KeyValue* existingClass : list) {
+static KeyValue<EquivalenceClass, TempEquivClassInfo>* oneOfListContains(const std::vector<KeyValue<EquivalenceClass, TempEquivClassInfo>*>& list, const PreprocessedFunctionInputSet& preprocessed) {
+	for(KeyValue<EquivalenceClass, TempEquivClassInfo>* existingClass : list) {
 		if(existingClass->key.contains(preprocessed)) {
 			return existingClass;
 		}
@@ -38,8 +38,8 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 	equivalenceClasses[1].resizeWithClear(1);
 	equivalenceClasses[layer.size()].resizeWithClear(1);
 
-	EquivalenceClassMap<TempEquivClassInfo>::KeyValue& layer0item = equivalenceClasses[0].add(EquivalenceClass::emptyEquivalenceClass, TempEquivClassInfo{}); // equivalence classes of size 0, only one
-	EquivalenceClassMap<TempEquivClassInfo>::KeyValue& layer1item = equivalenceClasses[1].add(preprocess(FunctionInputSet{layer[0]}), TempEquivClassInfo{}); // equivalence classes of size 1, only one
+	KeyValue<EquivalenceClass, TempEquivClassInfo>& layer0item = equivalenceClasses[0].getOrAdd(EquivalenceClass::emptyEquivalenceClass, TempEquivClassInfo{}); // equivalence classes of size 0, only one
+	KeyValue<EquivalenceClass, TempEquivClassInfo>& layer1item = equivalenceClasses[1].getOrAdd(preprocess(FunctionInputSet{layer[0]}), TempEquivClassInfo{}); // equivalence classes of size 1, only one
 	createLinkBetween(layer0item, layer1item, layer.size());
 
 	for(size_t groupSize = 2; groupSize < layer.size(); groupSize++) {
@@ -52,14 +52,14 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 		}
 		std::mutex modifyLock;
 		// try to extend each of the previous groups by 1
-		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&modifyLock,&equivalenceClasses,&groupSize](EquivalenceClassMap<TempEquivClassInfo>::KeyValue& element) {
+		iterCollectionInParallel(equivalenceClasses[groupSize - 1], [&layer,&curGroups,&modifyLock,&equivalenceClasses,&groupSize](KeyValue<EquivalenceClass, TempEquivClassInfo>& element) {
 			for(FunctionInput newInput : layer) {
 				if(element.key.hasFunctionInput(newInput)) continue; // only try to add new inputs that are not yet part of this
 				PreprocessedFunctionInputSet resultingPreprocessed = element.key.extendedBy(newInput);
 				uint64_t hash = resultingPreprocessed.hash();
 
 				{// this whole bit is to reduce contention on the modifyMutex of the curGroups map, by finding existing classes earlier and handling them without having to take a write lock
-					EquivalenceClassMap<TempEquivClassInfo>::KeyValue* existingClass = curGroups.find(resultingPreprocessed, hash);
+					KeyValue<EquivalenceClass, TempEquivClassInfo>* existingClass = curGroups.find(resultingPreprocessed, hash);
 
 					if(existingClass != nullptr) {
 						incrementLinkBetween(element, *existingClass);
@@ -68,7 +68,7 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 				}
 
 				modifyLock.lock();
-				EquivalenceClassMap<TempEquivClassInfo>::KeyValue& extended = curGroups.getOrAdd(resultingPreprocessed, TempEquivClassInfo{}, hash);
+				KeyValue<EquivalenceClass, TempEquivClassInfo>& extended = curGroups.getOrAdd(resultingPreprocessed, TempEquivClassInfo{}, hash);
 				modifyLock.unlock();
 
 				incrementLinkBetween(element, extended);
@@ -83,8 +83,8 @@ std::vector<EquivalenceClassMap<TempEquivClassInfo>> createDecomposition(const F
 		std::cout << " done! " << curGroups.size() << " classes found!" << std::endl;
 	}
 	if(layer.size() > 1) {
-		EquivalenceClassMap<TempEquivClassInfo>::KeyValue& lastLayer = equivalenceClasses[layer.size()].add(EquivalenceClass(preprocess(layer)), TempEquivClassInfo{});
-		for(EquivalenceClassMap<TempEquivClassInfo>::KeyValue& oneToLast : equivalenceClasses[layer.size() - 1]) {
+		KeyValue<EquivalenceClass, TempEquivClassInfo>& lastLayer = equivalenceClasses[layer.size()].getOrAdd(EquivalenceClass(preprocess(layer)), TempEquivClassInfo{});
+		for(KeyValue<EquivalenceClass, TempEquivClassInfo>& oneToLast : equivalenceClasses[layer.size() - 1]) {
 			createLinkBetween(oneToLast, lastLayer, 1);
 		}
 	}
