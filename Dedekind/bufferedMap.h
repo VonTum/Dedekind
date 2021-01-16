@@ -295,3 +295,176 @@ public:
 		return HashBase<T>::find(item) != nullptr;
 	}
 };
+
+template<typename T>
+class BakedHashBase {
+	T* data;
+	unsigned int* hashTable;
+	size_t buckets;
+	size_t itemCount;
+
+public:
+	BakedHashBase() : hashTable(nullptr), data(nullptr), buckets(0), itemCount(0) {}
+	BakedHashBase(const HashBase<T>& from, T* dataBuffer) : hashTable(new unsigned int[from.buckets + 1]), data(dataBuffer), buckets(from.buckets), itemCount(from.itemCount) {
+		unsigned int dataIndex = 0;
+		for(size_t bucketI = 0; bucketI < from.buckets; bucketI++) {
+			this->hashTable[bucketI] = dataIndex;
+
+			for(unsigned int curIndex = from.hashTable[bucketI].load(); curIndex != HashBase<T>::BAD_INDEX; curIndex = from.nextNodeBuffer[curIndex].load()) {
+				this->data[dataIndex++] = from.data[curIndex];
+			}
+		}
+		this->hashTable[from.buckets] = dataIndex;
+	}
+
+	template<typename OtherT, typename ConvertFunc>
+	BakedHashBase(const HashBase<OtherT>& from, T* dataBuffer, const ConvertFunc& convert) : hashTable(new unsigned int[from.buckets + 1]), data(dataBuffer), buckets(from.buckets), itemCount(from.itemCount) {
+		unsigned int dataIndex = 0;
+		for(size_t bucketI = 0; bucketI < from.buckets; bucketI++) {
+			this->hashTable[bucketI] = dataIndex;
+
+			for(unsigned int curIndex = from.hashTable[bucketI].load(); curIndex != HashBase<T>::BAD_INDEX; curIndex = from.nextNodeBuffer[curIndex].load()) {
+				this->data[dataIndex++] = convert(from.data[curIndex]);
+			}
+		}
+		this->hashTable[from.buckets] = dataIndex;
+	}
+
+	~BakedHashBase() {
+		delete[] this->hashTable;
+	}
+
+	BakedHashBase(BakedHashBase&& other) : hashTable(other.hashTable), data(other.data), buckets(other.buckets), itemCount(other.itemCount) {
+		other.hashTable = nullptr;
+		other.data = nullptr;
+		other.buckets = 0;
+		other.itemCount = 0;
+	}
+
+	BakedHashBase& operator=(BakedHashBase&& other) {
+		std::swap(hashTable, other.hashTable);
+		std::swap(data, other.data);
+		std::swap(buckets, other.buckets);
+		std::swap(itemCount, other.itemCount);
+		return *this;
+	}
+
+	template<typename KeyType>
+	T* find(const KeyType& key) {
+		size_t hashIndex = key.hash() % this->buckets;
+		unsigned int hashStart = this->hashTable[hashIndex];
+		unsigned int hashEnd = this->hashTable[hashIndex+1];
+
+		for(unsigned int curDataIndex = hashStart; curDataIndex < hashEnd; curDataIndex++) {
+			T& item = this->data[curDataIndex];
+			if(item == key) {
+				return &item;
+			}
+		}
+
+		return nullptr;
+	}
+
+	template<typename KeyType>
+	const T* find(const KeyType& key) const {
+		size_t hashIndex = key.hash() % this->buckets;
+		unsigned int hashStart = this->hashTable[hashIndex];
+		unsigned int hashEnd = this->hashTable[hashIndex + 1];
+
+		for(unsigned int curDataIndex = hashStart; curDataIndex < hashEnd; curDataIndex++) {
+			const T& item = this->data[curDataIndex];
+			if(item == key) {
+				return &item;
+			}
+		}
+
+		return nullptr;
+	}
+
+	template<typename KeyType>
+	T& get(const KeyType& key) {
+		T* item = this->find(key);
+		assert(item != nullptr);
+		return *item;
+	}
+
+	template<typename KeyType>
+	const T& get(const KeyType& key) const {
+		const T* item = this->find(key);
+		assert(item != nullptr);
+		return *item;
+	}
+
+	size_t size() const { return this->itemCount; }
+
+	T& operator[](size_t index) { return data[index]; }
+	const T& operator[](size_t index) const { return data[index]; }
+
+	T* begin() { return data; }
+	const T* begin() const { return data; }
+	T* end() { return data + itemCount; }
+	const T* end() const { return data + itemCount; }
+};
+
+template<typename Key, typename Value>
+class BakedMap : private BakedHashBase<KeyValue<Key, Value>> {
+public:
+	BakedMap() = default;
+	BakedMap(const BufferedMap<Key, Value>& from, KeyValue<Key, Value>* dataBuffer) : BakedHashBase(static_cast<HashBase<KeyValue<Key, Value>>>(from), dataBuffer) {}
+	BakedMap(const BufferedSet<Key>& from, KeyValue<Key, Value>* dataBuffer) : BakedHashBase(static_cast<HashBase<Key>>(from), dataBuffer, [](const Key& k) {return KeyValue<Key, Value>{k, {}}; }) {}
+
+	Value& get(const Key& key) {
+		return BakedHashBase<KeyValue<Key, Value>>::get(key).value;
+	}
+	const Value& get(const Key& key) const {
+		return BakedHashBase<KeyValue<Key, Value>>::get(key).value;
+	}
+
+	Value* find(const Key& key) {
+		KeyValue<Key, Value>* found = BakedHashBase<KeyValue<Key, Value>>::find(key);
+		if(found != nullptr) {
+			return &found->value;
+		} else {
+			return nullptr;
+		}
+	}
+	const Value* find(const Key& key) const {
+		const KeyValue<Key, Value>* found = BakedHashBase<KeyValue<Key, Value>>::find(key);
+		if(found != nullptr) {
+			return &found->value;
+		} else {
+			return nullptr;
+		}
+	}
+
+	bool contains(const Key& key) const {
+		return BakedHashBase<KeyValue<Key, Value>>::find(key) != nullptr;
+	}
+
+	size_t size() const { return BakedHashBase<KeyValue<Key, Value>>::size(); }
+	const KeyValue<Key, Value>& operator[](size_t index) const { return BakedHashBase<KeyValue<Key, Value>>::operator[](index); }
+	KeyValue<Key, Value>& operator[](size_t index) { return BakedHashBase<KeyValue<Key, Value>>::operator[](index); }
+	const KeyValue<Key, Value>* begin() const { return BakedHashBase<KeyValue<Key, Value>>::begin(); }
+	const KeyValue<Key, Value>* end() const { return BakedHashBase<KeyValue<Key, Value>>::end(); }
+	KeyValue<Key, Value>* begin() { return BakedHashBase<KeyValue<Key, Value>>::begin(); }
+	KeyValue<Key, Value>* end() { return BakedHashBase<KeyValue<Key, Value>>::end(); }
+};
+
+template<typename T>
+class BakedSet : private BakedHashBase<T> {
+public:
+	BakedSet() = default;
+	BakedSet(const BufferedSet<T>& from, T* dataBuffer) : BakedHashBase<T>(static_cast<const HashBase<T>&>(from), dataBuffer) {}
+
+	bool contains(const T& item) const {
+		return BakedHashBase<T>::find(item) != nullptr;
+	}
+
+	size_t size() const { return BakedHashBase<T>::size(); }
+	const T& operator[](size_t index) const { return BakedHashBase<T>::operator[](index); }
+	T& operator[](size_t index) { return BakedHashBase<T>::operator[](index); }
+	const T* begin() const { return BakedHashBase<T>::begin(); }
+	const T* end() const { return BakedHashBase<T>::end(); }
+	T* begin() { return BakedHashBase<T>::begin(); }
+	T* end() { return BakedHashBase<T>::end(); }
+};

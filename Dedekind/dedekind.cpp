@@ -85,10 +85,8 @@ void runGenAllMBFs() {
 		name.append(".mbf");
 		std::ofstream file(name, std::ios::binary);
 
-		uint8_t buf[(1 << Variables) / 8];
 		for(const FunctionInputBitSet<Variables>& item : result) {
-			serialize(item, buf);
-			file.write(reinterpret_cast<char*>(buf), (1 << Variables) / 8);
+			serializeMBF(item, file);
 		}
 		file.close();
 	}
@@ -115,6 +113,7 @@ void runGenAllMBFs() {
 		file.close();
 	}
 }
+
 void runGenLayerDecomposition() {
 	std::cout << "Detected " << std::thread::hardware_concurrency() << " available threads!\n";
 	TimeTracker timer;
@@ -126,9 +125,36 @@ void runGenLayerDecomposition() {
 	std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.getDedekind() << std::endl;
 }
 
+template<unsigned int Variables>
+void runSortAndComputeLinks() {
+	std::string inputName = "allUniqueMBF";
+	inputName.append(std::to_string(Variables));
+	inputName.append(".mbf");
+	std::ifstream inputFile(inputName, std::ios::binary);
+
+	std::string sortedName = "allUniqueMBFSorted";
+	sortedName.append(std::to_string(Variables));
+	sortedName.append(".mbf");
+	std::ofstream sortedFile(sortedName, std::ios::binary);
+
+	std::string linkName = "mbfLinks";
+	linkName.append(std::to_string(Variables));
+	linkName.append(".mbfLinks");
+	std::ofstream linkFile(linkName, std::ios::binary);
+
+	sortAndComputeLinks<Variables>(inputFile, sortedFile, linkFile);
+
+	inputFile.close();
+	sortedFile.close();
+	linkFile.close();
+}
+
 #ifndef RUN_TESTS
 int main() {
-	runGenAllMBFs<7>();
+	runGenAllMBFs<6>();
+	//return 0;
+
+	runSortAndComputeLinks<6>();
 	return 0;
 
 	//runGenLayerDecomposition();

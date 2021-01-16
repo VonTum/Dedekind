@@ -380,7 +380,6 @@ template<unsigned int Variables>
 struct CanonizeTest {
 	static void run() {
 		for(int iter = 0; iter < SMALL_ITER; iter++) {
-			std::cout << ".";
 			FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
 
 			FunctionInputBitSet<Variables> canonizedFibs = fibs.canonize();
@@ -396,7 +395,6 @@ template<unsigned int Variables>
 struct MBFTest {
 	static void run() {
 		for(int iter = 0; iter < SMALL_ITER; iter++) {
-			std::cout << ".";
 			FunctionInputBitSet<Variables> mfibs = generateMBF<Variables>();
 
 			logStream << mfibs << "\n";
@@ -420,7 +418,6 @@ struct LayerWiseTest {
 	static void run() {
 		for(unsigned int layer = 0; layer < Variables + 1; layer++) {
 			for(int iter = 0; iter < SMALL_ITER; iter++) {
-				std::cout << ".";
 				FunctionInputBitSet<Variables> layerFibs = generateLayer<Variables>(layer);
 
 				if(layerFibs.isEmpty()) continue;
@@ -430,6 +427,7 @@ struct LayerWiseTest {
 				ASSERT(layerFibs.isLayer());
 
 				FunctionInputBitSet<Variables> n = layerFibs.next();
+				n.remove(0);
 				FunctionInputBitSet<Variables> p = layerFibs.prev();
 
 				logStream << " p:" << p << " n:" << n << "\n";
@@ -455,7 +453,6 @@ template<unsigned int Variables>
 struct PrevTest {
 	static void run() {
 		for(int iter = 0; iter < LARGE_ITER; iter++) {
-			std::cout << ".";
 			FunctionInputBitSet<Variables> mbf = generateMBF<Variables>();
 			FunctionInputBitSet<Variables> prev = mbf.prev();
 			//prev.bitset.set(0); // 0 is undefined
@@ -487,11 +484,9 @@ template<unsigned int Variables>
 struct NextTest {
 	static void run() {
 		for(int iter = 0; iter < LARGE_ITER; iter++) {
-			std::cout << ".";
 			FunctionInputBitSet<Variables> mbf = generateMBF<Variables>();
 			FunctionInputBitSet<Variables> next = mbf.next();
-			next.bitset.set(0); // 0 is undefined
-
+			
 			logStream << "mbf: " << mbf << "\n";
 			logStream << "next: " << next << "\n";
 
@@ -515,12 +510,30 @@ struct NextTest {
 	}
 };
 
+template<unsigned int Variables>
+struct SerializationTest {
+	static void run() {
+		for(int iter = 0; iter < LARGE_ITER; iter++) {
+			uint8_t buf[getMBFSizeInBytes<Variables>()];
+
+			FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
+
+			uint8_t* end = serializeMBFToBuf(fibs, buf);
+			ASSERT(end == buf + getMBFSizeInBytes<Variables>());
+
+			FunctionInputBitSet<Variables> deserialfibs = deserializeMBFFromBuf<Variables>(buf);
+
+			ASSERT(fibs == deserialfibs);
+		}
+	}
+};
+
 
 /*TEST_CASE(testBitsCompare) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, CompareBitsTest>();
 }*/
 
-/*TEST_CASE(testSetResetTestBit) {
+TEST_CASE(testSetResetTestBit) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, SetResetTest>();
 }
 
@@ -562,20 +575,18 @@ TEST_CASE(testMBF) {
 
 TEST_CASE(testLayerWise) {
 	runFunctionRange<TEST_FROM, 7, LayerWiseTest>();
-}*/
+}
 
 TEST_CASE(testPrev) {
 	runFunctionRange<TEST_FROM, 7, PrevTest>();
 }
 
 TEST_CASE(testNext) {
-	rand();
-	rand();
-	rand();
-	rand();
-	rand();
-	rand();
 	runFunctionRange<TEST_FROM, 7, NextTest>();
+}
+
+TEST_CASE(testSerialization) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, SerializationTest>();
 }
 
 /*TEST_CASE(benchCanonize) {
