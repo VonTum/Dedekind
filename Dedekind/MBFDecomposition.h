@@ -30,7 +30,7 @@ size_t findAllExpandedMBFsFast(const FunctionInputBitSet<Variables>& curMBF, std
 		for(size_t i = 0; i < curSize; i++) {
 			// check for duplicates
 			if(expandedMBFs[i].first == canon) {
-				expandedMBFs[curSize].second++;
+				expandedMBFs[i].second++;
 				return;
 			}
 		}
@@ -189,10 +189,10 @@ struct LinkedNode {
 size_t serializeLinkedNodeList(const LinkedNode* ln, size_t count, uint8_t* outbuf) {
 	*outbuf++ = static_cast<uint8_t>(count);
 	for(size_t i = 0; i < count; i++) {
-		*outbuf++ = static_cast<uint8_t>(ln->count);
-		*outbuf++ = static_cast<uint8_t>(ln->index >> 16);
-		*outbuf++ = static_cast<uint8_t>(ln->index >> 8);
-		*outbuf++ = static_cast<uint8_t>(ln->index);
+		*outbuf++ = static_cast<uint8_t>(ln[i].count);
+		*outbuf++ = static_cast<uint8_t>(ln[i].index >> 16);
+		*outbuf++ = static_cast<uint8_t>(ln[i].index >> 8);
+		*outbuf++ = static_cast<uint8_t>(ln[i].index);
 	}
 	return count * 4 + 1;
 }
@@ -203,6 +203,8 @@ void sortAndComputeLinks(std::ifstream& allClassesSorted, std::ofstream& outputM
 
 	BufferedSet<FunctionInputBitSet<Variables>> prevSet;
 	for(size_t layer = 0; layer <= (1 << Variables); layer++) {
+		std::cout << "Baking layer " << layer << "\n";
+
 		size_t curLayerSize = getLayerSize<Variables>(layer);
 		BufferedSet<FunctionInputBitSet<Variables>> fisSet(curLayerSize);
 
@@ -216,6 +218,7 @@ void sortAndComputeLinks(std::ifstream& allClassesSorted, std::ofstream& outputM
 		}
 		
 		if(layer != 0) { // skip first layer, nothing links to first layer
+			std::cout << "Linking layer " << layer << " with " << (layer - 1) << "\n";
 			for(const FunctionInputBitSet<Variables>& element : prevSet) {
 				std::pair<FunctionInputBitSet<Variables>, int> expandedMBFBuf[MAX_EXPANSION];
 				size_t foundNumber = findAllExpandedMBFsFast(element, expandedMBFBuf);

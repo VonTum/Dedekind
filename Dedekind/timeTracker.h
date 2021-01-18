@@ -10,8 +10,13 @@ class TimeTracker {
 public:
 	TimeTracker(std::string message) : message(message), startTime(std::chrono::high_resolution_clock::now()) {}
 	TimeTracker() : message("Time taken: "), startTime(std::chrono::high_resolution_clock::now()) {}
+
+	std::chrono::nanoseconds getTime() const {
+		return std::chrono::high_resolution_clock::now() - startTime;
+	}
+
 	~TimeTracker() {
-		std::chrono::nanoseconds deltaTime = std::chrono::high_resolution_clock::now() - startTime;
+		std::chrono::nanoseconds deltaTime = getTime();
 		long long nanos = deltaTime.count();
 		if(nanos < 1.0e10) {
 			std::cout << message << nanos / 1.0e6 << "ms";
@@ -22,5 +27,7 @@ public:
 		}
 		std::cout << "\n";
 	}
+
+
 };
 

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ufwb version="1.17">
+    <grammar name="mbfLinks" start="id:14" author="Lennart" fileextension="mbfLinks">
+        <structure name="&lt;File&gt;" id="14" encoding="ISO_8859-1:1987" endian="big" signed="no">
+            <structure name="linkGroup" id="15" repeatmin="0" repeatmax="-1" encoding="ISO_8859-1:1987" endian="big" signed="no" fillcolor="00AA00">
+                <number name="numLinks" id="18" fillcolor="FFAA00" type="integer" length="1"/>
+                <structure name="countedLink" id="19" length="0" repeat="id:18" repeatmin="0" repeatmax="-1">
+                    <number name="count" id="20" fillcolor="55FF00" type="integer" length="1"/>
+                    <number name="index" id="21" fillcolor="55FFFF" type="integer" length="3"/>
+                </structure>
+            </structure>
+        </structure>
+    </grammar>
+</ufwb>

@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <random>
 #include "dedekindDecomposition.h"
 #include "valuedDecomposition.h"
 #include "toString.h"
@@ -127,6 +128,8 @@ void runGenLayerDecomposition() {
 
 template<unsigned int Variables>
 void runSortAndComputeLinks() {
+	TimeTracker timer;
+
 	std::string inputName = "allUniqueMBF";
 	inputName.append(std::to_string(Variables));
 	inputName.append(".mbf");
@@ -149,15 +152,138 @@ void runSortAndComputeLinks() {
 	linkFile.close();
 }
 
+
+void doRAMTest() {
+	constexpr size_t numCurs = 32;
+	constexpr uint32_t size = 1 << 25;
+
+	std::default_random_engine generator;
+	std::uniform_int_distribution<uint32_t> distribution(0, size - 1);
+
+	uint32_t* jumpTable = new uint32_t[size];
+	for(uint32_t i = 0; i < size; i++) jumpTable[i] = 0;
+	{
+		// create big cycle-free chain
+		uint32_t curHead = 0;
+		for(uint32_t i = 0; i < size / 2;) {
+			uint32_t nextJump = distribution(generator);
+			if(jumpTable[nextJump] == 0) {
+				jumpTable[curHead] = nextJump;
+				curHead = nextJump;
+				i++;
+			}
+		}
+		jumpTable[curHead] = 0;
+	}
+	
+	uint32_t curs[numCurs];
+	for(size_t i = 0; i < numCurs; ) {
+		uint32_t selected = distribution(generator);
+		if(jumpTable[selected] != 0) {
+			curs[i] = selected;
+			i++;
+		}
+	}
+	constexpr size_t numHops = 1ULL << 26;
+	std::cout << "Starting\n";
+	std::chrono::nanoseconds finalTime;
+	{
+		TimeTracker timer;
+
+		for(size_t i = 0; i < numHops; i++) {
+			for(size_t c = 0; c < numCurs; c++) {
+				_mm_prefetch(reinterpret_cast<const char*>(jumpTable + curs[c]), _MM_HINT_ENTA);
+			}
+			for(size_t c = 0; c < numCurs; c++) {
+				curs[c] = jumpTable[curs[c]];
+			}
+		}
+
+		finalTime = timer.getTime();
+	}
+
+	size_t totalNumHops = numHops * numCurs;
+	for(size_t i = 0; i < numCurs; i++) {
+		std::cout << "final value " << curs[i] << "\n";
+	}
+	std::cout << totalNumHops << " hops!\n";
+	std::cout << double(totalNumHops) / finalTime.count() * 1000000000 << " hops per second\n";
+	std::cout << finalTime.count() / double(totalNumHops) << "ns/hop\n";
+}
+
+
+template<unsigned int Variables>
+void doLinkCount() {
+	std::string linkName = "mbfLinks";
+	linkName.append(std::to_string(Variables));
+	linkName.append(".mbfLinks");
+	std::ifstream linkFile(linkName, std::ios::binary);
+
+	std::string linkStatsName = "linkStats";
+	linkStatsName.append(std::to_string(Variables));
+	linkStatsName.append(".txt");
+	std::ofstream linkStatsFile(linkStatsName);
+
+	size_t numLinksDistri[36];
+	for(size_t& item : numLinksDistri) item = 0;
+
+	size_t linkSizeDistri[36];
+	for(size_t& item : linkSizeDistri) item = 0;
+
+	char buf[4 * 35];
+	for(size_t layer = 0; layer < (1 << Variables) + 1; layer++) {
+		int maxNumLinks = 0;
+		size_t maxLinkCount = 0;
+		size_t totalLinks = 0;
+		for(size_t itemInLayer = 0; itemInLayer < getLayerSize<Variables>(layer); itemInLayer++) {
+			std::streamsize numLinks = static_cast<std::streamsize>(linkFile.get());
+			numLinksDistri[numLinks]++;
+			if(numLinks > maxNumLinks) maxNumLinks = numLinks;
+			totalLinks += numLinks;
+
+			linkFile.read(buf, 4 * numLinks);
+
+			for(std::streamsize i = 0; i < numLinks; i++) {
+				size_t linkSize = buf[4 * i];
+				linkSizeDistri[linkSize]++;
+				if(linkSize > maxLinkCount) {
+					maxLinkCount = linkSize;
+				}
+			}
+		}
+		std::cout << "layer: " << layer << " maxNumLinks: " << maxNumLinks << " maxLinkCount: " << maxLinkCount << " totalLinks: " << totalLinks << "\n";
+		linkStatsFile << "layer: " << layer << " maxNumLinks: " << maxNumLinks << " maxLinkCount: " << maxLinkCount << " totalLinks: " << totalLinks << "\n";
+	}
+
+	std::cout << "Link Num Distribution:\n";
+	linkStatsFile << "Link Num Distribution:\n";
+	for(int i = 1; i < 36; i++) {
+		std::cout << i << ": " << numLinksDistri[i] << "\n";
+		linkStatsFile << i << ": " << numLinksDistri[i] << "\n";
+	}
+
+	std::cout << "Link Size Distribution:\n";
+	linkStatsFile << "Link Size Distribution:\n";
+	for(int i = 1; i < 36; i++) {
+		std::cout << i << ": " << linkSizeDistri[i] << "\n";
+		linkStatsFile << i << ": " << linkSizeDistri[i] << "\n";
+	}
+
+	linkFile.close();
+	linkStatsFile.close();
+}
+
+
 #ifndef RUN_TESTS
 int main() {
-	runGenAllMBFs<6>();
-	//return 0;
+	//doRAMTest();
 
-	runSortAndComputeLinks<6>();
-	return 0;
+	doLinkCount<7>();
 
+	//runGenAllMBFs<7>();
+	
+	//runSortAndComputeLinks<7>();
+	
 	//runGenLayerDecomposition();
-	//return 0;
 }
 #endif
