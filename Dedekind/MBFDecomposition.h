@@ -5,14 +5,13 @@
 
 #include "dedekindDecomposition.h"
 
+#include "knownData.h"
+
 #include <thread>
 #include <atomic>
 #include <mutex>
 
 #include <iostream>
-
-constexpr size_t mbfCounts[]{2, 3, 5, 10, 30, 210, 16353, 490013148};
-constexpr size_t MAX_EXPANSION = 40; // greater than 35, which is the max for 7, leave some leeway
 
 // returns newMBFFoundCount
 template<unsigned int Variables>
@@ -145,42 +144,6 @@ std::pair<BufferedSet<FunctionInputBitSet<Variables>>, size_t> generateAllMBFsFa
 	return std::make_pair(std::move(foundMBFs), numberOfLinks.load());
 }
 
-constexpr size_t layerSizes1[]{1, 1, 1};
-constexpr size_t layerSizes2[]{1, 1, 1, 1, 1};
-constexpr size_t layerSizes3[]{1, 1, 1, 1, 2, 1, 1, 1, 1};
-constexpr size_t layerSizes4[]{1, 1, 1, 1, 2, 2, 2, 3, 4, 3, 2, 2, 2, 1, 1, 1, 1};
-constexpr size_t layerSizes5[]{1, 1, 1, 1, 2, 2, 3, 4, 6, 7, 9, 10, 12, 12, 13, 13, 16, 13, 13, 12, 12, 10, 9, 7, 6, 4, 3, 2, 2, 1, 1, 1, 1};
-constexpr size_t layerSizes6[]{1, 1, 1, 1, 2, 2, 3, 5, 7, 9, 14, 20, 29, 39, 53, 69, 93, 116, 146, 180, 225, 269, 328, 387, 459, 529, 611, 686, 769, 832, 892, 923, 951, 923, 892, 832, 769, 686, 611, 529, 459, 387, 328, 269, 225, 180, 146, 116, 93, 69, 53, 39, 29, 20, 14, 9, 7, 5, 3, 2, 2, 1, 1, 1, 1};
-constexpr size_t layerSizes7[]{1, 1, 1, 1, 2, 2, 3, 5, 8, 10, 16, 25, 40, 62, 101, 156, 249, 385, 594, 899, 1367, 2036, 3032, 4468, 6571, 9572, 13933, 20131, 29014, 41556, 59306, 84099, 118719, 166406, 231794, 320296, 439068, 596093, 801197, 1064468, 1396828, 1807837, 2305705, 2894434, 3574182, 4338853, 5177869, 6075361, 7013439, 7971830, 8931651, 9874300, 10784604, 11648558, 12456475, 13199408, 13872321, 14470219, 14991439, 15433196, 15795759, 16077423, 16279195, 16399768, 16440466, 16399768, 16279195, 16077423, 15795759, 15433196, 14991439, 14470219, 13872321, 13199408, 12456475, 11648558, 10784604, 9874300, 8931651, 7971830, 7013439, 6075361, 5177869, 4338853, 3574182, 2894434, 2305705, 1807837, 1396828, 1064468, 801197, 596093, 439068, 320296, 231794, 166406, 118719, 84099, 59306, 41556, 29014, 20131, 13933, 9572, 6571, 4468, 3032, 2036, 1367, 899, 594, 385, 249, 156, 101, 62, 40, 25, 16, 10, 8, 5, 3, 2, 2, 1, 1, 1, 1};
-
-constexpr size_t layerWidths[]{1, 1, 2, 3, 6, 10, 20, 35, 70};
-
-template<unsigned int Variables>
-constexpr size_t getLayerSize(size_t layer) {
-	if constexpr(Variables == 1) {
-		return layerSizes1[layer];
-	} else if constexpr(Variables == 2) {
-		return layerSizes2[layer];
-	} else if constexpr(Variables == 3) {
-		return layerSizes3[layer];
-	} else if constexpr(Variables == 4) {
-		return layerSizes4[layer];
-	} else if constexpr(Variables == 5) {
-		return layerSizes5[layer];
-	} else if constexpr(Variables == 6) {
-		return layerSizes6[layer];
-	} else if constexpr(Variables == 7) {
-		return layerSizes7[layer];
-	} else {
-		static_assert(Variables <= 7 && Variables != 0, "Not defined for >7");
-	}
-}
-
-template<unsigned int Variables>
-constexpr size_t getMaxLayerSize() {
-	return getLayerSize<Variables>((1 << Variables) / 2);
-}
-
 struct LinkedNode {
 	uint32_t count : 8; // max 35
 	uint32_t index : 24; // max 16440466, which is just shy of 2^24
@@ -241,8 +204,172 @@ void sortAndComputeLinks(std::ifstream& allClassesSorted, std::ofstream& outputM
 	}
 }
 
+struct LinkBufPtr {
+	int offset;
+	int size;
+};
+
+inline void getLinkLayer(std::ifstream& file, int numElements, LinkBufPtr* offsetBuf, LinkedNode* linkBuf) {
+	int offsetInLinkBuf = 0;
+	for(int i = 0; i < numElements; i++) {
+		uint8_t readBuf[MAX_EXPANSION * 4];
+		file.read(reinterpret_cast<char*>(readBuf), 1); // reads one char
+		unsigned int linkCount = readBuf[0];
+		//std::cout << "found group linkCount: " << linkCount << "\n";
+		file.read(reinterpret_cast<char*>(readBuf), static_cast<std::streamsize>(linkCount) * 4);
+
+		offsetBuf[i].offset = offsetInLinkBuf;
+		offsetBuf[i].size = linkCount;
 
 
+		for(unsigned int i = 0; i < linkCount; i++) {
+			linkBuf[offsetInLinkBuf].count = readBuf[i * 4];
+			linkBuf[offsetInLinkBuf].index = int32_t(readBuf[i * 4 + 3]) | (int32_t(readBuf[i * 4 + 2]) << 8) | (int32_t(readBuf[i * 4 + 1]) << 16);
+			//std::cout << "- count: " << linkBuf[offsetInLinkBuf].count  << " index: " << linkBuf[offsetInLinkBuf].index << "\n";
+			offsetInLinkBuf++;
+		}
+	}
+}
+
+template<unsigned int Variables>
+void readAllLinks() {
+	std::string linkName = "mbfLinks";
+	linkName.append(std::to_string(Variables));
+	linkName.append(".mbfLinks");
+	std::ifstream linkFile(linkName, std::ios::binary);
+
+	assert(linkFile.is_open());
+
+	LinkBufPtr* offsetBuf = new LinkBufPtr[getMaxLayerSize<Variables>()];
+	LinkedNode* linkBuf = new LinkedNode[getMaxLinkCount<Variables>()];
+	for(int i = 0; i < (1 << Variables); i++) {
+		getLinkLayer(linkFile, getLayerSize<Variables>(i), offsetBuf, linkBuf); // before layers
+	}
+	//linkFile.get();
+	//assert(linkFile.eof());
+	//linkFile.get();
+	linkFile.close();
+}
+
+
+template<unsigned int Variables>
+struct SwapperLayers {
+	static constexpr size_t MAX_SIZE = getMaxLayerSize<Variables>();
+
+	int* sourceCounts;
+	int* destinationCounts;
+
+	int* dirtySourceList;
+	int* dirtyDestinationList;
+
+	size_t dirtySourceListSize;
+	size_t dirtyDestinationListSize;
+
+
+	SwapperLayers() :
+		sourceCounts(new int[MAX_SIZE]),
+		destinationCounts(new int[MAX_SIZE]),
+		dirtySourceList(new int[MAX_SIZE]),
+		dirtyDestinationList(new int[MAX_SIZE]),
+		dirtySourceListSize(0),
+		dirtyDestinationListSize(0) {
+
+		for(size_t i = 0; i < MAX_SIZE; i++) {
+			sourceCounts[i] = 0;
+			destinationCounts[i] = 0;
+		}
+	}
+
+	~SwapperLayers() {
+		delete[] sourceCounts;
+		delete[] destinationCounts;
+	}
+	
+	void add(unsigned int to, unsigned int count) {
+		assert(to < MAX_SIZE);
+		if(destinationCounts[to] == 0) {
+			dirtyDestinationList[dirtyDestinationListSize++] = to;
+			assert(dirtyDestinationListSize <= MAX_SIZE);
+		}
+
+
+		destinationCounts[to] += count;
+	}
+
+	void pushNext() {
+		std::swap(sourceCounts, destinationCounts);
+		std::swap(dirtySourceList, dirtyDestinationList);
+		std::swap(dirtySourceListSize, dirtyDestinationListSize);
+
+		for(size_t i = 0; i < dirtyDestinationListSize; i++) {
+			destinationCounts[dirtyDestinationList[i]] = 0;
+		}
+
+		dirtyDestinationListSize = 0;
+	}
+
+	int* begin() {return this->dirtySourceList;}
+	const int* begin() const {return this->dirtySourceList;}
+	int* end() {return this->dirtySourceList + this->dirtySourceListSize;}
+	const int* end() const {return this->dirtySourceList + this->dirtySourceListSize;}
+	
+	int& operator[](size_t index) { assert(index < MAX_SIZE); return sourceCounts[index]; }
+	const int& operator[](size_t index) const { assert(index < MAX_SIZE); return sourceCounts[index];}
+};
+
+
+
+template<unsigned int Variables>
+std::pair<uint64_t, uint64_t> computeIntervalSize(int nodeLayer, int nodeIndex) {
+	std::string linkName = "mbfLinks";
+	linkName.append(std::to_string(Variables));
+	linkName.append(".mbfLinks");
+	std::ifstream linkFile(linkName, std::ios::binary);
+	assert(linkFile.is_open());
+
+	LinkBufPtr* offsetBuf = new LinkBufPtr[getMaxLayerSize<Variables>()];
+	LinkedNode* linkBuf = new LinkedNode[getMaxLinkCount<Variables>()];
+
+	for(int i = 0; i < nodeLayer; i++) {
+		getLinkLayer(linkFile, getLayerSize<Variables>(i), offsetBuf, linkBuf); // before layers
+	}
+
+	SwapperLayers<Variables> swapper{};
+	swapper.add(nodeIndex, 1);
+
+	swapper.pushNext();
+
+	uint64_t numberOfSubClasses = 1;
+	uint64_t intervalSize = 1;
+
+	for(int i = nodeLayer; i < (1 << Variables); i++) {
+		getLinkLayer(linkFile, getLayerSize<Variables>(i), offsetBuf, linkBuf); // downstream layers
+
+		//std::cout << "checking layer " << i << "\n";
+
+		for(int dirtyIndex : swapper) {
+			int count = swapper[dirtyIndex];
+
+			//std::cout << "  dirty index " << dirtyIndex << "\n";
+
+			intervalSize += count;
+
+			LinkBufPtr subLinkPtr = offsetBuf[dirtyIndex];
+
+			for(int subLinkIdx = 0; subLinkIdx < subLinkPtr.size; subLinkIdx++) {
+				LinkedNode ln = linkBuf[subLinkPtr.offset + subLinkIdx];
+				//std::cout << "    subLink " << ln.count << "x" << ln.index << "\n";
+				swapper.add(ln.index, ln.count * count);
+			}
+		}
+		numberOfSubClasses+=swapper.dirtyDestinationListSize;
+		swapper.pushNext();
+	}
+
+	linkFile.close();
+
+	return std::make_pair(numberOfSubClasses, intervalSize);
+}
 
 
 

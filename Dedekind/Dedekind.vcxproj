@@ -320,6 +320,7 @@
     <ClInclude Include="aligned_alloc.h" />
     <ClInclude Include="aligned_set.h" />
     <ClInclude Include="bufferedMap.h" />
+    <ClInclude Include="knownData.h" />
     <ClInclude Include="MBFDecomposition.h" />
     <ClInclude Include="codeGen.h" />
     <ClInclude Include="collectionOperations.h" />

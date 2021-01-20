@@ -53,6 +53,12 @@ static FunctionInputBitSet<Variables> generateFibs() {
 	return FunctionInputBitSet<Variables>(generateBitSet<(1 << Variables)>());
 }
 
+std::string getFileName(const char* title, unsigned int Variables, const char* extention) {
+	std::string name(title);
+	name.append(std::to_string(Variables));
+	name.append(extention);
+	return name;
+}
 
 template<unsigned int Variables>
 void runGenAllMBFs() {
@@ -81,10 +87,7 @@ void runGenAllMBFs() {
 	std::cout << "R(" << Variables << ") == " << result.size() << "\n";
 
 	{
-		std::string name = "allUniqueMBF";
-		name.append(std::to_string(Variables));
-		name.append(".mbf");
-		std::ofstream file(name, std::ios::binary);
+		std::ofstream file(getFileName("allUniqueMBF", Variables, ".mbf"), std::ios::binary);
 
 		for(const FunctionInputBitSet<Variables>& item : result) {
 			serializeMBF(item, file);
@@ -93,10 +96,7 @@ void runGenAllMBFs() {
 	}
 
 	{
-		std::string name = "allUniqueMBF";
-		name.append(std::to_string(Variables));
-		name.append("info.txt");
-		std::ofstream file(name);
+		std::ofstream file(getFileName("allUniqueMBF", Variables, "info.txt"));
 
 
 		file << "R(" << Variables << ") == " << result.size() << "\n";
@@ -130,20 +130,9 @@ template<unsigned int Variables>
 void runSortAndComputeLinks() {
 	TimeTracker timer;
 
-	std::string inputName = "allUniqueMBF";
-	inputName.append(std::to_string(Variables));
-	inputName.append(".mbf");
-	std::ifstream inputFile(inputName, std::ios::binary);
-
-	std::string sortedName = "allUniqueMBFSorted";
-	sortedName.append(std::to_string(Variables));
-	sortedName.append(".mbf");
-	std::ofstream sortedFile(sortedName, std::ios::binary);
-
-	std::string linkName = "mbfLinks";
-	linkName.append(std::to_string(Variables));
-	linkName.append(".mbfLinks");
-	std::ofstream linkFile(linkName, std::ios::binary);
+	std::ifstream inputFile(getFileName("allUniqueMBF", Variables, ".mbf"), std::ios::binary);
+	std::ofstream sortedFile(getFileName("allUniqueMBFSorted", Variables, ".mbf"), std::ios::binary);
+	std::ofstream linkFile(getFileName("mbfLinks", Variables, ".mbfLinks"), std::ios::binary);
 
 	sortAndComputeLinks<Variables>(inputFile, sortedFile, linkFile);
 
@@ -214,15 +203,10 @@ void doRAMTest() {
 
 template<unsigned int Variables>
 void doLinkCount() {
-	std::string linkName = "mbfLinks";
-	linkName.append(std::to_string(Variables));
-	linkName.append(".mbfLinks");
-	std::ifstream linkFile(linkName, std::ios::binary);
+	size_t linkCounts[(1 << Variables) + 1];
 
-	std::string linkStatsName = "linkStats";
-	linkStatsName.append(std::to_string(Variables));
-	linkStatsName.append(".txt");
-	std::ofstream linkStatsFile(linkStatsName);
+	std::ifstream linkFile(getFileName("mbfLinks", Variables, ".mbfLinks"), std::ios::binary);
+	std::ofstream linkStatsFile(getFileName("linkStats", Variables, ".txt"));
 
 	size_t numLinksDistri[36];
 	for(size_t& item : numLinksDistri) item = 0;
@@ -251,6 +235,8 @@ void doLinkCount() {
 				}
 			}
 		}
+
+		linkCounts[layer] = totalLinks;
 		std::cout << "layer: " << layer << " maxNumLinks: " << maxNumLinks << " maxLinkCount: " << maxLinkCount << " totalLinks: " << totalLinks << "\n";
 		linkStatsFile << "layer: " << layer << " maxNumLinks: " << maxNumLinks << " maxLinkCount: " << maxLinkCount << " totalLinks: " << totalLinks << "\n";
 	}
@@ -269,8 +255,39 @@ void doLinkCount() {
 		linkStatsFile << i << ": " << linkSizeDistri[i] << "\n";
 	}
 
+	std::cout << "Link Counts summary:\n" << linkCounts[0];
+	linkStatsFile << "Link Counts summary:\n" << linkCounts[0];
+	for(size_t layer = 1; layer < (1 << Variables); layer++) {
+		std::cout << ", " << linkCounts[layer];
+		linkStatsFile << ", " << linkCounts[layer];
+	}
+	std::cout << "\n";
+	linkStatsFile << "\n";
+
 	linkFile.close();
 	linkStatsFile.close();
+
+}
+
+template<unsigned int Variables>
+void sampleIntervalSizes() {
+	std::ofstream intervalStatsFile(getFileName("intervalStats", Variables, ".txt"));
+
+	intervalStatsFile << "layer, count, intervalSize, layerSize\n";
+	for(size_t layer = 0; layer < (1 << Variables); layer++) {
+		std::uniform_int_distribution<unsigned int> random(0, getLayerSize<Variables>(layer) - 1);
+		std::default_random_engine generator;
+		unsigned int selectedInLayer = random(generator);
+		std::cout << "\n" << selectedInLayer << "\n";
+		//readAllLinks<Variables>();
+		std::pair<uint64_t, uint64_t> countAndIntervalSize = computeIntervalSize<Variables>(layer, selectedInLayer);
+		uint64_t count = countAndIntervalSize.first;
+		uint64_t iSize = countAndIntervalSize.second;
+
+		intervalStatsFile << layer << ", " << count << ", " << iSize << ", " << getLayerSize<Variables>(layer) << "\n";
+	}
+
+	intervalStatsFile.close();
 }
 
 
@@ -278,12 +295,14 @@ void doLinkCount() {
 int main() {
 	//doRAMTest();
 
-	doLinkCount<7>();
+	//doLinkCount<7>();
 
 	//runGenAllMBFs<7>();
 	
 	//runSortAndComputeLinks<7>();
 	
 	//runGenLayerDecomposition();
+	
+	sampleIntervalSizes<7>();
 }
 #endif
