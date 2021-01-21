@@ -320,6 +320,7 @@
     <ClInclude Include="aligned_alloc.h" />
     <ClInclude Include="aligned_set.h" />
     <ClInclude Include="bufferedMap.h" />
+    <ClInclude Include="crossPlatformIntrinsics.h" />
     <ClInclude Include="knownData.h" />
     <ClInclude Include="MBFDecomposition.h" />
     <ClInclude Include="codeGen.h" />
@@ -340,6 +341,7 @@
     <ClInclude Include="layerStack.h" />
     <ClInclude Include="math.h" />
     <ClInclude Include="parallelIter.h" />
+    <ClInclude Include="r8Computation.h" />
     <ClInclude Include="set.h" />
     <ClInclude Include="sharedLockGuard.h" />
     <ClInclude Include="smallVector.h" />

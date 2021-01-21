@@ -528,6 +528,29 @@ struct SerializationTest {
 	}
 };
 
+template<unsigned int Variables>
+struct CountZerosTest {
+	static void run() {
+		for(int i = 0; i < (1 << Variables); i++) {
+			BitSet<(1 << Variables)> bits = BitSet<(1 << Variables)>::empty();
+
+			bits.set(i);
+
+			ASSERT(bits.getFirstOnBit() == i);
+
+			for(int j = 0; j < (1 << Variables); j++) {
+				int randomBit = rand() % (1 << Variables);
+
+				if(randomBit < i) continue;
+
+				bits.set(randomBit);
+
+				ASSERT(bits.getFirstOnBit() == i);
+			}
+		}
+	}
+};
+
 
 /*TEST_CASE(testBitsCompare) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, CompareBitsTest>();
@@ -587,6 +610,10 @@ TEST_CASE(testNext) {
 
 TEST_CASE(testSerialization) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, SerializationTest>();
+}
+
+TEST_CASE(testCountZeros) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, CountZerosTest>();
 }
 
 /*TEST_CASE(benchCanonize) {

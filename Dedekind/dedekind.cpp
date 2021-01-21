@@ -10,6 +10,7 @@
 #include "codeGen.h"
 
 #include "MBFDecomposition.h"
+#include "r8Computation.h"
 
 /*
 Correct numbers
@@ -271,23 +272,37 @@ void doLinkCount() {
 
 template<unsigned int Variables>
 void sampleIntervalSizes() {
-	std::ofstream intervalStatsFile(getFileName("intervalStats", Variables, ".txt"));
+	std::ofstream intervalStatsFile;
+	/*std::ofstream intervalStatsFile(getFileName("intervalStats", Variables, ".txt"));
 
-	intervalStatsFile << "layer, count, intervalSize, layerSize\n";
+	intervalStatsFile << "layer, intervalSize";
 	for(size_t layer = 0; layer < (1 << Variables); layer++) {
+		intervalStatsFile << ", " << getLayerSize<Variables>(layer);
+	}
+	intervalStatsFile << ", totalCount\n";
+	intervalStatsFile.close();*/
+	std::default_random_engine generator;
+	for(size_t layer = 49; layer < (1 << Variables); layer++) {
 		std::uniform_int_distribution<unsigned int> random(0, getLayerSize<Variables>(layer) - 1);
-		std::default_random_engine generator;
 		unsigned int selectedInLayer = random(generator);
-		std::cout << "\n" << selectedInLayer << "\n";
+		std::cout << selectedInLayer << "\n";
 		//readAllLinks<Variables>();
-		std::pair<uint64_t, uint64_t> countAndIntervalSize = computeIntervalSize<Variables>(layer, selectedInLayer);
-		uint64_t count = countAndIntervalSize.first;
+		std::pair<std::array<uint64_t, (1 << Variables)>, uint64_t> countAndIntervalSize = computeIntervalSize<Variables>(layer, selectedInLayer);
+		std::array<uint64_t, (1 << Variables)> counts = countAndIntervalSize.first;
 		uint64_t iSize = countAndIntervalSize.second;
 
-		intervalStatsFile << layer << ", " << count << ", " << iSize << ", " << getLayerSize<Variables>(layer) << "\n";
+		intervalStatsFile.open(getFileName("intervalStats", Variables, ".txt"), std::ios::app);
+		intervalStatsFile << layer << ", " << iSize;
+
+		uint64_t totalCount = 0;
+		for(uint64_t count : counts) {
+			totalCount += count;
+			intervalStatsFile << ", " << count;
+		}
+		intervalStatsFile << ", " << totalCount << "\n";
+		intervalStatsFile.close();
 	}
 
-	intervalStatsFile.close();
 }
 
 
@@ -303,6 +318,9 @@ int main() {
 	
 	//runGenLayerDecomposition();
 	
-	sampleIntervalSizes<7>();
+	//sampleIntervalSizes<7>();
+
+	std::cout << "D=" << getD<6>() << "\n";
+	std::cout << "R=" << getR<6>();
 }
 #endif

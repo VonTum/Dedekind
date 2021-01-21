@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <immintrin.h>
 
+#include "crossPlatformIntrinsics.h"
+
 template<size_t Size>
 class BitSet {
 public:
@@ -74,13 +76,21 @@ public:
 		}
 		return result;
 	}
-
 	uint64_t hash() const {
 		uint64_t result = 0;
 		for(uint64_t item : this->data) {
 			result ^= item;
 		}
 		return result;
+	}
+	size_t getFirstOnBit() const {
+		for(size_t curBlockI = 0; curBlockI < BLOCK_COUNT; curBlockI++) {
+			uint64_t curBlock = data[curBlockI];
+			if(curBlock != 0) {
+				return countZeros(curBlock) + 64 * curBlockI;
+			}
+		}
+		return Size;
 	}
 
 	constexpr bool get(size_t index) const {
@@ -106,6 +116,7 @@ public:
 		uint64_t& subPart = getBlock(index);
 		subPart ^= makeMask(index);
 	}
+
 
 	constexpr BitSet& operator|=(const BitSet& other) {
 		for(size_t i = 0; i < BLOCK_COUNT; i++) {
@@ -280,6 +291,17 @@ public:
 	uint64_t hash() const {
 		return _mm_extract_epi64(this->data, 0) ^ _mm_extract_epi64(this->data, 1);
 	}
+	size_t getFirstOnBit() const {
+		uint64_t firstPart = _mm_extract_epi64(this->data, 0);
+		if(firstPart != 0) {
+			return countZeros(firstPart);
+		}
+		uint64_t secondPart = _mm_extract_epi64(this->data, 1);
+		if(secondPart != 0) {
+			return countZeros(secondPart) + 64;
+		}
+		return 128;
+	}
 
 	bool get(size_t index) const {
 		assert(index < size());
@@ -430,6 +452,9 @@ public:
 	uint64_t hash() const {
 		return static_cast<uint64_t>(this->data);
 	}
+	size_t getFirstOnBit() const {
+		return countZeros(this->data);
+	}
 
 	constexpr bool get(size_t index) const {
 		assert(index < size());
@@ -551,6 +576,9 @@ public:
 	}
 	uint64_t hash() const {
 		return static_cast<uint64_t>(this->data);
+	}
+	size_t getFirstOnBit() const {
+		return countZeros(this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -674,6 +702,9 @@ public:
 	uint64_t hash() const {
 		return static_cast<uint64_t>(this->data);
 	}
+	size_t getFirstOnBit() const {
+		return countZeros(this->data);
+	}
 
 	constexpr bool get(size_t index) const {
 		assert(index < size());
@@ -796,6 +827,9 @@ public:
 	}
 	uint64_t hash() const {
 		return static_cast<uint64_t>(this->data);
+	}
+	size_t getFirstOnBit() const {
+		return countZeros(this->data);
 	}
 
 	constexpr bool get(size_t index) const {

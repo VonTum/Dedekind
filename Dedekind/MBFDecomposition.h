@@ -10,6 +10,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <array>
 
 #include <iostream>
 
@@ -209,6 +210,10 @@ struct LinkBufPtr {
 	int size;
 };
 
+inline void skipLinkLayer(std::ifstream& file, size_t numElements, size_t numLinks) {
+	file.ignore(numLinks * 4 + numElements);
+}
+
 inline void getLinkLayer(std::ifstream& file, int numElements, LinkBufPtr* offsetBuf, LinkedNode* linkBuf) {
 	int offsetInLinkBuf = 0;
 	for(int i = 0; i < numElements; i++) {
@@ -293,7 +298,7 @@ struct SwapperLayers {
 		}
 
 
-		destinationCounts[to] += count;
+		destinationCounts[to] |= count;
 	}
 
 	void pushNext() {
@@ -320,7 +325,7 @@ struct SwapperLayers {
 
 
 template<unsigned int Variables>
-std::pair<uint64_t, uint64_t> computeIntervalSize(int nodeLayer, int nodeIndex) {
+std::pair<std::array<uint64_t, (1 << Variables)>, uint64_t> computeIntervalSize(int nodeLayer, int nodeIndex) {
 	std::string linkName = "mbfLinks";
 	linkName.append(std::to_string(Variables));
 	linkName.append(".mbfLinks");
@@ -331,15 +336,20 @@ std::pair<uint64_t, uint64_t> computeIntervalSize(int nodeLayer, int nodeIndex) 
 	LinkedNode* linkBuf = new LinkedNode[getMaxLinkCount<Variables>()];
 
 	for(int i = 0; i < nodeLayer; i++) {
-		getLinkLayer(linkFile, getLayerSize<Variables>(i), offsetBuf, linkBuf); // before layers
+		//getLinkLayer(linkFile, getLayerSize<Variables>(i), offsetBuf, linkBuf);
+		skipLinkLayer(linkFile, getLayerSize<Variables>(i), getLinkCount<Variables>(i)); // before layers
 	}
+
+	//getLinkLayer(linkFile, getLayerSize<Variables>(nodeLayer-1), offsetBuf, linkBuf); // start layer
 
 	SwapperLayers<Variables> swapper{};
 	swapper.add(nodeIndex, 1);
 
 	swapper.pushNext();
 
-	uint64_t numberOfSubClasses = 1;
+	std::array<uint64_t, (1 << Variables)> numberOfClassesPerLayer;
+	for(uint64_t& item : numberOfClassesPerLayer) item = 0;
+	numberOfClassesPerLayer[nodeLayer - 1] = 1;
 	uint64_t intervalSize = 1;
 
 	for(int i = nodeLayer; i < (1 << Variables); i++) {
@@ -362,13 +372,22 @@ std::pair<uint64_t, uint64_t> computeIntervalSize(int nodeLayer, int nodeIndex) 
 				swapper.add(ln.index, ln.count * count);
 			}
 		}
-		numberOfSubClasses+=swapper.dirtyDestinationListSize;
+		numberOfClassesPerLayer[i] = swapper.dirtyDestinationListSize;
 		swapper.pushNext();
+		/*for(int dirtyIndex : swapper) {
+			int divideBy = i + 1 - nodeLayer;
+			assert(swapper[dirtyIndex] % divideBy == 0);
+			swapper[dirtyIndex] /= divideBy;
+		}*/
 	}
 
 	linkFile.close();
 
-	return std::make_pair(numberOfSubClasses, intervalSize);
+
+	delete[] offsetBuf;
+	delete[] linkBuf;
+
+	return std::make_pair(numberOfClassesPerLayer, intervalSize);
 }
 
 
