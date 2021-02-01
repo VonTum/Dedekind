@@ -1,6 +1,6 @@
 #pragma once
 
-#include <intrin.h>
+#include "crossPlatformIntrinsics.h"
 
 #include "iteratorFactory.h"
 
@@ -59,7 +59,7 @@ struct FunctionInput {
 		inputBits &= !(1 << index);
 	}
 	inline int getNumberEnabled() const {
-		return __popcnt(inputBits);
+		return popcnt32(inputBits);
 	}
 	inline int getHighestEnabled() const {
 		int total = 0;

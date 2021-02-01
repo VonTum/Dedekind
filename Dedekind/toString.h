@@ -153,7 +153,7 @@ inline std::ostream& operator<<(std::ostream& os, const TempEquivClassInfo& item
 template<typename Key, typename Value>
 inline std::ostream& operator<<(std::ostream& os, const BufferedMap<Key, Value>& eqMap) {
 	bool isFirst = true;
-	for(const BufferedMap<Key, Value>::KeyValue& item : eqMap) {
+	for(const typename BufferedMap<Key, Value>::KeyValue& item : eqMap) {
 		os << (isFirst ? '{' : ',') << item.key << ": " << item.value;
 		isFirst = false;
 	}

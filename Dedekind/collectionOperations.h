@@ -3,6 +3,7 @@
 #include <vector>
 #include <type_traits>
 #include <cassert>
+#include <algorithm>
 
 template<typename Collection, typename Func>
 void forEachSubgroupRecurse(const Collection& collection, const Func& func, Collection& output, size_t startFrom, size_t indexInOutput) {

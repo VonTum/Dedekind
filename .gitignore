@@ -12,6 +12,8 @@ Dedekind/x86/
 Dedekind/x64/
 Dedekind/Debug/
 Dedekind/Release/
+build/
+build_debug/
 *.mbf
 *.txt
 *.diagsession

@@ -1,5 +1,7 @@
 #include "equivalenceClass.h"
 
+#include "crossPlatformIntrinsics.h"
+
 #include <immintrin.h>
 
 #include <iostream>
@@ -29,7 +31,7 @@ uint64_t PreprocessedFunctionInputSet::hash() const {
 FunctionInputSet EquivalenceClass::asFunctionInputSet() const {
 	FunctionInputSet result;
 	unsigned int sp = this->functionInputSet.span();
-	assert(sp == 0 || sp == (1U << __popcnt(sp)) - 1);
+	assert(sp == 0 || sp == (1U << popcnt32(sp)) - 1);
 	for(FunctionInput::underlyingType i = 0; i <= sp; i++) {
 		if(functionInputSet.contains(i)) result.push_back(FunctionInput{i});
 	}

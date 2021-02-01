@@ -6,6 +6,8 @@
 #include "functionInput.h"
 #include "bitSet.h"
 
+#include "crossPlatformIntrinsics.h"
+
 template<unsigned int Variables>
 class FunctionInputBitSet {
 	static_assert(Variables >= 1, "Cannot make 0 variable FunctionInputBitSet");
@@ -139,7 +141,7 @@ public:
 			}
 
 			for(unsigned int i = 0; i < (1 << Variables); i++) {
-				unsigned int layer = __popcnt(i);
+				unsigned int layer = popcnt32(i);
 				masks[layer].set(i);
 			}
 		}

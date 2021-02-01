@@ -142,14 +142,31 @@ void runSortAndComputeLinks() {
 	linkFile.close();
 }
 
+void __attribute__ ((noinline)) RAMTestBenchFunc(size_t numHops, size_t numCurs, uint32_t* curs, uint32_t* jumpTable) {
+	for(size_t i = 0; i < numHops; i++) {
+		/*for(size_t c = 0; c < numCurs; c++) {
+			#ifdef _MSC_VER
+				_mm_prefetch(reinterpret_cast<const char*>(jumpTable + curs[c]), _MM_HINT_ENTA);
+			#else
+				_mm_prefetch(reinterpret_cast<const char*>(jumpTable + curs[c]), _MM_HINT_NTA);
+			#endif
+		}*/
+		for(size_t c = 0; c < numCurs; c++) {
+			curs[c] = jumpTable[curs[c]];
+		}
+	}
+}
 
 void doRAMTest() {
+	std::cout << "RAM test\n";
 	constexpr size_t numCurs = 32;
-	constexpr uint32_t size = 1 << 25;
+	constexpr std::size_t size = std::size_t(1) << 30;
 
+	std::cout << "Making random generator\n";
 	std::default_random_engine generator;
 	std::uniform_int_distribution<uint32_t> distribution(0, size - 1);
 
+	std::cout << "Init jump table size " << size << "\n";
 	uint32_t* jumpTable = new uint32_t[size];
 	for(uint32_t i = 0; i < size; i++) jumpTable[i] = 0;
 	{
@@ -166,6 +183,7 @@ void doRAMTest() {
 		jumpTable[curHead] = 0;
 	}
 	
+	std::cout << "Init cursors numCurs=" << numCurs << "\n";
 	uint32_t curs[numCurs];
 	for(size_t i = 0; i < numCurs; ) {
 		uint32_t selected = distribution(generator);
@@ -175,19 +193,12 @@ void doRAMTest() {
 		}
 	}
 	constexpr size_t numHops = 1ULL << 26;
-	std::cout << "Starting\n";
+	std::cout << "Starting for " << numHops << " hops\n";
 	std::chrono::nanoseconds finalTime;
 	{
 		TimeTracker timer;
 
-		for(size_t i = 0; i < numHops; i++) {
-			for(size_t c = 0; c < numCurs; c++) {
-				_mm_prefetch(reinterpret_cast<const char*>(jumpTable + curs[c]), _MM_HINT_ENTA);
-			}
-			for(size_t c = 0; c < numCurs; c++) {
-				curs[c] = jumpTable[curs[c]];
-			}
-		}
+		RAMTestBenchFunc(numHops, numCurs, curs, jumpTable);
 
 		finalTime = timer.getTime();
 	}
@@ -308,7 +319,7 @@ void sampleIntervalSizes() {
 
 #ifndef RUN_TESTS
 int main() {
-	//doRAMTest();
+	doRAMTest();
 
 	//doLinkCount<7>();
 
@@ -320,7 +331,7 @@ int main() {
 	
 	//sampleIntervalSizes<7>();
 
-	std::cout << "D=" << getD<6>() << "\n";
-	std::cout << "R=" << getR<6>();
+	//std::cout << "D=" << getD<6>() << "\n";
+	//std::cout << "R=" << getR<6>();
 }
 #endif

@@ -1,4 +1,6 @@
 #pragma once
 
-void* aligned_malloc(size_t size, size_t align);
+#include <cstdint>
+
+void* aligned_malloc(std::size_t size, std::size_t align);
 void aligned_free(void* ptr);

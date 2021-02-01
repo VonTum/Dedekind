@@ -3,4 +3,5 @@
 void genCodeForEquivClass();
 void genCodeForAllPermut();
 void genCodeForNatvis();
-void genGraphVisCode(size_t numLayers);
+void genGraphVisCode(int numLayers);
+

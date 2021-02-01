@@ -200,10 +200,10 @@ void genCodeForNatvis() {
 	}
 }
 
-void genGraphVisCode(size_t numLayers) {
+void genGraphVisCode(int numLayers) {
 	LayerStack layerStack = generateLayers(numLayers);
 	std::ofstream os("graphVisCode.txt");
-	for(size_t l = layerStack.layers.size() - 1; l > 0; l--) {
+	for(int l = layerStack.layers.size() - 1; l > 0; l--) {
 		const FullLayer& layerAbove = layerStack.layers[l];
 		const FullLayer& layerBelow = layerStack.layers[l - 1];
 

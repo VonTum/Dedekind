@@ -410,8 +410,8 @@ template<typename Key, typename Value>
 class BakedMap : private BakedHashBase<KeyValue<Key, Value>> {
 public:
 	BakedMap() = default;
-	BakedMap(const BufferedMap<Key, Value>& from, KeyValue<Key, Value>* dataBuffer) : BakedHashBase(static_cast<HashBase<KeyValue<Key, Value>>>(from), dataBuffer) {}
-	BakedMap(const BufferedSet<Key>& from, KeyValue<Key, Value>* dataBuffer) : BakedHashBase(static_cast<HashBase<Key>>(from), dataBuffer, [](const Key& k) {return KeyValue<Key, Value>{k, {}}; }) {}
+	BakedMap(const BufferedMap<Key, Value>& from, KeyValue<Key, Value>* dataBuffer) : BakedHashBase<KeyValue<Key, Value>>(static_cast<HashBase<KeyValue<Key, Value>>>(from), dataBuffer) {}
+	BakedMap(const BufferedSet<Key>& from, KeyValue<Key, Value>* dataBuffer) : BakedHashBase<KeyValue<Key, Value>>(static_cast<HashBase<Key>>(from), dataBuffer, [](const Key& k) {return KeyValue<Key, Value>{k, {}}; }) {}
 
 	Value& get(const Key& key) {
 		return BakedHashBase<KeyValue<Key, Value>>::get(key).value;
