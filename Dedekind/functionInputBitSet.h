@@ -702,3 +702,34 @@ FunctionInputBitSet<Variables> deserializeMBF(std::istream& is) {
 
 	return deserializeMBFFromBuf<Variables>(fibsBuf);
 }
+template<unsigned int Variables>
+uint64_t getFormationCount(const FunctionInputBitSet<Variables>& fibs, const FunctionInputBitSet<Variables>& base) {
+	uint64_t total = 1;
+	for(unsigned int v = 0; v < Variables; v++) {
+		uint32_t count = fibs.getLayer(v).size() - base.getLayer(v).size();
+		if(count != 0) {
+			total *= count; // for matching the factorial, 0! == 1, so take it to be 1 if it's 0
+		}
+	}
+	return total;
+}
+template<unsigned int Variables>
+uint64_t getFormationCountWithout(const FunctionInputBitSet<Variables>& fibs, const FunctionInputBitSet<Variables>& base, unsigned int skip) {
+	uint64_t total = 1;
+	for(unsigned int v = 0; v < Variables; v++) {
+		if(v == skip) continue;
+		uint32_t count = fibs.getLayer(v).size() - base.getLayer(v).size();
+		if(count != 0) {
+			total *= count; // for matching the factorial, 0! == 1, so take it to be 1 if it's 0
+		}
+	}
+	return total;
+}
+
+template<unsigned int Variables>
+unsigned int getModifiedLayer(const FunctionInputBitSet<Variables>& a, const FunctionInputBitSet<Variables>& b) {
+	for(unsigned int l = 0; l <= Variables; l++) {
+		if(a.getLayer(l).size() != b.getLayer(l).size()) return l;
+	}
+	throw "No difference";
+}

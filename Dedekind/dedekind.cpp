@@ -142,7 +142,7 @@ void runSortAndComputeLinks() {
 	linkFile.close();
 }
 
-void __attribute__ ((noinline)) RAMTestBenchFunc(size_t numHops, size_t numCurs, uint32_t* curs, uint32_t* jumpTable) {
+void RAMTestBenchFunc(size_t numHops, size_t numCurs, uint32_t* curs, uint32_t* jumpTable) {
 	for(size_t i = 0; i < numHops; i++) {
 		/*for(size_t c = 0; c < numCurs; c++) {
 			#ifdef _MSC_VER
@@ -316,10 +316,62 @@ void sampleIntervalSizes() {
 
 }
 
+/*
+	DOES NOT WORK
+*/
+template<unsigned int Variables>
+uint64_t getIntervalSizeForFast(const MBFDecomposition<Variables>& dec, int nodeLayer, int nodeIndex) {
+	SwapperLayers<Variables> swapper;
+	swapper.add(nodeIndex, 1);
+	swapper.pushNext();
+
+	FunctionInputBitSet<Variables> start = dec.get(nodeLayer, nodeIndex);
+
+	uint64_t intervalSize = 0;
+
+	for(int layer = nodeLayer; layer < (1 << Variables); layer++) {
+		//std::cout << "checking layer " << i << "\n";
+
+		for(int dirtyIndex : swapper) {
+			int count = swapper[dirtyIndex];
+
+			//std::cout << "  dirty index " << dirtyIndex << "\n";
+
+			intervalSize += count;
+
+			FunctionInputBitSet<Variables> cur = dec.get(layer, dirtyIndex);
+
+			for(LinkedNode& ln : dec.iterLinksOf(layer, dirtyIndex)){
+				//std::cout << "    subLink " << ln.count << "x" << ln.index << "\n";
+
+				FunctionInputBitSet<Variables> to = dec.get(layer+1, ln.index);
+
+				unsigned int modifiedLayer = getModifiedLayer(cur, to);
+
+				uint64_t multiplier = getFormationCountWithout(to, start, modifiedLayer);
+
+				swapper.add(ln.index, ln.count * count * multiplier);
+			}
+		}
+		swapper.pushNext();
+		for(int dirtyIndex : swapper) {
+			FunctionInputBitSet<Variables> to = dec.get(layer + 1, dirtyIndex);
+			int divideBy = getFormationCount(to, start);
+			assert(swapper[dirtyIndex] % divideBy == 0);
+			swapper[dirtyIndex] /= divideBy;
+		}
+	}
+
+	return intervalSize;
+}
 
 #ifndef RUN_TESTS
 int main() {
-	doRAMTest();
+	//doRAMTest();
+
+	MBFDecomposition<4> dec = readFullMBFDecomposition<4>();
+
+	std::cout << getIntervalSizeForFast<4>(dec, 0, 0);
 
 	//doLinkCount<7>();
 

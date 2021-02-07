@@ -7,6 +7,8 @@
 
 #include "knownData.h"
 
+#include "iteratorFactory.h"
+
 #include <thread>
 #include <atomic>
 #include <mutex>
@@ -237,7 +239,63 @@ inline void getLinkLayer(std::ifstream& file, int numElements, LinkBufPtr* offse
 }
 
 template<unsigned int Variables>
-void readAllLinks() {
+struct MBFDecomposition {
+	struct Layer {
+		LinkBufPtr* offsets;
+		LinkedNode* fullBuf;
+		FunctionInputBitSet<Variables>* fibs;
+	};
+	Layer* layers;
+
+	constexpr static unsigned int LAYER_COUNT = (1 << Variables) + 1;
+
+	MBFDecomposition() : layers(new Layer[LAYER_COUNT]) {
+		for(size_t i = 0; i < LAYER_COUNT; i++) {
+			layers[i].offsets = new LinkBufPtr[getLayerSize<Variables>(i)];
+			layers[i].fullBuf = new LinkedNode[getLinkCount<Variables>(i)];
+			layers[i].fibs = new FunctionInputBitSet<Variables>[getLayerSize<Variables>(i)];
+		}
+	}
+
+	MBFDecomposition(MBFDecomposition&& other) : layers(other.layers) {
+		other.layers = nullptr;
+	}
+
+	MBFDecomposition& operator=(MBFDecomposition&& other) {
+		std::swap(this->layers, other.layers);
+		return *this;
+	}
+
+	MBFDecomposition(const MBFDecomposition& other) = delete;
+	MBFDecomposition& operator=(const MBFDecomposition& other) = delete;
+
+	~MBFDecomposition() {
+		if(layers != nullptr) {
+			for(size_t i = 0; i < LAYER_COUNT; i++) {
+				delete[] layers[i].offsets;
+				delete[] layers[i].fullBuf;
+				delete[] layers[i].fibs;
+			}
+			delete[] layers;
+		}
+	}
+
+	IteratorFactory<LinkedNode*> iterLinksOf(int layerI, int nodeInLayer) const {
+		const Layer& l = layers[layerI];
+
+		LinkBufPtr& curOffset = l.offsets[nodeInLayer];
+		LinkedNode* start = l.fullBuf + curOffset.offset;
+
+		return IteratorFactory<LinkedNode*>{start, start + curOffset.size};
+	}
+
+	const FunctionInputBitSet<Variables>& get(int layerI, int nodeInLayer) const {
+		return layers[layerI].fibs[nodeInLayer];
+	}
+};
+
+template<unsigned int Variables>
+MBFDecomposition<Variables> readFullMBFDecomposition() {
 	std::string linkName = "mbfLinks";
 	linkName.append(std::to_string(Variables));
 	linkName.append(".mbfLinks");
@@ -245,15 +303,29 @@ void readAllLinks() {
 
 	assert(linkFile.is_open());
 
-	LinkBufPtr* offsetBuf = new LinkBufPtr[getMaxLayerSize<Variables>()];
-	LinkedNode* linkBuf = new LinkedNode[getMaxLinkCount<Variables>()];
+	MBFDecomposition<Variables> result;
+
 	for(int i = 0; i < (1 << Variables); i++) {
-		getLinkLayer(linkFile, getLayerSize<Variables>(i), offsetBuf, linkBuf); // before layers
+		getLinkLayer(linkFile, getLayerSize<Variables>(i), result.layers[i].offsets, result.layers[i].fullBuf); // before layers
 	}
-	//linkFile.get();
-	//assert(linkFile.eof());
-	//linkFile.get();
 	linkFile.close();
+
+	std::string mbfName = "allUniqueMBFSorted";
+	mbfName.append(std::to_string(Variables));
+	mbfName.append(".mbf");
+	std::ifstream mbfFile(mbfName, std::ios::binary);
+
+	uint8_t buf[getMBFSizeInBytes<Variables>()];
+	for(int layer = 0; layer < (1 << Variables); layer++) {
+		for(int mbfI = 0; mbfI < getLayerSize<Variables>(layer); mbfI++) {
+			mbfFile.read(reinterpret_cast<char*>(buf), getMBFSizeInBytes<Variables>());
+			result.layers[layer].fibs[mbfI] = deserializeMBFFromBuf<Variables>(buf);
+		}
+	}
+
+	mbfFile.close();
+
+	return result;
 }
 
 
