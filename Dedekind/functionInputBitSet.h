@@ -334,6 +334,10 @@ public:
 		return FunctionInputBitSet(forced);
 	}
 
+	FunctionInputBitSet dual() const {
+		return FunctionInputBitSet(~this->bitset.reverse());
+	}
+
 	// checks if the given FIBS represents a Monotonic Function, where higher layers are towards '0' and lower layers towards '1'
 	bool isMonotonic() const {
 		FunctionInputBitSet p = prev();

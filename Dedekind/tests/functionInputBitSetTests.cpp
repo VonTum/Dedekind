@@ -22,17 +22,33 @@ void runFunctionRange() {
 		runFunctionRange<Start + 1, End, FuncClass>();
 	}
 }
-
-template<unsigned int Variables>
-static bool operator==(const FunctionInputBitSet<Variables>& fibs, const std::vector<bool>& expectedState) {
-	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::maxSize(); i++) {
-		if(expectedState[i] != fibs.contains(FunctionInput{i})) return false;
+template<size_t Size>
+static bool operator==(const BitSet<Size>& bs, const std::vector<bool>& expectedState) {
+	assert(expectedState.size() == Size);
+	for(size_t i = 0; i < Size; i++) {
+		if(expectedState[i] != bs.get(i)) return false;
 	}
 	return true;
 }
+template<size_t Size>
+static bool operator!=(const BitSet<Size>& bs, const std::vector<bool>& expectedState) {
+	return !(bs == expectedState);
+}
+template<unsigned int Variables>
+static bool operator==(const FunctionInputBitSet<Variables>& fibs, const std::vector<bool>& expectedState) {
+	return fibs.bitset == expectedState;
+}
 template<unsigned int Variables>
 static bool operator!=(const FunctionInputBitSet<Variables>& fibs, const std::vector<bool>& expectedState) {
-	return !(fibs == expectedState);
+	return fibs.bitset != expectedState;
+}
+template<size_t Size>
+static bool operator==(const std::vector<bool>& expectedState, const BitSet<Size>& bs) {
+	return bs == expectedState;
+}
+template<size_t Size>
+static bool operator!=(const std::vector<bool>& expectedState, const BitSet<Size>& bs) {
+	return bs != expectedState;
 }
 template<unsigned int Variables>
 static bool operator==(const std::vector<bool>& expectedState, const FunctionInputBitSet<Variables>& fibs) {
@@ -112,15 +128,20 @@ bool isMonotonic(const FunctionInputBitSet<Variables>& fibs) {
 	return true;
 }
 
-template<unsigned int Variables>
-static std::vector<bool> toVector(const FunctionInputBitSet<Variables>& fibs) {
-	std::vector<bool> result(FunctionInputBitSet<Variables>::maxSize());
+template<size_t Size>
+static std::vector<bool> toVector(const BitSet<Size>& bs) {
+	std::vector<bool> result(Size);
 
-	for(FunctionInput::underlyingType i = 0; i < FunctionInputBitSet<Variables>::maxSize(); i++) {
-		result[i] = fibs.contains(FunctionInput{i});
+	for(size_t i = 0; i < Size; i++) {
+		result[i] = bs.get(i);
 	}
 
 	return result;
+}
+
+template<unsigned int Variables>
+static std::vector<bool> toVector(const FunctionInputBitSet<Variables>& fibs) {
+	return toVector(fibs.bitset);
 }
 
 template<unsigned int Variables>
@@ -203,6 +224,19 @@ struct ShiftRightTest {
 			}
 
 			ASSERT(fis == expectedState);
+		}
+	}
+};
+
+template<unsigned int Variables>
+struct ReverseTest {
+	static void run() {
+		for(size_t iter = 0; iter < LARGE_ITER; iter++) {
+			BitSet<(1 << Variables)> bs = generateBitSet<(1 << Variables)>();
+			std::vector<bool> expectedState = toVector(bs);
+			std::reverse(expectedState.begin(), expectedState.end());
+			BitSet<(1 << Variables)> reversed = bs.reverse();
+			ASSERT(reversed == expectedState);
 		}
 	}
 };
@@ -566,6 +600,10 @@ TEST_CASE(testShiftLeft) {
 
 TEST_CASE(testShiftRight) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, ShiftRightTest>();
+}
+
+TEST_CASE(testReverse) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, ReverseTest>();
 }
 
 TEST_CASE(testCompareTransitive) {

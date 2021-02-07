@@ -6,6 +6,60 @@
 
 #include "crossPlatformIntrinsics.h"
 
+inline constexpr uint64_t reverse64(uint64_t v) {
+	v = (v << 32) | (v >> 32);
+	constexpr uint64_t mask16 = 0xFFFF0000FFFF0000;
+	v = ((v & mask16) >> 16) | ((v & ~mask16) << 16);
+	constexpr uint64_t mask8 = 0xFF00FF00FF00FF00;
+	v = ((v & mask8) >> 8) | ((v & ~mask8) << 8);
+	constexpr uint64_t mask4 = 0xF0F0F0F0F0F0F0F0;
+	v = ((v & mask4) >> 4) | ((v & ~mask4) << 4);
+	constexpr uint64_t mask2 = 0xCCCCCCCCCCCCCCCC;
+	v = ((v & mask2) >> 2) | ((v & ~mask2) << 2);
+	constexpr uint64_t mask1 = 0xAAAAAAAAAAAAAAAA;
+	v = ((v & mask1) >> 1) | ((v & ~mask1) << 1);
+	return v;
+}
+inline constexpr uint32_t reverse32(uint32_t v) {
+	v = (v << 16) | (v >> 16);
+	constexpr uint32_t mask8 = 0xFF00FF00;
+	v = ((v & mask8) >> 8) | ((v & ~mask8) << 8);
+	constexpr uint32_t mask4 = 0xF0F0F0F0;
+	v = ((v & mask4) >> 4) | ((v & ~mask4) << 4);
+	constexpr uint32_t mask2 = 0xCCCCCCCC;
+	v = ((v & mask2) >> 2) | ((v & ~mask2) << 2);
+	constexpr uint32_t mask1 = 0xAAAAAAAA;
+	v = ((v & mask1) >> 1) | ((v & ~mask1) << 1);
+	return v;
+}
+inline constexpr uint16_t reverse16(uint16_t v) {
+	v = (v << 8) | (v >> 8);
+	constexpr uint16_t mask4 = 0xF0F0;
+	v = ((v & mask4) >> 4) | ((v & ~mask4) << 4);
+	constexpr uint16_t mask2 = 0xCCCC;
+	v = ((v & mask2) >> 2) | ((v & ~mask2) << 2);
+	constexpr uint16_t mask1 = 0xAAAA;
+	v = ((v & mask1) >> 1) | ((v & ~mask1) << 1);
+	return v;
+}
+inline constexpr uint8_t reverse8(uint8_t v) {
+	v = (v << 4) | (v >> 4);
+	constexpr uint8_t mask2 = 0xCC;
+	v = ((v & mask2) >> 2) | ((v & ~mask2) << 2);
+	constexpr uint8_t mask1 = 0xAA;
+	v = ((v & mask1) >> 1) | ((v & ~mask1) << 1);
+	return v;
+}
+inline constexpr uint8_t reverse4(uint8_t v) {
+	v = (v << 2) | (v >> 2);
+	constexpr uint8_t mask1 = 0xA;
+	v = ((v & mask1) >> 1) | ((v & ~mask1) << 1);
+	return v;
+}
+inline constexpr uint8_t reverse2(uint8_t v) {
+	return (v << 1) | (v >> 1);
+}
+
 template<size_t Size>
 class BitSet {
 public:
@@ -117,6 +171,14 @@ public:
 		subPart ^= makeMask(index);
 	}
 
+	constexpr BitSet reverse() const {
+		BitSet result;
+
+		for(size_t i = 0; i < BLOCK_COUNT; i++) {
+			result.data[BLOCK_COUNT - 1 - i] = reverse64(this->data[i]);
+		}
+		return result;
+	}
 
 	constexpr BitSet& operator|=(const BitSet& other) {
 		for(size_t i = 0; i < BLOCK_COUNT; i++) {
@@ -218,7 +280,6 @@ public:
 	constexpr bool operator<(const BitSet& other) const { return other > *this; }
 	constexpr bool operator<=(const BitSet& other) const { return !(*this >other); }
 	constexpr bool operator>=(const BitSet& other) const { return !(other > *this); }
-	
 
 	constexpr bool isEmpty() const {
 		for(uint64_t item : this->data) {
@@ -325,6 +386,18 @@ public:
 	void toggle(size_t index) {
 		assert(index < size());
 		this->data = _mm_xor_si128(makeMask(index), this->data);
+	}
+
+	BitSet reverse() const {
+		BitSet result;
+		__m128i reverse8 = _mm_shuffle_epi8(this->data, _mm_set_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15));
+		__m128i mask4 = _mm_set1_epi8(0xF0);
+		__m128i reverse4 = _mm_or_si128(_mm_slli_epi16(_mm_andnot_si128(mask4, reverse8), 4), _mm_srli_epi16(_mm_and_si128(mask4, reverse8), 4));
+		__m128i mask2 = _mm_set1_epi8(0b11001100);
+		__m128i reverse2 = _mm_or_si128(_mm_slli_epi16(_mm_andnot_si128(mask2, reverse4), 2), _mm_srli_epi16(_mm_and_si128(mask2, reverse4), 2));
+		__m128i mask1 = _mm_set1_epi8(0b10101010);
+		result.data = _mm_or_si128(_mm_slli_epi16(_mm_andnot_si128(mask1, reverse2), 1), _mm_srli_epi16(_mm_and_si128(mask1, reverse2), 1));
+		return result;
 	}
 
 	BitSet& operator|=(const BitSet& other) {
@@ -476,6 +549,12 @@ public:
 		this->data ^= makeMask(index);
 	}
 
+	constexpr BitSet reverse() const {
+		BitSet result;
+		result.data = reverse64(this->data);
+		return result;
+	}
+
 	constexpr BitSet& operator|=(const BitSet& other) {
 		this->data |= other.data;
 		return *this;
@@ -601,6 +680,12 @@ public:
 		this->data ^= makeMask(index);
 	}
 
+	constexpr BitSet reverse() const {
+		BitSet result;
+		result.data = reverse32(this->data);
+		return result;
+	}
+
 	constexpr BitSet& operator|=(const BitSet& other) {
 		this->data |= other.data;
 		return *this;
@@ -724,6 +809,12 @@ public:
 	constexpr void toggle(size_t index) {
 		assert(index < size());
 		this->data ^= makeMask(index);
+	}
+
+	constexpr BitSet reverse() const {
+		BitSet result;
+		result.data = reverse16(this->data);
+		return result;
 	}
 
 	constexpr BitSet& operator|=(const BitSet& other) {
@@ -852,6 +943,12 @@ public:
 		this->data ^= makeMask(index);
 	}
 
+	constexpr BitSet reverse() const {
+		BitSet result;
+		result.data = reverse8(this->data);
+		return result;
+	}
+
 	constexpr BitSet& operator|=(const BitSet& other) {
 		this->data |= other.data;
 		return *this;
@@ -977,6 +1074,12 @@ public:
 		this->data ^= makeMask(index);
 	}
 
+	constexpr BitSet reverse() const {
+		BitSet result;
+		result.data = reverse4(this->data);
+		return result;
+	}
+
 	constexpr BitSet& operator|=(const BitSet& other) {
 		this->data |= other.data;
 		return *this;
@@ -1100,6 +1203,12 @@ public:
 	constexpr void toggle(size_t index) {
 		assert(index < size());
 		this->data ^= makeMask(index);
+	}
+
+	constexpr BitSet reverse() const {
+		BitSet result;
+		result.data = reverse2(this->data);
+		return result;
 	}
 
 	constexpr BitSet& operator|=(const BitSet& other) {
