@@ -552,10 +552,10 @@ struct SerializationTest {
 
 			FunctionInputBitSet<Variables> fibs = generateFibs<Variables>();
 
-			uint8_t* end = serializeMBFToBuf(fibs, buf);
+			uint8_t* end = serializeMBF(fibs, buf);
 			ASSERT(end == buf + getMBFSizeInBytes<Variables>());
 
-			FunctionInputBitSet<Variables> deserialfibs = deserializeMBFFromBuf<Variables>(buf);
+			FunctionInputBitSet<Variables> deserialfibs = deserializeMBF<Variables>(buf);
 
 			ASSERT(fibs == deserialfibs);
 		}

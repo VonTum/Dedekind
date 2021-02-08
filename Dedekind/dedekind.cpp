@@ -321,7 +321,7 @@ void sampleIntervalSizes() {
 */
 template<unsigned int Variables>
 uint64_t getIntervalSizeForFast(const MBFDecomposition<Variables>& dec, int nodeLayer, int nodeIndex) {
-	SwapperLayers<Variables> swapper;
+	SwapperLayers<Variables, int> swapper;
 	swapper.add(nodeIndex, 1);
 	swapper.pushNext();
 
@@ -365,13 +365,101 @@ uint64_t getIntervalSizeForFast(const MBFDecomposition<Variables>& dec, int node
 	return intervalSize;
 }
 
+template<unsigned int Variables>
+int countSuperSetPermutations(const FunctionInputBitSet<Variables>& fibsToPermute, const FunctionInputBitSet<Variables>& superSet) {
+	int totalFound = 0;
+	int duplicates = 0;
+	
+	FunctionInputBitSet<Variables> permut = fibsToPermute;
+
+	permut.forEachPermutation([&](const FunctionInputBitSet<Variables>& permuted) {
+		if(superSet.isSubSetOf(permuted)) {
+			totalFound++;
+		}
+		if(permuted == fibsToPermute) {
+			duplicates++;
+		}
+	});
+
+	assert(totalFound >= 1);
+	assert(duplicates >= 1);
+	assert(totalFound % duplicates == 0);
+	return totalFound / duplicates;
+}
+
+template<unsigned int Variables>
+std::pair<uint64_t, uint64_t> getIntervalSizeFor(const MBFDecomposition<Variables>& dec, int nodeLayer, int nodeIndex) {
+	SwapperLayers<Variables, bool> swapper;
+	swapper.set(nodeIndex);
+	swapper.pushNext();
+
+	FunctionInputBitSet<Variables> start = dec.get(nodeLayer, nodeIndex);
+
+	uint64_t intervalSize = 0;
+	uint64_t uniqueClassesSize = 0;
+
+	for(int layer = nodeLayer; layer < (1 << Variables); layer++) {
+		//std::cout << "checking layer " << i << "\n";
+
+		for(int dirtyIndex : swapper) {
+			//std::cout << "  dirty index " << dirtyIndex << "\n";
+
+			FunctionInputBitSet<Variables> cur = dec.get(layer, dirtyIndex);
+
+			int numSubSets = countSuperSetPermutations(cur, start);
+			if(numSubSets < 1) {
+				__debugbreak();
+				int numSubSets = countSuperSetPermutations(cur, start);
+			}
+
+			intervalSize += numSubSets;
+			uniqueClassesSize++;
+
+			for(LinkedNode& ln : dec.iterLinksOf(layer, dirtyIndex)) {
+				//std::cout << "    subLink " << ln.count << "x" << ln.index << "\n";
+
+				FunctionInputBitSet<Variables> to = dec.get(layer + 1, ln.index);
+
+				swapper.set(ln.index);
+			}
+		}
+		swapper.pushNext();
+	}
+	intervalSize += 1;
+	uniqueClassesSize += 1;
+
+	return std::make_pair(intervalSize, uniqueClassesSize);
+}
+
+template<unsigned int Variables>
+void saveIntervalSizes() {
+	MBFDecomposition<Variables> dec = readFullMBFDecomposition<Variables>();
+
+	std::ofstream intervalSizeFile(getFileName("intervalSizesToTop", Variables, ".mbfU64"), std::ios::binary);
+	std::ofstream classCountFile(getFileName("uniqueClassCountsToTop", Variables, ".mbfU64"), std::ios::binary);
+
+	for(int layer = 0; layer < (1 << Variables) + 1; layer++) {
+		for(int curItemInLayer = 0; curItemInLayer < getLayerSize<Variables>(layer); curItemInLayer++) {
+			std::pair<uint64_t, uint64_t> intervalSize = getIntervalSizeFor(dec, layer, curItemInLayer);
+			std::cout << "for " << layer << ", " << curItemInLayer << ": intervalSize: " << intervalSize.first << " uniqueClassesSize: " << intervalSize.second << "\n";
+
+			uint8_t buf[8];
+			serializeU64(intervalSize.first, buf);
+			intervalSizeFile.write(reinterpret_cast<const char*>(buf), 8);
+			serializeU64(intervalSize.second, buf);
+			classCountFile.write(reinterpret_cast<const char*>(buf), 8);
+		}
+	}
+
+	intervalSizeFile.close();
+	classCountFile.close();
+}
+
 #ifndef RUN_TESTS
 int main() {
 	//doRAMTest();
 
-	MBFDecomposition<4> dec = readFullMBFDecomposition<4>();
-
-	std::cout << getIntervalSizeForFast<4>(dec, 0, 0);
+	saveIntervalSizes<6>();
 
 	//doLinkCount<7>();
 

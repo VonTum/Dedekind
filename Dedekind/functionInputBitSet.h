@@ -180,6 +180,10 @@ public:
 		return !checkVar.isEmpty();
 	}
 
+	bool isSubSetOf(const FunctionInputBitSet& other) const {
+		return isSubSet(this->bitset, other.bitset);
+	}
+
 	unsigned int span() const {
 		unsigned int result = 0;
 		for(unsigned int var = 0; var < Variables; var++) {
@@ -250,6 +254,20 @@ public:
 			Bits stayingElems = bitset & (~(mask1 | mask2) | mask1 & mask2);
 			unsigned int shift = (1 << var2) - (1 << var1);
 			bitset = ((bitset & andnot(mask1, mask2)) << shift) | ((bitset & andnot(mask2, mask1)) >> shift) | stayingElems;
+		}
+	}
+
+	template<typename Func, unsigned int CurVar = 0>
+	void forEachPermutation(const Func& func) {
+		if constexpr(CurVar == Variables) {
+			func(*this);
+		} else {
+			this->forEachPermutation<Func, CurVar + 1>(func);
+			for(unsigned int swapping = CurVar + 1; swapping < Variables; swapping++) {
+				this->swap(CurVar, swapping);
+				this->forEachPermutation<Func, CurVar + 1>(func);
+				this->swap(CurVar, swapping);
+			}
 		}
 	}
 
@@ -613,13 +631,13 @@ FunctionInputBitSet<Variables> operator>>(FunctionInputBitSet<Variables> result,
 	return result;
 }
 
-inline void serializeU32(uint32_t value, uint8_t*& outputBuf) {
+inline void serializeU32(uint32_t value, uint8_t* outputBuf) {
 	for(size_t i = 0; i < 4; i++) {
 		*outputBuf++ = static_cast<uint8_t>(value >> (24 - i * 8));
 	}
 }
 
-inline uint32_t deserializeU32(const uint8_t*& outputBuf) {
+inline uint32_t deserializeU32(const uint8_t* outputBuf) {
 	uint32_t result = 0;
 	for(size_t i = 0; i < 4; i++) {
 		result |= static_cast<uint32_t>(*outputBuf++) << (24 - i * 8);
@@ -627,13 +645,13 @@ inline uint32_t deserializeU32(const uint8_t*& outputBuf) {
 	return result;
 }
 
-inline void serializeU64(uint64_t value, uint8_t*& outputBuf) {
+inline void serializeU64(uint64_t value, uint8_t* outputBuf) {
 	for(size_t i = 0; i < 8; i++) {
 		*outputBuf++ = static_cast<uint8_t>(value >> (56 - i * 8));
 	}
 }
 
-inline uint64_t deserializeU64(const uint8_t*& outputBuf) {
+inline uint64_t deserializeU64(const uint8_t* outputBuf) {
 	uint64_t result = 0;
 	for(size_t i = 0; i < 8; i++) {
 		result |= static_cast<uint64_t>(*outputBuf++) << (56 - i * 8);
@@ -648,7 +666,7 @@ constexpr size_t getMBFSizeInBytes() {
 
 // returns the end of the buffer
 template<unsigned int Variables>
-uint8_t* serializeMBFToBuf(const FunctionInputBitSet<Variables>& fibs, uint8_t* outputBuf) {
+uint8_t* serializeMBF(const FunctionInputBitSet<Variables>& fibs, uint8_t* outputBuf) {
 	typename FunctionInputBitSet<Variables>::Bits bs = fibs.bitset;
 	if constexpr(Variables <= 3) {
 		*outputBuf++ = bs.data;
@@ -658,10 +676,13 @@ uint8_t* serializeMBFToBuf(const FunctionInputBitSet<Variables>& fibs, uint8_t* 
 		}
 	} else if constexpr(Variables == 7) {
 		serializeU64(_mm_extract_epi64(bs.data, 1), outputBuf);
+		outputBuf += 8;
 		serializeU64(_mm_extract_epi64(bs.data, 0), outputBuf);
+		outputBuf += 8;
 	} else {
 		for(size_t i = 0; i < bs.BLOCK_COUNT; i++) {
 			serializeU64(bs.data[bs.BLOCK_COUNT - i - 1], outputBuf);
+			outputBuf += 8;
 		}
 	}
 	return outputBuf;
@@ -669,7 +690,7 @@ uint8_t* serializeMBFToBuf(const FunctionInputBitSet<Variables>& fibs, uint8_t* 
 
 // returns the end of the buffer
 template<unsigned int Variables>
-FunctionInputBitSet<Variables> deserializeMBFFromBuf(const uint8_t* inputBuf) {
+FunctionInputBitSet<Variables> deserializeMBF(const uint8_t* inputBuf) {
 	FunctionInputBitSet<Variables> result = FunctionInputBitSet<Variables>::empty();
 	typename FunctionInputBitSet<Variables>::Bits& bs = result.bitset;
 	if constexpr(Variables <= 3) {
@@ -680,32 +701,32 @@ FunctionInputBitSet<Variables> deserializeMBFFromBuf(const uint8_t* inputBuf) {
 		}
 	} else if constexpr(Variables == 7) {
 		uint64_t part1 = deserializeU64(inputBuf);
+		inputBuf += 8;
 		uint64_t part0 = deserializeU64(inputBuf);
+		inputBuf += 8;
 		bs.data = _mm_set_epi64x(part1, part0);
 	} else {
 		for(size_t i = 0; i < bs.BLOCK_COUNT; i++) {
 			bs.data[bs.BLOCK_COUNT - i - 1] = deserializeU64(inputBuf);
+			inputBuf += 8;
 		}
 	}
 	return result;
 }
 
-template<unsigned int Variables>
-void serializeMBF(const FunctionInputBitSet<Variables>& mbf, std::ostream& os) {
-	uint8_t fibsBuf[getMBFSizeInBytes<Variables>()];
+#define MAKE_SERIALIZER(TYPE, SERIALIZE, DESERIALIZE, SIZE) \
+inline void SERIALIZE(TYPE val, std::ostream& os) { uint8_t buf[SIZE]; SERIALIZE(val, buf); os.write(reinterpret_cast<const char*>(buf), SIZE);}\
+inline TYPE DESERIALIZE(std::istream& is) { uint8_t buf[SIZE]; is.read(reinterpret_cast<char*>(buf), SIZE); return DESERIALIZE(buf);}
 
-	serializeMBFToBuf(mbf, fibsBuf);
+#define MAKE_VARIABLE_SERIALIZER(TYPE, SERIALIZE, DESERIALIZE, SIZE) \
+template<unsigned int Variables> void SERIALIZE(TYPE val, std::ostream& os) { uint8_t buf[SIZE]; SERIALIZE<Variables>(val, buf); os.write(reinterpret_cast<const char*>(buf), SIZE);}\
+template<unsigned int Variables> TYPE DESERIALIZE(std::istream& is) { uint8_t buf[SIZE]; is.read(reinterpret_cast<char*>(buf), SIZE); return DESERIALIZE<Variables>(buf);}
 
-	os.write(reinterpret_cast<const char*>(fibsBuf), getMBFSizeInBytes<Variables>());
-}
-template<unsigned int Variables>
-FunctionInputBitSet<Variables> deserializeMBF(std::istream& is) {
-	uint8_t fibsBuf[getMBFSizeInBytes<Variables>()];
+MAKE_SERIALIZER(uint32_t, serializeU32, deserializeU32, 4);
+MAKE_SERIALIZER(uint64_t, serializeU64, deserializeU64, 8);
 
-	is.read(reinterpret_cast<char*>(fibsBuf), getMBFSizeInBytes<Variables>());
+MAKE_VARIABLE_SERIALIZER(FunctionInputBitSet<Variables>, serializeMBF, deserializeMBF, getMBFSizeInBytes<Variables>());
 
-	return deserializeMBFFromBuf<Variables>(fibsBuf);
-}
 template<unsigned int Variables>
 uint64_t getFormationCount(const FunctionInputBitSet<Variables>& fibs, const FunctionInputBitSet<Variables>& base) {
 	uint64_t total = 1;

@@ -319,7 +319,7 @@ MBFDecomposition<Variables> readFullMBFDecomposition() {
 	for(int layer = 0; layer < (1 << Variables); layer++) {
 		for(int mbfI = 0; mbfI < getLayerSize<Variables>(layer); mbfI++) {
 			mbfFile.read(reinterpret_cast<char*>(buf), getMBFSizeInBytes<Variables>());
-			result.layers[layer].fibs[mbfI] = deserializeMBFFromBuf<Variables>(buf);
+			result.layers[layer].fibs[mbfI] = deserializeMBF<Variables>(buf);
 		}
 	}
 
@@ -329,25 +329,27 @@ MBFDecomposition<Variables> readFullMBFDecomposition() {
 }
 
 
-template<unsigned int Variables>
+template<unsigned int Variables, typename T>
 struct SwapperLayers {
 	static constexpr size_t MAX_SIZE = getMaxLayerSize<Variables>();
 
-	int* sourceCounts;
-	int* destinationCounts;
+	using IndexType = uint32_t;
 
-	int* dirtySourceList;
-	int* dirtyDestinationList;
+	T* sourceCounts;
+	T* destinationCounts;
+
+	IndexType* dirtySourceList;
+	IndexType* dirtyDestinationList;
 
 	size_t dirtySourceListSize;
 	size_t dirtyDestinationListSize;
 
 
 	SwapperLayers() :
-		sourceCounts(new int[MAX_SIZE]),
-		destinationCounts(new int[MAX_SIZE]),
-		dirtySourceList(new int[MAX_SIZE]),
-		dirtyDestinationList(new int[MAX_SIZE]),
+		sourceCounts(new T[MAX_SIZE]),
+		destinationCounts(new T[MAX_SIZE]),
+		dirtySourceList(new IndexType[MAX_SIZE]),
+		dirtyDestinationList(new IndexType[MAX_SIZE]),
 		dirtySourceListSize(0),
 		dirtyDestinationListSize(0) {
 
@@ -360,17 +362,6 @@ struct SwapperLayers {
 	~SwapperLayers() {
 		delete[] sourceCounts;
 		delete[] destinationCounts;
-	}
-	
-	void add(unsigned int to, unsigned int count) {
-		assert(to < MAX_SIZE);
-		if(destinationCounts[to] == 0) {
-			dirtyDestinationList[dirtyDestinationListSize++] = to;
-			assert(dirtyDestinationListSize <= MAX_SIZE);
-		}
-
-
-		destinationCounts[to] |= count;
 	}
 
 	void pushNext() {
@@ -385,13 +376,32 @@ struct SwapperLayers {
 		dirtyDestinationListSize = 0;
 	}
 
-	int* begin() {return this->dirtySourceList;}
-	const int* begin() const {return this->dirtySourceList;}
-	int* end() {return this->dirtySourceList + this->dirtySourceListSize;}
-	const int* end() const {return this->dirtySourceList + this->dirtySourceListSize;}
+	IndexType* begin() { return this->dirtySourceList; }
+	const IndexType* begin() const { return this->dirtySourceList; }
+	IndexType* end() { return this->dirtySourceList + this->dirtySourceListSize; }
+	const IndexType* end() const { return this->dirtySourceList + this->dirtySourceListSize; }
+
+	T& operator[](IndexType index) { assert(index < MAX_SIZE); return sourceCounts[index]; }
+	const T& operator[](IndexType index) const { assert(index < MAX_SIZE); return sourceCounts[index]; }
 	
-	int& operator[](size_t index) { assert(index < MAX_SIZE); return sourceCounts[index]; }
-	const int& operator[](size_t index) const { assert(index < MAX_SIZE); return sourceCounts[index];}
+	void add(IndexType to, unsigned int count) {
+		assert(to < MAX_SIZE);
+		if(destinationCounts[to] == 0) {
+			dirtyDestinationList[dirtyDestinationListSize++] = to;
+			assert(dirtyDestinationListSize <= MAX_SIZE);
+		}
+
+		destinationCounts[to] += count;
+	}
+	void set(IndexType to) {
+		assert(to < MAX_SIZE);
+		if(destinationCounts[to] == 0) {
+			dirtyDestinationList[dirtyDestinationListSize++] = to;
+			assert(dirtyDestinationListSize <= MAX_SIZE);
+		}
+
+		destinationCounts[to] = true;
+	}
 };
 
 

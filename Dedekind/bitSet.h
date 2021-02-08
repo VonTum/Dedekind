@@ -1314,3 +1314,8 @@ constexpr BitSet<Size> operator>>(BitSet<Size> result, unsigned int shift) {
 	result >>= shift;
 	return result;
 }
+
+template<size_t Size>
+bool isSubSet(const BitSet<Size>& smaller, const BitSet<Size>& larger) {
+	return (smaller & ~larger).isEmpty();
+}
