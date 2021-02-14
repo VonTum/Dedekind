@@ -319,8 +319,10 @@
   <ItemGroup>
     <ClInclude Include="aligned_alloc.h" />
     <ClInclude Include="aligned_set.h" />
+    <ClInclude Include="bfstream.h" />
     <ClInclude Include="bufferedMap.h" />
     <ClInclude Include="crossPlatformIntrinsics.h" />
+    <ClInclude Include="interval.h" />
     <ClInclude Include="knownData.h" />
     <ClInclude Include="MBFDecomposition.h" />
     <ClInclude Include="codeGen.h" />

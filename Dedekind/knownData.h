@@ -76,3 +76,11 @@ template<unsigned int Variables>
 constexpr size_t getMaxLinkCount() {
 	return getLinkCount<Variables>((1 << Variables) / 2);
 }
+template<unsigned int Variables>
+constexpr size_t getTotalLinkCount() {
+	size_t totalLinkCount = 0;
+	for(size_t size = 0; size < (1 << Variables); size++) {
+		totalLinkCount += getLinkCount<Variables>(size);
+	}
+	return totalLinkCount;
+}

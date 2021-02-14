@@ -8,6 +8,17 @@ constexpr size_t hashMapPrimes[]{
 	12582917,25165843,50331653,100663319,201326611,402653189,805306457,1610612741
 };
 
+inline size_t getNumberOfBucketsForSize(size_t size) {
+	size_t lastBp;
+	for(const size_t& bp : hashMapPrimes) {
+		if(bp > size) {
+			return bp;
+		}
+		lastBp = bp;
+	}
+	return lastBp;
+}
+
 template<typename T>
 class HashBase {
 public:
@@ -94,16 +105,6 @@ public:
 		bestBucketSize = this->itemCount * 2; // too large, use builtin value
 		rehash(bestBucketSize);
 
-	}
-	static size_t getNumberOfBucketsForSize(size_t size) {
-		size_t lastBp;
-		for(const size_t& bp : hashMapPrimes) {
-			if(bp > size) {
-				return bp;
-			}
-			lastBp = bp;
-		}
-		return lastBp;
 	}
 	void clear() {
 		for(size_t i = 0; i < this->itemCount; i++) {
@@ -305,6 +306,21 @@ class BakedHashBase {
 
 public:
 	BakedHashBase() : hashTable(nullptr), data(nullptr), buckets(0), itemCount(0) {}
+	BakedHashBase(T* dataBuffer, size_t size, size_t buckets) : hashTable(new unsigned int[buckets+1]), data(data), buckets(buckets), itemCount(size) {
+		unsigned int curBucket = 0;
+		this->hashTable[0] = 0;
+		for(size_t i = 0; i < size; i++) {
+			uint64_t hash = data[i].hash() % buckets;
+			while(hash != curBucket) {
+				this->hashTable[++curBucket] = i;
+			}
+		}
+		do {
+			curBucket++;
+			this->hashTable[curBucket] = size;
+		} while(curBucket != buckets);
+	}
+	BakedHashBase(T* dataBuffer, size_t size) : BakedHashBase(dataBuffer, size, getNumberOfBucketsForSize(size)) {}
 	BakedHashBase(const HashBase<T>& from, T* dataBuffer) : hashTable(new unsigned int[from.buckets + 1]), data(dataBuffer), buckets(from.buckets), itemCount(from.itemCount) {
 		unsigned int dataIndex = 0;
 		for(size_t bucketI = 0; bucketI < from.buckets; bucketI++) {
@@ -395,6 +411,13 @@ public:
 		return *item;
 	}
 
+	template<typename KeyType>
+	size_t indexOf(const KeyType& key) const {
+		const T* item = this->find(key);
+		assert(item != nullptr);
+		return item - data;
+	}
+
 	size_t size() const { return this->itemCount; }
 
 	T& operator[](size_t index) { return data[index]; }
@@ -454,10 +477,23 @@ template<typename T>
 class BakedSet : private BakedHashBase<T> {
 public:
 	BakedSet() = default;
+	BakedSet(T* dataBuffer, size_t size) : BakedHashBase<T>(dataBuffer, size) {}
 	BakedSet(const BufferedSet<T>& from, T* dataBuffer) : BakedHashBase<T>(static_cast<const HashBase<T>&>(from), dataBuffer) {}
 
 	bool contains(const T& item) const {
 		return BakedHashBase<T>::find(item) != nullptr;
+	}
+
+	size_t indexOf(const T& item) const {
+		return BakedHashBase<T>::indexOf(item);
+	}
+
+	T* find(const T& item) {
+		return BakedHashBase<T>::find(item);
+	}
+
+	const T* find(const T& item) const {
+		return BakedHashBase<T>::find(item);
 	}
 
 	size_t size() const { return BakedHashBase<T>::size(); }

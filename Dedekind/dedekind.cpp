@@ -61,6 +61,13 @@ std::string getFileName(const char* title, unsigned int Variables, const char* e
 	return name;
 }
 
+std::string getFileName(std::string title, unsigned int Variables, const char* extention) {
+	std::string name(title);
+	name.append(std::to_string(Variables));
+	name.append(extention);
+	return name;
+}
+
 template<unsigned int Variables>
 void runGenAllMBFs() {
 	std::pair<BufferedSet<FunctionInputBitSet<Variables>>, size_t> resultPair;
@@ -455,11 +462,47 @@ void saveIntervalSizes() {
 	classCountFile.close();
 }
 
+template<unsigned int Variables>
+void computeDualForFile(size_t elementSize, std::ifstream& originalFile, std::ofstream& dualFile) {
+	std::ifstream mbfFile(getFileName("allUniqueMBFSorted", Variables, ".mbf"), std::ios::binary);
+	MBFHashSet<Variables> fullMBFSet(mbfFile);
+	mbfFile.close();
+
+	constexpr size_t size = mbfCounts[Variables];
+
+	char* originalBuf = new char[size * elementSize];
+	originalFile.read(originalBuf, size * elementSize);
+
+	for(size_t layer = 0; layer < (1 << Variables) + 1; layer++) {
+		size_t dualLayer = (1 << Variables) - layer;
+		for(const FunctionInputBitSet<Variables>& destFibs : fullMBFSet.bufSets[layer]) {
+			FunctionInputBitSet<Variables>* dualIndex = fullMBFSet.bufSets[dualLayer].find(destFibs.dual());
+
+			size_t index = dualIndex - fullMBFSet.mbfs;
+
+			dualFile.write(originalBuf + index * elementSize, elementSize);
+		}
+	}
+
+	delete[] originalBuf;
+}
+
+template<unsigned int Variables>
+void produceDualU64File(const char* inputName, const char* dualName) {
+	std::ifstream inputFile(getFileName(inputName, Variables, ".mbfU64"), std::ios::binary);
+	std::ofstream outputFile(getFileName(dualName, Variables, ".mbfU64"), std::ios::binary);
+
+	computeDualForFile<Variables>(8, inputFile, outputFile);
+}
+
 #ifndef RUN_TESTS
 int main() {
 	//doRAMTest();
 
-	saveIntervalSizes<6>();
+	//saveIntervalSizes<6>();
+
+	produceDualU64File<6>("intervalSizesToTop", "intervalSizesToBottom");
+	produceDualU64File<6>("uniqueClassCountsToTop", "uniqueClassCountsToBottom");
 
 	//doLinkCount<7>();
 

@@ -239,6 +239,43 @@ inline void getLinkLayer(std::ifstream& file, int numElements, LinkBufPtr* offse
 }
 
 template<unsigned int Variables>
+struct FullMBFHashSet {
+	FunctionInputBitSet<Variables>* mbfs;
+	BakedSet<FunctionInputBitSet<Variables>>* bufSets;
+
+	FullMBFHashSet(std::ifstream& inputFile) : mbfs(new FunctionInputBitSet<Variables>[mbfCounts[Variables]]), bufSets(new BakedSet<FunctionInputBitSet<Variables>>[(1 << Variables) + 1]) {
+		FunctionInputBitSet<Variables>* curBufOffset = mbfs;
+		for(size_t i = 0; i < (1 << Variables) + 1; i++) {
+			bufSets[i] = BakedSet<FunctionInputBitSet<Variables>>(curBufOffset, getLayerSize<Variables>(i));
+			curBufOffset += getLayerSize<Variables>(i);
+		}
+	}
+
+	FullMBFHashSet(FullMBFHashSet&& other) : mbfs(other.mbfs), bufSets(other.bufSets) {
+		other.mbfs = nullptr;
+		other.bufSets = nullptr;
+	}
+
+	FullMBFHashSet& operator=(FullMBFHashSet&& other) {
+		std::swap(this->mbfs, other.mbfs);
+		std::swap(this->bufSets, other.bufSets);
+	}
+
+	~FullMBFHashSet() {
+		delete[] mbfs;
+		delete[] bufSets;
+	}
+};
+/*
+template<unsigned int Variables>
+struct FullMBFHashSetExpansion {
+	LinkBufPtr* offsetBuf;
+	LinkedNode* linkBuf;
+
+	FullMBFHashSetExpansion(std::ifstream& allClassesSorted, std::ifstream& linkFile) : offsetBuf(new LinkBufPtr[mbfCounts[Variables]]), linkBuf(new LinkedNode[getTotalLinkCount<Variables>()]) {}
+};
+*/
+template<unsigned int Variables>
 struct MBFDecomposition {
 	struct Layer {
 		LinkBufPtr* offsets;
@@ -247,22 +284,40 @@ struct MBFDecomposition {
 	};
 	Layer* layers;
 
+	LinkBufPtr* allOffsets;
+	LinkedNode* allFullBufs;
+	FunctionInputBitSet<Variables>* allFibs;
+
 	constexpr static unsigned int LAYER_COUNT = (1 << Variables) + 1;
 
-	MBFDecomposition() : layers(new Layer[LAYER_COUNT]) {
+	MBFDecomposition() : layers(new Layer[LAYER_COUNT]), allOffsets(new LinkBufPtr[mbfCounts[Variables]]), allFullBufs(new LinkedNode[getTotalLinkCount<Variables>()]), allFibs(new FunctionInputBitSet<Variables>[mbfCounts[Variables]]) {
+		LinkBufPtr* curOffsets = allOffsets;
+		LinkedNode* curFullBufs = allFullBufs;
+		FunctionInputBitSet<Variables>* curFibs = allFibs;
+
 		for(size_t i = 0; i < LAYER_COUNT; i++) {
-			layers[i].offsets = new LinkBufPtr[getLayerSize<Variables>(i)];
-			layers[i].fullBuf = new LinkedNode[getLinkCount<Variables>(i)];
-			layers[i].fibs = new FunctionInputBitSet<Variables>[getLayerSize<Variables>(i)];
+			layers[i].offsets = curOffsets;
+			layers[i].fullBuf = curFullBufs;
+			layers[i].fibs = curFibs;
+
+			curOffsets += getLayerSize<Variables>(i);
+			curFullBufs += getLinkCount<Variables>(i);
+			curFibs += getLayerSize<Variables>(i);
 		}
 	}
 
-	MBFDecomposition(MBFDecomposition&& other) : layers(other.layers) {
+	MBFDecomposition(MBFDecomposition&& other) : layers(other.layers), allOffsets(other.allOffsets), allFullBufs(other.allFullBufs), allFibs(other.allFibs) {
 		other.layers = nullptr;
+		other.allOffsets = nullptr;
+		other.allFullBufs = nullptr;
+		other.allFibs = nullptr;
 	}
 
 	MBFDecomposition& operator=(MBFDecomposition&& other) {
 		std::swap(this->layers, other.layers);
+		std::swap(this->allOffsets, other.allOffsets);
+		std::swap(this->allFullBufs, other.allFullBufs);
+		std::swap(this->allFibs, other.allFibs);
 		return *this;
 	}
 
@@ -270,14 +325,10 @@ struct MBFDecomposition {
 	MBFDecomposition& operator=(const MBFDecomposition& other) = delete;
 
 	~MBFDecomposition() {
-		if(layers != nullptr) {
-			for(size_t i = 0; i < LAYER_COUNT; i++) {
-				delete[] layers[i].offsets;
-				delete[] layers[i].fullBuf;
-				delete[] layers[i].fibs;
-			}
-			delete[] layers;
-		}
+		delete[] allOffsets;
+		delete[] allFullBufs;
+		delete[] allFibs;
+		delete[] layers;
 	}
 
 	IteratorFactory<LinkedNode*> iterLinksOf(int layerI, int nodeInLayer) const {
@@ -291,6 +342,39 @@ struct MBFDecomposition {
 
 	const FunctionInputBitSet<Variables>& get(int layerI, int nodeInLayer) const {
 		return layers[layerI].fibs[nodeInLayer];
+	}
+};
+
+template<unsigned int Variables>
+struct MBFDecompositionWithHash : public MBFDecomposition<Variables> {
+	BakedSet<FunctionInputBitSet<Variables>>* hashsets;
+
+	MBFDecompositionWithHash() : hashsets(new BakedSet<FunctionInputBitSet<Variables>>[(1 << Variables) + 1]) {
+		BufferedSet<FunctionInputBitSet<Variables>> startSet(1);
+		FunctionInputBitSet<Variables> empty;
+		startSet.add(empty);
+		new(&this->hashsets[0]) BakedSet<FunctionInputBitSet<Variables>>(startSet, this->layers[0].fibs);
+
+		for(size_t layer = 1; layer < (1 << Variables); layer++) {
+			BufferedSet<FunctionInputBitSet<Variables>> newBufSet(getLayerSize<Variables>(layer));
+
+			const BakedSet<FunctionInputBitSet<Variables>>& prevSet = this->hashsets[layer - 1];
+
+			for(size_t elem = 0; elem < getLayerSize<Variables>(layer); elem++) {
+				const FunctionInputBitSet<Variables>& curFibs = prevSet[elem];
+
+				std::pair<FunctionInputBitSet<Variables>, int> expandedMBFBuf[MAX_EXPANSION];
+
+				size_t expansionCount = findAllExpandedMBFsFast(curFibs, expandedMBFBuf);
+
+				for(std::pair<FunctionInputBitSet<Variables>, int>* curExpanded = expandedMBFBuf; curExpanded < expandedMBFBuf + expansionCount; curExpanded++) {
+					newBufSet.getOrAdd(curExpanded->first);
+				}
+			}
+			assert(newBufSet.size() == getLayerSize<Variables>(layer));
+
+			new(&this->hashsets[layer]) BakedSet<FunctionInputBitSet<Variables>>(newBufSet, this->layers[layer].fibs);
+		}
 	}
 };
 
