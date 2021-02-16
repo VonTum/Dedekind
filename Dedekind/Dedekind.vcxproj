@@ -306,6 +306,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="aligned_alloc.cpp" />
+    <ClCompile Include="bigint\uint128_t.cpp" />
+    <ClCompile Include="bigint\uint256_t.cpp" />
     <ClCompile Include="codeGen.cpp" />
     <ClCompile Include="dedekind.cpp" />
     <ClCompile Include="intervalDecomposition.cpp" />
@@ -320,6 +322,9 @@
     <ClInclude Include="aligned_alloc.h" />
     <ClInclude Include="aligned_set.h" />
     <ClInclude Include="bfstream.h" />
+    <ClInclude Include="bigint\endianness.h" />
+    <ClInclude Include="bigint\uint128_t.h" />
+    <ClInclude Include="bigint\uint256_t.h" />
     <ClInclude Include="bufferedMap.h" />
     <ClInclude Include="crossPlatformIntrinsics.h" />
     <ClInclude Include="interval.h" />
@@ -356,6 +361,13 @@
   <ItemGroup>
     <Natvis Include="functionInput.natvis" />
     <Natvis Include="debug.natvis" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="bigint\uint128_t.build" />
+    <None Include="bigint\uint128_t.include" />
+    <None Include="bigint\uint256_t.build" />
+    <None Include="bigint\uint256_t.include" />
+    <None Include="bigint\uint256_t_config.include" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
