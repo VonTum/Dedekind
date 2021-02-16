@@ -360,31 +360,97 @@ public:
 	bool isMonotonic() const {
 		FunctionInputBitSet p = prev();
 		FunctionInputBitSet n = next();
-		n.bitset.set(0);
+		//n.bitset.set(0);
 		return ((p | *this) == *this) && ((n & *this) == *this);
 	}
 
+	// returns a new Monotonic FunctionInputBitSet, with added 1s where needed
+	// this->isSubSetOf(result)
+	FunctionInputBitSet monotonizeDown() const {
+		FunctionInputBitSet result = *this;
+		while(!result.isMonotonic()) {
+			result |= result.prev();
+		}
+		return result;
+	}
+
+	// returns a new Monotonic FunctionInputBitSet, with added 0s where needed
+	// result.isSubSetOf(*this)
+	FunctionInputBitSet monotonizeUp() const {
+		FunctionInputBitSet result = *this;
+		while(!result.isMonotonic()) {
+			result &= result.prev();
+		}
+		return result;
+	}
 
 	// takes a function of the form void(size_t bits)
 	template<typename Func>
 	void forEachOne(const Func& func) const {
-		for(size_t i = 0; i < (size_t(1) << Variables); i++) {
-			if(bitset.get(i) == true) {
-				func(i);
-			}
-		}
+		this->bitset.forEachOne(func);
 	}
 
 	// takes a function of the form void(size_t bits)
 	template<typename Func>
 	void forEachZero(const Func& func) const {
-		for(size_t i = 0; i < (size_t(1) << Variables); i++) {
-			if(bitset.get(i) == false) {
-				func(i);
-			}
-		}
+		(~this->bitset).forEachOne(func);
 	}
 
+	FunctionInputBitSet getNextBits() const {
+		return FunctionInputBitSet(andnot(this->next().bitset, this->bitset));
+	}
+	FunctionInputBitSet getNextBits(const FunctionInputBitSet& mustBeSubSetOf) const {
+		return FunctionInputBitSet(andnot(this->next().bitset, this->bitset) & mustBeSubSetOf.bitset);
+	}
+
+	FunctionInputBitSet getPrevBits() const {
+		return FunctionInputBitSet(andnot(this->bitset, this->prev().bitset));
+	}
+	FunctionInputBitSet getPrevBits(const FunctionInputBitSet& mustBeSuperSetOf) const {
+		return FunctionInputBitSet(andnot(andnot(this->bitset, this->prev().bitset), mustBeSuperSetOf.bitset));
+	}
+
+	// takes a function of the form void(const FunctionInputBitSet& expanded)
+	template<typename Func>
+	void forEachUpExpansion(const Func& func) const {
+		Bits bitset = andnot(this->next().bitset, this->bitset);
+
+		bitset.forEachOne([&](size_t bit) {
+			FunctionInputBitSet expanded = *this;
+			expanded.add(bit);
+			func(expanded);
+		});
+	}
+	// takes a function of the form void(const FunctionInputBitSet& expanded)
+	template<typename Func>
+	void forEachUpExpansion(const FunctionInputBitSet& mustBeSubSetOf, const Func& func) const {
+		Bits bitset = andnot(this->next().bitset, this->bitset) & mustBeSubSetOf.bitset;
+
+		bitset.forEachOne([&](size_t bit) {
+			FunctionInputBitSet expanded = *this;
+			expanded.add(bit);
+			func(expanded);
+		});
+	}
+
+	FunctionInputBitSet asAntiChain() const {
+		return FunctionInputBitSet(andnot(this->bitset, this->prev().bitset));
+	}
+	static FunctionInputBitSet fromAntiChain(const FunctionInputBitSet& fibs) {
+		return fibs.monotonizeDown();
+	}
+
+	static FunctionInputBitSet minimalForcedDown(size_t bits) {
+		FunctionInputBitSet result = FunctionInputBitSet::empty();
+		result.bitset.set(bits);
+		return result.monotonizeDown();
+	}
+
+	static FunctionInputBitSet minimalForcedUp(size_t bits) {
+		FunctionInputBitSet result = FunctionInputBitSet::full();
+		result.bitset.reset(bits);
+		return result.monotonizeUp();
+	}
 
 	FunctionInputBitSet canonize() const {
 		if(this->bitset.isEmpty() || this->bitset.get(0) == 1 && this->bitset.count() == 1) return *this;
@@ -757,4 +823,11 @@ unsigned int getModifiedLayer(const FunctionInputBitSet<Variables>& a, const Fun
 		if(a.getLayer(l).size() != b.getLayer(l).size()) return l;
 	}
 	throw "No difference";
+}
+
+template<unsigned int Variables>
+FunctionInputBitSet<Variables> operator-(const FunctionInputBitSet<Variables>& a, const FunctionInputBitSet<Variables>& b) {
+	//assert(b.isSubSetOf(a));
+
+	return FunctionInputBitSet<Variables>(andnot(a.bitset, b.bitset));
 }

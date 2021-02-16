@@ -1,27 +1,16 @@
 #include "../toString.h"
 
 #include "testsMain.h"
+#include "testUtils.h"
+#include "generators.h"
 
 #include "../functionInput.h"
 #include "../functionInputBitSet.h"
 
-
 #include <random>
 #include <iostream>
 
-#define TEST_FROM 3
-#define TEST_UPTO 9
-#define SMALL_ITER 50
-#define LARGE_ITER 1000
 
-
-template<unsigned int Start, unsigned int End, template<unsigned int> typename FuncClass>
-void runFunctionRange() {
-	if constexpr(Start <= End) {
-		FuncClass<Start>::run();
-		runFunctionRange<Start + 1, End, FuncClass>();
-	}
-}
 template<size_t Size>
 static bool operator==(const BitSet<Size>& bs, const std::vector<bool>& expectedState) {
 	assert(expectedState.size() == Size);
@@ -57,75 +46,6 @@ static bool operator==(const std::vector<bool>& expectedState, const FunctionInp
 template<unsigned int Variables>
 static bool operator!=(const std::vector<bool>& expectedState, const FunctionInputBitSet<Variables>& fibs) {
 	return fibs != expectedState;
-}
-
-static bool genBool() {
-	return rand() % 2 == 1;
-}
-
-template<size_t Size>
-static BitSet<Size> generateBitSet() {
-	BitSet<Size> bs;
-
-	for(size_t i = 0; i < Size; i++) {
-		if(genBool()) {
-			bs.set(i);
-		}
-	}
-
-	return bs;
-}
-
-template<unsigned int Variables>
-static FunctionInputBitSet<Variables> generateFibs() {
-	return FunctionInputBitSet<Variables>(generateBitSet<(1 << Variables)>());
-}
-
-template<unsigned int Variables>
-static FunctionInputBitSet<Variables> generateMBF() {
-	FunctionInputBitSet<Variables> result = FunctionInputBitSet<Variables>::empty();
-
-	unsigned int numberOfSeeds = rand() % (Variables * 2);
-
-	for(unsigned int i = 0; i < numberOfSeeds; i++) {
-		result.bitset.set(rand() % (1 << Variables));
-	}
-
-	for(unsigned int i = 0; i < Variables + 1; i++) {
-		result = result.prev() | result;
-	}
-
-	return result;
-}
-
-template<unsigned int Variables>
-static FunctionInputBitSet<Variables> generateLayer(unsigned int layer) {
-	FunctionInputBitSet<Variables> result = generateFibs<Variables>();
-
-	result &= FunctionInputBitSet<Variables>::layerMask(layer);
-
-	return result;
-}
-
-
-template<unsigned int Variables>
-bool isMonotonic(const FunctionInputBitSet<Variables>& fibs) {
-	for(size_t i = 0; i < (1 << Variables); i++) {
-		if(fibs.bitset.get(i)) {
-			for(size_t j = 0; j < (1 << Variables); j++) {
-				if((j & i) == j) { // j is subset of i
-					if(fibs.bitset.get(j) == false) return false;
-				}
-			}
-		} else {
-			for(size_t j = 0; j < (1 << Variables); j++) {
-				if((i & j) == i) { // j is superset of i
-					if(fibs.bitset.get(j) == true) return false;
-				}
-			}
-		}
-	}
-	return true;
 }
 
 template<size_t Size>
@@ -426,6 +346,26 @@ struct CanonizeTest {
 };
 
 template<unsigned int Variables>
+bool isMonotonicNaive(const FunctionInputBitSet<Variables>& fibs) {
+	for(size_t i = 0; i < (1 << Variables); i++) {
+		if(fibs.bitset.get(i)) {
+			for(size_t j = 0; j < (1 << Variables); j++) {
+				if((j & i) == j) { // j is subset of i
+					if(fibs.bitset.get(j) == false) return false;
+				}
+			}
+		} else {
+			for(size_t j = 0; j < (1 << Variables); j++) {
+				if((i & j) == i) { // j is superset of i
+					if(fibs.bitset.get(j) == true) return false;
+				}
+			}
+		}
+	}
+	return true;
+}
+
+template<unsigned int Variables>
 struct MBFTest {
 	static void run() {
 		for(int iter = 0; iter < SMALL_ITER; iter++) {
@@ -433,7 +373,7 @@ struct MBFTest {
 
 			logStream << mfibs << "\n";
 
-			ASSERT(isMonotonic(mfibs));
+			ASSERT(isMonotonicNaive(mfibs));
 			ASSERT(mfibs.isMonotonic());
 
 			for(size_t i = 0; i < (1 << Variables); i++) {
@@ -441,7 +381,7 @@ struct MBFTest {
 				copy.bitset.toggle(i);
 				logStream << "+" << copy << "\n";
 
-				ASSERT(isMonotonic(copy) == copy.isMonotonic());
+				ASSERT(isMonotonicNaive(copy) == copy.isMonotonic());
 			}
 		}
 	}
@@ -585,6 +525,24 @@ struct CountZerosTest {
 	}
 };
 
+template<unsigned int Variables>
+struct ForEachOneTest {
+	static void run() {
+		for(int iter = 0; iter < LARGE_ITER; iter++) {
+			BitSet<(1 << Variables)> bits = generateBitSet<1 << Variables>();
+
+			BitSet<(1 << Variables)> foundBits = BitSet<(1 << Variables)>::empty();
+
+			bits.forEachOne([&](size_t bit) {
+				ASSERT(foundBits.get(bit) == false);
+				foundBits.set(bit);
+			});
+
+			ASSERT(foundBits == bits);
+		}
+	}
+};
+
 
 /*TEST_CASE(testBitsCompare) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, CompareBitsTest>();
@@ -652,6 +610,10 @@ TEST_CASE(testSerialization) {
 
 TEST_CASE(testCountZeros) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, CountZerosTest>();
+}
+
+TEST_CASE(testForEachOne) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, ForEachOneTest>();
 }
 
 /*TEST_CASE(benchCanonize) {

@@ -4,6 +4,7 @@
 constexpr size_t mbfCounts[]{2, 3, 5, 10, 30, 210, 16353, 490013148};
 constexpr size_t MAX_EXPANSION = 40; // greater than 35, which is the max for 7, leave some leeway
 
+constexpr size_t dedekindNumbers[]{2, 3, 6, 20, 168, 7581, 7828354, 2414682040998/*, 56130437228687557907788, ??????????????????????????????????????????*/}; //need bigint for D(8)
 
 constexpr size_t layerSizes1[]{1, 1, 1};
 constexpr size_t layerSizes2[]{1, 1, 1, 1, 1};

@@ -461,7 +461,7 @@ void saveIntervalSizes() {
 	intervalSizeFile.close();
 	classCountFile.close();
 }
-
+/*
 template<unsigned int Variables>
 void computeDualForFile(size_t elementSize, std::ifstream& originalFile, std::ofstream& dualFile) {
 	std::ifstream mbfFile(getFileName("allUniqueMBFSorted", Variables, ".mbf"), std::ios::binary);
@@ -494,15 +494,17 @@ void produceDualU64File(const char* inputName, const char* dualName) {
 
 	computeDualForFile<Variables>(8, inputFile, outputFile);
 }
-
+*/
 #ifndef RUN_TESTS
 int main() {
 	//doRAMTest();
 
+	MBFDecompositionWithHash<6> thing;
+
 	//saveIntervalSizes<6>();
 
-	produceDualU64File<6>("intervalSizesToTop", "intervalSizesToBottom");
-	produceDualU64File<6>("uniqueClassCountsToTop", "uniqueClassCountsToBottom");
+	//produceDualU64File<6>("intervalSizesToTop", "intervalSizesToBottom");
+	//produceDualU64File<6>("uniqueClassCountsToTop", "uniqueClassCountsToBottom");
 
 	//doLinkCount<7>();
 

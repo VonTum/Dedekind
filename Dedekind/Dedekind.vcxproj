@@ -312,6 +312,7 @@
     <ClCompile Include="dedekind.cpp" />
     <ClCompile Include="intervalDecomposition.cpp" />
     <ClCompile Include="tests\functionInputBitSetTests.cpp" />
+    <ClCompile Include="tests\intervalTests.cpp" />
     <ClCompile Include="tests\terminalColor.cpp" />
     <ClCompile Include="tests\testsMain.cpp" />
     <ClCompile Include="valuedDecomposition.cpp" />
@@ -352,8 +353,10 @@
     <ClInclude Include="set.h" />
     <ClInclude Include="sharedLockGuard.h" />
     <ClInclude Include="smallVector.h" />
+    <ClInclude Include="tests\generators.h" />
     <ClInclude Include="tests\terminalColor.h" />
     <ClInclude Include="tests\testsMain.h" />
+    <ClInclude Include="tests\testUtils.h" />
     <ClInclude Include="timeTracker.h" />
     <ClInclude Include="toString.h" />
     <ClInclude Include="valuedDecomposition.h" />

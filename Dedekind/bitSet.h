@@ -309,6 +309,19 @@ public:
 		}
 		return result;
 	}
+
+	// expects a function of the form void(size_t i)
+	template<typename Func>
+	void forEachOne(const Func& func) const {
+		for(size_t block = 0; block < BLOCK_COUNT; block++) {
+			uint64_t curBlock = this->data[block];
+			while(curBlock != 0) {
+				int firstBit = countZeros64(curBlock);
+				func(block * 64 + firstBit);
+				curBlock &= ~(uint64_t(1) << firstBit);
+			}
+		}
+	}
 };
 
 // SSE implementation
@@ -488,6 +501,25 @@ public:
 		result.data = _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_setzero_si128());
 		return result;
 	}
+
+	// expects a function of the form void(size_t i)
+	template<typename Func>
+	void forEachOne(const Func& func) const {
+		uint64_t part0 = _mm_extract_epi64(this->data, 0);
+		uint64_t part1 = _mm_extract_epi64(this->data, 1);
+		
+		while(part0 != 0) {
+			int firstBit = countZeros64(part0);
+			func(firstBit);
+			part0 &= ~(uint64_t(1) << firstBit);
+		}
+
+		while(part1 != 0) {
+			int firstBit = countZeros64(part1);
+			func(64 + firstBit);
+			part1 &= ~(uint64_t(1) << firstBit);
+		}
+	}
 };
 
 template<>
@@ -619,6 +651,17 @@ public:
 		result.data = 0xFFFFFFFFFFFFFFFF;
 		return result;
 	}
+	
+	// expects a function of the form void(size_t i)
+	template<typename Func>
+	void forEachOne(const Func& func) const {
+		uint64_t buf = this->data;
+		while(buf != 0) {
+			int firstBit = countZeros64(buf);
+			func(firstBit);
+			buf &= ~(uint64_t(1) << firstBit);
+		}
+	}
 };
 
 template<>
@@ -749,6 +792,17 @@ public:
 		BitSet result;
 		result.data = 0xFFFFFFFF;
 		return result;
+	}
+
+	// expects a function of the form void(size_t i)
+	template<typename Func>
+	void forEachOne(const Func& func) const {
+		uint32_t buf = this->data;
+		while(buf != 0) {
+			int firstBit = countZeros32(buf);
+			func(firstBit);
+			buf &= ~(uint32_t(1) << firstBit);
+		}
 	}
 };
 
@@ -882,6 +936,17 @@ public:
 		result.data = 0xFFFF;
 		return result;
 	}
+
+	// expects a function of the form void(size_t i)
+	template<typename Func>
+	void forEachOne(const Func& func) const {
+		uint16_t buf = this->data;
+		while(buf != 0) {
+			int firstBit = countZeros16(buf);
+			func(firstBit);
+			buf &= ~(uint16_t(1) << firstBit);
+		}
+	}
 };
 
 template<>
@@ -1012,6 +1077,17 @@ public:
 		BitSet result;
 		result.data = 0xFF;
 		return result;
+	}
+
+	// expects a function of the form void(size_t i)
+	template<typename Func>
+	void forEachOne(const Func& func) const {
+		uint8_t buf = this->data;
+		while(buf != 0) {
+			int firstBit = countZeros8(buf);
+			func(firstBit);
+			buf &= ~(uint8_t(1) << firstBit);
+		}
 	}
 };
 
@@ -1144,6 +1220,17 @@ public:
 		result.data = 0b1111;
 		return result;
 	}
+
+	// expects a function of the form void(size_t i)
+	template<typename Func>
+	void forEachOne(const Func& func) const {
+		uint8_t buf = this->data;
+		while(buf != 0) {
+			int firstBit = countZeros8(buf);
+			func(firstBit);
+			buf &= ~(uint8_t(1) << firstBit);
+		}
+	}
 };
 
 template<>
@@ -1275,6 +1362,17 @@ public:
 		result.data = 0b11;
 		return result;
 	}
+
+	// expects a function of the form void(size_t i)
+	template<typename Func>
+	void forEachOne(const Func& func) const {
+		uint8_t buf = this->data;
+		while(buf != 0) {
+			int firstBit = countZeros8(buf);
+			func(firstBit);
+			buf &= ~(uint8_t(1) << firstBit);
+		}
+	}
 };
 
 template<size_t Size>
@@ -1317,5 +1415,5 @@ constexpr BitSet<Size> operator>>(BitSet<Size> result, unsigned int shift) {
 
 template<size_t Size>
 bool isSubSet(const BitSet<Size>& smaller, const BitSet<Size>& larger) {
-	return (smaller & ~larger).isEmpty();
+	return andnot(smaller, larger).isEmpty();
 }

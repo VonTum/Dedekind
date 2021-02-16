@@ -35,6 +35,8 @@ extern thread_local TestInterface __testInterface;
 extern std::stringstream logStream;
 void logf(const char* format, ...);
 
+#define printVar(Var) do { logStream << #Var << " : " << (Var) << "\n"; } while(false)
+
 // Testing utils:
 
 template<typename T, std::size_t Size>
