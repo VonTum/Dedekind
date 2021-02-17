@@ -9,6 +9,13 @@ inline bool genBool() {
 	return rand() % 2 == 1;
 }
 
+inline int generateInt(int max) {
+	return rand() % max;
+}
+inline size_t generateSize_t(size_t max) {
+	return rand() % max;
+}
+
 template<size_t Size>
 BitSet<Size> generateBitSet() {
 	BitSet<Size> bs;

@@ -1,4 +1,17 @@
+/**
+* The algorithms described in this file are the work of Patrick De Causmaeker, Stefan De Wannemacker, and Jay Yellen. 
+* 
+* https://www.kuleuven.be/wieiswie/en/person/00003471
+* https://arxiv.org/pdf/1103.2877v1.pdf
+* https://arxiv.org/pdf/1407.4288.pdf
+* https://arxiv.org/pdf/1602.04675v1.pdf
+*/
+
+
+
 #pragma once
+
+#define printAC(AC) do { std::cout << #AC << " : "; prettyFibs(std::cout, (AC).asAntiChain()); std::cout << "\n"; } while(false)
 
 #include "functionInputBitSet.h"
 #include "bufferedMap.h"
@@ -17,34 +30,36 @@ constexpr FunctionInputBitSet<Variables> getBot() {
 
 template<unsigned int Variables>
 struct Interval {
-	FunctionInputBitSet<Variables> bot;
-	FunctionInputBitSet<Variables> top;
+	using MBF = FunctionInputBitSet<Variables>;
 
-	Interval(FunctionInputBitSet<Variables> bot, FunctionInputBitSet<Variables> top) : bot(bot), top(top) {
+	MBF bot;
+	MBF top;
+
+	Interval(MBF bot, MBF top) : bot(bot), top(top) {
 		assert(bot.isSubSetOf(top));
 	}
 
-	bool contains(const FunctionInputBitSet<Variables>& item) const {
+	bool contains(const MBF& item) const {
 		return this->bot.isSubSetOf(item) && item.isSubSetOf(this->top);
 	}
 
-	// expects a function of type void(const FunctionInputBitSet<Variables>&)
+	// expects a function of type void(const MBF&)
 	template<typename Func>
 	void forEach(const Func& func) const {
-		BufferedSet<FunctionInputBitSet<Variables>> curHashed(8000000); // just large enough for 6
-		std::vector<FunctionInputBitSet<Variables>> toExpand;
+		BufferedSet<MBF> curHashed(8000000); // just large enough for 6
+		std::vector<MBF> toExpand;
 
 		toExpand.push_back(bot);
 
 		do {
-			for(const FunctionInputBitSet<Variables>& curExpanding : toExpand) {
-				curExpanding.forEachUpExpansion(top, [&](const FunctionInputBitSet<Variables>& expanded) {
+			for(const MBF& curExpanding : toExpand) {
+				curExpanding.forEachUpExpansion(top, [&](const MBF& expanded) {
 					curHashed.add(expanded);
 				});
 			}
 			toExpand.clear();
 			toExpand.reserve(curHashed.size());
-			for(const FunctionInputBitSet<Variables>& item : curHashed) {
+			for(const MBF& item : curHashed) {
 				func(item);
 				toExpand.push_back(item);
 			}
@@ -54,22 +69,19 @@ struct Interval {
 
 	uint64_t intevalSizeVeryNaive() const {
 		uint64_t total = 0;
-		for(uint64_t data = 0; data < (1 << (1 << Variables)); data++) {
-			FunctionInputBitSet<Variables> fibs;
-			fibs.bitset.data = data;
 
-			if(fibs.isMonotonic()) {
-				if(this->contains(fibs)) {
-					total++;
-				}
+		forEachMonotonicFunction<Variables>([this, &total](const MBF& fibs) {
+			if(this->contains(fibs)) {
+				total++;
 			}
-		}
+		});
+
 		return total;
 	}
 	
 	uint64_t intevalSizeNaive() const {
-		BufferedSet<FunctionInputBitSet<Variables>> curHashed(dedekindNumbers[Variables]); // just large enough for 6
-		std::vector<FunctionInputBitSet<Variables>> toExpand;
+		BufferedSet<MBF> curHashed(dedekindNumbers[Variables]); // just large enough for 6
+		std::vector<MBF> toExpand;
 
 		toExpand.push_back(bot);
 		
@@ -77,14 +89,14 @@ struct Interval {
 
 		do {
 			totalIntervalSize += toExpand.size();
-			for(const FunctionInputBitSet<Variables>& curExpanding : toExpand) {
-				curExpanding.forEachUpExpansion(top, [&](const FunctionInputBitSet<Variables>& expanded) {
+			for(const MBF& curExpanding : toExpand) {
+				curExpanding.forEachUpExpansion(top, [&](const MBF& expanded) {
 					curHashed.add(expanded);
 				});
 			}
 			toExpand.clear();
 			toExpand.reserve(curHashed.size());
-			for(FunctionInputBitSet<Variables>& item : curHashed) {
+			for(MBF& item : curHashed) {
 				toExpand.push_back(item);
 			}
 			curHashed.clear();
@@ -93,26 +105,79 @@ struct Interval {
 		return totalIntervalSize;
 	}
 
-	uint64_t intervalSizeFast() const {
-		if(!(bot.isSubSetOf(top))) {
-			return 0;
-		}
+	uint64_t intervalSize() const {
 		if(bot == top) {
 			return 1;
 		}
 
-		//std::cout << "currently processing " << bot.bitset.data << " - " << top.bitset.data << "\n";
-
-		BitSet<1 << Variables> predOfTop = top.asAntiChain().bitset;
+		BitSet<1 << Variables> nextBits = top.asAntiChain().bitset;
 		// arbitrarily chosen extention of bot
-		FunctionInputBitSet<Variables> b1ac = FunctionInputBitSet<Variables>::minimalForcedDown(predOfTop.getFirstOnBit());
-
-		//std::cout << logStream.str().c_str();
-		//logStream.clear();
+		MBF b1ac = MBF::minimalForcedDown(nextBits.getFirstOnBit());
 
 		uint64_t intervalSize1 = getIntervalSizeForNonNormal(b1ac | bot, top);
 		uint64_t intervalSize2 = getIntervalSizeForNonNormal(bot, b1ac.prev() | bot | (top - b1ac));
 		return intervalSize1 + intervalSize2;
+	}
+
+	uint64_t intervalSizeFast() const {
+		//std::cout << "intervalSizeFast: \n";
+		//printAC(bot);
+		//printAC(top);
+
+		if(bot == top) {
+			//std::cout << "intervalsizeFast bot == top : return 1\n";
+			return 1;
+		}
+
+		BitSet<1 << Variables> nextBits = top.asAntiChain().bitset;
+		if(nextBits.isEmpty() || nextBits.count() == 1 && nextBits.get(0)) {
+			//std::cout << "intervalsizeFast not b1 : return 2\n";
+			return 2;
+		}
+		size_t firstOnBit = nextBits.getFirstOnBit();
+		// arbitrarily chosen extention of bot
+		MBF top1ac = MBF::minimalForcedDown(firstOnBit);
+		//printAC(top1ac);
+		MBF top1acm = top1ac.prev();
+		//printAC(top1acm);
+		MBF top1acmm = top1acm.prev();
+		//printAC(top1acmm);
+
+		size_t universe = size_t(1U << Variables) - 1;
+		MBF umb1 = MBF::minimalForcedDown(universe & ~(firstOnBit));
+		//printAC(umb1);
+
+		//printAC(bot | top1ac);
+
+		//std::cout << "getting first interval...\n";
+		uint64_t v1 = getIntervalSizeForNonNormalFast(bot | top1ac, top);
+		//std::cout << "first interval result...\n";
+		//printVar(v1);
+
+		uint64_t v2 = 0;
+
+		top1acm.asAntiChain().forEachSubSet([&](const MBF& ss) {
+			MBF subSet = top1acm & ~ss.monotonizeDown();
+			if(subSet != top1acm) { // strict subsets
+				//printAC(subSet);
+				MBF gpm = subSet | top1acmm;
+
+				/*printAC(gpm);
+				printAC(acProd(gpm, umb1));
+				printAC(bot);
+				printAC(top);*/
+
+				//std::cout << "getting second interval...\n";
+				uint64_t vv = getIntervalSizeForNonNormalFast(bot | subSet.monotonizeDown(), acProd(gpm, umb1) & top);
+				//std::cout << "second interval result...\n";
+
+				//printVar(vv);
+
+				v2 += vv;
+			}
+		});
+		//std::cout << "intervalsizeFast v : return " << 2 * v1 + v2 << "\n";
+		return 2 * v1 + v2;
 	}
 };
 
@@ -124,11 +189,40 @@ uint64_t getIntervalSizeForNonNormal(const FunctionInputBitSet<Variables>& bot, 
 		FunctionInputBitSet<Variables> newBot = bot & newTop;
 
 		if(newBot.isSubSetOf(newTop)) {
-			return Interval(newBot, newTop).intervalSizeFast();
+			return Interval(newBot, newTop).intervalSize();
 		} else {
 			return 0;
 		}
 	} else {
+		return 0;
+	}
+}
+template<unsigned int Variables>
+uint64_t getIntervalSizeForNonNormalFast(const FunctionInputBitSet<Variables>& bot, const FunctionInputBitSet<Variables>& top) {
+	assert(bot.isMonotonic());
+	assert(top.isMonotonic());
+
+	/*std::cout << "getIntervalSizeForNonNormalFast: \n";
+	std::cout << "len ";
+	printAC(top);
+	std::cout << "len ";
+	printAC(bot);*/
+	if(bot.isSubSetOf(top)) {
+		FunctionInputBitSet<Variables> dsn = (bot.asAntiChain() & top.asAntiChain());
+		//printAC(dsn);
+		FunctionInputBitSet<Variables> newTop = (top.asAntiChain() - dsn).monotonizeDown();
+		//printAC(newTop);
+		FunctionInputBitSet<Variables> newBot = bot & newTop;
+		//printAC(newBot);
+
+		if(newBot.isSubSetOf(newTop)) {
+			return Interval(newBot, newTop).intervalSizeFast();
+		} else {
+			//std::cout << "newBot !<= newTop: return 0\n";
+			return 0;
+		}
+	} else {
+		//std::cout << "bot !<= top: return 0\n";
 		return 0;
 	}
 }

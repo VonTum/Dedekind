@@ -5,13 +5,6 @@
 #include "functionInputBitSet.h"
 
 template<unsigned int Variables>
-bool isUniqueExtention(const FunctionInputBitSet<Variables>& bs, size_t bit) {
-	BitSet<(1 << Variables)> possibleBits(andnot(bs.bitset, bs.prev().bitset));
-
-	return possibleBits.getFirstOnBit() == bit;
-}
-
-template<unsigned int Variables>
 uint64_t getNumberOfOwnedChildClasses(const FunctionInputBitSet<Variables>& cur) {
 	uint64_t total = 1;
 

@@ -13,7 +13,9 @@ struct BotToTopIntervalSize {
 	static void run() {
 		Interval<Variables> i(getBot<Variables>(), getTop<Variables>());
 
-		ASSERT(i.intevalSizeNaive() == dedekindNumbers[Variables]);
+		std::cout << "\n" << Variables << "\n";
+
+		ASSERT(i.intervalSizeFast() == dedekindNumbers[Variables]);
 	}
 };
 
@@ -30,7 +32,7 @@ struct IntervalSizeVeryNaive {
 };
 
 template<unsigned int Variables>
-struct BotToTopIntervalSizeFast {
+struct IntervalSizeVsNaive {
 	static void run() {
 		for(int iter = 0; iter < LARGE_ITER; iter++) {
 			//std::cout << ".";
@@ -46,14 +48,36 @@ struct BotToTopIntervalSizeFast {
 	}
 };
 
+template<unsigned int Variables>
+struct IntervalSizeFast {
+	static void run() {
+		for(int iter = 0; iter < (Variables == 6? 30 : LARGE_ITER); iter++) {
+			//std::cout << ".";
+			//std::cout << "\n\n\n\n\n\n\n\n\n\n\n";
+
+			Interval<Variables> i = generateInterval<Variables>();
+
+			prettyInterval(std::cout, i);
+			std::cout << "\n";
+
+
+			ASSERT(i.intevalSizeNaive() == getIntervalSizeForNonNormalFast(i.bot, i.top));
+		}
+	}
+};
+
 TEST_CASE(testBotToTopIntervalSize) {
-	runFunctionRange<1, 5, BotToTopIntervalSize>();
+	runFunctionRange<1, 6, BotToTopIntervalSize>();
 }
 
 TEST_CASE(testIntervalSizeVeryNaive) {
-	runFunctionRange<1, 4, IntervalSizeVeryNaive>();
+	runFunctionRange<1, 5, IntervalSizeVeryNaive>();
 }
 
-TEST_CASE(testBotToTopIntervalSizeFast) {
-	runFunctionRange<1, 4, BotToTopIntervalSizeFast>();
+TEST_CASE(testIntervalSize) {
+	runFunctionRange<1, 5, IntervalSizeVsNaive>();
+}
+
+TEST_CASE(testIntervalSizeFast) {
+	runFunctionRange<1, 6, IntervalSizeFast>();
 }

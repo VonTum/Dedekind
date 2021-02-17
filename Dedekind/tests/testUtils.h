@@ -1,6 +1,8 @@
 #pragma once
 
 #include "testsMain.h"
+#include "../functionInputBitSet.h"
+#include "../interval.h"
 
 #define TEST_FROM 3
 #define TEST_UPTO 9
@@ -20,6 +22,13 @@ void prettyFibs(std::ostream& os, const FunctionInputBitSet<Variables>& ac) {
 	if(isFirst) os << '{';
 	os << "}";
 }
+template<unsigned int Variables>
+void prettyInterval(std::ostream& os, const Interval<Variables>& i) {
+	prettyFibs(os, i.bot);
+	os << " - ";
+	prettyFibs(os, i.top);
+}
+
 
 #define printAC(AC) do { std::cout << #AC << " : "; prettyFibs(std::cout, (AC).asAntiChain()); std::cout << "\n"; } while(false)
 

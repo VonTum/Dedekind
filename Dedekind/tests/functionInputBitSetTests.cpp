@@ -9,6 +9,7 @@
 
 #include <random>
 #include <iostream>
+#include <vector>
 
 
 template<size_t Size>
@@ -543,6 +544,57 @@ struct ForEachOneTest {
 	}
 };
 
+template<unsigned int Variables>
+struct ForEachSubSetTest {
+	static void run() {
+		for(int iter = 0; iter < LARGE_ITER; iter++) {
+			std::vector<int> selectedBits;
+
+			constexpr int MAX_SELECTED = 15;
+
+			int selectCount = generateInt(std::min((1 << Variables), MAX_SELECTED));
+			for(int i = 0; i < selectCount; i++) {
+				int newBit = generateInt((1 << Variables));
+				for(int prevSelected : selectedBits) {
+					if(newBit == prevSelected) {
+						goto alreadyExists;
+					}
+				}
+				selectedBits.push_back(newBit);
+
+				alreadyExists:;
+			}
+			BitSet<(1 << Variables)> bitset = BitSet<(1 << Variables)>::empty();
+
+			for(int bit : selectedBits) {
+				bitset.set(bit);
+			}
+
+			BitSet<1 << MAX_SELECTED> foundSubSets = BitSet<1 << MAX_SELECTED>::empty();
+
+			size_t foundCount = 0;
+
+			bitset.forEachSubSet([&](const BitSet<1 << Variables>& subSet) {
+				ASSERT(isSubSet(subSet, bitset));
+
+				unsigned int subSetFound = 0;
+				for(int varIdx = 0; varIdx < selectedBits.size(); varIdx++) {
+					if(subSet.get(selectedBits[varIdx])) {
+						subSetFound |= (1U << varIdx);
+					}
+				}
+
+				ASSERT(!foundSubSets.get(subSetFound));
+				foundSubSets.set(subSetFound);
+
+				foundCount++;
+			});
+
+			ASSERT(foundCount == 1 << selectedBits.size());
+		}
+	}
+};
+
 
 /*TEST_CASE(testBitsCompare) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, CompareBitsTest>();
@@ -614,6 +666,10 @@ TEST_CASE(testCountZeros) {
 
 TEST_CASE(testForEachOne) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, ForEachOneTest>();
+}
+
+TEST_CASE(testForEachSubSet) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, ForEachSubSetTest>();
 }
 
 /*TEST_CASE(benchCanonize) {

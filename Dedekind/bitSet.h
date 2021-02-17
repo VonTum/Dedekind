@@ -322,6 +322,30 @@ public:
 			}
 		}
 	}
+private:
+	template<size_t CurBlock, typename Func>
+	void forEachSubSetRecurse(BitSet& currentlyWorkingOn, const Func& func) const {
+		currentlyWorkingOn.data[CurBlock] = this->data[CurBlock];
+		while(true) {
+			if constexpr(CurBlock == 0) {
+				func(currentlyWorkingOn);
+			} else {
+				forEachSubSetRecurse<CurBlock - 1>(currentlyWorkingOn, func);
+			}
+			if(currentlyWorkingOn.data[CurBlock] == 0) break;
+			currentlyWorkingOn.data[CurBlock]--;
+			currentlyWorkingOn.data[CurBlock] &= this->data[CurBlock];
+		}
+	}
+public:
+	// iterates over every subset of the 1 bits in this bitset. 
+	// Example: forEachSubSet of 0b1011 would run the function for: {0b1011, 0b1010, 0b1001, 0b1000, 0b0011, 0b0010, 0b0001, 0b0000}
+	// expects a function of the form void(const BitSet<Size>& bs)
+	template<typename Func>
+	void forEachSubSet(const Func& func) const {
+		BitSet result = *this;
+		forEachSubSetRecurse<BLOCK_COUNT - 1>(result, func);
+	}
 };
 
 // SSE implementation
@@ -520,6 +544,31 @@ public:
 			part1 &= ~(uint64_t(1) << firstBit);
 		}
 	}
+
+	// iterates over every subset of the 1 bits in this bitset. 
+	// Example: forEachSubSet of 0b1011 would run the function for: {0b1011, 0b1010, 0b1001, 0b1000, 0b0011, 0b0010, 0b0001, 0b0000}
+	// expects a function of the form void(const BitSet<Size>& bs)
+	template<typename Func>
+	void forEachSubSet(const Func& func) const {
+		uint64_t mask0 = _mm_extract_epi64(this->data, 0);
+		uint64_t mask1 = _mm_extract_epi64(this->data, 1);
+		uint64_t data1 = mask1;
+
+		while(true) {
+			uint64_t data0 = mask0;
+			while(true) {
+				BitSet result;
+				result.data = _mm_set_epi64x(data1, data0);
+				func(result);
+				if(data0 == 0) break;
+				data0--;
+				data0 &= mask0;
+			}
+			if(data1 == 0) break;
+			data1--;
+			data1 &= mask1;
+		}
+	}
 };
 
 template<>
@@ -662,6 +711,20 @@ public:
 			buf &= ~(uint64_t(1) << firstBit);
 		}
 	}
+
+	// iterates over every subset of the 1 bits in this bitset. 
+	// Example: forEachSubSet of 0b1011 would run the function for: {0b1011, 0b1010, 0b1001, 0b1000, 0b0011, 0b0010, 0b0001, 0b0000}
+	// expects a function of the form void(const BitSet<Size>& bs)
+	template<typename Func>
+	void forEachSubSet(const Func& func) const {
+		BitSet subSet = *this;
+		while(true) {
+			func(subSet);
+			if(subSet.data == 0) break;
+			subSet.data--;
+			subSet.data &= this->data;
+		}
+	}
 };
 
 template<>
@@ -802,6 +865,20 @@ public:
 			int firstBit = countZeros32(buf);
 			func(firstBit);
 			buf &= ~(uint32_t(1) << firstBit);
+		}
+	}
+
+	// iterates over every subset of the 1 bits in this bitset. 
+	// Example: forEachSubSet of 0b1011 would run the function for: {0b1011, 0b1010, 0b1001, 0b1000, 0b0011, 0b0010, 0b0001, 0b0000}
+	// expects a function of the form void(const BitSet<Size>& bs)
+	template<typename Func>
+	void forEachSubSet(const Func& func) const {
+		BitSet subSet = *this;
+		while(true) {
+			func(subSet);
+			if(subSet.data == 0) break;
+			subSet.data--;
+			subSet.data &= this->data;
 		}
 	}
 };
@@ -947,6 +1024,20 @@ public:
 			buf &= ~(uint16_t(1) << firstBit);
 		}
 	}
+
+	// iterates over every subset of the 1 bits in this bitset. 
+	// Example: forEachSubSet of 0b1011 would run the function for: {0b1011, 0b1010, 0b1001, 0b1000, 0b0011, 0b0010, 0b0001, 0b0000}
+	// expects a function of the form void(const BitSet<Size>& bs)
+	template<typename Func>
+	void forEachSubSet(const Func& func) const {
+		BitSet subSet = *this;
+		while(true) {
+			func(subSet);
+			if(subSet.data == 0) break;
+			subSet.data--;
+			subSet.data &= this->data;
+		}
+	}
 };
 
 template<>
@@ -1087,6 +1178,20 @@ public:
 			int firstBit = countZeros8(buf);
 			func(firstBit);
 			buf &= ~(uint8_t(1) << firstBit);
+		}
+	}
+
+	// iterates over every subset of the 1 bits in this bitset. 
+	// Example: forEachSubSet of 0b1011 would run the function for: {0b1011, 0b1010, 0b1001, 0b1000, 0b0011, 0b0010, 0b0001, 0b0000}
+	// expects a function of the form void(const BitSet<Size>& bs)
+	template<typename Func>
+	void forEachSubSet(const Func& func) const {
+		BitSet subSet = *this;
+		while(true) {
+			func(subSet);
+			if(subSet.data == 0) break;
+			subSet.data--;
+			subSet.data &= this->data;
 		}
 	}
 };
@@ -1231,6 +1336,20 @@ public:
 			buf &= ~(uint8_t(1) << firstBit);
 		}
 	}
+
+	// iterates over every subset of the 1 bits in this bitset. 
+	// Example: forEachSubSet of 0b1011 would run the function for: {0b1011, 0b1010, 0b1001, 0b1000, 0b0011, 0b0010, 0b0001, 0b0000}
+	// expects a function of the form void(const BitSet<Size>& bs)
+	template<typename Func>
+	void forEachSubSet(const Func& func) const {
+		BitSet subSet = *this;
+		while(true) {
+			func(subSet);
+			if(subSet.data == 0) break;
+			subSet.data--;
+			subSet.data &= this->data;
+		}
+	}
 };
 
 template<>
@@ -1371,6 +1490,20 @@ public:
 			int firstBit = countZeros8(buf);
 			func(firstBit);
 			buf &= ~(uint8_t(1) << firstBit);
+		}
+	}
+
+	// iterates over every subset of the 1 bits in this bitset. 
+	// Example: forEachSubSet of 0b1011 would run the function for: {0b1011, 0b1010, 0b1001, 0b1000, 0b0011, 0b0010, 0b0001, 0b0000}
+	// expects a function of the form void(const BitSet<Size>& bs)
+	template<typename Func>
+	void forEachSubSet(const Func& func) const {
+		BitSet subSet = *this;
+		while(true) {
+			func(subSet);
+			if(subSet.data == 0) break;
+			subSet.data--;
+			subSet.data &= this->data;
 		}
 	}
 };
