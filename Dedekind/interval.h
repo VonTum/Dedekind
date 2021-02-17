@@ -16,31 +16,33 @@
 #include "functionInputBitSet.h"
 #include "bufferedMap.h"
 #include "knownData.h"
+#include "funcTypes.h"
 
 #include <vector>
 
 template<unsigned int Variables>
-constexpr FunctionInputBitSet<Variables> getTop() {
-	return FunctionInputBitSet<Variables>::full();
+constexpr Monotonic<Variables> getTop() {
+	return Monotonic<Variables>(FunctionInputBitSet<Variables>::full());
 }
 template<unsigned int Variables>
-constexpr FunctionInputBitSet<Variables> getBot() {
-	return FunctionInputBitSet<Variables>::empty();
+constexpr Monotonic<Variables> getBot() {
+	return Monotonic<Variables>(FunctionInputBitSet<Variables>::empty());
 }
 
 template<unsigned int Variables>
 struct Interval {
-	using MBF = FunctionInputBitSet<Variables>;
+	using MBF = Monotonic<Variables>;
+	using AC = AntiChain<Variables>;
 
-	MBF bot;
-	MBF top;
+	Monotonic<Variables> bot;
+	Monotonic<Variables> top;
 
-	Interval(MBF bot, MBF top) : bot(bot), top(top) {
-		assert(bot.isSubSetOf(top));
+	Interval(Monotonic<Variables> bot, Monotonic<Variables> top) : bot(bot), top(top) {
+		assert(bot <= top);
 	}
 
-	bool contains(const MBF& item) const {
-		return this->bot.isSubSetOf(item) && item.isSubSetOf(this->top);
+	bool contains(const Monotonic<Variables>& item) const {
+		return this->bot <= item && item <= this->top;
 	}
 
 	// expects a function of type void(const MBF&)
@@ -67,10 +69,10 @@ struct Interval {
 		} while(!toExpand.empty());
 	}
 
-	uint64_t intevalSizeVeryNaive() const {
+	uint64_t intevalSizeNaive() const {
 		uint64_t total = 0;
 
-		forEachMonotonicFunction<Variables>([this, &total](const MBF& fibs) {
+		forEachMonotonicFunction<Variables>([this, &total](const Monotonic<Variables>& fibs) {
 			if(this->contains(fibs)) {
 				total++;
 			}
@@ -78,117 +80,72 @@ struct Interval {
 
 		return total;
 	}
-	
-	uint64_t intevalSizeNaive() const {
-		BufferedSet<MBF> curHashed(dedekindNumbers[Variables]); // just large enough for 6
-		std::vector<MBF> toExpand;
-
-		toExpand.push_back(bot);
-		
-		size_t totalIntervalSize = 0;
-
-		do {
-			totalIntervalSize += toExpand.size();
-			for(const MBF& curExpanding : toExpand) {
-				curExpanding.forEachUpExpansion(top, [&](const MBF& expanded) {
-					curHashed.add(expanded);
-				});
-			}
-			toExpand.clear();
-			toExpand.reserve(curHashed.size());
-			for(MBF& item : curHashed) {
-				toExpand.push_back(item);
-			}
-			curHashed.clear();
-		} while(!toExpand.empty());
-
-		return totalIntervalSize;
-	}
 
 	uint64_t intervalSize() const {
 		if(bot == top) {
 			return 1;
 		}
 
-		BitSet<1 << Variables> nextBits = top.asAntiChain().bitset;
+		AC nextBits = top.asAntiChain();
 		// arbitrarily chosen extention of bot
-		MBF b1ac = MBF::minimalForcedDown(nextBits.getFirstOnBit());
+		MBF b1ac = AC{nextBits.getFirst()}.asMonotonic();
 
 		uint64_t intervalSize1 = getIntervalSizeForNonNormal(b1ac | bot, top);
-		uint64_t intervalSize2 = getIntervalSizeForNonNormal(bot, b1ac.prev() | bot | (top - b1ac));
+		uint64_t intervalSize2 = getIntervalSizeForNonNormal(bot, b1ac.prev() | bot | (top.asAntiChain() - b1ac.asAntiChain()).asMonotonic());
 		return intervalSize1 + intervalSize2;
 	}
 
 	uint64_t intervalSizeFast() const {
-		//std::cout << "intervalSizeFast: \n";
-		//printAC(bot);
-		//printAC(top);
-
 		if(bot == top) {
-			//std::cout << "intervalsizeFast bot == top : return 1\n";
 			return 1;
 		}
 
-		BitSet<1 << Variables> nextBits = top.asAntiChain().bitset;
-		if(nextBits.isEmpty() || nextBits.count() == 1 && nextBits.get(0)) {
-			//std::cout << "intervalsizeFast not b1 : return 2\n";
+		AC nextBits = top.asAntiChain();
+		if(nextBits.fibs.isEmpty() || nextBits.fibs.bitset.count() == 1 && nextBits.fibs.bitset.get(0)) {
 			return 2;
 		}
-		size_t firstOnBit = nextBits.getFirstOnBit();
+		size_t firstOnBit = nextBits.getFirst();
 		// arbitrarily chosen extention of bot
-		MBF top1ac = MBF::minimalForcedDown(firstOnBit);
-		//printAC(top1ac);
+		MBF top1ac = AC{firstOnBit}.asMonotonic();
 		MBF top1acm = top1ac.prev();
-		//printAC(top1acm);
 		MBF top1acmm = top1acm.prev();
-		//printAC(top1acmm);
 
 		size_t universe = size_t(1U << Variables) - 1;
-		MBF umb1 = MBF::minimalForcedDown(universe & ~(firstOnBit));
-		//printAC(umb1);
+		AC umb1{universe & ~firstOnBit};
 
-		//printAC(bot | top1ac);
-
-		//std::cout << "getting first interval...\n";
 		uint64_t v1 = getIntervalSizeForNonNormalFast(bot | top1ac, top);
-		//std::cout << "first interval result...\n";
-		//printVar(v1);
 
 		uint64_t v2 = 0;
 
-		top1acm.asAntiChain().forEachSubSet([&](const MBF& ss) {
-			MBF subSet = top1acm & ~ss.monotonizeDown();
-			if(subSet != top1acm) { // strict subsets
-				//printAC(subSet);
+		AC top1acmAsAchain = top1acm.asAntiChain();
+		top1acmAsAchain.fibs.forEachSubSet([&](const FunctionInputBitSet<Variables>& achainSubSet) { // this is to dodge the double function call of AntiChain::forEachSubSet
+			AC ss(achainSubSet);
+			//MBF subSet = (top1acm.asAntiChain() - ss).asMonotonic();
+			if(ss != top1acmAsAchain) { // strict subsets
+				MBF subSet = ss.asMonotonic();
+
 				MBF gpm = subSet | top1acmm;
 
-				/*printAC(gpm);
-				printAC(acProd(gpm, umb1));
-				printAC(bot);
-				printAC(top);*/
+				MBF subTop = acProd(gpm, umb1) & top;
 
-				//std::cout << "getting second interval...\n";
-				uint64_t vv = getIntervalSizeForNonNormalFast(bot | subSet.monotonizeDown(), acProd(gpm, umb1) & top);
-				//std::cout << "second interval result...\n";
-
-				//printVar(vv);
+				uint64_t vv = getIntervalSizeForNonNormalFast(bot | subSet, subTop);
 
 				v2 += vv;
 			}
 		});
-		//std::cout << "intervalsizeFast v : return " << 2 * v1 + v2 << "\n";
+
 		return 2 * v1 + v2;
 	}
 };
 
 template<unsigned int Variables>
-uint64_t getIntervalSizeForNonNormal(const FunctionInputBitSet<Variables>& bot, const FunctionInputBitSet<Variables>& top) {
-	if(bot.isSubSetOf(top)) {
-		FunctionInputBitSet<Variables> dsn = (bot.asAntiChain() & top.asAntiChain());
-		FunctionInputBitSet<Variables> newTop = (top.asAntiChain() - dsn).monotonizeDown();
-		FunctionInputBitSet<Variables> newBot = bot & newTop;
+uint64_t getIntervalSizeForNonNormal(const Monotonic<Variables>& bot, const Monotonic<Variables>& top) {
+	if(bot <= top) {
+		AntiChain<Variables> dsn = intersection(bot.asAntiChain(), top.asAntiChain());
+		Monotonic<Variables> newTop = (top.asAntiChain() - dsn).asMonotonic();
+		Monotonic<Variables> newBot = bot & newTop;
 
-		if(newBot.isSubSetOf(newTop)) {
+		if(newBot <= newTop) {
 			return Interval(newBot, newTop).intervalSize();
 		} else {
 			return 0;
@@ -198,31 +155,19 @@ uint64_t getIntervalSizeForNonNormal(const FunctionInputBitSet<Variables>& bot, 
 	}
 }
 template<unsigned int Variables>
-uint64_t getIntervalSizeForNonNormalFast(const FunctionInputBitSet<Variables>& bot, const FunctionInputBitSet<Variables>& top) {
-	assert(bot.isMonotonic());
-	assert(top.isMonotonic());
+uint64_t getIntervalSizeForNonNormalFast(const Monotonic<Variables>& bot, const Monotonic<Variables>& top) {
+	if(bot <= top) {
+		//AntiChain<Variables> dsn = intersection(bot.asAntiChain(), top.asAntiChain());
+		//Monotonic<Variables> newTop = (top.asAntiChain() - dsn).asMonotonic();
+		Monotonic<Variables> newTop = (top.asAntiChain() - bot.asAntiChain()).asMonotonic();
+		Monotonic<Variables> newBot = bot & newTop;
 
-	/*std::cout << "getIntervalSizeForNonNormalFast: \n";
-	std::cout << "len ";
-	printAC(top);
-	std::cout << "len ";
-	printAC(bot);*/
-	if(bot.isSubSetOf(top)) {
-		FunctionInputBitSet<Variables> dsn = (bot.asAntiChain() & top.asAntiChain());
-		//printAC(dsn);
-		FunctionInputBitSet<Variables> newTop = (top.asAntiChain() - dsn).monotonizeDown();
-		//printAC(newTop);
-		FunctionInputBitSet<Variables> newBot = bot & newTop;
-		//printAC(newBot);
-
-		if(newBot.isSubSetOf(newTop)) {
+		if(newBot <= newTop) {
 			return Interval(newBot, newTop).intervalSizeFast();
 		} else {
-			//std::cout << "newBot !<= newTop: return 0\n";
 			return 0;
 		}
 	} else {
-		//std::cout << "bot !<= top: return 0\n";
 		return 0;
 	}
 }

@@ -595,6 +595,24 @@ struct ForEachSubSetTest {
 	}
 };
 
+template<unsigned int Variables>
+struct ACProdTest {
+	static void run() {
+		for(int iter = 0; iter < LARGE_ITER; iter++) {
+			Monotonic<Variables> m1 = generateMonotonic<Variables>();
+			Monotonic<Variables> m2 = generateMonotonic<Variables>();
+
+			m2 = (m2.asAntiChain() - m1.asAntiChain()).asMonotonic();
+
+			printVar(m1);
+			printVar(m2);
+
+			ASSERT(acProd(m1, m2) == (m1.asAntiChain() * m2.asAntiChain()).asMonotonic());
+			ASSERT(acProd(m2, m1) == (m2.asAntiChain() * m1.asAntiChain()).asMonotonic());
+			ASSERT(acProd(m1, m2) == acProd(m2, m1));
+		}
+	}
+};
 
 /*TEST_CASE(testBitsCompare) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, CompareBitsTest>();
@@ -670,6 +688,10 @@ TEST_CASE(testForEachOne) {
 
 TEST_CASE(testForEachSubSet) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, ForEachSubSetTest>();
+}
+
+TEST_CASE(testAntiChainMul) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, ACProdTest>();
 }
 
 /*TEST_CASE(benchCanonize) {

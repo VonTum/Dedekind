@@ -24,9 +24,9 @@ void prettyFibs(std::ostream& os, const FunctionInputBitSet<Variables>& ac) {
 }
 template<unsigned int Variables>
 void prettyInterval(std::ostream& os, const Interval<Variables>& i) {
-	prettyFibs(os, i.bot);
+	prettyFibs(os, i.bot.fibs);
 	os << " - ";
-	prettyFibs(os, i.top);
+	prettyFibs(os, i.top.fibs);
 }
 
 

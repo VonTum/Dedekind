@@ -4,6 +4,7 @@
 #include "../bitSet.h"
 #include "../functionInputBitSet.h"
 #include "../interval.h"
+#include "../funcTypes.h"
 
 inline bool genBool() {
 	return rand() % 2 == 1;
@@ -52,6 +53,11 @@ FunctionInputBitSet<Variables> generateMBF() {
 }
 
 template<unsigned int Variables>
+Monotonic<Variables> generateMonotonic() {
+	return Monotonic<Variables>(generateMBF<Variables>());
+}
+
+template<unsigned int Variables>
 FunctionInputBitSet<Variables> generateLayer(unsigned int layer) {
 	FunctionInputBitSet<Variables> result = generateFibs<Variables>();
 
@@ -62,16 +68,16 @@ FunctionInputBitSet<Variables> generateLayer(unsigned int layer) {
 
 template<unsigned int Variables>
 Interval<Variables> generateInterval() {
-	FunctionInputBitSet<Variables> mbf = generateMBF<Variables>();
+	Monotonic<Variables> mbf = generateMonotonic<Variables>();
 	
 	// should have a reasonable chance of finding an mbf that is above or below it
 	while(true) {
-		FunctionInputBitSet<Variables> secondMBF = generateMBF<Variables>();
+		Monotonic<Variables> secondMBF = generateMonotonic<Variables>();
 		
-		if(secondMBF.isSubSetOf(mbf)) {
+		if(secondMBF <= mbf) {
 			return Interval<Variables>(secondMBF, mbf);
 		}
-		if(mbf.isSubSetOf(secondMBF)) {
+		if(mbf <= secondMBF) {
 			return Interval<Variables>(mbf, secondMBF);
 		}
 	}

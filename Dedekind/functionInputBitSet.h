@@ -357,6 +357,13 @@ public:
 	}
 
 	// checks if the given FIBS represents a Monotonic Function, where higher layers are towards '0' and lower layers towards '1'
+	bool isAntiChain() const {
+		FunctionInputBitSet p = prev();
+		//n.bitset.set(0);
+		return (*this & p.monotonizeDown()).isEmpty();
+	}
+
+	// checks if the given FIBS represents a Monotonic Function, where higher layers are towards '0' and lower layers towards '1'
 	bool isMonotonic() const {
 		FunctionInputBitSet p = prev();
 		FunctionInputBitSet n = next();
@@ -367,20 +374,32 @@ public:
 	// returns a new Monotonic FunctionInputBitSet, with added 1s where needed
 	// this->isSubSetOf(result)
 	FunctionInputBitSet monotonizeDown() const {
-		FunctionInputBitSet result = *this;
-		while(!result.isMonotonic()) {
-			result |= result.prev();
+		Bits resultbits = this->bitset;
+
+		for(unsigned int var = 0; var < Variables; var++) {
+			Bits whereVarActive = resultbits & varMask(var);
+			Bits varRemoved = whereVarActive >> (1 << var);
+			resultbits |= varRemoved;
 		}
+
+		FunctionInputBitSet<Variables> result(resultbits);
+		assert(result.isMonotonic());
 		return result;
 	}
 
 	// returns a new Monotonic FunctionInputBitSet, with added 0s where needed
 	// result.isSubSetOf(*this)
 	FunctionInputBitSet monotonizeUp() const {
-		FunctionInputBitSet result = *this;
-		while(!result.isMonotonic()) {
-			result &= result.prev();
+		Bits resultbits = this->bitset;
+
+		for(unsigned int var = 0; var < Variables; var++) {
+			Bits whereVarNotActive = ~resultbits & ~varMask(var);
+			Bits varAdded = whereVarNotActive << (1 << var);
+			resultbits &= ~varAdded; // anding by zeros is the forced spaces
 		}
+
+		FunctionInputBitSet<Variables> result(resultbits);
+		assert(result.isMonotonic());
 		return result;
 	}
 
@@ -443,7 +462,7 @@ public:
 	}
 
 	FunctionInputBitSet asAntiChain() const {
-		return FunctionInputBitSet(andnot(this->bitset, this->prev().bitset));
+		return FunctionInputBitSet(andnot(this->bitset, this->monotonizeDown().prev().bitset));
 	}
 	static FunctionInputBitSet fromAntiChain(const FunctionInputBitSet& fibs) {
 		return fibs.monotonizeDown();
@@ -706,20 +725,6 @@ FunctionInputBitSet<Variables> operator>>(FunctionInputBitSet<Variables> result,
 	return result;
 }
 
-template<unsigned int Variables>
-FunctionInputBitSet<Variables> operator*(const FunctionInputBitSet<Variables>& a, const FunctionInputBitSet<Variables>& b) {
-	FunctionInputBitSet<Variables> result = FunctionInputBitSet<Variables>::empty();
-
-	a.forEachOne([&](size_t aIndex) {
-		b.forEachOne([&](size_t bIndex) {
-			result.bitset.set(aIndex | bIndex);
-		});
-	});
-
-	return result;
-}
-
-
 inline void serializeU32(uint32_t value, uint8_t* outputBuf) {
 	for(size_t i = 0; i < 4; i++) {
 		*outputBuf++ = static_cast<uint8_t>(value >> (24 - i * 8));
@@ -846,48 +851,4 @@ unsigned int getModifiedLayer(const FunctionInputBitSet<Variables>& a, const Fun
 		if(a.getLayer(l).size() != b.getLayer(l).size()) return l;
 	}
 	throw "No difference";
-}
-
-template<unsigned int Variables>
-FunctionInputBitSet<Variables> operator-(const FunctionInputBitSet<Variables>& a, const FunctionInputBitSet<Variables>& b) {
-	//assert(b.isSubSetOf(a));
-
-	return FunctionInputBitSet<Variables>(andnot(a.bitset, b.bitset));
-}
-
-template<unsigned int Variables>
-bool isUniqueExtention(const FunctionInputBitSet<Variables>& bs, size_t bit) {
-	BitSet<(1 << Variables)> possibleBits(andnot(bs.bitset, bs.prev().bitset));
-
-	return possibleBits.getFirstOnBit() == bit;
-}
-
-template<unsigned int Variables, typename Func>
-void forEachMonotonicFunctionRecursive(const FunctionInputBitSet<Variables>& cur, const Func& func) {
-	func(cur);
-
-	FunctionInputBitSet<Variables> newBits(andnot(cur.next().bitset, cur.bitset));
-
-	newBits.forEachOne([&](size_t bit) {
-		FunctionInputBitSet<Variables> newMBF = cur;
-		newMBF.add(FunctionInput::underlyingType(bit));
-
-		if(isUniqueExtention(newMBF, bit)) {
-			forEachMonotonicFunctionRecursive(newMBF, func);
-		}
-	});
-}
-
-template<unsigned int Variables, typename Func>
-void forEachMonotonicFunction(const Func& func) {
-	forEachMonotonicFunctionRecursive(FunctionInputBitSet<Variables>::empty(), func);
-}
-
-template<unsigned int Variables>
-FunctionInputBitSet<Variables> acIntersection(const FunctionInputBitSet<Variables>& a, const FunctionInputBitSet<Variables>& b) {
-	return (a.asAntiChain() & b.asAntiChain()).monotonizeDown();
-}
-template<unsigned int Variables>
-FunctionInputBitSet<Variables> acProd(const FunctionInputBitSet<Variables>& a, const FunctionInputBitSet<Variables>& b) {
-	return (a.asAntiChain() * b.asAntiChain()).monotonizeDown();
 }
