@@ -602,10 +602,10 @@ struct ACProdTest {
 			Monotonic<Variables> m1 = generateMonotonic<Variables>();
 			Monotonic<Variables> m2 = generateMonotonic<Variables>();
 
-			m2 = (m2.asAntiChain() - m1.asAntiChain()).asMonotonic();
+			m2 = Monotonic<Variables>(andnot(m2.fibs.bitset, FunctionInputBitSet<Variables>::multiVarMask(m1.getUniverse())));
 
-			printVar(m1);
-			printVar(m2);
+			//printVar(m1);
+			//printVar(m2);
 
 			ASSERT(acProd(m1, m2) == (m1.asAntiChain() * m2.asAntiChain()).asMonotonic());
 			ASSERT(acProd(m2, m1) == (m2.asAntiChain() * m1.asAntiChain()).asMonotonic());
@@ -662,7 +662,7 @@ TEST_CASE(testMBF) {
 	runFunctionRange<TEST_FROM, 7, MBFTest>();
 }
 
-TEST_CASE(testLayerWise) {
+TEST_CASE_SLOW(testLayerWise) {
 	runFunctionRange<TEST_FROM, 7, LayerWiseTest>();
 }
 

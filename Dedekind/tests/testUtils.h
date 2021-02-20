@@ -1,6 +1,10 @@
 #pragma once
 
+#include <ostream>
+
 #include "testsMain.h"
+#include "../toString.h"
+#include "../functionInput.h"
 #include "../functionInputBitSet.h"
 #include "../interval.h"
 

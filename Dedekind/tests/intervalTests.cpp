@@ -1,9 +1,8 @@
-#include "../toString.h"
-
 #include "testsMain.h"
 #include "testUtils.h"
 #include "generators.h"
 #include "../knownData.h"
+#include "../toString.h"
 
 #include "../interval.h"
 
@@ -13,7 +12,7 @@ struct BotToTopIntervalSize {
 	static void run() {
 		Interval<Variables> i(getBot<Variables>(), getTop<Variables>());
 
-		ASSERT(i.intervalSizeFast() == dedekindNumbers[Variables]);
+		ASSERT(intervalSizeFast(i.bot, i.top) == dedekindNumbers[Variables]);
 	}
 };
 
@@ -41,7 +40,7 @@ struct IntervalSizeFast {
 			if(iter % 100 == 1) std::cout << '.';
 			Interval<Variables> i = generateInterval<Variables>();
 
-			ASSERT(i.intevalSizeNaive() == getIntervalSizeForNonNormalFast(i.bot, i.top));
+			ASSERT(i.intevalSizeNaive() == intervalSizeFast(i.bot, i.top));
 		}
 	}
 };
@@ -54,16 +53,17 @@ TEST_CASE(testIntervalSize) {
 	runFunctionRange<1, 5, IntervalSizeVsNaive>();
 }
 
-TEST_CASE(testIntervalSizeFast) {
+TEST_CASE_SLOW(testIntervalSizeFast) {
 	runFunctionRange<1, 6, IntervalSizeFast>();
 }
-TEST_CASE(benchIntervalSizeFast) {
+TEST_CASE_SLOW(benchIntervalSizeFast) {
 	size_t totalSize = 0;
 	for(int iter = 0; iter < 10000; iter++) {
 		if(iter % 100 == 0) std::cout << '.';
 		Interval<6> i = generateInterval<6>();
 
-		totalSize += i.intervalSizeFast();
+		totalSize += intervalSizeFast(i.bot, i.top);
 	}
 	logStream << totalSize;
+	//std::cout << intervalSizeFast(getBot<7>(), getTop<7>());
 }

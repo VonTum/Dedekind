@@ -94,48 +94,6 @@ struct Interval {
 		uint64_t intervalSize2 = getIntervalSizeForNonNormal(bot, b1ac.prev() | bot | (top.asAntiChain() - b1ac.asAntiChain()).asMonotonic());
 		return intervalSize1 + intervalSize2;
 	}
-
-	uint64_t intervalSizeFast() const {
-		if(bot == top) {
-			return 1;
-		}
-
-		AC nextBits = top.asAntiChain();
-		if(nextBits.fibs.isEmpty() || nextBits.fibs.bitset.count() == 1 && nextBits.fibs.bitset.get(0)) {
-			return 2;
-		}
-		size_t firstOnBit = nextBits.getFirst();
-		// arbitrarily chosen extention of bot
-		MBF top1ac = AC{firstOnBit}.asMonotonic();
-		MBF top1acm = top1ac.prev();
-		MBF top1acmm = top1acm.prev();
-
-		size_t universe = size_t(1U << Variables) - 1;
-		AC umb1{universe & ~firstOnBit};
-
-		uint64_t v1 = getIntervalSizeForNonNormalFast(bot | top1ac, top);
-
-		uint64_t v2 = 0;
-
-		AC top1acmAsAchain = top1acm.asAntiChain();
-		top1acmAsAchain.fibs.forEachSubSet([&](const FunctionInputBitSet<Variables>& achainSubSet) { // this is to dodge the double function call of AntiChain::forEachSubSet
-			AC ss(achainSubSet);
-			//MBF subSet = (top1acm.asAntiChain() - ss).asMonotonic();
-			if(ss != top1acmAsAchain) { // strict subsets
-				MBF subSet = ss.asMonotonic();
-
-				MBF gpm = subSet | top1acmm;
-
-				MBF subTop = acProd(gpm, umb1) & top;
-
-				uint64_t vv = getIntervalSizeForNonNormalFast(bot | subSet, subTop);
-
-				v2 += vv;
-			}
-		});
-
-		return 2 * v1 + v2;
-	}
 };
 
 template<unsigned int Variables>
@@ -155,15 +113,55 @@ uint64_t getIntervalSizeForNonNormal(const Monotonic<Variables>& bot, const Mono
 	}
 }
 template<unsigned int Variables>
-uint64_t getIntervalSizeForNonNormalFast(const Monotonic<Variables>& bot, const Monotonic<Variables>& top) {
-	if(bot <= top) {
-		//AntiChain<Variables> dsn = intersection(bot.asAntiChain(), top.asAntiChain());
-		//Monotonic<Variables> newTop = (top.asAntiChain() - dsn).asMonotonic();
-		Monotonic<Variables> newTop = (top.asAntiChain() - bot.asAntiChain()).asMonotonic();
-		Monotonic<Variables> newBot = bot & newTop;
+uint64_t intervalSizeFast(const Monotonic<Variables>& intervalBot, const Monotonic<Variables>& intervalTop) {
+	using MBF = Monotonic<Variables>;
+	using AC = AntiChain<Variables>;
+	if(intervalBot <= intervalTop) {
+		//AntiChain<Variables> dsn = intersection(intervalBot.asAntiChain(), intervalTop.asAntiChain());
+		//Monotonic<Variables> newTop = (intervalTop.asAntiChain() - dsn).asMonotonic();
+		AC topAC = intervalTop.asAntiChain() - intervalBot.asAntiChain();
+		MBF top = topAC.asMonotonic();
+		MBF bot = intervalBot & top;
 
-		if(newBot <= newTop) {
-			return Interval(newBot, newTop).intervalSizeFast();
+		if(bot <= top) {
+			if(bot == top) {
+				return 1;
+			}
+
+			if(topAC.fibs.isEmpty() || topAC.fibs.bitset.count() == 1 && topAC.fibs.bitset.get(0)) {
+				return 2;
+			}
+			size_t firstOnBit = topAC.getFirst();
+			// arbitrarily chosen extention of bot
+			MBF top1ac = AC{firstOnBit}.asMonotonic();
+			MBF top1acm = top1ac.prev();
+			MBF top1acmm = top1acm.prev();
+
+			size_t universe = size_t(1U << Variables) - 1;
+			AC umb1{universe & ~firstOnBit};
+
+			uint64_t v1 = intervalSizeFast(bot | top1ac, top);
+
+			uint64_t v2 = 0;
+
+			AC top1acmAsAchain = top1acm.asAntiChain();
+			top1acmAsAchain.fibs.forEachSubSet([&](const FunctionInputBitSet<Variables>& achainSubSet) { // this is to dodge the double function call of AntiChain::forEachSubSet
+				AC ss(achainSubSet);
+				//MBF subSet = (top1acm.asAntiChain() - ss).asMonotonic();
+				if(ss != top1acmAsAchain) { // strict subsets
+					MBF subSet = ss.asMonotonic();
+
+					MBF gpm = subSet | top1acmm;
+
+					MBF subTop = acProd(gpm, umb1) & top;
+
+					uint64_t vv = intervalSizeFast(bot | subSet, subTop);
+
+					v2 += vv;
+				}
+			});
+
+			return 2 * v1 + v2;
 		} else {
 			return 0;
 		}

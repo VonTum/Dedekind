@@ -495,11 +495,36 @@ void produceDualU64File(const char* inputName, const char* dualName) {
 	computeDualForFile<Variables>(8, inputFile, outputFile);
 }
 */
+
+#include "bigint/uint256_t.h"
+
 #ifndef RUN_TESTS
 int main() {
 	//doRAMTest();
 
-	MBFDecompositionWithHash<6> thing;
+	//MBFDecompositionWithHash<6> thing;
+
+	uint256_t num = 123456789;
+	num *= 1000000000;
+	num += 123456789;
+	num *= 1000000000;
+	num += 123456789;
+	num *= 1000000000;
+	num += 123456789;
+	num *= 1000000000;
+	num += 123456789;
+	num *= 1000000000;
+	num += 123456789;
+	num *= 1000000000;
+	num += 123456789;
+	num *= 1000000000;
+	num += 123456789;
+	num *= 1000000000;
+	num += 123456789;
+	num *= 1000000000;
+	num += 123456789;
+
+	std::cout << num;
 
 	//saveIntervalSizes<6>();
 

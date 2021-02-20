@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "functionInput.h"
+#include "functionInputSet.h"
 #include "bitSet.h"
 
 #include "crossPlatformIntrinsics.h"
@@ -153,12 +154,25 @@ public:
 	static constexpr Bits varMask(unsigned int var) {
 		assert(var < Variables);
 
-		return FunctionInputBitSet<Variables>::varMaskCache.masks[var];
+		return FunctionInputBitSet::varMaskCache.masks[var];
+	}
+	static constexpr Bits multiVarMask(unsigned int mask) {
+		assert(mask < (1 << Variables));
+
+		Bits totalMask = Bits::empty();
+
+		for(unsigned int var = 0; var < Variables; var++) {
+			if(mask & (1 << var)) {
+				totalMask |= varMask(var);
+			}
+		}
+
+		return totalMask;
 	}
 	static constexpr Bits layerMask(unsigned int layer) {
 		assert(layer < Variables + 1);
 
-		return FunctionInputBitSet<Variables>::layerMaskCache.masks[layer];
+		return FunctionInputBitSet::layerMaskCache.masks[layer];
 	}
 
 	size_t countVariableOccurences(unsigned int var) const {
@@ -178,6 +192,16 @@ public:
 		FunctionInputBitSet checkVar = *this & mask;
 
 		return !checkVar.isEmpty();
+	}
+
+	unsigned int getUniverse() const {
+		unsigned int result = 0;
+		for(unsigned int var = 0; var < Variables; var++) {
+			if(this->hasVariable(var)) {
+				result |= (1 << var);
+			}
+		}
+		return result;
 	}
 
 	bool isSubSetOf(const FunctionInputBitSet& other) const {
@@ -306,10 +330,10 @@ public:
 
 	bool isLayer() const {
 		for(unsigned int i = 0; i < Variables + 1; i++) {
-			Bits everythingInLayer = this->bitset & FunctionInputBitSet<Variables>::layerMask(i);
+			Bits everythingInLayer = this->bitset & FunctionInputBitSet::layerMask(i);
 
 			if(!everythingInLayer.isEmpty()) {
-				Bits everythingButLayer = andnot(this->bitset, FunctionInputBitSet<Variables>::layerMask(i));
+				Bits everythingButLayer = andnot(this->bitset, FunctionInputBitSet::layerMask(i));
 				return everythingButLayer.isEmpty();
 			}
 		}
@@ -382,7 +406,7 @@ public:
 			resultbits |= varRemoved;
 		}
 
-		FunctionInputBitSet<Variables> result(resultbits);
+		FunctionInputBitSet result(resultbits);
 		assert(result.isMonotonic());
 		return result;
 	}
@@ -398,7 +422,7 @@ public:
 			resultbits &= ~varAdded; // anding by zeros is the forced spaces
 		}
 
-		FunctionInputBitSet<Variables> result(resultbits);
+		FunctionInputBitSet result(resultbits);
 		assert(result.isMonotonic());
 		return result;
 	}
@@ -463,21 +487,6 @@ public:
 
 	FunctionInputBitSet asAntiChain() const {
 		return FunctionInputBitSet(andnot(this->bitset, this->monotonizeDown().prev().bitset));
-	}
-	static FunctionInputBitSet fromAntiChain(const FunctionInputBitSet& fibs) {
-		return fibs.monotonizeDown();
-	}
-
-	static FunctionInputBitSet minimalForcedDown(size_t bits) {
-		FunctionInputBitSet result = FunctionInputBitSet::empty();
-		result.bitset.set(bits);
-		return result.monotonizeDown();
-	}
-
-	static FunctionInputBitSet minimalForcedUp(size_t bits) {
-		FunctionInputBitSet result = FunctionInputBitSet::full();
-		result.bitset.reset(bits);
-		return result.monotonizeUp();
 	}
 
 	FunctionInputBitSet canonize() const {

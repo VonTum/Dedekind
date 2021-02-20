@@ -51,6 +51,10 @@ struct AntiChain {
 	bool isEmpty() const {
 		return this->fibs.isEmpty();
 	}
+
+	unsigned int getUniverse() const {
+		return fibs.getUniverse();
+	}
 };
 template<unsigned int Variables>
 bool operator==(const AntiChain<Variables>& a, const AntiChain<Variables>& b) {
@@ -87,7 +91,7 @@ struct Monotonic {
 
 	Monotonic() = default;
 	explicit Monotonic(const BitSet<(1 << Variables)>& bitset) : fibs(bitset) {
-		assert(this->isMonotonic());
+		assert(fibs.isMonotonic());
 	}
 	explicit Monotonic(const FunctionInputBitSet<Variables>& fibs) : fibs(fibs) {
 		assert(fibs.isMonotonic());
@@ -118,6 +122,10 @@ struct Monotonic {
 	bool isEmpty() const {
 		return this->fibs.isEmpty();
 	}
+
+	unsigned int getUniverse() const {
+		return fibs.getUniverse();
+	}
 };
 
 template<unsigned int Variables>
@@ -136,6 +144,17 @@ Monotonic<Variables> operator&(const Monotonic<Variables>& a, const Monotonic<Va
 template<unsigned int Variables>
 Monotonic<Variables> operator|(const Monotonic<Variables>& a, const Monotonic<Variables>& b) {
 	return Monotonic<Variables>(a.fibs | b.fibs);
+}
+
+template<unsigned int Variables>
+Monotonic<Variables>& operator&=(Monotonic<Variables>& a, const Monotonic<Variables>& b) {
+	a.fibs &= b.fibs;
+	return a;
+}
+template<unsigned int Variables>
+Monotonic<Variables>& operator|=(Monotonic<Variables>& a, const Monotonic<Variables>& b) {
+	a.fibs |= b.fibs;
+	return a;
 }
 
 template<unsigned int Variables>
@@ -174,7 +193,7 @@ void forEachMonotonicFunction(const Func& func) {
 
 template<unsigned int Variables>
 Monotonic<Variables> acProd(const Monotonic<Variables>& a, const AntiChain<Variables>& b) {
-	assert(intersection(a.asAntiChain(), b).isEmpty()); // multiply is optimized if no overlap
+	assert((a.getUniverse() & b.getUniverse()) == 0); // direct product is optimized if no overlap of universes
 	
 	BitSet<(1 << Variables)> result = BitSet<(1 << Variables)>::empty();
 
