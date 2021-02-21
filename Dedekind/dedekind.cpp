@@ -50,8 +50,8 @@ static BitSet<Size> generateBitSet() {
 }
 
 template<unsigned int Variables>
-static FunctionInputBitSet<Variables> generateFibs() {
-	return FunctionInputBitSet<Variables>(generateBitSet<(1 << Variables)>());
+static BooleanFunction<Variables> generateFibs() {
+	return BooleanFunction<Variables>(generateBitSet<(1 << Variables)>());
 }
 
 std::string getFileName(const char* title, unsigned int Variables, const char* extention) {
@@ -70,17 +70,17 @@ std::string getFileName(std::string title, unsigned int Variables, const char* e
 
 template<unsigned int Variables>
 void runGenAllMBFs() {
-	std::pair<BufferedSet<FunctionInputBitSet<Variables>>, size_t> resultPair;
+	std::pair<BufferedSet<BooleanFunction<Variables>>, size_t> resultPair;
 	{
 		TimeTracker timer;
 		resultPair = generateAllMBFsFast<Variables>();
 	}
-	BufferedSet<FunctionInputBitSet<Variables>>& result = resultPair.first;
+	BufferedSet<BooleanFunction<Variables>>& result = resultPair.first;
 	size_t numberOfLinks = resultPair.second;
 	{
 		std::cout << "Sorting\n";
 		TimeTracker timer;
-		std::sort(result.begin(), result.end(), [](FunctionInputBitSet<Variables>& a, FunctionInputBitSet<Variables>& b) -> bool {return a.size() < b.size(); });
+		std::sort(result.begin(), result.end(), [](BooleanFunction<Variables>& a, BooleanFunction<Variables>& b) -> bool {return a.size() < b.size(); });
 	}
 
 
@@ -88,7 +88,7 @@ void runGenAllMBFs() {
 	for(size_t i = 0; i < (1 << Variables) + 1; i++) {
 		sizeCounts[i] = 0;
 	}
-	for(const FunctionInputBitSet<Variables>& item : result) {
+	for(const BooleanFunction<Variables>& item : result) {
 		sizeCounts[item.size()]++;
 	}
 
@@ -97,7 +97,7 @@ void runGenAllMBFs() {
 	{
 		std::ofstream file(getFileName("allUniqueMBF", Variables, ".mbf"), std::ios::binary);
 
-		for(const FunctionInputBitSet<Variables>& item : result) {
+		for(const BooleanFunction<Variables>& item : result) {
 			serializeMBF(item, file);
 		}
 		file.close();
@@ -332,7 +332,7 @@ uint64_t getIntervalSizeForFast(const MBFDecomposition<Variables>& dec, int node
 	swapper.add(nodeIndex, 1);
 	swapper.pushNext();
 
-	FunctionInputBitSet<Variables> start = dec.get(nodeLayer, nodeIndex);
+	BooleanFunction<Variables> start = dec.get(nodeLayer, nodeIndex);
 
 	uint64_t intervalSize = 0;
 
@@ -346,12 +346,12 @@ uint64_t getIntervalSizeForFast(const MBFDecomposition<Variables>& dec, int node
 
 			intervalSize += count;
 
-			FunctionInputBitSet<Variables> cur = dec.get(layer, dirtyIndex);
+			BooleanFunction<Variables> cur = dec.get(layer, dirtyIndex);
 
 			for(LinkedNode& ln : dec.iterLinksOf(layer, dirtyIndex)){
 				//std::cout << "    subLink " << ln.count << "x" << ln.index << "\n";
 
-				FunctionInputBitSet<Variables> to = dec.get(layer+1, ln.index);
+				BooleanFunction<Variables> to = dec.get(layer+1, ln.index);
 
 				unsigned int modifiedLayer = getModifiedLayer(cur, to);
 
@@ -362,7 +362,7 @@ uint64_t getIntervalSizeForFast(const MBFDecomposition<Variables>& dec, int node
 		}
 		swapper.pushNext();
 		for(int dirtyIndex : swapper) {
-			FunctionInputBitSet<Variables> to = dec.get(layer + 1, dirtyIndex);
+			BooleanFunction<Variables> to = dec.get(layer + 1, dirtyIndex);
 			int divideBy = getFormationCount(to, start);
 			assert(swapper[dirtyIndex] % divideBy == 0);
 			swapper[dirtyIndex] /= divideBy;
@@ -373,17 +373,17 @@ uint64_t getIntervalSizeForFast(const MBFDecomposition<Variables>& dec, int node
 }
 
 template<unsigned int Variables>
-int countSuperSetPermutations(const FunctionInputBitSet<Variables>& fibsToPermute, const FunctionInputBitSet<Variables>& superSet) {
+int countSuperSetPermutations(const BooleanFunction<Variables>& funcToPermute, const BooleanFunction<Variables>& superSet) {
 	int totalFound = 0;
 	int duplicates = 0;
 	
-	FunctionInputBitSet<Variables> permut = fibsToPermute;
+	BooleanFunction<Variables> permut = funcToPermute;
 
-	permut.forEachPermutation([&](const FunctionInputBitSet<Variables>& permuted) {
+	permut.forEachPermutation([&](const BooleanFunction<Variables>& permuted) {
 		if(superSet.isSubSetOf(permuted)) {
 			totalFound++;
 		}
-		if(permuted == fibsToPermute) {
+		if(permuted == funcToPermute) {
 			duplicates++;
 		}
 	});
@@ -400,7 +400,7 @@ std::pair<uint64_t, uint64_t> getIntervalSizeFor(const MBFDecomposition<Variable
 	swapper.set(nodeIndex);
 	swapper.pushNext();
 
-	FunctionInputBitSet<Variables> start = dec.get(nodeLayer, nodeIndex);
+	BooleanFunction<Variables> start = dec.get(nodeLayer, nodeIndex);
 
 	uint64_t intervalSize = 0;
 	uint64_t uniqueClassesSize = 0;
@@ -411,7 +411,7 @@ std::pair<uint64_t, uint64_t> getIntervalSizeFor(const MBFDecomposition<Variable
 		for(int dirtyIndex : swapper) {
 			//std::cout << "  dirty index " << dirtyIndex << "\n";
 
-			FunctionInputBitSet<Variables> cur = dec.get(layer, dirtyIndex);
+			BooleanFunction<Variables> cur = dec.get(layer, dirtyIndex);
 
 			int numSubSets = countSuperSetPermutations(cur, start);
 			if(numSubSets < 1) {
@@ -425,7 +425,7 @@ std::pair<uint64_t, uint64_t> getIntervalSizeFor(const MBFDecomposition<Variable
 			for(LinkedNode& ln : dec.iterLinksOf(layer, dirtyIndex)) {
 				//std::cout << "    subLink " << ln.count << "x" << ln.index << "\n";
 
-				FunctionInputBitSet<Variables> to = dec.get(layer + 1, ln.index);
+				BooleanFunction<Variables> to = dec.get(layer + 1, ln.index);
 
 				swapper.set(ln.index);
 			}
@@ -475,8 +475,8 @@ void computeDualForFile(size_t elementSize, std::ifstream& originalFile, std::of
 
 	for(size_t layer = 0; layer < (1 << Variables) + 1; layer++) {
 		size_t dualLayer = (1 << Variables) - layer;
-		for(const FunctionInputBitSet<Variables>& destFibs : fullMBFSet.bufSets[layer]) {
-			FunctionInputBitSet<Variables>* dualIndex = fullMBFSet.bufSets[dualLayer].find(destFibs.dual());
+		for(const BooleanFunction<Variables>& destFibs : fullMBFSet.bufSets[layer]) {
+			BooleanFunction<Variables>* dualIndex = fullMBFSet.bufSets[dualLayer].find(destFibs.dual());
 
 			size_t index = dualIndex - fullMBFSet.mbfs;
 

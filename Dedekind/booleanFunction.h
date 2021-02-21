@@ -10,8 +10,8 @@
 #include "crossPlatformIntrinsics.h"
 
 template<unsigned int Variables>
-class FunctionInputBitSet {
-	static_assert(Variables >= 1, "Cannot make 0 variable FunctionInputBitSet");
+class BooleanFunction {
+	static_assert(Variables >= 1, "Cannot make 0 variable BooleanFunction");
 
 public:
 	using Bits = BitSet<(size_t(1) << Variables)>;
@@ -19,19 +19,19 @@ public:
 
 	Bits bitset;
 
-	FunctionInputBitSet() : bitset() {}
-	FunctionInputBitSet(const Bits& bitset) : bitset(bitset) {}
-	FunctionInputBitSet(const FunctionInputSet& inputSet) : bitset() {
+	BooleanFunction() : bitset() {}
+	BooleanFunction(const Bits& bitset) : bitset(bitset) {}
+	BooleanFunction(const FunctionInputSet& inputSet) : bitset() {
 		for(FunctionInput fi : inputSet) {
 			bitset.set(fi.inputBits);
 		}
 	}
 
 	template<unsigned int OtherVariables>
-	FunctionInputBitSet(const FunctionInputBitSet<OtherVariables>& other) : bitset(other.bitset) {}
+	BooleanFunction(const BooleanFunction<OtherVariables>& other) : bitset(other.bitset) {}
 
 	template<unsigned int OtherVariables>
-	FunctionInputBitSet& operator=(const FunctionInputBitSet<OtherVariables>& other) { this->bitset = other.bitset; }
+	BooleanFunction& operator=(const BooleanFunction<OtherVariables>& other) { this->bitset = other.bitset; }
 
 	static constexpr FunctionInput::underlyingType maxSize() {
 		return FunctionInput::underlyingType(1) << Variables;
@@ -58,42 +58,42 @@ public:
 		return bitset.reset(index);
 	}
 
-	constexpr FunctionInputBitSet& operator|=(const FunctionInputBitSet& other) {
+	constexpr BooleanFunction& operator|=(const BooleanFunction& other) {
 		this->bitset |= other.bitset;
 		return *this;
 	}
-	constexpr FunctionInputBitSet& operator&=(const FunctionInputBitSet& other) {
+	constexpr BooleanFunction& operator&=(const BooleanFunction& other) {
 		this->bitset &= other.bitset;
 		return *this;
 	}
-	constexpr FunctionInputBitSet& operator^=(const FunctionInputBitSet& other) {
+	constexpr BooleanFunction& operator^=(const BooleanFunction& other) {
 		this->bitset ^= other.bitset;
 		return *this;
 	}
-	constexpr FunctionInputBitSet operator~() const {
-		return FunctionInputBitSet(~this->bitset);
+	constexpr BooleanFunction operator~() const {
+		return BooleanFunction(~this->bitset);
 	}
-	constexpr FunctionInputBitSet& operator<<=(unsigned int shift) {
+	constexpr BooleanFunction& operator<<=(unsigned int shift) {
 		this->bitset <<= shift;
 		return *this;
 	}
-	constexpr FunctionInputBitSet& operator>>=(unsigned int shift) {
+	constexpr BooleanFunction& operator>>=(unsigned int shift) {
 		this->bitset >>= shift;
 		return *this;
 	}
-	bool operator==(const FunctionInputBitSet& other) const {
+	bool operator==(const BooleanFunction& other) const {
 		return this->bitset == other.bitset;
 	}
-	bool operator!=(const FunctionInputBitSet& other) const {
+	bool operator!=(const BooleanFunction& other) const {
 		return this->bitset != other.bitset;
 	}
 
-	static constexpr FunctionInputBitSet empty() {
-		return FunctionInputBitSet(Bits::empty());
+	static constexpr BooleanFunction empty() {
+		return BooleanFunction(Bits::empty());
 	}
 
-	static constexpr FunctionInputBitSet full() {
-		return FunctionInputBitSet(Bits::full());
+	static constexpr BooleanFunction full() {
+		return BooleanFunction(Bits::full());
 	}
 
 	struct VarMaskCache {
@@ -154,7 +154,7 @@ public:
 	static constexpr Bits varMask(unsigned int var) {
 		assert(var < Variables);
 
-		return FunctionInputBitSet::varMaskCache.masks[var];
+		return BooleanFunction::varMaskCache.masks[var];
 	}
 	static constexpr Bits multiVarMask(unsigned int mask) {
 		assert(mask < (1 << Variables));
@@ -172,11 +172,11 @@ public:
 	static constexpr Bits layerMask(unsigned int layer) {
 		assert(layer < Variables + 1);
 
-		return FunctionInputBitSet::layerMaskCache.masks[layer];
+		return BooleanFunction::layerMaskCache.masks[layer];
 	}
 
 	size_t countVariableOccurences(unsigned int var) const {
-		return (this->bitset & FunctionInputBitSet::varMask(var)).count();
+		return (this->bitset & BooleanFunction::varMask(var)).count();
 	}
 
 	bool isEmpty() const {
@@ -187,9 +187,9 @@ public:
 	}
 
 	bool hasVariable(unsigned int var) const {
-		FunctionInputBitSet mask = FunctionInputBitSet::varMask(var);
+		BooleanFunction mask = BooleanFunction::varMask(var);
 
-		FunctionInputBitSet checkVar = *this & mask;
+		BooleanFunction checkVar = *this & mask;
 
 		return !checkVar.isEmpty();
 	}
@@ -204,7 +204,7 @@ public:
 		return result;
 	}
 
-	bool isSubSetOf(const FunctionInputBitSet& other) const {
+	bool isSubSetOf(const BooleanFunction& other) const {
 		return isSubSet(this->bitset, other.bitset);
 	}
 
@@ -222,7 +222,7 @@ public:
 	void move(unsigned int original, unsigned int destination) {
 		assert(!this->hasVariable(destination));
 
-		Bits originalMask = FunctionInputBitSet::varMask(original);
+		Bits originalMask = BooleanFunction::varMask(original);
 
 		// shift amount
 		// assuming source < destination (moving a lower variable to a higher spot)
@@ -243,10 +243,10 @@ public:
 	void swap(unsigned int var1, unsigned int var2) {
 		if(var1 > var2) std::swap(var1, var2);
 		// var1 <= var2
-		Bits mask1 = FunctionInputBitSet::varMask(var1);
+		Bits mask1 = BooleanFunction::varMask(var1);
 		if constexpr(Variables == 7) {
 			if(var2 != 6) {
-				Bits mask2 = FunctionInputBitSet::varMask(var2);
+				Bits mask2 = BooleanFunction::varMask(var2);
 
 				// andnot is a more efficient operation for SIMD than complement
 				Bits stayingElems = andnot(bitset, andnot(mask1 | mask2, mask1 & mask2));
@@ -274,7 +274,7 @@ public:
 				bitset.data = _mm_or_si128(shiftedRight, _mm_or_si128(shiftedLeft, stayingElems));
 			}
 		} else {
-			Bits mask2 = FunctionInputBitSet::varMask(var2);
+			Bits mask2 = BooleanFunction::varMask(var2);
 			Bits stayingElems = bitset & (~(mask1 | mask2) | mask1 & mask2);
 			unsigned int shift = (1 << var2) - (1 << var1);
 			bitset = ((bitset & andnot(mask1, mask2)) << shift) | ((bitset & andnot(mask2, mask1)) >> shift) | stayingElems;
@@ -330,10 +330,10 @@ public:
 
 	bool isLayer() const {
 		for(unsigned int i = 0; i < Variables + 1; i++) {
-			Bits everythingInLayer = this->bitset & FunctionInputBitSet::layerMask(i);
+			Bits everythingInLayer = this->bitset & BooleanFunction::layerMask(i);
 
 			if(!everythingInLayer.isEmpty()) {
-				Bits everythingButLayer = andnot(this->bitset, FunctionInputBitSet::layerMask(i));
+				Bits everythingButLayer = andnot(this->bitset, BooleanFunction::layerMask(i));
 				return everythingButLayer.isEmpty();
 			}
 		}
@@ -341,13 +341,13 @@ public:
 		return true;
 	}
 
-	FunctionInputBitSet getLayer(unsigned int layer) const {
+	BooleanFunction getLayer(unsigned int layer) const {
 		assert(layer < Variables + 1);
-		return FunctionInputBitSet(this->bitset & layerMask(layer));
+		return BooleanFunction(this->bitset & layerMask(layer));
 	}
 
 	// returns a FIBS where all elements which have a '0' where there is no superset above them that is '1'
-	FunctionInputBitSet prev() const {
+	BooleanFunction pred() const {
 		// remove a variable for every item and OR the results
 
 		Bits forced = Bits::empty();
@@ -358,11 +358,11 @@ public:
 			forced |= varRemoved;
 		}
 
-		return FunctionInputBitSet(forced);
+		return BooleanFunction(forced);
 	}
 
 	// returns a FIBS where all elements which have a '1' where there is no subset below them that is '0'
-	FunctionInputBitSet next() const {
+	BooleanFunction succ() const {
 		// add a variable to every item and AND the results
 
 		Bits forced = Bits::full();
@@ -373,31 +373,31 @@ public:
 			forced &= ~varAdded; // anding by zeros is the forced spaces
 		}
 
-		return FunctionInputBitSet(forced);
+		return BooleanFunction(forced);
 	}
 
-	FunctionInputBitSet dual() const {
-		return FunctionInputBitSet(~this->bitset.reverse());
+	BooleanFunction dual() const {
+		return BooleanFunction(~this->bitset.reverse());
 	}
 
 	// checks if the given FIBS represents a Monotonic Function, where higher layers are towards '0' and lower layers towards '1'
 	bool isAntiChain() const {
-		FunctionInputBitSet p = prev();
+		BooleanFunction p = pred();
 		//n.bitset.set(0);
 		return (*this & p.monotonizeDown()).isEmpty();
 	}
 
 	// checks if the given FIBS represents a Monotonic Function, where higher layers are towards '0' and lower layers towards '1'
 	bool isMonotonic() const {
-		FunctionInputBitSet p = prev();
-		FunctionInputBitSet n = next();
+		BooleanFunction p = pred();
+		BooleanFunction n = succ();
 		//n.bitset.set(0);
 		return ((p | *this) == *this) && ((n & *this) == *this);
 	}
 
-	// returns a new Monotonic FunctionInputBitSet, with added 1s where needed
+	// returns a new Monotonic BooleanFunction, with added 1s where needed
 	// this->isSubSetOf(result)
-	FunctionInputBitSet monotonizeDown() const {
+	BooleanFunction monotonizeDown() const {
 		Bits resultbits = this->bitset;
 
 		for(unsigned int var = 0; var < Variables; var++) {
@@ -406,14 +406,14 @@ public:
 			resultbits |= varRemoved;
 		}
 
-		FunctionInputBitSet result(resultbits);
+		BooleanFunction result(resultbits);
 		assert(result.isMonotonic());
 		return result;
 	}
 
-	// returns a new Monotonic FunctionInputBitSet, with added 0s where needed
+	// returns a new Monotonic BooleanFunction, with added 0s where needed
 	// result.isSubSetOf(*this)
-	FunctionInputBitSet monotonizeUp() const {
+	BooleanFunction monotonizeUp() const {
 		Bits resultbits = this->bitset;
 
 		for(unsigned int var = 0; var < Variables; var++) {
@@ -422,7 +422,7 @@ public:
 			resultbits &= ~varAdded; // anding by zeros is the forced spaces
 		}
 
-		FunctionInputBitSet result(resultbits);
+		BooleanFunction result(resultbits);
 		assert(result.isMonotonic());
 		return result;
 	}
@@ -439,60 +439,60 @@ public:
 		(~this->bitset).forEachOne(func);
 	}
 
-	FunctionInputBitSet getNextBits() const {
-		return FunctionInputBitSet(andnot(this->next().bitset, this->bitset));
+	BooleanFunction getNextBits() const {
+		return BooleanFunction(andnot(this->succ().bitset, this->bitset));
 	}
-	FunctionInputBitSet getNextBits(const FunctionInputBitSet& mustBeSubSetOf) const {
-		return FunctionInputBitSet(andnot(this->next().bitset, this->bitset) & mustBeSubSetOf.bitset);
-	}
-
-	FunctionInputBitSet getPrevBits() const {
-		return FunctionInputBitSet(andnot(this->bitset, this->prev().bitset));
-	}
-	FunctionInputBitSet getPrevBits(const FunctionInputBitSet& mustBeSuperSetOf) const {
-		return FunctionInputBitSet(andnot(andnot(this->bitset, this->prev().bitset), mustBeSuperSetOf.bitset));
+	BooleanFunction getNextBits(const BooleanFunction& mustBeSubSetOf) const {
+		return BooleanFunction(andnot(this->succ().bitset, this->bitset) & mustBeSubSetOf.bitset);
 	}
 
-	// takes a function of the form void(const FunctionInputBitSet& expanded)
+	BooleanFunction getPrevBits() const {
+		return BooleanFunction(andnot(this->bitset, this->pred().bitset));
+	}
+	BooleanFunction getPrevBits(const BooleanFunction& mustBeSuperSetOf) const {
+		return BooleanFunction(andnot(andnot(this->bitset, this->pred().bitset), mustBeSuperSetOf.bitset));
+	}
+
+	// takes a function of the form void(const BooleanFunction& expanded)
 	template<typename Func>
 	void forEachUpExpansion(const Func& func) const {
-		Bits bitset = andnot(this->next().bitset, this->bitset);
+		Bits bitset = andnot(this->succ().bitset, this->bitset);
 
 		bitset.forEachOne([&](size_t bit) {
-			FunctionInputBitSet expanded = *this;
+			BooleanFunction expanded = *this;
 			expanded.add(bit);
 			func(expanded);
 		});
 	}
-	// takes a function of the form void(const FunctionInputBitSet& expanded)
+	// takes a function of the form void(const BooleanFunction& expanded)
 	template<typename Func>
-	void forEachUpExpansion(const FunctionInputBitSet& mustBeSubSetOf, const Func& func) const {
-		Bits bitset = andnot(this->next().bitset, this->bitset) & mustBeSubSetOf.bitset;
+	void forEachUpExpansion(const BooleanFunction& mustBeSubSetOf, const Func& func) const {
+		Bits bitset = andnot(this->succ().bitset, this->bitset) & mustBeSubSetOf.bitset;
 
 		bitset.forEachOne([&](size_t bit) {
-			FunctionInputBitSet expanded = *this;
+			BooleanFunction expanded = *this;
 			expanded.add(bit);
 			func(expanded);
 		});
 	}
 
-	// takes a function of the form void(const FunctionInputBitSet& subSet)
+	// takes a function of the form void(const BooleanFunction& subSet)
 	template<typename Func>
 	void forEachSubSet(const Func& func) const {
 		this->bitset.forEachSubSet([&](const Bits& bits) {
-			FunctionInputBitSet subSet(bits);
+			BooleanFunction subSet(bits);
 			func(subSet);
 		});
 	}
 
-	FunctionInputBitSet asAntiChain() const {
-		return FunctionInputBitSet(andnot(this->bitset, this->monotonizeDown().prev().bitset));
+	BooleanFunction asAntiChain() const {
+		return BooleanFunction(andnot(this->bitset, this->monotonizeDown().pred().bitset));
 	}
 
-	FunctionInputBitSet canonize() const {
+	BooleanFunction canonize() const {
 		if(this->bitset.isEmpty() || this->bitset.get(0) == 1 && this->bitset.count() == 1) return *this;
 
-		FunctionInputBitSet copy = *this;
+		BooleanFunction copy = *this;
 
 		unsigned int counts[Variables];
 		for(unsigned int v = 0; v < Variables; v++) {
@@ -695,8 +695,8 @@ public:
 			unsigned int groupSizeBuffer[Variables];
 			for(unsigned int i = 0; i < groupCount; i++) groupSizeBuffer[i] = groups[i].groupSize;
 
-			FunctionInputBitSet best = copy;
-			copy.forEachPermutationInGroups(numberOfSize1Groups, numberOfSize1Groups + groupSizeBuffer[numberOfSize1Groups], groupSizeBuffer + 1 + numberOfSize1Groups, groupSizeBuffer + groupCount, [&best](const FunctionInputBitSet& permut) {
+			BooleanFunction best = copy;
+			copy.forEachPermutationInGroups(numberOfSize1Groups, numberOfSize1Groups + groupSizeBuffer[numberOfSize1Groups], groupSizeBuffer + 1 + numberOfSize1Groups, groupSizeBuffer + groupCount, [&best](const BooleanFunction& permut) {
 				if(permut.bitset < best.bitset) {
 					best = permut;
 				}
@@ -710,31 +710,31 @@ public:
 
 
 template<unsigned int Variables>
-FunctionInputBitSet<Variables> operator|(FunctionInputBitSet<Variables> result, const FunctionInputBitSet<Variables>& b) {
+BooleanFunction<Variables> operator|(BooleanFunction<Variables> result, const BooleanFunction<Variables>& b) {
 	result |= b;
 	return result;
 }
 template<unsigned int Variables>
-FunctionInputBitSet<Variables> operator&(FunctionInputBitSet<Variables> result, const FunctionInputBitSet<Variables>& b) {
+BooleanFunction<Variables> operator&(BooleanFunction<Variables> result, const BooleanFunction<Variables>& b) {
 	result &= b;
 	return result;
 }
 template<unsigned int Variables>
-FunctionInputBitSet<Variables> operator^(FunctionInputBitSet<Variables> result, const FunctionInputBitSet<Variables>& b) {
+BooleanFunction<Variables> operator^(BooleanFunction<Variables> result, const BooleanFunction<Variables>& b) {
 	result ^= b;
 	return result;
 }
 template<unsigned int Variables>
-FunctionInputBitSet<Variables> andnot(const FunctionInputBitSet<Variables>& a, const FunctionInputBitSet<Variables>& b) {
-	return FunctionInputBitSet<Variables>(andnot(a.bitset, b.bitset));
+BooleanFunction<Variables> andnot(const BooleanFunction<Variables>& a, const BooleanFunction<Variables>& b) {
+	return BooleanFunction<Variables>(andnot(a.bitset, b.bitset));
 }
 template<unsigned int Variables>
-FunctionInputBitSet<Variables> operator<<(FunctionInputBitSet<Variables> result, unsigned int shift) {
+BooleanFunction<Variables> operator<<(BooleanFunction<Variables> result, unsigned int shift) {
 	result <<= shift;
 	return result;
 }
 template<unsigned int Variables>
-FunctionInputBitSet<Variables> operator>>(FunctionInputBitSet<Variables> result, unsigned int shift) {
+BooleanFunction<Variables> operator>>(BooleanFunction<Variables> result, unsigned int shift) {
 	result >>= shift;
 	return result;
 }
@@ -774,12 +774,12 @@ constexpr size_t getMBFSizeInBytes() {
 
 // returns the end of the buffer
 template<unsigned int Variables>
-uint8_t* serializeMBF(const FunctionInputBitSet<Variables>& fibs, uint8_t* outputBuf) {
-	typename FunctionInputBitSet<Variables>::Bits bs = fibs.bitset;
+uint8_t* serializeMBF(const BooleanFunction<Variables>& func, uint8_t* outputBuf) {
+	typename BooleanFunction<Variables>::Bits bs = func.bitset;
 	if constexpr(Variables <= 3) {
 		*outputBuf++ = bs.data;
 	} else if constexpr(Variables <= 6) {
-		for(size_t i = FunctionInputBitSet<Variables>::Bits::size(); i > 0; i-=8) {
+		for(size_t i = BooleanFunction<Variables>::Bits::size(); i > 0; i-=8) {
 			*outputBuf++ = static_cast<uint8_t>(bs.data >> (i - 8));
 		}
 	} else if constexpr(Variables == 7) {
@@ -798,13 +798,13 @@ uint8_t* serializeMBF(const FunctionInputBitSet<Variables>& fibs, uint8_t* outpu
 
 // returns the end of the buffer
 template<unsigned int Variables>
-FunctionInputBitSet<Variables> deserializeMBF(const uint8_t* inputBuf) {
-	FunctionInputBitSet<Variables> result = FunctionInputBitSet<Variables>::empty();
-	typename FunctionInputBitSet<Variables>::Bits& bs = result.bitset;
+BooleanFunction<Variables> deserializeMBF(const uint8_t* inputBuf) {
+	BooleanFunction<Variables> result = BooleanFunction<Variables>::empty();
+	typename BooleanFunction<Variables>::Bits& bs = result.bitset;
 	if constexpr(Variables <= 3) {
 		bs.data = *inputBuf;
 	} else if constexpr(Variables <= 6) {
-		for(size_t i = FunctionInputBitSet<Variables>::Bits::size(); i > 0; i -= 8) {
+		for(size_t i = BooleanFunction<Variables>::Bits::size(); i > 0; i -= 8) {
 			bs.data |= static_cast<decltype(bs.data)>(*inputBuf++) << (i - 8);
 		}
 	} else if constexpr(Variables == 7) {
@@ -833,13 +833,13 @@ template<unsigned int Variables> TYPE DESERIALIZE(std::istream& is) { uint8_t bu
 MAKE_SERIALIZER(uint32_t, serializeU32, deserializeU32, 4);
 MAKE_SERIALIZER(uint64_t, serializeU64, deserializeU64, 8);
 
-MAKE_VARIABLE_SERIALIZER(FunctionInputBitSet<Variables>, serializeMBF, deserializeMBF, getMBFSizeInBytes<Variables>());
+MAKE_VARIABLE_SERIALIZER(BooleanFunction<Variables>, serializeMBF, deserializeMBF, getMBFSizeInBytes<Variables>());
 
 template<unsigned int Variables>
-uint64_t getFormationCount(const FunctionInputBitSet<Variables>& fibs, const FunctionInputBitSet<Variables>& base) {
+uint64_t getFormationCount(const BooleanFunction<Variables>& func, const BooleanFunction<Variables>& base) {
 	uint64_t total = 1;
 	for(unsigned int v = 0; v < Variables; v++) {
-		uint32_t count = fibs.getLayer(v).size() - base.getLayer(v).size();
+		uint32_t count = func.getLayer(v).size() - base.getLayer(v).size();
 		if(count != 0) {
 			total *= count; // for matching the factorial, 0! == 1, so take it to be 1 if it's 0
 		}
@@ -847,11 +847,11 @@ uint64_t getFormationCount(const FunctionInputBitSet<Variables>& fibs, const Fun
 	return total;
 }
 template<unsigned int Variables>
-uint64_t getFormationCountWithout(const FunctionInputBitSet<Variables>& fibs, const FunctionInputBitSet<Variables>& base, unsigned int skip) {
+uint64_t getFormationCountWithout(const BooleanFunction<Variables>& func, const BooleanFunction<Variables>& base, unsigned int skip) {
 	uint64_t total = 1;
 	for(unsigned int v = 0; v < Variables; v++) {
 		if(v == skip) continue;
-		uint32_t count = fibs.getLayer(v).size() - base.getLayer(v).size();
+		uint32_t count = func.getLayer(v).size() - base.getLayer(v).size();
 		if(count != 0) {
 			total *= count; // for matching the factorial, 0! == 1, so take it to be 1 if it's 0
 		}
@@ -860,7 +860,7 @@ uint64_t getFormationCountWithout(const FunctionInputBitSet<Variables>& fibs, co
 }
 
 template<unsigned int Variables>
-unsigned int getModifiedLayer(const FunctionInputBitSet<Variables>& a, const FunctionInputBitSet<Variables>& b) {
+unsigned int getModifiedLayer(const BooleanFunction<Variables>& a, const BooleanFunction<Variables>& b) {
 	for(unsigned int l = 0; l <= Variables; l++) {
 		if(a.getLayer(l).size() != b.getLayer(l).size()) return l;
 	}

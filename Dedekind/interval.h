@@ -13,7 +13,7 @@
 
 #define printAC(AC) do { std::cout << #AC << " : "; prettyFibs(std::cout, (AC).asAntiChain()); std::cout << "\n"; } while(false)
 
-#include "functionInputBitSet.h"
+#include "booleanFunction.h"
 #include "bufferedMap.h"
 #include "knownData.h"
 #include "funcTypes.h"
@@ -22,11 +22,11 @@
 
 template<unsigned int Variables>
 constexpr Monotonic<Variables> getTop() {
-	return Monotonic<Variables>(FunctionInputBitSet<Variables>::full());
+	return Monotonic<Variables>(BooleanFunction<Variables>::full());
 }
 template<unsigned int Variables>
 constexpr Monotonic<Variables> getBot() {
-	return Monotonic<Variables>(FunctionInputBitSet<Variables>::empty());
+	return Monotonic<Variables>(BooleanFunction<Variables>::empty());
 }
 
 template<unsigned int Variables>
@@ -72,8 +72,8 @@ struct Interval {
 	uint64_t intevalSizeNaive() const {
 		uint64_t total = 0;
 
-		forEachMonotonicFunction<Variables>([this, &total](const Monotonic<Variables>& fibs) {
-			if(this->contains(fibs)) {
+		forEachMonotonicFunction<Variables>([this, &total](const Monotonic<Variables>& func) {
+			if(this->contains(func)) {
 				total++;
 			}
 		});
@@ -91,7 +91,7 @@ struct Interval {
 		MBF b1ac = AC{nextBits.getFirst()}.asMonotonic();
 
 		uint64_t intervalSize1 = getIntervalSizeForNonNormal(b1ac | bot, top);
-		uint64_t intervalSize2 = getIntervalSizeForNonNormal(bot, b1ac.prev() | bot | (top.asAntiChain() - b1ac.asAntiChain()).asMonotonic());
+		uint64_t intervalSize2 = getIntervalSizeForNonNormal(bot, b1ac.pred() | bot | (top.asAntiChain() - b1ac.asAntiChain()).asMonotonic());
 		return intervalSize1 + intervalSize2;
 	}
 };
@@ -128,14 +128,14 @@ uint64_t intervalSizeFast(const Monotonic<Variables>& intervalBot, const Monoton
 				return 1;
 			}
 
-			if(topAC.fibs.isEmpty() || topAC.fibs.bitset.count() == 1 && topAC.fibs.bitset.get(0)) {
+			if(topAC.func.isEmpty() || topAC.func.bitset.count() == 1 && topAC.func.bitset.get(0)) {
 				return 2;
 			}
 			size_t firstOnBit = topAC.getFirst();
 			// arbitrarily chosen extention of bot
 			MBF top1ac = AC{firstOnBit}.asMonotonic();
-			MBF top1acm = top1ac.prev();
-			MBF top1acmm = top1acm.prev();
+			MBF top1acm = top1ac.pred();
+			MBF top1acmm = top1acm.pred();
 
 			size_t universe = size_t(1U << Variables) - 1;
 			AC umb1{universe & ~firstOnBit};
@@ -145,7 +145,7 @@ uint64_t intervalSizeFast(const Monotonic<Variables>& intervalBot, const Monoton
 			uint64_t v2 = 0;
 
 			AC top1acmAsAchain = top1acm.asAntiChain();
-			top1acmAsAchain.fibs.forEachSubSet([&](const FunctionInputBitSet<Variables>& achainSubSet) { // this is to dodge the double function call of AntiChain::forEachSubSet
+			top1acmAsAchain.func.forEachSubSet([&](const BooleanFunction<Variables>& achainSubSet) { // this is to dodge the double function call of AntiChain::forEachSubSet
 				AC ss(achainSubSet);
 				//MBF subSet = (top1acm.asAntiChain() - ss).asMonotonic();
 				if(ss != top1acmAsAchain) { // strict subsets

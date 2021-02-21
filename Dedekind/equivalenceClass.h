@@ -7,14 +7,14 @@
 #include "collectionOperations.h"
 #include "functionInput.h"
 #include "functionInputSet.h"
-#include "functionInputBitSet.h"
+#include "booleanFunction.h"
 #include "intSet.h"
 #include "smallVector.h"
 
 constexpr int MAX_PREPROCESSED = 7;
 constexpr int MAX_LAYER_SIZE = 35;
 
-typedef FunctionInputBitSet<MAX_PREPROCESSED> InputBitSet;
+typedef BooleanFunction<MAX_PREPROCESSED> InputBitSet;
 
 struct PreprocessedFunctionInputSet {
 	InputBitSet functionInputSet;

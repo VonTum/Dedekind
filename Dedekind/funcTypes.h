@@ -1,6 +1,6 @@
 #pragma once
 
-#include "functionInputBitSet.h"
+#include "booleanFunction.h"
 #include <initializer_list>
 #include <ostream>
 
@@ -9,35 +9,35 @@ struct Monotonic;
 
 template<unsigned int Variables>
 struct AntiChain {
-	FunctionInputBitSet<Variables> fibs;
+	BooleanFunction<Variables> func;
 
 	AntiChain() = default;
-	explicit AntiChain(const BitSet<(1 << Variables)>& bitset) : fibs(bitset) {
-		assert(fibs.isAntiChain());
+	explicit AntiChain(const BitSet<(1 << Variables)>& bitset) : func(bitset) {
+		assert(func.isAntiChain());
 	}
-	explicit AntiChain(const FunctionInputBitSet<Variables>& fibs) : fibs(fibs) {
-		assert(fibs.isAntiChain());
+	explicit AntiChain(const BooleanFunction<Variables>& func) : func(func) {
+		assert(func.isAntiChain());
 	}
-	explicit AntiChain(std::initializer_list<size_t> from) : fibs(FunctionInputBitSet<Variables>::empty()) {
+	explicit AntiChain(std::initializer_list<size_t> from) : func(BooleanFunction<Variables>::empty()) {
 		for(unsigned int item : from) {
-			fibs.add(item);
+			func.add(item);
 		}
 
-		assert(fibs.isAntiChain());
+		assert(func.isAntiChain());
 	}
 
 	Monotonic<Variables> asMonotonic() const {
-		return Monotonic<Variables>(fibs.monotonizeDown());
+		return Monotonic<Variables>(func.monotonizeDown());
 	}
 
 	AntiChain intersection(const AntiChain<Variables>& other) const {
-		return AntiChain(this->fibs.bitset & other.fibs.bitset);
+		return AntiChain(this->func.bitset & other.func.bitset);
 	}
 
 	// expects a function of the form void(const AntiChain<Variables>&)
 	template<typename Func>
 	void forEachSubSet(const Func& func) const {
-		this->fibs.forEachSubSet([&func](const FunctionInputBitSet<Variables>& f) {
+		this->func.forEachSubSet([&func](const BooleanFunction<Variables>& f) {
 			func(AntiChain(f));
 		});
 	}
@@ -45,42 +45,42 @@ struct AntiChain {
 	// expects a function of the form void(size_t index)
 	template<typename Func>
 	void forEachOne(const Func& func) const {
-		this->fibs.forEachOne(func);
+		this->func.forEachOne(func);
 	}
 
 	size_t getFirst() const {
-		return fibs.bitset.getFirstOnBit();
+		return func.bitset.getFirstOnBit();
 	}
 
 	bool isEmpty() const {
-		return this->fibs.isEmpty();
+		return this->func.isEmpty();
 	}
 
 	unsigned int getUniverse() const {
-		return fibs.getUniverse();
+		return func.getUniverse();
 	}
 
 	template<unsigned int Variables>
 	AntiChain<Variables>& operator-=(const AntiChain<Variables>& other) {
-		this->fibs = andnot(this->fibs, other.fibs);
+		this->func = andnot(this->func, other.func);
 		return *this;
 	}
 };
 template<unsigned int Variables>
 bool operator==(const AntiChain<Variables>& a, const AntiChain<Variables>& b) {
-	return a.fibs == b.fibs;
+	return a.func == b.func;
 }
 template<unsigned int Variables>
 bool operator!=(const AntiChain<Variables>& a, const AntiChain<Variables>& b) {
-	return a.fibs != b.fibs;
+	return a.func != b.func;
 }
 template<unsigned int Variables>
 AntiChain<Variables> operator-(const AntiChain<Variables>& a, const AntiChain<Variables>& b) {
-	return AntiChain<Variables>(andnot(a.fibs, b.fibs));
+	return AntiChain<Variables>(andnot(a.func, b.func));
 }
 template<unsigned int Variables>
 AntiChain<Variables> operator*(const AntiChain<Variables>& a, const AntiChain<Variables>& b) {
-	FunctionInputBitSet<Variables> result = FunctionInputBitSet<Variables>::empty();
+	BooleanFunction<Variables> result = BooleanFunction<Variables>::empty();
 
 	a.forEachOne([&](size_t aIndex) {
 		b.forEachOne([&](size_t bIndex) {
@@ -93,79 +93,79 @@ AntiChain<Variables> operator*(const AntiChain<Variables>& a, const AntiChain<Va
 
 template<unsigned int Variables>
 struct Monotonic {
-	FunctionInputBitSet<Variables> fibs;
+	BooleanFunction<Variables> func;
 
 	Monotonic() = default;
-	explicit Monotonic(const BitSet<(1 << Variables)>& bitset) : fibs(bitset) {
-		assert(fibs.isMonotonic());
+	explicit Monotonic(const BitSet<(1 << Variables)>& bitset) : func(bitset) {
+		assert(func.isMonotonic());
 	}
-	explicit Monotonic(const FunctionInputBitSet<Variables>& fibs) : fibs(fibs) {
-		assert(fibs.isMonotonic());
+	explicit Monotonic(const BooleanFunction<Variables>& func) : func(func) {
+		assert(func.isMonotonic());
 	}
 
 	AntiChain<Variables> asAntiChain() const {
-		return AntiChain<Variables>(andnot(fibs, fibs.prev()));
+		return AntiChain<Variables>(andnot(func, func.pred()));
 	}
 
-	Monotonic prev() const {
-		return Monotonic(fibs.prev());
+	Monotonic pred() const {
+		return Monotonic(func.pred());
 	}
-	Monotonic next() const {
-		return Monotonic(fibs.next());
+	Monotonic succ() const {
+		return Monotonic(func.succ());
 	}
 
 	void add(size_t newBit) {
-		this->fibs.add(newBit);
-		assert(fibs.isMonotonic());
+		this->func.add(newBit);
+		assert(func.isMonotonic());
 	}
 
 	// expects a function of the form void(size_t index)
 	template<typename Func>
 	void forEachOne(const Func& func) const {
-		this->fibs.forEachOne(func);
+		this->func.forEachOne(func);
 	}
 
 	bool isEmpty() const {
-		return this->fibs.isEmpty();
+		return this->func.isEmpty();
 	}
 
 	unsigned int getUniverse() const {
-		return fibs.getUniverse();
+		return func.getUniverse();
 	}
 };
 
 template<unsigned int Variables>
 bool operator==(const Monotonic<Variables>& a, const Monotonic<Variables>& b) {
-	return a.fibs == b.fibs;
+	return a.func == b.func;
 }
 template<unsigned int Variables>
 bool operator!=(const Monotonic<Variables>& a, const Monotonic<Variables>& b) {
-	return a.fibs != b.fibs;
+	return a.func != b.func;
 }
 
 template<unsigned int Variables>
 Monotonic<Variables> operator&(const Monotonic<Variables>& a, const Monotonic<Variables>& b) {
-	return Monotonic<Variables>(a.fibs & b.fibs);
+	return Monotonic<Variables>(a.func & b.func);
 }
 template<unsigned int Variables>
 Monotonic<Variables> operator|(const Monotonic<Variables>& a, const Monotonic<Variables>& b) {
-	return Monotonic<Variables>(a.fibs | b.fibs);
+	return Monotonic<Variables>(a.func | b.func);
 }
 
 template<unsigned int Variables>
 Monotonic<Variables>& operator&=(Monotonic<Variables>& a, const Monotonic<Variables>& b) {
-	a.fibs &= b.fibs;
+	a.func &= b.func;
 	return a;
 }
 template<unsigned int Variables>
 Monotonic<Variables>& operator|=(Monotonic<Variables>& a, const Monotonic<Variables>& b) {
-	a.fibs |= b.fibs;
+	a.func |= b.func;
 	return a;
 }
 
 template<unsigned int Variables>
 bool operator<=(const Monotonic<Variables>& a, const Monotonic<Variables>& b) {
-	return a.fibs.isSubSetOf(b.fibs);
+	return a.func.isSubSetOf(b.func);
 }
 
 
@@ -180,7 +180,7 @@ template<unsigned int Variables, typename Func>
 void forEachMonotonicFunctionRecursive(const Monotonic<Variables>& cur, const Func& func) {
 	func(cur);
 
-	AntiChain<Variables> newBits(andnot(cur.fibs.next(), cur.fibs));
+	AntiChain<Variables> newBits(andnot(cur.func.succ(), cur.func));
 
 	newBits.forEachOne([&](size_t bit) {
 		Monotonic<Variables> newMBF = cur;
@@ -194,7 +194,7 @@ void forEachMonotonicFunctionRecursive(const Monotonic<Variables>& cur, const Fu
 
 template<unsigned int Variables, typename Func>
 void forEachMonotonicFunction(const Func& func) {
-	forEachMonotonicFunctionRecursive(Monotonic<Variables>(FunctionInputBitSet<Variables>::empty()), func);
+	forEachMonotonicFunctionRecursive(Monotonic<Variables>(BooleanFunction<Variables>::empty()), func);
 }
 
 template<unsigned int Variables>
@@ -204,10 +204,10 @@ Monotonic<Variables> acProd(const Monotonic<Variables>& a, const AntiChain<Varia
 	BitSet<(1 << Variables)> result = BitSet<(1 << Variables)>::empty();
 
 	b.forEachOne([&](size_t index) {
-		result |= a.fibs.bitset << index;
+		result |= a.func.bitset << index;
 	});
 
-	return Monotonic<Variables>(FunctionInputBitSet<Variables>(result).monotonizeDown());
+	return Monotonic<Variables>(BooleanFunction<Variables>(result).monotonizeDown());
 }
 
 template<unsigned int Variables>

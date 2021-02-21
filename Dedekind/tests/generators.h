@@ -2,7 +2,7 @@
 
 #include <random>
 #include "../bitSet.h"
-#include "../functionInputBitSet.h"
+#include "../booleanFunction.h"
 #include "../interval.h"
 #include "../funcTypes.h"
 
@@ -31,13 +31,13 @@ BitSet<Size> generateBitSet() {
 }
 
 template<unsigned int Variables>
-FunctionInputBitSet<Variables> generateFibs() {
-	return FunctionInputBitSet<Variables>(generateBitSet<(1 << Variables)>());
+BooleanFunction<Variables> generateFibs() {
+	return BooleanFunction<Variables>(generateBitSet<(1 << Variables)>());
 }
 
 template<unsigned int Variables>
-FunctionInputBitSet<Variables> generateMBF() {
-	FunctionInputBitSet<Variables> result = FunctionInputBitSet<Variables>::empty();
+BooleanFunction<Variables> generateMBF() {
+	BooleanFunction<Variables> result = BooleanFunction<Variables>::empty();
 
 	unsigned int numberOfSeeds = rand() % (Variables * 2);
 
@@ -46,7 +46,7 @@ FunctionInputBitSet<Variables> generateMBF() {
 	}
 
 	for(unsigned int i = 0; i < Variables + 1; i++) {
-		result = result.prev() | result;
+		result = result.pred() | result;
 	}
 
 	return result;
@@ -58,10 +58,10 @@ Monotonic<Variables> generateMonotonic() {
 }
 
 template<unsigned int Variables>
-FunctionInputBitSet<Variables> generateLayer(unsigned int layer) {
-	FunctionInputBitSet<Variables> result = generateFibs<Variables>();
+BooleanFunction<Variables> generateLayer(unsigned int layer) {
+	BooleanFunction<Variables> result = generateFibs<Variables>();
 
-	result &= FunctionInputBitSet<Variables>::layerMask(layer);
+	result &= BooleanFunction<Variables>::layerMask(layer);
 
 	return result;
 }

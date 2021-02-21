@@ -4,7 +4,7 @@
 #include <ostream>
 #include "functionInput.h"
 #include "functionInputSet.h"
-#include "functionInputBitSet.h"
+#include "booleanFunction.h"
 #include "equivalenceClass.h"
 #include "equivalenceClassMap.h"
 #include "layerStack.h"
@@ -104,7 +104,7 @@ inline std::ostream& operator<<(std::ostream& os, const BitSet<Size>& bitset) {
 }
 
 template<unsigned int Variables>
-inline std::ostream& operator<<(std::ostream& os, const FunctionInputBitSet<Variables>& fis) {
+inline std::ostream& operator<<(std::ostream& os, const BooleanFunction<Variables>& fis) {
 	os << fis.bitset;
 	return os;
 }
@@ -124,7 +124,7 @@ inline std::ostream& printHex(std::ostream& os, const BitSet<Size>& bitset) {
 	return os;
 }
 template<unsigned int Variables>
-inline std::ostream& printHex(std::ostream& os, const FunctionInputBitSet<Variables>& fis) {
+inline std::ostream& printHex(std::ostream& os, const BooleanFunction<Variables>& fis) {
 	printHex(os, fis.bitset);
 	return os;
 }

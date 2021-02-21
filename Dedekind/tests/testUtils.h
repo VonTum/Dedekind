@@ -5,7 +5,7 @@
 #include "testsMain.h"
 #include "../toString.h"
 #include "../functionInput.h"
-#include "../functionInputBitSet.h"
+#include "../booleanFunction.h"
 #include "../interval.h"
 
 #define TEST_FROM 3
@@ -14,7 +14,7 @@
 #define LARGE_ITER 1000
 
 template<unsigned int Variables>
-void prettyFibs(std::ostream& os, const FunctionInputBitSet<Variables>& ac) {
+void prettyFibs(std::ostream& os, const BooleanFunction<Variables>& ac) {
 	bool isFirst = true;
 	ac.forEachOne([&](size_t i) {
 		FunctionInput fi{i};
@@ -28,9 +28,9 @@ void prettyFibs(std::ostream& os, const FunctionInputBitSet<Variables>& ac) {
 }
 template<unsigned int Variables>
 void prettyInterval(std::ostream& os, const Interval<Variables>& i) {
-	prettyFibs(os, i.bot.fibs);
+	prettyFibs(os, i.bot.func);
 	os << " - ";
-	prettyFibs(os, i.top.fibs);
+	prettyFibs(os, i.top.func);
 }
 
 

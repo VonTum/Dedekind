@@ -1,6 +1,6 @@
 #pragma once
 
-#include "functionInputBitSet.h"
+#include "booleanFunction.h"
 #include "aligned_alloc.h"
 
 #include "dedekindDecomposition.h"
@@ -18,16 +18,16 @@
 
 // returns newMBFFoundCount
 template<unsigned int Variables>
-size_t findAllExpandedMBFsFast(const FunctionInputBitSet<Variables>& curMBF, std::pair<FunctionInputBitSet<Variables>, int>* expandedMBFs) {
-	FunctionInputBitSet<Variables> newBits = andnot(curMBF.next(), curMBF);
+size_t findAllExpandedMBFsFast(const BooleanFunction<Variables>& curMBF, std::pair<BooleanFunction<Variables>, int>* expandedMBFs) {
+	BooleanFunction<Variables> newBits = andnot(curMBF.next(), curMBF);
 
 	size_t curSize = 0;
 
 	newBits.forEachOne([&](size_t bits) {
-		FunctionInputBitSet<Variables> newMBF = curMBF;
+		BooleanFunction<Variables> newMBF = curMBF;
 		newMBF.add(FunctionInput::underlyingType(bits));
 
-		FunctionInputBitSet<Variables> canon = newMBF.canonize();
+		BooleanFunction<Variables> canon = newMBF.canonize();
 
 		for(size_t i = 0; i < curSize; i++) {
 			// check for duplicates
@@ -46,17 +46,17 @@ size_t findAllExpandedMBFsFast(const FunctionInputBitSet<Variables>& curMBF, std
 }
 
 template<unsigned int Variables>
-std::pair<BufferedSet<FunctionInputBitSet<Variables>>, size_t> generateAllMBFsFast() {
-	BufferedSet<FunctionInputBitSet<Variables>> foundMBFs(mbfCounts[Variables] + mbfCounts[Variables] / 16); // some extra buffer room
+std::pair<BufferedSet<BooleanFunction<Variables>>, size_t> generateAllMBFsFast() {
+	BufferedSet<BooleanFunction<Variables>> foundMBFs(mbfCounts[Variables] + mbfCounts[Variables] / 16); // some extra buffer room
 
 	std::atomic<size_t> numberOfLinks(0);
 
 
-	std::atomic<FunctionInputBitSet<Variables>*> nextToExpand(foundMBFs.begin());
-	std::atomic<FunctionInputBitSet<Variables>*> knownMBFs(foundMBFs.begin());
+	std::atomic<BooleanFunction<Variables>*> nextToExpand(foundMBFs.begin());
+	std::atomic<BooleanFunction<Variables>*> knownMBFs(foundMBFs.begin());
 	std::mutex newMBFMutex;
 
-	FunctionInputBitSet<Variables> initialFibs = FunctionInputBitSet<Variables>::empty();
+	BooleanFunction<Variables> initialFibs = BooleanFunction<Variables>::empty();
 	foundMBFs.add(initialFibs);
 	knownMBFs.fetch_add(1);
 
@@ -67,9 +67,9 @@ std::pair<BufferedSet<FunctionInputBitSet<Variables>>, size_t> generateAllMBFsFa
 
 	auto threadFunc = [&foundMBFs, &nextToExpand , &knownMBFs, &newMBFMutex, &numberOfWaitingThreads, &numberOfThreads, &numberOfLinks]() {
 		while(true) {
-			FunctionInputBitSet<Variables>* claimedNextToExpand = nextToExpand.load();
+			BooleanFunction<Variables>* claimedNextToExpand = nextToExpand.load();
 			tryAgain:
-			FunctionInputBitSet<Variables>* upTo = knownMBFs.load();
+			BooleanFunction<Variables>* upTo = knownMBFs.load();
 			if(claimedNextToExpand < upTo) {
 				bool wasClaimed = nextToExpand.compare_exchange_weak(claimedNextToExpand, claimedNextToExpand + 1);
 				if(!wasClaimed) { // another thread edited inbetween, try again
@@ -88,7 +88,7 @@ std::pair<BufferedSet<FunctionInputBitSet<Variables>>, size_t> generateAllMBFsFa
 						return;
 					}
 
-					std::pair<FunctionInputBitSet<Variables>, int> expandedMBFs[MAX_EXPANSION];
+					std::pair<BooleanFunction<Variables>, int> expandedMBFs[MAX_EXPANSION];
 					
 					size_t newMBFFoundCount = findAllExpandedMBFsFast(*claimedNextToExpand, expandedMBFs);
 					numberOfLinks.fetch_add(newMBFFoundCount);
@@ -165,34 +165,34 @@ size_t serializeLinkedNodeList(const LinkedNode* ln, size_t count, uint8_t* outb
 
 template<unsigned int Variables>
 void sortAndComputeLinks(std::ifstream& allClassesSorted, std::ofstream& outputMBFs, std::ofstream& linkNodeFile) {
-	//FunctionInputBitSet<Variables>* buf = new FunctionInputBitSet<Variables>[getMaxLayerSize<Variables>()];
+	//BooleanFunction<Variables>* buf = new BooleanFunction<Variables>[getMaxLayerSize<Variables>()];
 
-	BufferedSet<FunctionInputBitSet<Variables>> prevSet;
+	BufferedSet<BooleanFunction<Variables>> prevSet;
 	for(size_t layer = 0; layer <= (1 << Variables); layer++) {
 		std::cout << "Baking layer " << layer << "\n";
 
 		size_t curLayerSize = getLayerSize<Variables>(layer);
-		BufferedSet<FunctionInputBitSet<Variables>> fisSet(curLayerSize);
+		BufferedSet<BooleanFunction<Variables>> fisSet(curLayerSize);
 
 		for(size_t i = 0; i < curLayerSize; i++) {
 			fisSet.add(deserializeMBF<Variables>(allClassesSorted));
 		}
 
 		// write to outputHashMaps
-		for(const FunctionInputBitSet<Variables>& item : fisSet) {
+		for(const BooleanFunction<Variables>& item : fisSet) {
 			serializeMBF(item, outputMBFs);
 		}
 		
 		if(layer != 0) { // skip first layer, nothing links to first layer
 			std::cout << "Linking layer " << layer << " with " << (layer - 1) << "\n";
-			for(const FunctionInputBitSet<Variables>& element : prevSet) {
-				std::pair<FunctionInputBitSet<Variables>, int> expandedMBFBuf[MAX_EXPANSION];
+			for(const BooleanFunction<Variables>& element : prevSet) {
+				std::pair<BooleanFunction<Variables>, int> expandedMBFBuf[MAX_EXPANSION];
 				size_t foundNumber = findAllExpandedMBFsFast(element, expandedMBFBuf);
 
 				LinkedNode linkedNodeBuf[MAX_EXPANSION];
 
 				for(size_t i = 0; i < foundNumber; i++) {
-					FunctionInputBitSet<Variables>* expanded = fisSet.find(expandedMBFBuf[i].first);
+					BooleanFunction<Variables>* expanded = fisSet.find(expandedMBFBuf[i].first);
 					linkedNodeBuf[i].count = expandedMBFBuf[i].second;
 					linkedNodeBuf[i].index = expanded - fisSet.begin();
 				}
@@ -240,13 +240,13 @@ inline void getLinkLayer(std::ifstream& file, int numElements, LinkBufPtr* offse
 
 template<unsigned int Variables>
 struct FullMBFHashSet {
-	FunctionInputBitSet<Variables>* mbfs;
-	BakedSet<FunctionInputBitSet<Variables>>* bufSets;
+	BooleanFunction<Variables>* mbfs;
+	BakedSet<BooleanFunction<Variables>>* bufSets;
 
-	FullMBFHashSet(std::ifstream& inputFile) : mbfs(new FunctionInputBitSet<Variables>[mbfCounts[Variables]]), bufSets(new BakedSet<FunctionInputBitSet<Variables>>[(1 << Variables) + 1]) {
-		FunctionInputBitSet<Variables>* curBufOffset = mbfs;
+	FullMBFHashSet(std::ifstream& inputFile) : mbfs(new BooleanFunction<Variables>[mbfCounts[Variables]]), bufSets(new BakedSet<BooleanFunction<Variables>>[(1 << Variables) + 1]) {
+		BooleanFunction<Variables>* curBufOffset = mbfs;
 		for(size_t i = 0; i < (1 << Variables) + 1; i++) {
-			bufSets[i] = BakedSet<FunctionInputBitSet<Variables>>(curBufOffset, getLayerSize<Variables>(i));
+			bufSets[i] = BakedSet<BooleanFunction<Variables>>(curBufOffset, getLayerSize<Variables>(i));
 			curBufOffset += getLayerSize<Variables>(i);
 		}
 	}
@@ -280,25 +280,25 @@ struct MBFDecomposition {
 	struct Layer {
 		LinkBufPtr* offsets;
 		LinkedNode* fullBuf;
-		FunctionInputBitSet<Variables>* fibs;
+		BooleanFunction<Variables>* func;
 	};
 	Layer* layers;
 
 	LinkBufPtr* allOffsets;
 	LinkedNode* allFullBufs;
-	FunctionInputBitSet<Variables>* allFibs;
+	BooleanFunction<Variables>* allFibs;
 
 	constexpr static unsigned int LAYER_COUNT = (1 << Variables) + 1;
 
-	MBFDecomposition() : layers(new Layer[LAYER_COUNT]), allOffsets(new LinkBufPtr[mbfCounts[Variables]]), allFullBufs(new LinkedNode[getTotalLinkCount<Variables>()]), allFibs(new FunctionInputBitSet<Variables>[mbfCounts[Variables]]) {
+	MBFDecomposition() : layers(new Layer[LAYER_COUNT]), allOffsets(new LinkBufPtr[mbfCounts[Variables]]), allFullBufs(new LinkedNode[getTotalLinkCount<Variables>()]), allFibs(new BooleanFunction<Variables>[mbfCounts[Variables]]) {
 		LinkBufPtr* curOffsets = allOffsets;
 		LinkedNode* curFullBufs = allFullBufs;
-		FunctionInputBitSet<Variables>* curFibs = allFibs;
+		BooleanFunction<Variables>* curFibs = allFibs;
 
 		for(size_t i = 0; i < LAYER_COUNT; i++) {
 			layers[i].offsets = curOffsets;
 			layers[i].fullBuf = curFullBufs;
-			layers[i].fibs = curFibs;
+			layers[i].func = curFibs;
 
 			curOffsets += getLayerSize<Variables>(i);
 			curFullBufs += getLinkCount<Variables>(i);
@@ -340,40 +340,40 @@ struct MBFDecomposition {
 		return IteratorFactory<LinkedNode*>{start, start + curOffset.size};
 	}
 
-	const FunctionInputBitSet<Variables>& get(int layerI, int nodeInLayer) const {
-		return layers[layerI].fibs[nodeInLayer];
+	const BooleanFunction<Variables>& get(int layerI, int nodeInLayer) const {
+		return layers[layerI].func[nodeInLayer];
 	}
 };
 
 template<unsigned int Variables>
 struct MBFDecompositionWithHash : public MBFDecomposition<Variables> {
-	BakedSet<FunctionInputBitSet<Variables>>* hashsets;
+	BakedSet<BooleanFunction<Variables>>* hashsets;
 
-	MBFDecompositionWithHash() : hashsets(new BakedSet<FunctionInputBitSet<Variables>>[(1 << Variables) + 1]) {
-		BufferedSet<FunctionInputBitSet<Variables>> startSet(1);
-		FunctionInputBitSet<Variables> empty;
+	MBFDecompositionWithHash() : hashsets(new BakedSet<BooleanFunction<Variables>>[(1 << Variables) + 1]) {
+		BufferedSet<BooleanFunction<Variables>> startSet(1);
+		BooleanFunction<Variables> empty;
 		startSet.add(empty);
-		new(&this->hashsets[0]) BakedSet<FunctionInputBitSet<Variables>>(startSet, this->layers[0].fibs);
+		new(&this->hashsets[0]) BakedSet<BooleanFunction<Variables>>(startSet, this->layers[0].func);
 
 		for(size_t layer = 1; layer < (1 << Variables); layer++) {
-			BufferedSet<FunctionInputBitSet<Variables>> newBufSet(getLayerSize<Variables>(layer));
+			BufferedSet<BooleanFunction<Variables>> newBufSet(getLayerSize<Variables>(layer));
 
-			const BakedSet<FunctionInputBitSet<Variables>>& prevSet = this->hashsets[layer - 1];
+			const BakedSet<BooleanFunction<Variables>>& prevSet = this->hashsets[layer - 1];
 
 			for(size_t elem = 0; elem < getLayerSize<Variables>(layer); elem++) {
-				const FunctionInputBitSet<Variables>& curFibs = prevSet[elem];
+				const BooleanFunction<Variables>& curFibs = prevSet[elem];
 
-				std::pair<FunctionInputBitSet<Variables>, int> expandedMBFBuf[MAX_EXPANSION];
+				std::pair<BooleanFunction<Variables>, int> expandedMBFBuf[MAX_EXPANSION];
 
 				size_t expansionCount = findAllExpandedMBFsFast(curFibs, expandedMBFBuf);
 
-				for(std::pair<FunctionInputBitSet<Variables>, int>* curExpanded = expandedMBFBuf; curExpanded < expandedMBFBuf + expansionCount; curExpanded++) {
+				for(std::pair<BooleanFunction<Variables>, int>* curExpanded = expandedMBFBuf; curExpanded < expandedMBFBuf + expansionCount; curExpanded++) {
 					newBufSet.getOrAdd(curExpanded->first);
 				}
 			}
 			assert(newBufSet.size() == getLayerSize<Variables>(layer));
 
-			new(&this->hashsets[layer]) BakedSet<FunctionInputBitSet<Variables>>(newBufSet, this->layers[layer].fibs);
+			new(&this->hashsets[layer]) BakedSet<BooleanFunction<Variables>>(newBufSet, this->layers[layer].func);
 		}
 	}
 };
@@ -403,7 +403,7 @@ MBFDecomposition<Variables> readFullMBFDecomposition() {
 	for(int layer = 0; layer < (1 << Variables); layer++) {
 		for(int mbfI = 0; mbfI < getLayerSize<Variables>(layer); mbfI++) {
 			mbfFile.read(reinterpret_cast<char*>(buf), getMBFSizeInBytes<Variables>());
-			result.layers[layer].fibs[mbfI] = deserializeMBF<Variables>(buf);
+			result.layers[layer].func[mbfI] = deserializeMBF<Variables>(buf);
 		}
 	}
 

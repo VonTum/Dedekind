@@ -311,7 +311,7 @@
     <ClCompile Include="codeGen.cpp" />
     <ClCompile Include="dedekind.cpp" />
     <ClCompile Include="intervalDecomposition.cpp" />
-    <ClCompile Include="tests\functionInputBitSetTests.cpp" />
+    <ClCompile Include="tests\bitsetTests.cpp" />
     <ClCompile Include="tests\indent.cpp" />
     <ClCompile Include="tests\intervalTests.cpp" />
     <ClCompile Include="tests\terminalColor.cpp" />
@@ -340,7 +340,7 @@
     <ClInclude Include="equivalenceClassMap.h" />
     <ClInclude Include="dedekindDecomposition.h" />
     <ClInclude Include="bitSet.h" />
-    <ClInclude Include="functionInputBitSet.h" />
+    <ClInclude Include="booleanFunction.h" />
     <ClInclude Include="heapArray.h" />
     <ClInclude Include="intervalDecomposition.h" />
     <ClInclude Include="layerDecomposition.h" />
