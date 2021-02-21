@@ -19,7 +19,7 @@
 // returns newMBFFoundCount
 template<unsigned int Variables>
 size_t findAllExpandedMBFsFast(const FunctionInputBitSet<Variables>& curMBF, std::pair<FunctionInputBitSet<Variables>, int>* expandedMBFs) {
-	FunctionInputBitSet<Variables> newBits(andnot(curMBF.next().bitset, curMBF.bitset));
+	FunctionInputBitSet<Variables> newBits = andnot(curMBF.next(), curMBF);
 
 	size_t curSize = 0;
 

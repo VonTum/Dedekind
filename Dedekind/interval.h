@@ -99,7 +99,7 @@ struct Interval {
 template<unsigned int Variables>
 uint64_t getIntervalSizeForNonNormal(const Monotonic<Variables>& bot, const Monotonic<Variables>& top) {
 	if(bot <= top) {
-		AntiChain<Variables> dsn = intersection(bot.asAntiChain(), top.asAntiChain());
+		AntiChain<Variables> dsn = bot.asAntiChain().intersection(top.asAntiChain());
 		Monotonic<Variables> newTop = (top.asAntiChain() - dsn).asMonotonic();
 		Monotonic<Variables> newBot = bot & newTop;
 

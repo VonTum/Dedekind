@@ -708,6 +708,7 @@ public:
 	}
 };
 
+
 template<unsigned int Variables>
 FunctionInputBitSet<Variables> operator|(FunctionInputBitSet<Variables> result, const FunctionInputBitSet<Variables>& b) {
 	result |= b;
@@ -722,6 +723,10 @@ template<unsigned int Variables>
 FunctionInputBitSet<Variables> operator^(FunctionInputBitSet<Variables> result, const FunctionInputBitSet<Variables>& b) {
 	result ^= b;
 	return result;
+}
+template<unsigned int Variables>
+FunctionInputBitSet<Variables> andnot(const FunctionInputBitSet<Variables>& a, const FunctionInputBitSet<Variables>& b) {
+	return FunctionInputBitSet<Variables>(andnot(a.bitset, b.bitset));
 }
 template<unsigned int Variables>
 FunctionInputBitSet<Variables> operator<<(FunctionInputBitSet<Variables> result, unsigned int shift) {

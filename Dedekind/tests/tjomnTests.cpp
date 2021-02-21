@@ -113,3 +113,7 @@ TEST_CASE(testConnect) {
 TEST_CASE(testConnectFast) {
 	runFunctionRange<1, 7, ConnectFastTest>();
 }
+
+TEST_CASE(testKnownTJOMN) {
+	ASSERT(threejoinmeetnumberveryfast(AntiChain<3>{0b011}, AntiChain<3>{0b111}, AntiChain<3>{0b101}, AntiChain<3>{0b001}.asMonotonic()) == 3);
+}

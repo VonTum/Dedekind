@@ -8,7 +8,7 @@ template<unsigned int Variables>
 uint64_t getNumberOfOwnedChildClasses(const FunctionInputBitSet<Variables>& cur) {
 	uint64_t total = 1;
 
-	FunctionInputBitSet<Variables> newBits(andnot(cur.next().bitset, cur.bitset));
+	FunctionInputBitSet<Variables> newBits = andnot(cur.next(), cur);
 
 	newBits.forEachOne([&](size_t bit) {
 		FunctionInputBitSet<Variables> newMBF = cur;
@@ -32,7 +32,7 @@ template<unsigned int Variables>
 uint64_t getNumberOfCanonicalOwnedChildClasses(const FunctionInputBitSet<Variables>& cur) {
 	uint64_t total = 1;
 
-	FunctionInputBitSet<Variables> newBits(andnot(cur.next().bitset, cur.bitset));
+	FunctionInputBitSet<Variables> newBits = andnot(cur.next(), cur);
 
 	newBits.forEachOne([&](size_t bit) {
 		FunctionInputBitSet<Variables> newMBF = cur;

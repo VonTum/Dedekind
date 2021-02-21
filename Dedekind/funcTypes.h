@@ -30,6 +30,10 @@ struct AntiChain {
 		return Monotonic<Variables>(fibs.monotonizeDown());
 	}
 
+	AntiChain intersection(const AntiChain<Variables>& other) const {
+		return AntiChain(this->fibs.bitset & other.fibs.bitset);
+	}
+
 	// expects a function of the form void(const AntiChain<Variables>&)
 	template<typename Func>
 	void forEachSubSet(const Func& func) const {
@@ -55,6 +59,12 @@ struct AntiChain {
 	unsigned int getUniverse() const {
 		return fibs.getUniverse();
 	}
+
+	template<unsigned int Variables>
+	AntiChain<Variables>& operator-=(const AntiChain<Variables>& other) {
+		this->fibs = andnot(this->fibs, other.fibs);
+		return *this;
+	}
 };
 template<unsigned int Variables>
 bool operator==(const AntiChain<Variables>& a, const AntiChain<Variables>& b) {
@@ -66,7 +76,7 @@ bool operator!=(const AntiChain<Variables>& a, const AntiChain<Variables>& b) {
 }
 template<unsigned int Variables>
 AntiChain<Variables> operator-(const AntiChain<Variables>& a, const AntiChain<Variables>& b) {
-	return AntiChain<Variables>(andnot(a.fibs.bitset, b.fibs.bitset));
+	return AntiChain<Variables>(andnot(a.fibs, b.fibs));
 }
 template<unsigned int Variables>
 AntiChain<Variables> operator*(const AntiChain<Variables>& a, const AntiChain<Variables>& b) {
@@ -79,10 +89,6 @@ AntiChain<Variables> operator*(const AntiChain<Variables>& a, const AntiChain<Va
 	});
 
 	return AntiChain<Variables>(result.asAntiChain());
-}
-template<unsigned int Variables>
-AntiChain<Variables> intersection(const AntiChain<Variables>& a, const AntiChain<Variables>& b) {
-	return AntiChain<Variables>(a.fibs.bitset & b.fibs.bitset);
 }
 
 template<unsigned int Variables>
@@ -98,7 +104,7 @@ struct Monotonic {
 	}
 
 	AntiChain<Variables> asAntiChain() const {
-		return AntiChain<Variables>(andnot(fibs.bitset, fibs.prev().bitset));
+		return AntiChain<Variables>(andnot(fibs, fibs.prev()));
 	}
 
 	Monotonic prev() const {
@@ -174,7 +180,7 @@ template<unsigned int Variables, typename Func>
 void forEachMonotonicFunctionRecursive(const Monotonic<Variables>& cur, const Func& func) {
 	func(cur);
 
-	AntiChain<Variables> newBits(andnot(cur.fibs.next().bitset, cur.fibs.bitset));
+	AntiChain<Variables> newBits(andnot(cur.fibs.next(), cur.fibs));
 
 	newBits.forEachOne([&](size_t bit) {
 		Monotonic<Variables> newMBF = cur;
