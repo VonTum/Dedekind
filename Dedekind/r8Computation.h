@@ -5,14 +5,14 @@
 #include "booleanFunction.h"
 
 template<unsigned int Variables>
-uint64_t getNumberOfOwnedChildClasses(const BooleanFunction<Variables>& cur) {
+uint64_t getNumberOfOwnedChildClasses(const Monotonic<Variables>& cur) {
 	uint64_t total = 1;
 
-	BooleanFunction<Variables> newBits = andnot(cur.next(), cur);
+	BooleanFunction<Variables> newBits = andnot(cur.succ().func, cur.func);
 
 	newBits.forEachOne([&](size_t bit) {
-		BooleanFunction<Variables> newMBF = cur;
-		newMBF.add(FunctionInput::underlyingType(bit));
+		Monotonic<Variables> newMBF = cur;
+		newMBF.add(bit);
 
 		if(isUniqueExtention(newMBF, bit)) {
 			total += getNumberOfOwnedChildClasses(newMBF);
@@ -24,19 +24,19 @@ uint64_t getNumberOfOwnedChildClasses(const BooleanFunction<Variables>& cur) {
 
 template<unsigned int Variables>
 uint64_t getD() {
-	return getNumberOfOwnedChildClasses(BooleanFunction<Variables>::empty());
+	return getNumberOfOwnedChildClasses(Monotonic<Variables>::getBot());
 }
 
 
 template<unsigned int Variables>
-uint64_t getNumberOfCanonicalOwnedChildClasses(const BooleanFunction<Variables>& cur) {
+uint64_t getNumberOfCanonicalOwnedChildClasses(const Monotonic<Variables>& cur) {
 	uint64_t total = 1;
 
-	BooleanFunction<Variables> newBits = andnot(cur.next(), cur);
+	BooleanFunction<Variables> newBits = andnot(cur.succ().func, cur.func);
 
 	newBits.forEachOne([&](size_t bit) {
-		BooleanFunction<Variables> newMBF = cur;
-		newMBF.add(FunctionInput::underlyingType(bit));
+		Monotonic<Variables> newMBF = cur;
+		newMBF.add(bit);
 
 		// incorrect still work to do
 		if(newMBF == newMBF.canonize()) {
@@ -51,6 +51,6 @@ uint64_t getNumberOfCanonicalOwnedChildClasses(const BooleanFunction<Variables>&
 
 template<unsigned int Variables>
 uint64_t getR() {
-	return getNumberOfCanonicalOwnedChildClasses(BooleanFunction<Variables>::empty());
+	return getNumberOfCanonicalOwnedChildClasses(Monotonic<Variables>::getBot());
 }
 

@@ -10,7 +10,7 @@
 template<unsigned int Variables>
 struct BotToTopIntervalSize {
 	static void run() {
-		Interval<Variables> i(getBot<Variables>(), getTop<Variables>());
+		Interval<Variables> i(Monotonic<Variables>::getBot(), Monotonic<Variables>::getTop());
 
 		ASSERT(intervalSizeFast(i.bot, i.top) == dedekindNumbers[Variables]);
 	}

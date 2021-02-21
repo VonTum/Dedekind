@@ -6,6 +6,7 @@
 
 #include "../functionInput.h"
 #include "../booleanFunction.h"
+#include "../serialization.h"
 
 #include <random>
 #include <iostream>
@@ -493,10 +494,10 @@ struct SerializationTest {
 
 			BooleanFunction<Variables> func = generateFibs<Variables>();
 
-			uint8_t* end = serializeMBF(func, buf);
+			uint8_t* end = serializeBooleanFunction(func, buf);
 			ASSERT(end == buf + getMBFSizeInBytes<Variables>());
 
-			BooleanFunction<Variables> deserialfunc = deserializeMBF<Variables>(buf);
+			BooleanFunction<Variables> deserialfunc = deserializeBooleanFunction<Variables>(buf);
 
 			ASSERT(func == deserialfunc);
 		}

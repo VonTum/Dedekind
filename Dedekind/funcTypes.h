@@ -60,10 +60,21 @@ struct AntiChain {
 		return func.getUniverse();
 	}
 
-	template<unsigned int Variables>
-	AntiChain<Variables>& operator-=(const AntiChain<Variables>& other) {
+	AntiChain& operator-=(const AntiChain& other) {
 		this->func = andnot(this->func, other.func);
 		return *this;
+	}
+
+	AntiChain canonize() const {
+		return AntiChain(this->func.canonize());
+	}
+
+	size_t size() const {
+		return this->func.size();
+	}
+	
+	uint64_t hash() const {
+		return this->func.hash();
 	}
 };
 template<unsigned int Variables>
@@ -129,8 +140,32 @@ struct Monotonic {
 		return this->func.isEmpty();
 	}
 
+	bool isFull() const {
+		return this->func.isFull();
+	}
+
 	unsigned int getUniverse() const {
 		return func.getUniverse();
+	}
+
+	Monotonic canonize() const {
+		return Monotonic(this->func.canonize());
+	}
+
+	size_t size() const {
+		return this->func.size();
+	}
+
+	uint64_t hash() const {
+		return this->func.hash();
+	}
+
+	static Monotonic getTop() {
+		return Monotonic(BooleanFunction<Variables>::full());
+	}
+
+	static Monotonic getBot() {
+		return Monotonic(BooleanFunction<Variables>::empty());
 	}
 };
 

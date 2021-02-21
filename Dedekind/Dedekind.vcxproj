@@ -353,6 +353,7 @@
     <ClInclude Include="math.h" />
     <ClInclude Include="parallelIter.h" />
     <ClInclude Include="r8Computation.h" />
+    <ClInclude Include="serialization.h" />
     <ClInclude Include="set.h" />
     <ClInclude Include="sharedLockGuard.h" />
     <ClInclude Include="smallVector.h" />

@@ -5,6 +5,7 @@
 #include "dedekindDecomposition.h"
 #include "valuedDecomposition.h"
 #include "toString.h"
+#include "serialization.h"
 
 #include "timeTracker.h"
 #include "codeGen.h"
@@ -70,17 +71,17 @@ std::string getFileName(std::string title, unsigned int Variables, const char* e
 
 template<unsigned int Variables>
 void runGenAllMBFs() {
-	std::pair<BufferedSet<BooleanFunction<Variables>>, size_t> resultPair;
+	std::pair<BufferedSet<Monotonic<Variables>>, size_t> resultPair;
 	{
 		TimeTracker timer;
 		resultPair = generateAllMBFsFast<Variables>();
 	}
-	BufferedSet<BooleanFunction<Variables>>& result = resultPair.first;
+	BufferedSet<Monotonic<Variables>>& result = resultPair.first;
 	size_t numberOfLinks = resultPair.second;
 	{
 		std::cout << "Sorting\n";
 		TimeTracker timer;
-		std::sort(result.begin(), result.end(), [](BooleanFunction<Variables>& a, BooleanFunction<Variables>& b) -> bool {return a.size() < b.size(); });
+		std::sort(result.begin(), result.end(), [](Monotonic<Variables>& a, Monotonic<Variables>& b) -> bool {return a.size() < b.size(); });
 	}
 
 
@@ -88,7 +89,7 @@ void runGenAllMBFs() {
 	for(size_t i = 0; i < (1 << Variables) + 1; i++) {
 		sizeCounts[i] = 0;
 	}
-	for(const BooleanFunction<Variables>& item : result) {
+	for(const Monotonic<Variables>& item : result) {
 		sizeCounts[item.size()]++;
 	}
 
@@ -97,7 +98,7 @@ void runGenAllMBFs() {
 	{
 		std::ofstream file(getFileName("allUniqueMBF", Variables, ".mbf"), std::ios::binary);
 
-		for(const BooleanFunction<Variables>& item : result) {
+		for(const Monotonic<Variables>& item : result) {
 			serializeMBF(item, file);
 		}
 		file.close();
@@ -400,7 +401,7 @@ std::pair<uint64_t, uint64_t> getIntervalSizeFor(const MBFDecomposition<Variable
 	swapper.set(nodeIndex);
 	swapper.pushNext();
 
-	BooleanFunction<Variables> start = dec.get(nodeLayer, nodeIndex);
+	Monotonic<Variables> start = dec.get(nodeLayer, nodeIndex);
 
 	uint64_t intervalSize = 0;
 	uint64_t uniqueClassesSize = 0;
@@ -411,12 +412,12 @@ std::pair<uint64_t, uint64_t> getIntervalSizeFor(const MBFDecomposition<Variable
 		for(int dirtyIndex : swapper) {
 			//std::cout << "  dirty index " << dirtyIndex << "\n";
 
-			BooleanFunction<Variables> cur = dec.get(layer, dirtyIndex);
+			Monotonic<Variables> cur = dec.get(layer, dirtyIndex);
 
-			int numSubSets = countSuperSetPermutations(cur, start);
+			int numSubSets = countSuperSetPermutations(cur.func, start.func);
 			if(numSubSets < 1) {
 				__debugbreak();
-				int numSubSets = countSuperSetPermutations(cur, start);
+				int numSubSets = countSuperSetPermutations(cur.func, start.func);
 			}
 
 			intervalSize += numSubSets;
@@ -425,7 +426,7 @@ std::pair<uint64_t, uint64_t> getIntervalSizeFor(const MBFDecomposition<Variable
 			for(LinkedNode& ln : dec.iterLinksOf(layer, dirtyIndex)) {
 				//std::cout << "    subLink " << ln.count << "x" << ln.index << "\n";
 
-				BooleanFunction<Variables> to = dec.get(layer + 1, ln.index);
+				Monotonic<Variables> to = dec.get(layer + 1, ln.index);
 
 				swapper.set(ln.index);
 			}
@@ -500,48 +501,23 @@ void produceDualU64File(const char* inputName, const char* dualName) {
 
 #ifndef RUN_TESTS
 int main() {
-	//doRAMTest();
+	//doRAMTest();  // works
 
-	//MBFDecompositionWithHash<6> thing;
+	//MBFDecompositionWithHash<6> thing; // doesn't work
 
-	uint256_t num = 123456789;
-	num *= 1000000000;
-	num += 123456789;
-	num *= 1000000000;
-	num += 123456789;
-	num *= 1000000000;
-	num += 123456789;
-	num *= 1000000000;
-	num += 123456789;
-	num *= 1000000000;
-	num += 123456789;
-	num *= 1000000000;
-	num += 123456789;
-	num *= 1000000000;
-	num += 123456789;
-	num *= 1000000000;
-	num += 123456789;
-	num *= 1000000000;
-	num += 123456789;
-
-	std::cout << num;
-
-	//saveIntervalSizes<6>();
-
-	//produceDualU64File<6>("intervalSizesToTop", "intervalSizesToBottom");
-	//produceDualU64File<6>("uniqueClassCountsToTop", "uniqueClassCountsToBottom");
-
-	//doLinkCount<7>();
-
-	//runGenAllMBFs<7>();
+	//runGenAllMBFs<5>(); // works
 	
-	//runSortAndComputeLinks<7>();
-	
-	//runGenLayerDecomposition();
-	
-	//sampleIntervalSizes<7>();
+	//runSortAndComputeLinks<5>(); // works
 
-	//std::cout << "D=" << getD<6>() << "\n";
-	//std::cout << "R=" << getR<6>();
+	//saveIntervalSizes<5>(); // works
+
+	//doLinkCount<5>(); // works
+
+	//runGenLayerDecomposition(); // works
+	
+	//sampleIntervalSizes<5>(); // works
+
+	//std::cout << "D=" << getD<6>() << "\n"; // works
+	//std::cout << "R=" << getR<6>(); // doesn't work
 }
 #endif

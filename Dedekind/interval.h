@@ -21,15 +21,6 @@
 #include <vector>
 
 template<unsigned int Variables>
-constexpr Monotonic<Variables> getTop() {
-	return Monotonic<Variables>(BooleanFunction<Variables>::full());
-}
-template<unsigned int Variables>
-constexpr Monotonic<Variables> getBot() {
-	return Monotonic<Variables>(BooleanFunction<Variables>::empty());
-}
-
-template<unsigned int Variables>
 struct Interval {
 	using MBF = Monotonic<Variables>;
 	using AC = AntiChain<Variables>;
