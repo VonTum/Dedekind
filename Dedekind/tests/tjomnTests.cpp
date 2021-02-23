@@ -186,3 +186,15 @@ TEST_CASE(testRevolution) {
 
 	std::cout << "D(" << (Degree + 3) << ") = " << d << "\n";
 }
+
+// Manual inspection
+TEST_CASE(testRevolutionBetterMEM) {
+	constexpr unsigned int Degree = 4;
+	using AC = AntiChain<Degree>;
+	using MBF = Monotonic<Degree>;
+	std::cout << "\n";
+
+	uint256_t d = revolutionBetterMEM<Degree>();
+
+	std::cout << "D(" << (Degree + 3) << ") = " << d << "\n";
+}

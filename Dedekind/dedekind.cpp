@@ -12,6 +12,7 @@
 
 #include "MBFDecomposition.h"
 #include "r8Computation.h"
+#include "tjomn.h"
 
 /*
 Correct numbers
@@ -497,6 +498,15 @@ void produceDualU64File(const char* inputName, const char* dualName) {
 }
 */
 
+template<unsigned int DedekindOrder>
+void doRevolution() {
+	std::cout << "Computing D(" << DedekindOrder << ")...\n";
+
+	TimeTracker timer;
+
+	revolutionBetterMEM<DedekindOrder - 3>();
+}
+
 #include "bigint/uint256_t.h"
 
 #ifndef RUN_TESTS
@@ -519,5 +529,11 @@ int main() {
 
 	//std::cout << "D=" << getD<6>() << "\n"; // works
 	//std::cout << "R=" << getR<6>(); // doesn't work
+
+	doRevolution<5>();
+	doRevolution<6>();
+	doRevolution<7>();
+	doRevolution<8>();
+	doRevolution<9>();
 }
 #endif

@@ -313,6 +313,29 @@ std::map<TJOMN<Variables>, TJOMNInfo> threeJoinOneMeetDecompositionsFast() {
 	return result;
 }
 
+// expects a function of the form void(const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& delta, uint64_t eqClassSize, uint64_t solutionCount)
+template<unsigned int Variables, typename Func>
+void forEachTJOMNFast(const Func& func) {
+	using AC = AntiChain<Variables>;
+	using MBF = Monotonic<Variables>;
+
+	BufferedMap<MBF, int> alltaus = generateNonEquivalentMonotonics<Variables>();
+	for(const KeyValue<MBF, int>& veetau : alltaus) {
+		generateTaus(veetau.key.asAntiChain(), [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, unsigned int nr) {
+			Interval<Variables> i(minDelta, maxDelta);
+			AC tac0 = tau0.asAntiChain();
+			AC tac1 = tau1.asAntiChain();
+			AC tac2 = tau2.asAntiChain();
+			i.forEach([&](const MBF& delta) {
+				uint64_t tjomn = threejoinmeetnumberveryfast(tac0, tac1, tac2, delta);
+				if(tjomn != 0) {
+					func(tau0, tau1, tau2, delta, veetau.value * nr, tjomn);
+				}
+			});
+		});
+	}
+}
+
 template<unsigned int Variables>
 struct TSize {
 	Monotonic<Variables> t;
@@ -431,3 +454,54 @@ uint256_t revolution() {
 
 	return result;
 }
+
+template<unsigned int Variables>
+uint256_t revolutionBetterMEM() {
+	using AC = AntiChain<Variables>;
+	using MBF = Monotonic<Variables>;
+	using INT = Interval<Variables>;
+
+	MBF e = MBF::getBot();
+	MBF a = MBF::getTop();
+	uint256_t result = 0;
+	std::map<TSize<Variables>, uint64_t> tisizes;
+	INT(e, a).forEach([&](const MBF& alpha) {
+		INT(e, alpha).forEach([&](const MBF& t) {
+			uint64_t intervalSize = intervalSizeFast(t, alpha);
+			tisizes.insert(std::make_pair(TSize<Variables>{t, alpha}, intervalSize));
+		});
+	});
+	std::map<DSize<Variables>, uint64_t> disizes;
+	INT(e, a).forEach([&](const MBF& d) {
+		uint64_t intervalSize = intervalSizeFast(e, d);
+		disizes.insert(std::make_pair(DSize<Variables>{d}, intervalSize));
+	});
+
+	uint64_t counting = 0;
+	uint64_t systemCount = 0;
+	forEachTJOMNFast<Variables>([&](const MBF& t0, const MBF& t1, const MBF& t2, const MBF& d, uint64_t eqClassSize, uint64_t solutionCount) {
+		systemCount++;
+		uint256_t term = 0;
+		INT(t0 | t1 | t2, a).forEach([&](const MBF& alpha) {
+			counting++;
+			term +=
+				uint256_t(tisizes[TSize<Variables>{t0, alpha}]) *
+				uint256_t(tisizes[TSize<Variables>{t1, alpha}]) *
+				uint256_t(tisizes[TSize<Variables>{t2, alpha}]);
+		});
+
+		result +=
+			term *
+			disizes[DSize<Variables>{d}] *
+			eqClassSize *
+			solutionCount;
+	});
+
+	std::cout << "systems : " << systemCount << "\n";
+	std::cout << "terms: " << counting << "\n";
+	std::cout << "D(" << (Variables + 3) << ") = " << result << "\n";
+
+	return result;
+}
+
+
