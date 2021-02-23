@@ -2,9 +2,11 @@
 
 
 #include "interval.h"
+#include "bigint/uint256_t.h"
 
 #include <array>
 #include <cstdint>
+#include <map>
 
 /* 
 	Finds the connected groups within a given antichain ss where they are linked by links not on d
@@ -142,4 +144,290 @@ uint64_t threejoinmeetnumberveryfast(const AntiChain<Variables>& t0, const AntiC
 		res *= nr;
 	}
 	return res;
+}
+
+// expects a function of the form void(const AntiChain<Variables>& p0, const AntiChain<Variables>& p1, const AntiChain<Variables>& p2, const AntiChain<Variables>& p3, unsigned int classSize)
+// classSize is either 1, 3, or 6
+template<unsigned int Variables, typename Func>
+void fourPartNonEquivalent(const AntiChain<Variables>& v, const Func& func) {
+	using AC = AntiChain<Variables>;
+
+	AC e = AC{};
+	v.forEachSubSet([&](const AC& p4) {
+		AC l0 = v - p4;
+		if(l0.isEmpty()) {
+			func(e, e, e, p4, 1);
+			return;
+		}
+		size_t f1 = l0.getFirst();
+		l0.remove(f1);
+		l0.forEachSubSet([&](AC p1) {
+			AC l1 = l0 - p1;
+			p1.add(f1);
+			if(l1.isEmpty()) {
+				func(p1, e, e, p4, 3);
+				return;
+			}
+			size_t f2 = l1.getFirst();
+			l1.remove(f2);
+			l1.forEachSubSet([&](AC p2) {
+				AC p3 = l1 - p2;
+				p2.add(f2);
+				func(p1, p2, p3, p4, 6);
+			});
+		});
+	});
+}
+
+// expects a function of the form void(const Monotonic<Variables>& tau0, const Monotonic<Variables>& tau1, const Monotonic<Variables>& tau2, const Monotonic<Variables>& minDelta, const Monotonic<Variables>& maxDelta, unsigned int nr)
+template<unsigned int Variables, typename Func>
+void generateTaus(const AntiChain<Variables>& vee, const Func& funcToRun) {
+	using AC = AntiChain<Variables>;
+	using MBF = Monotonic<Variables>;
+	using INT = Interval<Variables>;
+
+	fourPartNonEquivalent(vee, [&](const AC& p0, const AC& p1, const AC& p2, const AC& p3, unsigned int nr) {
+		MBF fp0 = p0.asMonotonic();
+		MBF fp1 = p1.asMonotonic();
+		MBF fp2 = p2.asMonotonic();
+		MBF fp3 = p3.asMonotonic();
+
+		MBF tau01 = fp0 | fp1 | fp3;
+		MBF tau02 = fp0 | fp2 | fp3;
+		MBF tau12 = fp1 | fp2 | fp3;
+
+		INT i2(tau01, tau01 | fp2.pred());
+		INT i1(tau02, tau02 | fp1.pred());
+		INT i0(tau12, tau12 | fp0.pred());
+
+		// these indices are reversed in the original code, perhaps fix in a later iteration
+		i2.forEach([&](const MBF& rt0) {
+			i1.forEach([&](const MBF& rt1) {
+				i0.forEach([&](const MBF& rt2) {
+					MBF minDelta = fp0 & fp1 & fp2;
+					MBF maxDelta = rt0 & rt1 & rt2;
+					funcToRun(rt0, rt1, rt2, minDelta, maxDelta, nr);
+				});
+			});
+		});
+	});
+}
+
+template<unsigned int Variables>
+BufferedMap<Monotonic<Variables>, int> generateNonEquivalentMonotonics() {
+	using MBF = Monotonic<Variables>;
+
+	BufferedMap<MBF, int> result(mbfCounts[Variables]);
+
+	forEachMonotonicFunction<Variables>([&](const MBF& mbf) {
+		MBF canon = mbf.canonize();
+		KeyValue<MBF, int>* found = result.find(canon);
+		if(found) {
+			found->value++;
+		} else {
+			result.add(canon, 1);
+		}
+	});
+
+	return result;
+}
+
+template<unsigned int Variables>
+struct TJOMN {
+	Monotonic<Variables> taus[3];
+	Monotonic<Variables> delta;
+};
+
+template<unsigned int Variables>
+bool operator==(const TJOMN<Variables>& a, const TJOMN<Variables>& b) {
+	for(size_t i = 0; i < 3; i++) {
+		if(a.taus[i] != b.taus[i]) return false;
+	}
+	return a.delta == b.delta;
+}
+template<unsigned int Variables>
+bool operator!=(const TJOMN<Variables>& a, const TJOMN<Variables>& b) {
+	return !(a == b);
+}
+template<unsigned int Variables>
+bool operator<(const TJOMN<Variables>& a, const TJOMN<Variables>& b) {
+	for(size_t i = 0; i < 3; i++) {
+		if(a.taus[i].func.bitset != b.taus[i].func.bitset) {
+			return a.taus[i].func.bitset < b.taus[i].func.bitset;
+		}
+	}
+	return a.delta.func.bitset < b.delta.func.bitset;
+}
+template<unsigned int Variables>
+bool operator>(const TJOMN<Variables>& a, const TJOMN<Variables>& b) {
+	return b < a;
+}
+template<unsigned int Variables>
+bool operator>=(const TJOMN<Variables>& a, const TJOMN<Variables>& b) {
+	return !(a < b);
+}
+template<unsigned int Variables>
+bool operator<=(const TJOMN<Variables>& a, const TJOMN<Variables>& b) {
+	return !(b < a);
+}
+
+template<unsigned int Variables>
+std::ostream& operator<<(std::ostream& os, const TJOMN<Variables>& tj) {
+	os << "{" << tj.taus[0] << ", " << tj.taus[1] << ", " << tj.taus[2] << "}, " << tj.delta << "}";
+	return os;
+}
+
+struct TJOMNInfo {
+	uint64_t eqClassSize;
+	uint64_t solutionCount;
+};
+
+inline std::ostream& operator<<(std::ostream& os, const TJOMNInfo& tj) {
+	os << "{eqClassSize=" <<tj.eqClassSize << ", solutionCount=" << tj.solutionCount << "}";
+	return os;
+}
+
+template<unsigned int Variables>
+std::map<TJOMN<Variables>, TJOMNInfo> threeJoinOneMeetDecompositionsFast() {
+	using AC = AntiChain<Variables>;
+	using MBF = Monotonic<Variables>;
+
+	std::map<TJOMN<Variables>, TJOMNInfo> result;
+	BufferedMap<MBF, int> alltaus = generateNonEquivalentMonotonics<Variables>();
+	for(const KeyValue<MBF, int>& veetau : alltaus) {
+		generateTaus(veetau.key.asAntiChain(), [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, unsigned int nr) {
+			Interval<Variables> i(minDelta, maxDelta);
+			AC tac0 = tau0.asAntiChain();
+			AC tac1 = tau1.asAntiChain();
+			AC tac2 = tau2.asAntiChain();
+			i.forEach([&](const MBF& delta) {
+				uint64_t tjomn = threejoinmeetnumberveryfast(tac0, tac1, tac2, delta);
+				if(tjomn != 0) {
+					TJOMN<Variables> key{{tau0, tau1, tau2}, delta};
+					result.insert(std::make_pair(key, TJOMNInfo{veetau.value * nr, tjomn}));
+				}
+			});
+		});
+	}
+
+	return result;
+}
+
+template<unsigned int Variables>
+struct TSize {
+	Monotonic<Variables> t;
+	Monotonic<Variables> alpha;
+};
+
+template<unsigned int Variables>
+bool operator==(const TSize<Variables>& a, const TSize<Variables>& b) {
+	return a.t == b.t && a.alpha == b.alpha;
+}
+template<unsigned int Variables>
+bool operator!=(const TSize<Variables>& a, const TSize<Variables>& b) {
+	return !(a == b);
+}
+template<unsigned int Variables>
+bool operator<(const TSize<Variables>& a, const TSize<Variables>& b) {
+	if(a.t.func.bitset != b.t.func.bitset) {
+		return a.t.func.bitset < b.t.func.bitset;
+	}
+	return a.alpha.func.bitset < b.alpha.func.bitset;
+}
+template<unsigned int Variables>
+bool operator>(const TSize<Variables>& a, const TSize<Variables>& b) {
+	return b < a;
+}
+template<unsigned int Variables>
+bool operator>=(const TSize<Variables>& a, const TSize<Variables>& b) {
+	return !(a < b);
+}
+template<unsigned int Variables>
+bool operator<=(const TSize<Variables>& a, const TSize<Variables>& b) {
+	return !(b < a);
+}
+
+template<unsigned int Variables>
+struct DSize {
+	Monotonic<Variables> d;
+};
+
+template<unsigned int Variables>
+bool operator==(const DSize<Variables>& a, const DSize<Variables>& b) {
+	return a.d == b.d;
+}
+template<unsigned int Variables>
+bool operator!=(const DSize<Variables>& a, const DSize<Variables>& b) {
+	return !(a == b);
+}
+template<unsigned int Variables>
+bool operator<(const DSize<Variables>& a, const DSize<Variables>& b) {
+	return a.d.func.bitset < b.d.func.bitset;
+}
+template<unsigned int Variables>
+bool operator>(const DSize<Variables>& a, const DSize<Variables>& b) {
+	return b < a;
+}
+template<unsigned int Variables>
+bool operator>=(const DSize<Variables>& a, const DSize<Variables>& b) {
+	return !(a < b);
+}
+template<unsigned int Variables>
+bool operator<=(const DSize<Variables>& a, const DSize<Variables>& b) {
+	return !(b < a);
+}
+
+template<unsigned int Variables>
+uint256_t revolution() {
+	using AC = AntiChain<Variables>;
+	using MBF = Monotonic<Variables>;
+	using INT = Interval<Variables>;
+
+	std::map<TJOMN<Variables>, TJOMNInfo> systems = threeJoinOneMeetDecompositionsFast<Variables>();
+
+	std::cout << "systems : " << systems.size() << "\n";
+
+	MBF e = MBF::getBot();
+	MBF a = MBF::getTop();
+	uint256_t result = 0;
+	std::map<TSize<Variables>, uint64_t> tisizes;
+	INT(e, a).forEach([&](const MBF& alpha) {
+		INT(e, alpha).forEach([&](const MBF& t) {
+			uint64_t intervalSize = intervalSizeFast(t, alpha);
+			tisizes.insert(std::make_pair(TSize<Variables>{t, alpha}, intervalSize));
+		});
+	});
+	std::map<DSize<Variables>, uint64_t> disizes;
+	INT(e, a).forEach([&](const MBF& d) {
+		uint64_t intervalSize = intervalSizeFast(e, d);
+		disizes.insert(std::make_pair(DSize<Variables>{d}, intervalSize));
+	});
+
+	uint64_t counting = 0;
+	for(const std::pair<TJOMN<Variables>, TJOMNInfo>& item : systems) {
+		MBF t0 = item.first.taus[0];
+		MBF t1 = item.first.taus[1];
+		MBF t2 = item.first.taus[2];
+		MBF d = item.first.delta;
+
+		uint256_t term = 0;
+		INT(t0 | t1 | t2, a).forEach([&](const MBF& alpha) {
+			counting++;
+			term +=
+				uint256_t(tisizes[TSize<Variables>{t0, alpha}]) *
+				uint256_t(tisizes[TSize<Variables>{t1, alpha}]) *
+				uint256_t(tisizes[TSize<Variables>{t2, alpha}]);
+		});
+
+		result +=
+			term *
+			disizes[DSize<Variables>{d}] *
+			item.second.eqClassSize * 
+			item.second.solutionCount;
+	}
+
+	std::cout << "terms: " << counting << "\n";
+	std::cout << "D(" << (Variables + 3) << ") = " << result << "\n";
+
+	return result;
 }

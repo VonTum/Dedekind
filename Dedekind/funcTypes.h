@@ -30,6 +30,16 @@ struct AntiChain {
 		return Monotonic<Variables>(func.monotonizeDown());
 	}
 
+	void add(size_t index) {
+		this->func.add(index);
+		assert(this->func.isAntiChain());
+	}
+
+	void remove(size_t index) {
+		this->func.remove(index);
+		assert(this->func.isAntiChain());
+	}
+
 	AntiChain intersection(const AntiChain<Variables>& other) const {
 		return AntiChain(this->func.bitset & other.func.bitset);
 	}
@@ -125,9 +135,14 @@ struct Monotonic {
 		return Monotonic(func.succ());
 	}
 
-	void add(size_t newBit) {
-		this->func.add(newBit);
-		assert(func.isMonotonic());
+	void add(size_t index) {
+		this->func.add(index);
+		assert(this->func.isMonotonic());
+	}
+
+	void remove(size_t index) {
+		this->func.remove(index);
+		assert(this->func.isMonotonic());
 	}
 
 	// expects a function of the form void(size_t index)

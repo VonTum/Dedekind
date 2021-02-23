@@ -39,32 +39,18 @@ struct Interval {
 	// expects a function of type void(const MBF&)
 	template<typename Func>
 	void forEach(const Func& func) const {
-		BufferedSet<MBF> curHashed(8000000); // just large enough for 6
-		std::vector<MBF> toExpand;
-
-		toExpand.push_back(bot);
-
-		do {
-			for(const MBF& curExpanding : toExpand) {
-				curExpanding.forEachUpExpansion(top, [&](const MBF& expanded) {
-					curHashed.add(expanded);
-				});
+		forEachMonotonicFunction<Variables>([this, &func](const Monotonic<Variables>& bf) {
+			if(this->contains(bf)) {
+				func(bf);
 			}
-			toExpand.clear();
-			toExpand.reserve(curHashed.size());
-			for(const MBF& item : curHashed) {
-				func(item);
-				toExpand.push_back(item);
-			}
-			curHashed.clear();
-		} while(!toExpand.empty());
+		});
 	}
 
 	uint64_t intevalSizeNaive() const {
 		uint64_t total = 0;
 
-		forEachMonotonicFunction<Variables>([this, &total](const Monotonic<Variables>& func) {
-			if(this->contains(func)) {
+		forEachMonotonicFunction<Variables>([this, &total](const Monotonic<Variables>& bf) {
+			if(this->contains(bf)) {
 				total++;
 			}
 		});

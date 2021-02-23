@@ -117,3 +117,72 @@ TEST_CASE(testConnectFast) {
 TEST_CASE(testKnownTJOMN) {
 	ASSERT(threejoinmeetnumberveryfast(AntiChain<3>{0b011}, AntiChain<3>{0b111}, AntiChain<3>{0b101}, AntiChain<3>{0b001}.asMonotonic()) == 3);
 }
+
+// Manual inspection
+TEST_CASE(testKnownFourPartNonEquivalent) {
+	using AC = AntiChain<4>;
+	std::cout << "\n";
+	fourPartNonEquivalent(AC{0b0111, 0b1100}, [&](const AC& p1, const AC& p2, const AC& p3, const AC& p4, int classSize) {
+		std::cout << "{" << p1 << ", " << p2 << ", " << p3 << ", " << p4 << "}, " << classSize << "\n";
+	});
+}
+
+// Manual inspection
+TEST_CASE(testGenerateTaus) {
+	using AC = AntiChain<3>;
+	using MBF = Monotonic<3>;
+	std::cout << "\n";
+	generateTaus(AC{0b111}, [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, int classSize) {
+		std::cout << "{" << tau0 << ", " << tau1 << ", " << tau2 << ", " << minDelta << ", " << maxDelta << "}, " << classSize << "\n";
+	});
+}
+
+// Manual inspection
+TEST_CASE(testGenerateNonEquivalentMonotonics) {
+	using AC = AntiChain<3>;
+	using MBF = Monotonic<3>;
+	std::cout << "\n";
+	BufferedMap<MBF, int> allChains = generateNonEquivalentMonotonics<3>();
+
+	for(const KeyValue<MBF, int>& item : allChains) {
+		std::cout << item.key << ": " << item.value << "\n";
+	}
+}
+
+// Manual inspection
+TEST_CASE(testThreeJoinOneMeetDecompositionsFast) {
+	constexpr unsigned int Degree = 3;
+	using AC = AntiChain<Degree>;
+	using MBF = Monotonic<Degree>;
+	std::cout << "\n";
+	
+	std::map<TJOMN<Degree>, TJOMNInfo> result = threeJoinOneMeetDecompositionsFast<Degree>();
+
+	std::cout << "systems: " << result.size() << "\n";
+
+	uint64_t maxEqClassSize = 0;
+	uint64_t maxSolutionCount = 0;
+
+	for(const std::pair<TJOMN<Degree>, TJOMNInfo>& item : result) {
+		if(item.second.eqClassSize > maxEqClassSize) {
+			maxEqClassSize = item.second.eqClassSize;
+		}
+		if(item.second.solutionCount > maxSolutionCount) {
+			maxSolutionCount = item.second.solutionCount;
+		}
+	}
+	printVar(maxEqClassSize);
+	printVar(maxSolutionCount);
+}
+
+// Manual inspection
+TEST_CASE(testRevolution) {
+	constexpr unsigned int Degree = 4;
+	using AC = AntiChain<Degree>;
+	using MBF = Monotonic<Degree>;
+	std::cout << "\n";
+
+	uint256_t d = revolution<Degree>();
+
+	std::cout << "D(" << (Degree + 3) << ") = " << d << "\n";
+}
