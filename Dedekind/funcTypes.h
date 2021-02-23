@@ -244,7 +244,34 @@ void forEachMonotonicFunctionRecursive(const Monotonic<Variables>& cur, const Fu
 
 template<unsigned int Variables, typename Func>
 void forEachMonotonicFunction(const Func& func) {
-	forEachMonotonicFunctionRecursive(Monotonic<Variables>(BooleanFunction<Variables>::empty()), func);
+	forEachMonotonicFunctionRecursive(Monotonic<Variables>::getBot(), func);
+}
+
+template<unsigned int Variables, typename Func>
+void forEachMonotonicFunctionBetweenRecursive(const Monotonic<Variables>& bot, const Monotonic<Variables>& top, const Monotonic<Variables>& cur, const Func& func) {
+	if(bot <= cur) {
+		func(cur);
+	}
+
+	AntiChain<Variables> newBits(andnot(cur.func.succ(), cur.func) & top.func);
+
+	newBits.forEachOne([&](size_t bit) {
+		Monotonic<Variables> newMBF = cur;
+		newMBF.add(FunctionInput::underlyingType(bit));
+
+		if(isUniqueExtention(newMBF, bit)) {
+			forEachMonotonicFunctionBetweenRecursive(bot, top, newMBF, func);
+		}
+	});
+}
+
+template<unsigned int Variables, typename Func>
+void forEachMonotonicFunctionBetween(const Monotonic<Variables>& bot, const Monotonic<Variables>& top, const Func& func) {
+	//BooleanFunction<Variables> reachableFromBot = ~((~bot.asAntiChain().func).monotonizeUp());
+	//BooleanFunction<Variables> availableBits = reachableFromBot & top.func;
+	if(bot <= top) {
+		forEachMonotonicFunctionBetweenRecursive(bot, top, Monotonic<Variables>::getBot(), func);
+	}
 }
 
 template<unsigned int Variables>

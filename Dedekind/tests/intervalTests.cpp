@@ -56,6 +56,17 @@ TEST_CASE(testIntervalSize) {
 TEST_CASE_SLOW(testIntervalSizeFast) {
 	runFunctionRange<1, 6, IntervalSizeFast>();
 }
+TEST_CASE_SLOW(benchIntervalSizeNaive) {
+	size_t totalSize = 0;
+	for(int iter = 0; iter < 50; iter++) {
+		if(iter % 100 == 0) std::cout << '.';
+		Interval<6> i = generateInterval<6>();
+
+		totalSize += i.intevalSizeNaive();
+	}
+	std::cout << totalSize;
+	//std::cout << intervalSizeFast(getBot<7>(), getTop<7>());
+}
 TEST_CASE_SLOW(benchIntervalSizeFast) {
 	size_t totalSize = 0;
 	for(int iter = 0; iter < 10000; iter++) {
@@ -64,6 +75,6 @@ TEST_CASE_SLOW(benchIntervalSizeFast) {
 
 		totalSize += intervalSizeFast(i.bot, i.top);
 	}
-	logStream << totalSize;
+	std::cout << totalSize;
 	//std::cout << intervalSizeFast(getBot<7>(), getTop<7>());
 }

@@ -39,20 +39,20 @@ struct Interval {
 	// expects a function of type void(const MBF&)
 	template<typename Func>
 	void forEach(const Func& func) const {
-		forEachMonotonicFunction<Variables>([this, &func](const Monotonic<Variables>& bf) {
-			if(this->contains(bf)) {
-				func(bf);
-			}
-		});
+		forEachMonotonicFunctionBetween<Variables>(this->bot, this->top, func);
 	}
 
 	uint64_t intevalSizeNaive() const {
 		uint64_t total = 0;
 
-		forEachMonotonicFunction<Variables>([this, &total](const Monotonic<Variables>& bf) {
-			if(this->contains(bf)) {
+		/*forEachMonotonicFunction<Variables>([this, &total](const Monotonic<Variables>& bf) {
+			if(this->bot <= bf && bf <= this->top) {
 				total++;
 			}
+		});*/
+
+		forEachMonotonicFunctionBetween<Variables>(this->bot, this->top, [this, &total](const Monotonic<Variables>& bf) {
+			total++;
 		});
 
 		return total;
