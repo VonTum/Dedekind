@@ -218,14 +218,6 @@ bool operator<=(const Monotonic<Variables>& a, const Monotonic<Variables>& b) {
 	return a.func.isSubSetOf(b.func);
 }
 
-
-template<unsigned int Variables>
-bool isUniqueExtention(const Monotonic<Variables>& bs, size_t bit) {
-	AntiChain<Variables> possibleBits = bs.asAntiChain();
-
-	return possibleBits.getFirst() == bit;
-}
-
 template<unsigned int Variables, typename Func>
 void forEachMonotonicFunctionRecursive(const Monotonic<Variables>& cur, const Func& func) {
 	func(cur);
@@ -234,9 +226,9 @@ void forEachMonotonicFunctionRecursive(const Monotonic<Variables>& cur, const Fu
 
 	newBits.forEachOne([&](size_t bit) {
 		Monotonic<Variables> newMBF = cur;
-		newMBF.add(FunctionInput::underlyingType(bit));
+		newMBF.add(bit);
 
-		if(isUniqueExtention(newMBF, bit)) {
+		if(newMBF.asAntiChain().getFirst() == bit) {
 			forEachMonotonicFunctionRecursive(newMBF, func);
 		}
 	});
@@ -248,18 +240,40 @@ void forEachMonotonicFunction(const Func& func) {
 }
 
 template<unsigned int Variables, typename Func>
-void forEachMonotonicFunctionBetweenRecursive(const Monotonic<Variables>& bot, const Monotonic<Variables>& top, const Monotonic<Variables>& cur, const Func& func) {
-	if(bot <= cur) {
-		func(cur);
-	}
+void forEachMonotonicFunctionUpToRecursive(const Monotonic<Variables>& top, const Monotonic<Variables>& cur, const Func& func) {
+	func(cur);
 
 	AntiChain<Variables> newBits(andnot(cur.func.succ(), cur.func) & top.func);
 
 	newBits.forEachOne([&](size_t bit) {
 		Monotonic<Variables> newMBF = cur;
-		newMBF.add(FunctionInput::underlyingType(bit));
+		newMBF.add(bit);
 
-		if(isUniqueExtention(newMBF, bit)) {
+		if(newMBF.asAntiChain().getFirst() == bit) {
+			forEachMonotonicFunctionUpToRecursive(top, newMBF, func);
+		}
+	});
+}
+
+template<unsigned int Variables, typename Func>
+void forEachMonotonicFunctionUpTo(const Monotonic<Variables>& top, const Func& func) {
+	forEachMonotonicFunctionUpToRecursive(top, Monotonic<Variables>::getBot(), func);
+}
+
+template<unsigned int Variables, typename Func>
+void forEachMonotonicFunctionBetweenRecursive(const Monotonic<Variables>& bot, const Monotonic<Variables>& top, const Monotonic<Variables>& cur, const Func& func) {
+	func(cur);
+
+	// remove top and bot extentions which cannot be added
+	AntiChain<Variables> newBits(andnot(cur.func.succ(), cur.func) & top.func & ~bot.func);
+
+	newBits.forEachOne([&](size_t bit) {
+		Monotonic<Variables> newMBF = cur;
+		newMBF.add(bit);
+
+		// &~bot is to remove bits that are not allowed to be added, as they should have been added from the beginning
+		// the new bits that overlap with bot are bits that *must* have already been on, so cannot be added
+		if((newMBF.asAntiChain().func & ~bot.func).getFirst() == bit) {
 			forEachMonotonicFunctionBetweenRecursive(bot, top, newMBF, func);
 		}
 	});
@@ -267,10 +281,8 @@ void forEachMonotonicFunctionBetweenRecursive(const Monotonic<Variables>& bot, c
 
 template<unsigned int Variables, typename Func>
 void forEachMonotonicFunctionBetween(const Monotonic<Variables>& bot, const Monotonic<Variables>& top, const Func& func) {
-	//BooleanFunction<Variables> reachableFromBot = ~((~bot.asAntiChain().func).monotonizeUp());
-	//BooleanFunction<Variables> availableBits = reachableFromBot & top.func;
 	if(bot <= top) {
-		forEachMonotonicFunctionBetweenRecursive(bot, top, Monotonic<Variables>::getBot(), func);
+		forEachMonotonicFunctionBetweenRecursive(bot, top, bot, func);
 	}
 }
 

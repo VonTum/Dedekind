@@ -453,6 +453,10 @@ public:
 		return BooleanFunction(andnot(andnot(this->bitset, this->pred().bitset), mustBeSuperSetOf.bitset));
 	}
 
+	size_t getFirst() const {
+		return bitset.getFirstOnBit();
+	}
+
 	// takes a function of the form void(const BooleanFunction& expanded)
 	template<typename Func>
 	void forEachUpExpansion(const Func& func) const {

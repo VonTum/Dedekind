@@ -471,11 +471,13 @@ uint256_t revolutionBetterMEM() {
 			tisizes.insert(std::make_pair(TSize<Variables>{t, alpha}, intervalSize));
 		});
 	});
+	std::cout << "ti intervals: " << tisizes.size() << "\n";
 	std::map<DSize<Variables>, uint64_t> disizes;
 	INT(e, a).forEach([&](const MBF& d) {
 		uint64_t intervalSize = intervalSizeFast(e, d);
 		disizes.insert(std::make_pair(DSize<Variables>{d}, intervalSize));
 	});
+	std::cout << "di intervals: " << disizes.size() << "\n";
 
 	uint64_t counting = 0;
 	uint64_t systemCount = 0;
