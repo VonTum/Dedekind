@@ -504,7 +504,7 @@ void doRevolution() {
 
 	TimeTracker timer;
 
-	revolutionMemoized<DedekindOrder - 3>();
+	revolutionParallel<DedekindOrder - 3>();
 }
 
 #include "bigint/uint256_t.h"

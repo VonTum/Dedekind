@@ -338,6 +338,61 @@ void forEachTJOMNFast(const Func& func) {
 	}
 }
 
+struct PerThreadTotals {
+	uint64_t systemCount;
+	uint64_t counting;
+	u192 totalResult;
+};
+
+// expects a function of the form void(const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& delta, uint64_t eqClassSize, uint64_t solutionCount)
+template<unsigned int Variables>
+PerThreadTotals tjomnCountInParallel() {
+	using AC = AntiChain<Variables>;
+	using MBF = Monotonic<Variables>;
+	using INT = Interval<Variables>;
+
+	BufferedMap<MBF, int> alltaus = generateNonEquivalentMonotonics<Variables>();
+	
+	IntervalSizeCache<Variables> intervalSizes = IntervalSizeCache<Variables>::generate();
+	return iterCollectionPartitionedWithSeparateTotals(alltaus, PerThreadTotals{0, 0, 0}, [&](const KeyValue<MBF, int>& veetau, PerThreadTotals& localTotal) {
+		std::cout << '.';
+		
+		
+		generateTaus(veetau.key.asAntiChain(), [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, unsigned int nr) {
+			uint64_t eqClassSize = veetau.value * nr;
+
+			Interval<Variables> i(minDelta, maxDelta);
+			AC tac0 = tau0.asAntiChain();
+			AC tac1 = tau1.asAntiChain();
+			AC tac2 = tau2.asAntiChain();
+			i.forEach([&](const MBF& delta) {
+				uint64_t tjomn = threejoinmeetnumberveryfast(tac0, tac1, tac2, delta);
+				if(tjomn != 0) {
+					localTotal.systemCount++;
+					u128 term = 0;
+					INT(tau0 | tau1 | tau2, MBF::getTop()).forEach([&](const MBF& alpha) {
+						localTotal.counting++;
+						uint64_t is0 = intervalSizes.getIntervalSize(tau0, alpha);
+						uint64_t is1 = intervalSizes.getIntervalSize(tau1, alpha);
+						uint64_t is2 = intervalSizes.getIntervalSize(tau2, alpha);
+						term += umul128(is0 * is1, is2);
+					});
+
+					uint64_t dSize = intervalSizes.getIntervalSizeFromBot(delta);
+
+					term *= tjomn; // quite a few leftover bits in term, to make up for 31 max bits of tjomn
+
+					localTotal.totalResult += umul192(term, dSize * eqClassSize);
+				}
+			});
+		});
+	}, [](PerThreadTotals& total, const PerThreadTotals& localTotal) {
+		total.totalResult += localTotal.totalResult;
+		total.counting += localTotal.counting;
+		total.systemCount += localTotal.systemCount;
+	});
+}
+
 template<unsigned int Variables>
 struct TSize {
 	Monotonic<Variables> t;
@@ -496,4 +551,13 @@ u192 revolutionMemoized() {
 	return result;
 }
 
+template<unsigned int Variables>
+u192 revolutionParallel() {
+	PerThreadTotals result = tjomnCountInParallel<Variables>();
 
+	std::cout << "systems : " << result.systemCount << "\n";
+	std::cout << "terms: " << result.counting << "\n";
+	std::cout << "D(" << (Variables + 3) << ") = " << result.totalResult << "\n";
+
+	return result.totalResult;
+}
