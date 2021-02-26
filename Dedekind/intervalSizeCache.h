@@ -5,18 +5,23 @@
 
 #include "parallelIter.h"
 
+#include "MBFDecomposition.h"
+
 #include <mutex>
 #include <atomic>
 
-template<unsigned int Variables>
+template<unsigned int Variables, bool UseCanonization>
 BooleanFunction<Variables> getIntervalBFRepresentation(const Monotonic<Variables>& bot, const Monotonic<Variables>& top) {
-	//assert(!bot.isEmpty());
 	assert(bot <= top);
 	BooleanFunction<Variables> base = andnot(top.func, bot.func);
-	return base.canonize();
+	if constexpr(UseCanonization) {
+		return base.canonize();
+	} else {
+		return base;
+	}
 }
 
-template<unsigned int Variables>
+template<unsigned int Variables, bool UseCanonization>
 uint64_t intervalSizeMemoized(const Monotonic<Variables>& intervalBot, const Monotonic<Variables>& intervalTop, BufferedMap<BooleanFunction<Variables>, uint64_t>& knownIntervalSizes, std::mutex& knownIntervalSizeMutex) {
 	using MBF = Monotonic<Variables>;
 	using AC = AntiChain<Variables>;
@@ -24,8 +29,6 @@ uint64_t intervalSizeMemoized(const Monotonic<Variables>& intervalBot, const Mon
 		return 0;
 	}
 
-	//AntiChain<Variables> dsn = intersection(intervalBot.asAntiChain(), intervalTop.asAntiChain());
-	//Monotonic<Variables> newTop = (intervalTop.asAntiChain() - dsn).asMonotonic();
 	AC topAC = intervalTop.asAntiChain() - intervalBot.asAntiChain();
 	MBF top = topAC.asMonotonic();
 	MBF bot = intervalBot & top;
@@ -36,12 +39,12 @@ uint64_t intervalSizeMemoized(const Monotonic<Variables>& intervalBot, const Mon
 	if(bot == top) {
 		return 1;
 	}
-	if(topAC.func.bitset.count() == 1 && topAC.func.bitset.get(0)) {
+	if(top == MBF::getBotSucc()) {
 		return 2;
 	}
 
 	// memoization result
-	BooleanFunction<Variables> hashRep = getIntervalBFRepresentation(bot, top);
+	BooleanFunction<Variables> hashRep = getIntervalBFRepresentation<Variables, UseCanonization>(bot, top);
 	KeyValue<BooleanFunction<Variables>, uint64_t>* found = knownIntervalSizes.find(hashRep);
 	if(found) {
 		return found->value;
@@ -56,7 +59,7 @@ uint64_t intervalSizeMemoized(const Monotonic<Variables>& intervalBot, const Mon
 	size_t universe = size_t(1U << Variables) - 1;
 	AC umb1{universe & ~firstOnBit};
 
-	uint64_t v1 = intervalSizeMemoized(bot | top1ac, top, knownIntervalSizes, knownIntervalSizeMutex);
+	uint64_t v1 = intervalSizeMemoized<Variables, UseCanonization>(bot | top1ac, top, knownIntervalSizes, knownIntervalSizeMutex);
 
 	uint64_t v2 = 0;
 
@@ -71,7 +74,7 @@ uint64_t intervalSizeMemoized(const Monotonic<Variables>& intervalBot, const Mon
 
 			MBF subTop = acProd(gpm, umb1) & top;
 
-			uint64_t vv = intervalSizeMemoized(bot | subSet, subTop, knownIntervalSizes, knownIntervalSizeMutex);
+			uint64_t vv = intervalSizeMemoized<Variables, UseCanonization>(bot | subSet, subTop, knownIntervalSizes, knownIntervalSizeMutex);
 
 			v2 += vv;
 		}
@@ -84,9 +87,11 @@ uint64_t intervalSizeMemoized(const Monotonic<Variables>& intervalBot, const Mon
 	return result;
 }
 
-constexpr size_t intervalBufferSize[]{2, 2, 8, 35, 347, 35877, 999999999 /*To be determined*/};
+constexpr size_t compactIntervalBufferSizes[]{2, 2, 8, 35, 347, 35877, 999999999 /*To be determined*/};
+constexpr size_t fastIntervalBufferSizes[]{2, 2, 11, 99, 3936, 3257608};
 
-template<unsigned int Variables>
+
+template<unsigned int Variables, bool UseCanonization = (Variables >= 6)>
 class IntervalSizeCache {
 	BakedMap<BooleanFunction<Variables>, uint64_t> intervalSizes;
 
@@ -119,7 +124,7 @@ public:
 			return 2;
 		}
 
-		return intervalSizes.get(getIntervalBFRepresentation(bot, top));
+		return intervalSizes.get(getIntervalBFRepresentation<Variables, UseCanonization>(bot, top));
 	}
 
 	uint64_t getIntervalSizeFromBot(const Monotonic<Variables>& top) const {
@@ -133,33 +138,62 @@ public:
 			return 2;
 		}
 
-		return intervalSizes.get(top.func.canonize());
+		if constexpr(UseCanonization) {
+			return intervalSizes.get(top.func.canonize());
+		} else {
+			return intervalSizes.get(top.func);
+		}
 	}
 
-	static IntervalSizeCache generate(const BufferedSet<Monotonic<Variables>>& allMBFs) {
-		std::mutex intervalSizeMutex;
-		BufferedMap<BooleanFunction<Variables>, uint64_t> intervalSizes(intervalBufferSize[Variables]);
-		std::cout << "made interval buffer\n";
+	static IntervalSizeCache generate() {
+		if constexpr(UseCanonization) {
+			std::pair<BufferedSet<Monotonic<Variables>>, uint64_t> allMBFsPair = generateAllMBFsFast<Variables>();
+			const BufferedSet<Monotonic<Variables>>& allMBFs = allMBFsPair.first;
 
-		std::cout << "Iterating MBFs: " << allMBFs.size() << " mbfs found!\n";
+			std::mutex intervalSizeMutex;
+			BufferedMap<BooleanFunction<Variables>, uint64_t> intervalSizes(compactIntervalBufferSizes[Variables]);
+			std::cout << "made interval buffer\n";
 
-		std::atomic<int> i = 0;
+			std::cout << "Iterating MBFs: " << allMBFs.size() << " mbfs found!\n";
 
-		//iterCollectionInParallel(allMBFs, [&](const Monotonic<Variables>& top) {
-		for(const Monotonic<Variables>& top : allMBFs){
-			int curI = i.fetch_add(1);
-			if(curI % 1000 == 0) {
-				std::cout << curI << "/" << allMBFs.size() << " ---- " << intervalSizes.size() << "/" << intervalBufferSize[Variables] << " intervals found" << "\n";
+			std::atomic<int> i = 0;
+
+			//iterCollectionInParallel(allMBFs, [&](const Monotonic<Variables>& top) {
+			for(const Monotonic<Variables>& top : allMBFs) {
+				int curI = i.fetch_add(1);
+				if(curI % 1000 == 0) {
+					std::cout << curI << "/" << allMBFs.size() << " ---- " << intervalSizes.size() << "/" << compactIntervalBufferSizes[Variables] << " intervals found" << "\n";
+				}
+				forEachMonotonicFunctionUpTo<Variables>(top, [&](const Monotonic<Variables>& bot) {
+					intervalSizeMemoized<Variables, UseCanonization>(bot, top, intervalSizes, intervalSizeMutex); // memoizes this interval, and all related
+				});
 			}
-			forEachMonotonicFunctionUpTo(top, [&](const Monotonic<Variables>& bot) {
-				intervalSizeMemoized(bot, top, intervalSizes, intervalSizeMutex); // memoizes this interval, and all related
+			//});
+
+			std::cout << Variables << "> Number of intervals: " << intervalSizes.size() << "\n";
+
+			return IntervalSizeCache(intervalSizes);
+		} else {
+			std::mutex intervalSizeMutex;
+			BufferedMap<BooleanFunction<Variables>, uint64_t> intervalSizes(fastIntervalBufferSizes[Variables]);
+			std::cout << "made interval buffer\n";
+
+			std::atomic<int> i = 0;
+
+			forEachMonotonicFunction<Variables>([&](const Monotonic<Variables>& top) {
+				int curI = i.fetch_add(1);
+				if(curI % 1000 == 0) {
+					std::cout << curI << "/" << dedekindNumbers[Variables] << " ---- " << intervalSizes.size() << "/" << fastIntervalBufferSizes[Variables] << " intervals found" << "\n";
+				}
+				forEachMonotonicFunctionUpTo<Variables>(top, [&](const Monotonic<Variables>& bot) {
+					intervalSizeMemoized<Variables, UseCanonization>(bot, top, intervalSizes, intervalSizeMutex); // memoizes this interval, and all related
+				});
 			});
+
+			std::cout << Variables << "> Number of intervals: " << intervalSizes.size() << "\n";
+
+			return IntervalSizeCache(intervalSizes);
 		}
-		//});
-
-		std::cout << Variables << "> Number of intervals: " << intervalSizes.size() << "\n";
-
-		return IntervalSizeCache(intervalSizes);
 	}
 };
 

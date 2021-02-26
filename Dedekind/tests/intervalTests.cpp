@@ -66,8 +66,7 @@ struct IntervalSizeCacheTest {
 		using AC = AntiChain<Variables>;
 		using MBF = Monotonic<Variables>;
 		using INT = Interval<Variables>;
-		std::pair<BufferedSet<MBF>, uint64_t> allMBFs = generateAllMBFsFast<Variables>();
-		IntervalSizeCache<Variables> intervalSizes = IntervalSizeCache<Variables>::generate(allMBFs.first);
+		IntervalSizeCache<Variables> intervalSizes = IntervalSizeCache<Variables>::generate();
 
 		MBF e = MBF::getBot();
 		MBF a = MBF::getTop();

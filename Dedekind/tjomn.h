@@ -518,8 +518,7 @@ uint256_t revolutionMemoized() {
 	MBF e = MBF::getBot();
 	MBF a = MBF::getTop();
 
-	std::pair<BufferedSet<MBF>, uint64_t> allMBFs = generateAllMBFsFast<Variables>();
-	IntervalSizeCache<Variables> intervalSizes = IntervalSizeCache<Variables>::generate(allMBFs.first);
+	IntervalSizeCache<Variables> intervalSizes = IntervalSizeCache<Variables>::generate();
 
 	uint256_t result = 0;
 	uint64_t counting = 0;

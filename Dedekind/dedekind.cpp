@@ -504,7 +504,7 @@ void doRevolution() {
 
 	TimeTracker timer;
 
-	revolutionBetterMEM<DedekindOrder - 3>();
+	revolutionMemoized<DedekindOrder - 3>();
 }
 
 #include "bigint/uint256_t.h"
@@ -537,10 +537,11 @@ int main() {
 	IntervalSizeCache<5>::generate(generateAllMBFsFast<5>().first);
 	IntervalSizeCache<6>::generate(generateAllMBFsFast<6>().first);*/
 
-	/*doRevolution<5>();
+	doRevolution<4>();
+	doRevolution<5>();
 	doRevolution<6>();
-	doRevolution<7>();*/
+	doRevolution<7>();
 	doRevolution<8>();
-	/*doRevolution<9>();*/
+	//doRevolution<9>();
 }
 #endif
