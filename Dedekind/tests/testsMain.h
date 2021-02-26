@@ -16,7 +16,8 @@ public:
 
 enum class TestType {
 	NORMAL,
-	SLOW
+	SLOW,
+	PROPERTY
 };
 
 struct TestAdder {
@@ -32,7 +33,7 @@ public:
 };
 
 extern thread_local TestInterface __testInterface;
-extern std::stringstream logStream;
+extern thread_local std::stringstream logStream;
 void logf(const char* format, ...);
 
 #define printVar(Var) do { std::cout << #Var << " : " << (Var) << "\n"; } while(false)
@@ -129,3 +130,13 @@ struct AssertBuilder {
 	if(ISFILLED_NAME) ASSERT(PREV_VAL_NAME == (value));\
 	ISFILLED_NAME = true;\
 }while(false)
+
+#define TEST_PROPERTY(func) void func(); static TestAdder __JOIN(tAdder, __LINE__)(__FILE__, #func, func, TestType::PROPERTY); void func()
+
+template<typename GenFunc>
+auto ____test_generate(const char* name, const GenFunc& generator) {
+	auto generated = generator();
+	logStream << name << " = " << generated << "\n";
+	return generated;
+}
+#define GEN(name, generator) auto name = ____test_generate(#name, (generator))

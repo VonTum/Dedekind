@@ -311,6 +311,7 @@
     <ClCompile Include="codeGen.cpp" />
     <ClCompile Include="dedekind.cpp" />
     <ClCompile Include="intervalDecomposition.cpp" />
+    <ClCompile Include="tests\bigintTests.cpp" />
     <ClCompile Include="tests\bitsetTests.cpp" />
     <ClCompile Include="tests\indent.cpp" />
     <ClCompile Include="tests\intervalTests.cpp" />
@@ -366,6 +367,7 @@
     <ClInclude Include="timeTracker.h" />
     <ClInclude Include="tjomn.h" />
     <ClInclude Include="toString.h" />
+    <ClInclude Include="u192.h" />
     <ClInclude Include="valuedDecomposition.h" />
   </ItemGroup>
   <ItemGroup>

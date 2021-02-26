@@ -29,7 +29,7 @@ static const TerminalColor ERROR_COLOR = TerminalColor::MAGENTA;
 static const TerminalColor SKIP_COLOR = TerminalColor::LIGHT_GRAY;
 
 thread_local TestInterface __testInterface;
-stringstream logStream;
+thread_local stringstream logStream;
 const bool reffableTrue = true;
 
 static void resetLog() {
@@ -140,12 +140,26 @@ public:
 		type(type),
 		fileName(std::strrchr(this->filePath, sepChar) ? std::strrchr(this->filePath, sepChar) + 1 : this->filePath) {}
 private:
+	void printFailure() const {
+		dumpLog();
+	}
+
+	void runTestFunc() const {
+		if(this->type == TestType::PROPERTY) {
+			for(int iter = 0; iter < 100; iter++) {
+				testFunc();
+			}
+		} else {
+			testFunc();
+		}
+	}
+
 	TestResult runNoErrorChecking(TestFlags flags, time_point<system_clock>& startTime) {
 		try {
 			startTime = system_clock::now();
 
 			__testInterface.reset();
-			testFunc();
+			runTestFunc();
 
 			std::size_t assertCount = __testInterface.getAssertCount();
 			setColor(assertCount > 0 ? TerminalColor::GRAY : TerminalColor::RED);
@@ -157,7 +171,7 @@ private:
 		} catch(AssertionError& e) {
 
 			printDeltaTime(startTime, FAILURE_COLOR);
-			dumpLog();
+			printFailure();
 
 			setColor(TerminalColor::RED);
 			printf("An assertion was incorrect at line %d:\n", e.line);
@@ -193,22 +207,22 @@ public:
 				return runNoErrorChecking(flags, startTime);
 			} catch(exception& e) {
 				printDeltaTime(startTime, ERROR_COLOR);
-				dumpLog();
+				printFailure();
 				setColor(TerminalColor::RED); printf("An general error was thrown: %s\n", e.what());
 				return TestResult::ERROR;
 			} catch(string& e) {
 				printDeltaTime(startTime, ERROR_COLOR);
-				dumpLog();
+				printFailure();
 				setColor(TerminalColor::RED); printf("An string exception was thrown: %s\n", e.c_str());
 				return TestResult::ERROR;
 			} catch(const char* ex) {
 				printDeltaTime(startTime, ERROR_COLOR);
-				dumpLog();
+				printFailure();
 				setColor(TerminalColor::RED); printf("A char* exception was thrown: %s\n", ex);
 				return TestResult::ERROR;
 			} catch(...) {
 				printDeltaTime(startTime, ERROR_COLOR);
-				dumpLog();
+				printFailure();
 				setColor(TerminalColor::RED); printf("An unknown exception was thrown\n");
 				return TestResult::ERROR;
 			}

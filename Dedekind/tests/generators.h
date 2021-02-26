@@ -5,6 +5,7 @@
 #include "../booleanFunction.h"
 #include "../interval.h"
 #include "../funcTypes.h"
+#include "../u192.h"
 
 inline bool genBool() {
 	return rand() % 2 == 1;
@@ -15,6 +16,14 @@ inline int generateInt(int max) {
 }
 inline size_t generateSize_t(size_t max) {
 	return rand() % max;
+}
+inline uint64_t genU64() {
+	uint64_t result = 0;
+	for(int iter = 0; iter < 5; iter++) {
+		result <<= 15;
+		result ^= uint64_t(rand());
+	}
+	return result;
 }
 
 template<size_t Size>
@@ -83,3 +92,10 @@ Interval<Variables> generateInterval() {
 	}
 }
 
+inline u128 genU128() {
+	return u128(genU64(), genU64());
+}
+
+inline u192 genU192() {
+	return u192(genU64(), genU64(), genU64());
+}

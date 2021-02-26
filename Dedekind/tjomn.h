@@ -4,7 +4,7 @@
 #include "interval.h"
 #include "intervalSizeCache.h"
 #include "MBFDecomposition.h"
-#include "bigint/uint256_t.h"
+#include "u192.h"
 
 #include <array>
 #include <cstdint>
@@ -458,59 +458,7 @@ uint256_t revolution() {
 }
 
 template<unsigned int Variables>
-uint256_t revolutionBetterMEM() {
-	using AC = AntiChain<Variables>;
-	using MBF = Monotonic<Variables>;
-	using INT = Interval<Variables>;
-
-	MBF e = MBF::getBot();
-	MBF a = MBF::getTop();
-
-	std::map<TSize<Variables>, uint64_t> tisizes;
-	INT(e, a).forEach([&](const MBF& alpha) {
-		INT(e, alpha).forEach([&](const MBF& t) {
-			uint64_t intervalSize = intervalSizeFast(t, alpha);
-			tisizes.insert(std::make_pair(TSize<Variables>{t, alpha}, intervalSize));
-		});
-	});
-	std::cout << "ti intervals: " << tisizes.size() << "\n";
-	std::map<DSize<Variables>, uint64_t> disizes;
-	INT(e, a).forEach([&](const MBF& d) {
-		uint64_t intervalSize = intervalSizeFast(e, d);
-		disizes.insert(std::make_pair(DSize<Variables>{d}, intervalSize));
-	});
-	std::cout << "di intervals: " << disizes.size() << "\n";
-	
-	uint256_t result = 0;
-	uint64_t counting = 0;
-	uint64_t systemCount = 0;
-	forEachTJOMNFast<Variables>([&](const MBF& t0, const MBF& t1, const MBF& t2, const MBF& d, uint64_t eqClassSize, uint64_t solutionCount) {
-		systemCount++;
-		uint256_t term = 0;
-		INT(t0 | t1 | t2, a).forEach([&](const MBF& alpha) {
-			counting++;
-			term +=
-				uint256_t(tisizes[TSize<Variables>{t0, alpha}]) *
-				uint256_t(tisizes[TSize<Variables>{t1, alpha}]) *
-				uint256_t(tisizes[TSize<Variables>{t2, alpha}]);
-		});
-
-		result +=
-			term *
-			disizes[DSize<Variables>{d}] *
-			eqClassSize *
-			solutionCount;
-	});
-
-	std::cout << "systems : " << systemCount << "\n";
-	std::cout << "terms: " << counting << "\n";
-	std::cout << "D(" << (Variables + 3) << ") = " << result << "\n";
-
-	return result;
-}
-
-template<unsigned int Variables>
-uint256_t revolutionMemoized() {
+u192 revolutionMemoized() {
 	using AC = AntiChain<Variables>;
 	using MBF = Monotonic<Variables>;
 	using INT = Interval<Variables>;
@@ -520,25 +468,25 @@ uint256_t revolutionMemoized() {
 
 	IntervalSizeCache<Variables> intervalSizes = IntervalSizeCache<Variables>::generate();
 
-	uint256_t result = 0;
+	u192 result = 0;
 	uint64_t counting = 0;
 	uint64_t systemCount = 0;
 	forEachTJOMNFast<Variables>([&](const MBF& t0, const MBF& t1, const MBF& t2, const MBF& d, uint64_t eqClassSize, uint64_t solutionCount) {
 		systemCount++;
-		uint256_t term = 0;
+		u128 term = 0;
 		INT(t0 | t1 | t2, a).forEach([&](const MBF& alpha) {
 			counting++;
-			term +=
-				uint256_t(intervalSizes.getIntervalSize(t0, alpha)) *
-				uint256_t(intervalSizes.getIntervalSize(t1, alpha)) *
-				uint256_t(intervalSizes.getIntervalSize(t2, alpha));
+			uint64_t is0 = intervalSizes.getIntervalSize(t0, alpha);
+			uint64_t is1 = intervalSizes.getIntervalSize(t1, alpha);
+			uint64_t is2 = intervalSizes.getIntervalSize(t2, alpha);
+			term += umul128(is0 * is1, is2);
 		});
 
-		result +=
-			term *
-			intervalSizes.getIntervalSizeFromBot(d) *
-			eqClassSize *
-			solutionCount;
+		uint64_t dSize = intervalSizes.getIntervalSizeFromBot(d);
+		
+		term *= solutionCount; // quite a few leftover bits in term, to make up for 31 max bits of solutionCount
+
+		result += umul192(term, dSize * eqClassSize);
 	});
 
 	std::cout << "systems : " << systemCount << "\n";

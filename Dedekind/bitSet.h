@@ -141,7 +141,7 @@ public:
 		for(size_t curBlockI = 0; curBlockI < BLOCK_COUNT; curBlockI++) {
 			uint64_t curBlock = data[curBlockI];
 			if(curBlock != 0) {
-				return countZeros64(curBlock) + 64 * curBlockI;
+				return ctz64(curBlock) + 64 * curBlockI;
 			}
 		}
 		return Size;
@@ -316,7 +316,7 @@ public:
 		for(size_t block = 0; block < BLOCK_COUNT; block++) {
 			uint64_t curBlock = this->data[block];
 			while(curBlock != 0) {
-				int firstBit = countZeros64(curBlock);
+				int firstBit = ctz64(curBlock);
 				func(block * 64 + firstBit);
 				curBlock &= ~(uint64_t(1) << firstBit);
 			}
@@ -392,11 +392,11 @@ public:
 	size_t getFirstOnBit() const {
 		uint64_t firstPart = _mm_extract_epi64(this->data, 0);
 		if(firstPart != 0) {
-			return countZeros64(firstPart);
+			return ctz64(firstPart);
 		}
 		uint64_t secondPart = _mm_extract_epi64(this->data, 1);
 		if(secondPart != 0) {
-			return countZeros64(secondPart) + 64;
+			return ctz64(secondPart) + 64;
 		}
 		return 128;
 	}
@@ -533,13 +533,13 @@ public:
 		uint64_t part1 = _mm_extract_epi64(this->data, 1);
 		
 		while(part0 != 0) {
-			int firstBit = countZeros64(part0);
+			int firstBit = ctz64(part0);
 			func(firstBit);
 			part0 &= ~(uint64_t(1) << firstBit);
 		}
 
 		while(part1 != 0) {
-			int firstBit = countZeros64(part1);
+			int firstBit = ctz64(part1);
 			func(64 + firstBit);
 			part1 &= ~(uint64_t(1) << firstBit);
 		}
@@ -607,7 +607,7 @@ public:
 		return static_cast<uint64_t>(this->data);
 	}
 	size_t getFirstOnBit() const {
-		return countZeros64(this->data);
+		return ctz64(this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -706,7 +706,7 @@ public:
 	void forEachOne(const Func& func) const {
 		uint64_t buf = this->data;
 		while(buf != 0) {
-			int firstBit = countZeros64(buf);
+			int firstBit = ctz64(buf);
 			func(firstBit);
 			buf &= ~(uint64_t(1) << firstBit);
 		}
@@ -763,7 +763,7 @@ public:
 		return static_cast<uint64_t>(this->data);
 	}
 	size_t getFirstOnBit() const {
-		return countZeros32(this->data);
+		return ctz32(this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -862,7 +862,7 @@ public:
 	void forEachOne(const Func& func) const {
 		uint32_t buf = this->data;
 		while(buf != 0) {
-			int firstBit = countZeros32(buf);
+			int firstBit = ctz32(buf);
 			func(firstBit);
 			buf &= ~(uint32_t(1) << firstBit);
 		}
@@ -919,7 +919,7 @@ public:
 		return static_cast<uint64_t>(this->data);
 	}
 	size_t getFirstOnBit() const {
-		return countZeros16(this->data);
+		return ctz16(this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -1019,7 +1019,7 @@ public:
 	void forEachOne(const Func& func) const {
 		uint16_t buf = this->data;
 		while(buf != 0) {
-			int firstBit = countZeros16(buf);
+			int firstBit = ctz16(buf);
 			func(firstBit);
 			buf &= ~(uint16_t(1) << firstBit);
 		}
@@ -1076,7 +1076,7 @@ public:
 		return static_cast<uint64_t>(this->data);
 	}
 	size_t getFirstOnBit() const {
-		return countZeros8(this->data);
+		return ctz8(this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -1175,7 +1175,7 @@ public:
 	void forEachOne(const Func& func) const {
 		uint8_t buf = this->data;
 		while(buf != 0) {
-			int firstBit = countZeros8(buf);
+			int firstBit = ctz8(buf);
 			func(firstBit);
 			buf &= ~(uint8_t(1) << firstBit);
 		}
@@ -1232,7 +1232,7 @@ public:
 		return static_cast<uint64_t>(this->data);
 	}
 	size_t getFirstOnBit() const {
-		return countZeros8(this->data);
+		return ctz8(this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -1331,7 +1331,7 @@ public:
 	void forEachOne(const Func& func) const {
 		uint8_t buf = this->data;
 		while(buf != 0) {
-			int firstBit = countZeros8(buf);
+			int firstBit = ctz8(buf);
 			func(firstBit);
 			buf &= ~(uint8_t(1) << firstBit);
 		}
@@ -1388,7 +1388,7 @@ public:
 		return static_cast<uint64_t>(this->data);
 	}
 	size_t getFirstOnBit() const {
-		return countZeros8(this->data);
+		return ctz8(this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -1487,7 +1487,7 @@ public:
 	void forEachOne(const Func& func) const {
 		uint8_t buf = this->data;
 		while(buf != 0) {
-			int firstBit = countZeros8(buf);
+			int firstBit = ctz8(buf);
 			func(firstBit);
 			buf &= ~(uint8_t(1) << firstBit);
 		}
