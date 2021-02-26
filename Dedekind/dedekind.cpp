@@ -530,10 +530,17 @@ int main() {
 	//std::cout << "D=" << getD<6>() << "\n"; // works
 	//std::cout << "R=" << getR<6>(); // doesn't work
 
-	doRevolution<5>();
+	/*IntervalSizeCache<1>::generate(generateAllMBFsFast<1>().first);
+	IntervalSizeCache<2>::generate(generateAllMBFsFast<2>().first);
+	IntervalSizeCache<3>::generate(generateAllMBFsFast<3>().first);
+	IntervalSizeCache<4>::generate(generateAllMBFsFast<4>().first);
+	IntervalSizeCache<5>::generate(generateAllMBFsFast<5>().first);
+	IntervalSizeCache<6>::generate(generateAllMBFsFast<6>().first);*/
+
+	/*doRevolution<5>();
 	doRevolution<6>();
-	doRevolution<7>();
+	doRevolution<7>();*/
 	doRevolution<8>();
-	doRevolution<9>();
+	/*doRevolution<9>();*/
 }
 #endif

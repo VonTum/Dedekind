@@ -175,12 +175,18 @@ struct Monotonic {
 		return this->func.hash();
 	}
 
-	static Monotonic getTop() {
+	static constexpr Monotonic getTop() {
 		return Monotonic(BooleanFunction<Variables>::full());
 	}
 
-	static Monotonic getBot() {
+	static constexpr Monotonic getBot() {
 		return Monotonic(BooleanFunction<Variables>::empty());
+	}
+
+	static constexpr Monotonic getBotSucc() {
+		BooleanFunction<Variables> result = BooleanFunction<Variables>::empty();
+		result.add(0);
+		return Monotonic(result);
 	}
 };
 

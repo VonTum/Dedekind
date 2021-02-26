@@ -2,6 +2,8 @@
 
 
 #include "interval.h"
+#include "intervalSizeCache.h"
+#include "MBFDecomposition.h"
 #include "bigint/uint256_t.h"
 
 #include <array>
@@ -463,7 +465,7 @@ uint256_t revolutionBetterMEM() {
 
 	MBF e = MBF::getBot();
 	MBF a = MBF::getTop();
-	uint256_t result = 0;
+
 	std::map<TSize<Variables>, uint64_t> tisizes;
 	INT(e, a).forEach([&](const MBF& alpha) {
 		INT(e, alpha).forEach([&](const MBF& t) {
@@ -478,7 +480,8 @@ uint256_t revolutionBetterMEM() {
 		disizes.insert(std::make_pair(DSize<Variables>{d}, intervalSize));
 	});
 	std::cout << "di intervals: " << disizes.size() << "\n";
-
+	
+	uint256_t result = 0;
 	uint64_t counting = 0;
 	uint64_t systemCount = 0;
 	forEachTJOMNFast<Variables>([&](const MBF& t0, const MBF& t1, const MBF& t2, const MBF& d, uint64_t eqClassSize, uint64_t solutionCount) {
@@ -495,6 +498,46 @@ uint256_t revolutionBetterMEM() {
 		result +=
 			term *
 			disizes[DSize<Variables>{d}] *
+			eqClassSize *
+			solutionCount;
+	});
+
+	std::cout << "systems : " << systemCount << "\n";
+	std::cout << "terms: " << counting << "\n";
+	std::cout << "D(" << (Variables + 3) << ") = " << result << "\n";
+
+	return result;
+}
+
+template<unsigned int Variables>
+uint256_t revolutionMemoized() {
+	using AC = AntiChain<Variables>;
+	using MBF = Monotonic<Variables>;
+	using INT = Interval<Variables>;
+
+	MBF e = MBF::getBot();
+	MBF a = MBF::getTop();
+
+	std::pair<BufferedSet<MBF>, uint64_t> allMBFs = generateAllMBFsFast<Variables>();
+	IntervalSizeCache<Variables> intervalSizes = IntervalSizeCache<Variables>::generate(allMBFs.first);
+
+	uint256_t result = 0;
+	uint64_t counting = 0;
+	uint64_t systemCount = 0;
+	forEachTJOMNFast<Variables>([&](const MBF& t0, const MBF& t1, const MBF& t2, const MBF& d, uint64_t eqClassSize, uint64_t solutionCount) {
+		systemCount++;
+		uint256_t term = 0;
+		INT(t0 | t1 | t2, a).forEach([&](const MBF& alpha) {
+			counting++;
+			term +=
+				uint256_t(intervalSizes.getIntervalSize(t0, alpha)) *
+				uint256_t(intervalSizes.getIntervalSize(t1, alpha)) *
+				uint256_t(intervalSizes.getIntervalSize(t2, alpha));
+		});
+
+		result +=
+			term *
+			intervalSizes.getIntervalSizeFromBot(d) *
 			eqClassSize *
 			solutionCount;
 	});

@@ -411,19 +411,19 @@ public:
 		return result;
 	}
 
-	// returns a new Monotonic BooleanFunction, with added 0s where needed
-	// result.isSubSetOf(*this)
+	// returns a new Monotonic BooleanFunction, with added 1s where needed
+	// this->isSubSetOf(result)
 	BooleanFunction monotonizeUp() const {
 		Bits resultbits = this->bitset;
 
 		for(unsigned int var = 0; var < Variables; var++) {
-			Bits whereVarNotActive = ~resultbits & ~varMask(var);
+			Bits whereVarNotActive = andnot(resultbits, varMask(var));
 			Bits varAdded = whereVarNotActive << (1 << var);
-			resultbits &= ~varAdded; // anding by zeros is the forced spaces
+			resultbits |= varAdded; // anding by zeros is the forced spaces
 		}
 
 		BooleanFunction result(resultbits);
-		assert(result.isMonotonic());
+		assert((~result).isMonotonic());
 		return result;
 	}
 

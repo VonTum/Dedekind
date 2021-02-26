@@ -332,6 +332,7 @@
     <ClInclude Include="crossPlatformIntrinsics.h" />
     <ClInclude Include="funcTypes.h" />
     <ClInclude Include="interval.h" />
+    <ClInclude Include="intervalSizeCache.h" />
     <ClInclude Include="knownData.h" />
     <ClInclude Include="MBFDecomposition.h" />
     <ClInclude Include="codeGen.h" />

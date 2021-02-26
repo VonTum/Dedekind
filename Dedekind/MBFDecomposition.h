@@ -1,8 +1,15 @@
 #pragma once
 
+#include <thread>
+#include <atomic>
+#include <mutex>
+#include <array>
+#include <fstream>
+
 #include "booleanFunction.h"
 #include "funcTypes.h"
 #include "aligned_alloc.h"
+#include "serialization.h"
 
 #include "dedekindDecomposition.h"
 
@@ -10,12 +17,6 @@
 
 #include "iteratorFactory.h"
 
-#include <thread>
-#include <atomic>
-#include <mutex>
-#include <array>
-
-#include <iostream>
 
 // returns newMBFFoundCount
 template<unsigned int Variables>
@@ -61,7 +62,7 @@ std::pair<BufferedSet<Monotonic<Variables>>, size_t> generateAllMBFsFast() {
 	foundMBFs.add(initialFibs);
 	knownMBFs.fetch_add(1);
 
-	std::cout << "Did predefined::  knownMBFs: " << (knownMBFs.load() - foundMBFs.begin()) << " nextToExpand: " << (nextToExpand.load() - foundMBFs.begin()) << "\n";
+	//std::cout << "Did predefined::  knownMBFs: " << (knownMBFs.load() - foundMBFs.begin()) << " nextToExpand: " << (nextToExpand.load() - foundMBFs.begin()) << "\n";
 
 	int numberOfThreads = std::thread::hardware_concurrency();
 	std::atomic<int> numberOfWaitingThreads(0);
@@ -80,12 +81,12 @@ std::pair<BufferedSet<Monotonic<Variables>>, size_t> generateAllMBFsFast() {
 					// claimedNextToExpand now points to a value claimed for processing by this thread, work on it now
 					size_t index = claimedNextToExpand - foundMBFs.begin();
 					if(index % 100000 == 0) {
-						std::cout << index << "/" << mbfCounts[Variables] << "\n";
+						//std::cout << index << "/" << mbfCounts[Variables] << "\n";
 					}
 
 					if(claimedNextToExpand->isFull()) {
 						numberOfWaitingThreads.fetch_add(1);
-						std::cout << "Done\n";
+						//std::cout << "Done\n";
 						return;
 					}
 
@@ -117,18 +118,18 @@ std::pair<BufferedSet<Monotonic<Variables>>, size_t> generateAllMBFsFast() {
 				}
 			} else {
 				numberOfWaitingThreads.fetch_add(1);
-				std::cout << "Went to sleep! " << numberOfWaitingThreads.load() << "/" << numberOfThreads << " sleeping\n";
+				//std::cout << "Went to sleep! " << numberOfWaitingThreads.load() << "/" << numberOfThreads << " sleeping\n";
 				do {
 					std::this_thread::sleep_for(std::chrono::milliseconds(50));
 					if(numberOfWaitingThreads.load() == numberOfThreads) {
 						// work done
-						std::cout << "All threads waiting, Done!\n";
+						//std::cout << "All threads waiting, Done!\n";
 						return;
 					}
 				} while(knownMBFs.load() != upTo);
 				// new work?
 				numberOfWaitingThreads.fetch_add(-1);
-				std::cout << "Woke up! " << numberOfWaitingThreads.load() << "/" << numberOfThreads << " sleeping\n";
+				//std::cout << "Woke up! " << numberOfWaitingThreads.load() << "/" << numberOfThreads << " sleeping\n";
 			}
 		}
 	};
@@ -153,7 +154,7 @@ struct LinkedNode {
 	uint32_t index : 24; // max 16440466, which is just shy of 2^24
 };
 
-size_t serializeLinkedNodeList(const LinkedNode* ln, size_t count, uint8_t* outbuf) {
+inline size_t serializeLinkedNodeList(const LinkedNode* ln, size_t count, uint8_t* outbuf) {
 	*outbuf++ = static_cast<uint8_t>(count);
 	for(size_t i = 0; i < count; i++) {
 		*outbuf++ = static_cast<uint8_t>(ln[i].count);
