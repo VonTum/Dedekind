@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <array>
 
 #include "functionInput.h"
 #include "functionInputSet.h"
@@ -295,6 +296,24 @@ public:
 		}
 	}
 
+	template<size_t Size, typename Func, unsigned int CurVar = 0>
+	static void forEachCoPermutation(std::array<BooleanFunction, Size>& cur, const Func& func) {
+		if constexpr(CurVar == Variables) {
+			func(cur);
+		} else {
+			forEachCoPermutation<Size, Func, CurVar + 1>(cur, func);
+			for(unsigned int swapping = CurVar + 1; swapping < Variables; swapping++) {
+				for(BooleanFunction& item : cur) {
+					item.swap(CurVar, swapping);
+				}
+				forEachCoPermutation<Size, Func, CurVar + 1>(cur, func);
+				for(BooleanFunction& item : cur) {
+					item.swap(CurVar, swapping);
+				}
+			}
+		}
+	}
+
 	template<typename Func>
 	void forEachPermutation(unsigned int fromVar, unsigned int toVar, const Func& func) {
 		if(fromVar == toVar) {
@@ -493,15 +512,20 @@ public:
 		return BooleanFunction(andnot(this->bitset, this->monotonizeDown().pred().bitset));
 	}
 
+	std::array<unsigned int, Variables> countAllVarOccurences() const {
+		std::array<unsigned int, Variables> result;
+		for(unsigned int v = 0; v < Variables; v++) {
+			result[v] = this->countVariableOccurences(v);
+		}
+		return result;
+	}
+
 	BooleanFunction canonize() const {
 		if(this->bitset.isEmpty() || this->bitset.get(0) == 1 && this->bitset.count() == 1) return *this;
 
 		BooleanFunction copy = *this;
 
-		unsigned int counts[Variables];
-		for(unsigned int v = 0; v < Variables; v++) {
-			counts[v] = copy.countVariableOccurences(v);
-		}
+		std::array<unsigned int, Variables> counts = copy.countAllVarOccurences();
 
 		// Fill all empty spots
 		unsigned int varIdx = 0;
@@ -709,6 +733,28 @@ public:
 		}
 
 		return copy;
+	}
+
+
+	BooleanFunction canonizePreserving(const BooleanFunction& referenceToMatch) const {
+		if(this->bitset.isEmpty() || this->bitset.get(0) == 1 && this->bitset.count() == 1) return *this;
+
+		std::array<BooleanFunction, 2> combo;
+		combo[0] = referenceToMatch;
+		combo[1] = *this;
+
+		BooleanFunction best = *this;
+
+		forEachCoPermutation(combo, [&](const std::array<BooleanFunction, 2>& permutation) {
+			if(permutation[0] == referenceToMatch) {
+				// only try if these match
+				if(permutation[1].bitset < best.bitset) {
+					best = permutation[1];
+				}
+			}
+		});
+
+		return best;
 	}
 };
 

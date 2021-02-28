@@ -4,38 +4,48 @@
 #include <mutex>
 #include <vector>
 
+template<typename Func>
+void runInParallel(const Func& work) {
+	unsigned int processorCount = std::thread::hardware_concurrency();
+	std::vector<std::thread> workers(processorCount - 1);
+	for(std::thread& worker : workers) {
+		worker = std::thread(work);
+	}
+	work();
+	for(std::thread& worker : workers) {
+		worker.join();
+	}
+}
+
+template<typename Iter, typename IterEnd, typename Func, typename... Args>
+void whileIterGrab(Iter& iter, const IterEnd& iterEnd, std::mutex& iterMutex, const Func& funcToRun, Args&... extraArgs) {
+	while(true) {
+		iterMutex.lock();
+		if(iter != iterEnd) {
+			auto& item = *iter;
+			++iter;
+			iterMutex.unlock();
+
+			funcToRun(item, extraArgs...);
+		} else {
+			iterMutex.unlock();
+			break;
+		}
+	}
+}
+
 template<typename Iter, typename IterEnd, typename Func>
 void finishIterInParallel(Iter iter, IterEnd iterEnd, Func funcToRun) {
 #ifndef NO_MULTITHREAD
 	unsigned int processorCount = std::thread::hardware_concurrency();
 	if(processorCount > 1) {
-		std::vector<std::thread> workers(processorCount - 1);
-
 		std::mutex iterMutex;
 
-		auto work = [&iter, &iterEnd, &funcToRun, &iterMutex]() {
-			while(true) {
-				iterMutex.lock();
-				if(iter != iterEnd) {
-					auto& item = *iter;
-					++iter;
-					iterMutex.unlock();
-
-					funcToRun(item);
-				} else {
-					iterMutex.unlock();
-					break;
-				}
-			}
+		auto work = [&iter, &iterEnd, &iterMutex, &funcToRun]() {
+			whileIterGrab(iter, iterEnd, iterMutex, funcToRun);
 		};
 
-		for(std::thread& worker : workers) {
-			worker = std::thread(work);
-		}
-		work();
-		for(std::thread& worker : workers) {
-			worker.join();
-		}
+		runInParallel(work);
 	}
 	else 
 #endif
@@ -64,34 +74,14 @@ void finishIterInParallelWithPerThreadBuffer(Iter iter, IterEnd iterEnd, BufferF
 #ifndef NO_MULTITHREAD
 	unsigned int processorCount = std::thread::hardware_concurrency();
 	if(processorCount > 1) {
-		std::vector<std::thread> workers(processorCount - 1);
-
 		std::mutex iterMutex;
 
-		auto work = [&iter, &iterEnd, &funcToRun, &iterMutex, &bufferProducer]() {
+		auto work = [&]() {
 			auto buffer = bufferProducer();
-			while(true) {
-				iterMutex.lock();
-				if(iter != iterEnd) {
-					auto& item = *iter;
-					++iter;
-					iterMutex.unlock();
-
-					funcToRun(item, buffer);
-				} else {
-					iterMutex.unlock();
-					break;
-				}
-			}
+			whileIterGrab(iter, iterEnd, iterMutex, funcToRun, buffer);
 		};
 
-		for(std::thread& worker : workers) {
-			worker = std::thread(work);
-		}
-		work();
-		for(std::thread& worker : workers) {
-			worker.join();
-		}
+		runInParallel(work);
 	} else
 #endif
 	{
@@ -113,47 +103,27 @@ void iterCollectionInParallelWithPerThreadBuffer(Collection& col, BufferFunc buf
 
 
 // expects two functions, one function for work, and another function for constructing the buffer that will be reused for the work:
-// funcToRun = void(T& item, decltype(bufferProducer()))
-// bufferProducer = Buffer()
+// funcToRun = void(T& item, ThreadTotal& localTotal)
+// localTotal = initialTotal
 template<typename Iter, typename IterEnd, typename ThreadTotal, typename Func, typename ThreadTotalMergeFunc>
 ThreadTotal finishIterPartitionedWithSeparateTotals(Iter iter, IterEnd iterEnd, const ThreadTotal& initialPerThreadTotal, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc) {
 #ifndef NO_MULTITHREAD
 	unsigned int processorCount = std::thread::hardware_concurrency();
 	if(processorCount > 1) {
-		std::vector<std::thread> workers(processorCount - 1);
-
 		std::mutex iterMutex;
 
 		ThreadTotal fullTotal = initialPerThreadTotal;
 		std::mutex fullTotalMutex;
 
-		auto work = [&iter, &iterEnd, &funcToRun, &iterMutex, &initialPerThreadTotal, &fullTotal, &fullTotalMutex, &totalMergeFunc]() {
+		auto work = [&]() {
 			ThreadTotal selfTotal = initialPerThreadTotal;
-			while(true) {
-				iterMutex.lock();
-				if(iter != iterEnd) {
-					auto& item = *iter;
-					++iter;
-					iterMutex.unlock();
-
-					funcToRun(item, selfTotal);
-				} else {
-					iterMutex.unlock();
-					break;
-				}
-			}
+			whileIterGrab(iter, iterEnd, iterMutex, funcToRun, selfTotal);
 			fullTotalMutex.lock();
 			totalMergeFunc(fullTotal, selfTotal);
 			fullTotalMutex.unlock();
 		};
 
-		for(std::thread& worker : workers) {
-			worker = std::thread(work);
-		}
-		work();
-		for(std::thread& worker : workers) {
-			worker.join();
-		}
+		runInParallel(work);
 
 		return fullTotal;
 	} else
@@ -175,3 +145,52 @@ template<typename Collection, typename ThreadTotal, typename Func, typename Thre
 ThreadTotal iterCollectionPartitionedWithSeparateTotals(Collection& col, const ThreadTotal& initialPerThreadTotal, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc) {
 	return finishIterPartitionedWithSeparateTotals(col.begin(), col.end(), initialPerThreadTotal, funcToRun, totalMergeFunc);
 }
+
+
+// expects two functions, one function for work, and another function for constructing the buffer that will be reused for the work:
+// funcToRun = void(T& item, ThreadTotal& localTotal, decltype(bufferProducer())& localBuffer)
+// localTotal = initialTotal
+// bufProducer = Buffer()
+template<typename Iter, typename IterEnd, typename ThreadTotal, typename Func, typename ThreadTotalMergeFunc, typename BufProducer>
+ThreadTotal finishIterPartitionedWithSeparateTotalsWithBuffers(Iter iter, IterEnd iterEnd, const ThreadTotal& initialPerThreadTotal, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc, const BufProducer& bufProducer) {
+#ifndef NO_MULTITHREAD
+	unsigned int processorCount = std::thread::hardware_concurrency();
+	if(processorCount > 1) {
+		std::mutex iterMutex;
+
+		ThreadTotal fullTotal = initialPerThreadTotal;
+		std::mutex fullTotalMutex;
+
+		auto work = [&]() {
+			auto buf = bufProducer();
+			ThreadTotal selfTotal = initialPerThreadTotal;
+			whileIterGrab(iter, iterEnd, iterMutex, funcToRun, selfTotal, buf);
+			fullTotalMutex.lock();
+			totalMergeFunc(fullTotal, selfTotal);
+			fullTotalMutex.unlock();
+		};
+
+		runInParallel(work);
+
+		return fullTotal;
+	} else
+#endif
+	{
+		auto buf = bufProducer();
+		ThreadTotal total = initialPerThreadTotal;
+		for(; iter != iterEnd; ++iter) {
+			funcToRun(*iter, total, buf);
+		}
+		return total;
+	}
+}
+
+template<typename Collection, typename ThreadTotal, typename Func, typename ThreadTotalMergeFunc, typename BufProducer>
+ThreadTotal iterCollectionPartitionedWithSeparateTotalsWithBuffers(const Collection& col, const ThreadTotal& initialPerThreadTotal, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc, const BufProducer& bufProducer) {
+	return finishIterPartitionedWithSeparateTotalsWithBuffers(col.begin(), col.end(), initialPerThreadTotal, funcToRun, totalMergeFunc, bufProducer);
+}
+template<typename Collection, typename ThreadTotal, typename Func, typename ThreadTotalMergeFunc, typename BufProducer>
+ThreadTotal iterCollectionPartitionedWithSeparateTotalsWithBuffers(Collection& col, const ThreadTotal& initialPerThreadTotal, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc, const BufProducer& bufProducer) {
+	return finishIterPartitionedWithSeparateTotalsWithBuffers(col.begin(), col.end(), initialPerThreadTotal, funcToRun, totalMergeFunc, bufProducer);
+}
+

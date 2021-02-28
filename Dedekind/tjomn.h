@@ -153,9 +153,10 @@ uint64_t threejoinmeetnumberveryfast(const AntiChain<Variables>& t0, const AntiC
 template<unsigned int Variables, typename Func>
 void fourPartNonEquivalent(const AntiChain<Variables>& v, const Func& func) {
 	using AC = AntiChain<Variables>;
+	using BF = BooleanFunction<Variables>;
 
 	AC e = AC{};
-	v.forEachSubSet([&](const AC& p4) {
+	v.forEachSubSet([&](AC p4) {
 		AC l0 = v - p4;
 		if(l0.isEmpty()) {
 			func(e, e, e, p4, 1);
@@ -181,14 +182,98 @@ void fourPartNonEquivalent(const AntiChain<Variables>& v, const Func& func) {
 	});
 }
 
+// expects a function of the form void(const AntiChain<Variables>& p0, const AntiChain<Variables>& p1, const AntiChain<Variables>& p2, const AntiChain<Variables>& p3, unsigned int classSize)
+// classSize is either 1, 3, or 6
+template<unsigned int Variables, typename Func>
+void fourPartNonEquivalentWithBuffers(const AntiChain<Variables>& v, BufferedMap<AntiChain<Variables>, int>& bufSet, const Func& func) {
+	using AC = AntiChain<Variables>;
+	using BF = BooleanFunction<Variables>;
+
+	
+	bufSet.clear();
+	v.forEachSubSet([&](const AC& p4) {
+		AC canon = AC(p4.func.canonizePreserving(v.func));
+		KeyValue<AC, int>* found = bufSet.find(canon);
+		if(found) {
+			found->value++;
+		} else {
+			bool wasAdded = bufSet.add(canon, 1);
+			assert(wasAdded);
+		}
+	});
+
+	AC e = AC{};
+	for(const KeyValue<AC, int>& item : bufSet) {
+		AC p4 = item.key;
+		AC l0 = v - p4;
+		if(l0.isEmpty()) {
+			func(e, e, e, p4, 1 * item.value);
+			continue;
+		}
+		size_t f1 = l0.getFirst();
+		l0.remove(f1);
+		l0.forEachSubSet([&](AC p1) {
+			AC l1 = l0 - p1;
+			p1.add(f1);
+			if(l1.isEmpty()) {
+				func(p1, e, e, p4, 3 * item.value);
+				return;
+			}
+			size_t f2 = l1.getFirst();
+			l1.remove(f2);
+			l1.forEachSubSet([&](AC p2) {
+				AC p3 = l1 - p2;
+				p2.add(f2);
+				func(p1, p2, p3, p4, 6 * item.value);
+			});
+		});
+	}
+}
+
 // expects a function of the form void(const Monotonic<Variables>& tau0, const Monotonic<Variables>& tau1, const Monotonic<Variables>& tau2, const Monotonic<Variables>& minDelta, const Monotonic<Variables>& maxDelta, unsigned int nr)
 template<unsigned int Variables, typename Func>
-void generateTaus(const AntiChain<Variables>& vee, const Func& funcToRun) {
+void generateTaus(const Monotonic<Variables>& veem, const Func& funcToRun) {
 	using AC = AntiChain<Variables>;
 	using MBF = Monotonic<Variables>;
 	using INT = Interval<Variables>;
 
+	const AntiChain<Variables>& vee = veem.asAntiChain();
 	fourPartNonEquivalent(vee, [&](const AC& p0, const AC& p1, const AC& p2, const AC& p3, unsigned int nr) {
+		MBF fp0 = p0.asMonotonic();
+		MBF fp1 = p1.asMonotonic();
+		MBF fp2 = p2.asMonotonic();
+		MBF fp3 = p3.asMonotonic();
+
+		MBF tau01 = fp0 | fp1 | fp3;
+		MBF tau02 = fp0 | fp2 | fp3;
+		MBF tau12 = fp1 | fp2 | fp3;
+
+		INT i2(tau01, tau01 | fp2.pred());
+		INT i1(tau02, tau02 | fp1.pred());
+		INT i0(tau12, tau12 | fp0.pred());
+
+		// these indices are reversed in the original code, perhaps fix in a later iteration
+		i2.forEach([&](const MBF& rt0) {
+			i1.forEach([&](const MBF& rt1) {
+				i0.forEach([&](const MBF& rt2) {
+					MBF minDelta = fp0 & fp1 & fp2;
+					MBF maxDelta = rt0 & rt1 & rt2;
+					funcToRun(rt0, rt1, rt2, minDelta, maxDelta, nr);
+				});
+			});
+		});
+	});
+}
+
+// expects a function of the form void(const Monotonic<Variables>& tau0, const Monotonic<Variables>& tau1, const Monotonic<Variables>& tau2, const Monotonic<Variables>& minDelta, const Monotonic<Variables>& maxDelta, unsigned int nr)
+template<unsigned int Variables, typename Func>
+void generateTausWithBuffers(const Monotonic<Variables>& veem, BufferedMap<AntiChain<Variables>, int>& bufSet, const Func& funcToRun) {
+	using AC = AntiChain<Variables>;
+	using MBF = Monotonic<Variables>;
+	using INT = Interval<Variables>;
+
+	const AntiChain<Variables>& vee = veem.asAntiChain();
+	fourPartNonEquivalentWithBuffers(vee, bufSet, [&](const AC& p0, const AC& p1, const AC& p2, const AC& p3, unsigned int nr) {
 		MBF fp0 = p0.asMonotonic();
 		MBF fp1 = p1.asMonotonic();
 		MBF fp2 = p2.asMonotonic();
@@ -297,7 +382,7 @@ std::map<TJOMN<Variables>, TJOMNInfo> threeJoinOneMeetDecompositionsFast() {
 	std::map<TJOMN<Variables>, TJOMNInfo> result;
 	BufferedMap<MBF, int> alltaus = generateNonEquivalentMonotonics<Variables>();
 	for(const KeyValue<MBF, int>& veetau : alltaus) {
-		generateTaus(veetau.key.asAntiChain(), [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, unsigned int nr) {
+		generateTaus(veetau.key, [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, unsigned int nr) {
 			Interval<Variables> i(minDelta, maxDelta);
 			AC tac0 = tau0.asAntiChain();
 			AC tac1 = tau1.asAntiChain();
@@ -323,7 +408,7 @@ void forEachTJOMNFast(const Func& func) {
 
 	BufferedMap<MBF, int> alltaus = generateNonEquivalentMonotonics<Variables>();
 	for(const KeyValue<MBF, int>& veetau : alltaus) {
-		generateTaus(veetau.key.asAntiChain(), [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, unsigned int nr) {
+		generateTaus(veetau.key, [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, unsigned int nr) {
 			Interval<Variables> i(minDelta, maxDelta);
 			AC tac0 = tau0.asAntiChain();
 			AC tac1 = tau1.asAntiChain();
@@ -354,11 +439,10 @@ PerThreadTotals tjomnCountInParallel() {
 	BufferedMap<MBF, int> alltaus = generateNonEquivalentMonotonics<Variables>();
 	
 	IntervalSizeCache<Variables> intervalSizes = IntervalSizeCache<Variables>::generate();
-	return iterCollectionPartitionedWithSeparateTotals(alltaus, PerThreadTotals{0, 0, 0}, [&](const KeyValue<MBF, int>& veetau, PerThreadTotals& localTotal) {
+	return iterCollectionPartitionedWithSeparateTotalsWithBuffers(alltaus, PerThreadTotals{0, 0, 0}, [&](const KeyValue<MBF, int>& veetau, PerThreadTotals& localTotal, BufferedMap<AntiChain<Variables>, int>& bufSet) {
 		std::cout << '.';
 		
-		
-		generateTaus(veetau.key.asAntiChain(), [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, unsigned int nr) {
+		generateTausWithBuffers(veetau.key, bufSet, [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, unsigned int nr) {
 			uint64_t eqClassSize = veetau.value * nr;
 
 			Interval<Variables> i(minDelta, maxDelta);
@@ -390,6 +474,8 @@ PerThreadTotals tjomnCountInParallel() {
 		total.totalResult += localTotal.totalResult;
 		total.counting += localTotal.counting;
 		total.systemCount += localTotal.systemCount;
+	}, []() {
+		return BufferedMap<AntiChain<Variables>, int>(dedekindNumbers[Variables]);
 	});
 }
 

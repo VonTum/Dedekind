@@ -132,7 +132,7 @@ TEST_CASE(testGenerateTaus) {
 	using AC = AntiChain<3>;
 	using MBF = Monotonic<3>;
 	std::cout << "\n";
-	generateTaus(AC{0b111}, [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, int classSize) {
+	generateTaus(AC{0b111}.asMonotonic(), [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, int classSize) {
 		std::cout << "{" << tau0 << ", " << tau1 << ", " << tau2 << ", " << minDelta << ", " << maxDelta << "}, " << classSize << "\n";
 	});
 }
