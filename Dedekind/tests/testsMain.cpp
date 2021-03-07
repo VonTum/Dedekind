@@ -52,7 +52,7 @@ void logf(const char* format, ...) {
 static void printDeltaTime(time_point<system_clock> startTime, TerminalColor c) {
 	duration<double> delta = system_clock::now() - startTime;
 	setColor(c);
-	cout << " (" << fixed << delta.count() << "s)\n";
+	cout << " (" << fixed << delta.count() << "s)\n" << std::flush;
 }
 
 static ifstream getFileStream(const char* fileName) {
@@ -190,11 +190,11 @@ public:
 		resetLog();
 
 		setColor(TerminalColor::CYAN);
-		cout << fileName << ":" << funcName;
+		cout << fileName << ":" << funcName << std::flush;
 
 		if(flags.allowSkip && type == TestType::SLOW) {
 			setColor(SKIP_COLOR);
-			cout << " (skip)\n";
+			cout << " (skip)\n" << std::flush;
 			return TestResult::SKIP;
 		}
 
@@ -272,7 +272,7 @@ static void runTests(const std::vector<std::string>& filter, TestFlags flags) {
 	setColor(SUCCESS_COLOR); cout << "[SUCCESS] ";
 	setColor(FAILURE_COLOR); cout << "[FAILURE] ";
 	setColor(ERROR_COLOR); cout << "[ERROR] ";
-	setColor(SKIP_COLOR); cout << "[SKIP]\n";
+	setColor(SKIP_COLOR); cout << "[SKIP]\n" << std::flush;
 	setColor(TerminalColor::WHITE); cout << "Number of tests: " << tests->size() << endl;
 
 	int totalTestsRan = 0;
@@ -286,7 +286,7 @@ static void runTests(const std::vector<std::string>& filter, TestFlags flags) {
 	}
 	
 	setColor(TerminalColor::WHITE);
-	cout << "Tests finished! Ran " << totalTestsRan << "/" << tests->size() << " tests\n";
+	cout << "Tests finished! Ran " << totalTestsRan << "/" << tests->size() << " tests\n" << std::flush;
 
 	setColor(SUCCESS_COLOR); cout << resultCounts[0] << " SUCCESS\n";
 	setColor(FAILURE_COLOR); cout << resultCounts[1] << " FAILURE\n";
@@ -339,7 +339,7 @@ int main(int argc, char* argv[]) {
 		string input;
 
 		setColor(TerminalColor::WHITE);
-		cout << "> ";
+		cout << "> " << std::flush;
 		cin >> input;
 
 		if(input == "") {

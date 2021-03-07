@@ -15,7 +15,6 @@ Dedekind/Release/
 build/
 build_debug/
 *.mbf
-*.txt
 *.diagsession
 *.mbfLinks
 *.xlsx

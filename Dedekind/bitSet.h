@@ -378,6 +378,7 @@ public:
 	template<size_t OtherSize>
 	BitSet& operator=(const BitSet<OtherSize>& other) {
 		*this = BitSet(other);
+		return *this;
 	}
 
 	static constexpr size_t size() {
@@ -595,6 +596,7 @@ public:
 	template<size_t OtherSize>
 	BitSet& operator=(const BitSet<OtherSize>& other) {
 		*this = BitSet(other);
+		return *this;
 	}
 
 	static constexpr size_t size() {
@@ -751,6 +753,7 @@ public:
 	template<size_t OtherSize>
 	BitSet& operator=(const BitSet<OtherSize>& other) {
 		*this = BitSet(other);
+		return *this;
 	}
 
 	static constexpr size_t size() {
@@ -907,6 +910,7 @@ public:
 	template<size_t OtherSize>
 	BitSet& operator=(const BitSet<OtherSize>& other) {
 		*this = BitSet(other);
+		return *this;
 	}
 
 	static constexpr size_t size() {
@@ -1064,6 +1068,7 @@ public:
 	template<size_t OtherSize>
 	BitSet& operator=(const BitSet<OtherSize>& other) {
 		*this = BitSet(other);
+		return *this;
 	}
 
 	static constexpr size_t size() {
@@ -1220,6 +1225,7 @@ public:
 	template<size_t OtherSize>
 	BitSet& operator=(const BitSet<OtherSize>& other) {
 		*this = BitSet(other);
+		return *this;
 	}
 
 	static constexpr size_t size() {
@@ -1376,6 +1382,7 @@ public:
 	template<size_t OtherSize>
 	BitSet& operator=(const BitSet<OtherSize>& other) {
 		*this = BitSet(other);
+		return *this;
 	}
 
 	static constexpr size_t size() {

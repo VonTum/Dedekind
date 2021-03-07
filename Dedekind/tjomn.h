@@ -440,7 +440,7 @@ PerThreadTotals tjomnCountInParallel() {
 	
 	IntervalSizeCache<Variables> intervalSizes = IntervalSizeCache<Variables>::generate();
 	return iterCollectionPartitionedWithSeparateTotalsWithBuffers(alltaus, PerThreadTotals{0, 0, 0}, [&](const KeyValue<MBF, int>& veetau, PerThreadTotals& localTotal, BufferedMap<AntiChain<Variables>, int>& bufSet) {
-		std::cout << '.';
+		std::cout << '.' << std::flush;
 		
 		generateTausWithBuffers(veetau.key, bufSet, [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, unsigned int nr) {
 			uint64_t eqClassSize = veetau.value * nr;

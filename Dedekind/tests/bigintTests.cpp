@@ -8,8 +8,6 @@
 
 #include <iostream>
 
-uint256_t mask192 = uint256_t(0xFFFFFFFFFFFFFFFF) | uint256_t(0xFFFFFFFFFFFFFFFF) << 64 | uint256_t(0xFFFFFFFFFFFFFFFF) << 128;
-
 TEST_PROPERTY(testMul128) {
 	GEN(a, genU64);
 	GEN(b, genU64);
@@ -21,7 +19,11 @@ TEST_PROPERTY(testMul192) {
 	GEN(a, genU128);
 	GEN(b, genU64);
 
-	ASSERT(asBigInt(umul192(a, b)) == (uint256_t(asBigInt(a)) * uint256_t(b) & mask192));
+	uint256_t mask192 = uint256_t(0xFFFFFFFFFFFFFFFF) | (uint256_t(0xFFFFFFFFFFFFFFFF) << 64) | (uint256_t(0xFFFFFFFFFFFFFFFF) << 128);
+
+	uint256_t correct = uint256_t(asBigInt(a) * uint256_t(b));
+	
+	ASSERT(asBigInt(umul192(a, b)) == (correct & mask192));
 }
 
 TEST_PROPERTY(testAdd128) {
@@ -35,7 +37,11 @@ TEST_PROPERTY(testAdd192) {
 	GEN(a, genU192);
 	GEN(b, genU192);
 
-	ASSERT(asBigInt(a + b) == ((asBigInt(a) + asBigInt(b)) & mask192));
+	uint256_t mask192 = uint256_t(0xFFFFFFFFFFFFFFFF) | (uint256_t(0xFFFFFFFFFFFFFFFF) << 64) | (uint256_t(0xFFFFFFFFFFFFFFFF) << 128);
+
+	uint256_t correct = asBigInt(a) + asBigInt(b);
+
+	ASSERT(asBigInt(a + b) == (correct & mask192));
 }
 
 

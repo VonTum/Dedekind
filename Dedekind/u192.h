@@ -20,7 +20,7 @@ struct u128 {
 	}
 };
 #else
-typedef __uint128_t u128
+typedef __uint128_t u128;
 #endif
 
 struct u192 {
@@ -29,6 +29,8 @@ struct u192 {
 	uint64_t high;
 
 	u192() = default;
+	u192(int32_t num) : low(num), mid(0), high(0) {}
+	u192(uint32_t num) : low(num), mid(0), high(0) {}
 	u192(uint64_t num) : low(num), mid(0), high(0) {}
 #ifdef _MSC_VER
 	u192(u128 num) : low(num.low), mid(num.high), high(0) {}
@@ -55,11 +57,16 @@ inline u192 umul192(u128 a, uint64_t b) {
 	uint64_t midAdd = _umul128(a.high, b, &result.high);
 	unsigned char c = _addcarry_u64(0, result.mid, midAdd, &result.mid);
 	if(c) result.high++;
-
-	return result;
 #else
-#error "Not implemented!"
+	__uint128_t lowMid = static_cast<uint64_t>(a) * static_cast<__uint128_t>(b);
+	__uint128_t midHigh = static_cast<uint64_t>(a >> 64) * static_cast<__uint128_t>(b);
+	result.low = static_cast<uint64_t>(lowMid);
+	uint64_t mid1 = static_cast<uint64_t>(lowMid >> 64);
+	uint64_t mid2 = static_cast<uint64_t>(midHigh);
+	result.mid = mid1 + mid2;
+	result.high = static_cast<uint64_t>(midHigh >> 64) + (result.mid < mid1); // add with carry
 #endif
+	return result;
 }
 
 #ifdef _MSC_VER
@@ -96,7 +103,10 @@ inline u192& operator+=(u192& a, u192 b) {
 }
 #else
 inline u192& operator+=(u192& a, u192 b) {
-#error "Not implemented!"
+	a.low += b.low;
+	a.mid += b.mid + (a.low < b.low); // add carry, gcc optimizes this
+	a.high += b.high + (a.mid < b.mid); // add carry, gcc optimizes this
+	return a;
 }
 #endif
 inline u192 operator+(u192 a, u192 b) {
@@ -111,7 +121,7 @@ inline uint128_t asBigInt(u128 v) {
 #ifdef _MSC_VER
 	return (uint128_t(v.low) | (uint128_t(v.high) << 64));
 #else
-	return (uint128_t(uint64_t(v)) | (uint128_t(v >> 64) << 64));
+	return (uint128_t(uint64_t(v)) | (uint128_t(uint64_t(v >> 64)) << 64));
 #endif
 }
 inline uint256_t asBigInt(u192 v) {

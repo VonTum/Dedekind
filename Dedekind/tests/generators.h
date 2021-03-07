@@ -93,7 +93,11 @@ Interval<Variables> generateInterval() {
 }
 
 inline u128 genU128() {
+#ifdef _MSC_VER
 	return u128(genU64(), genU64());
+#else
+	return __uint128_t(genU64()) | (__uint128_t(genU64()) << 64);
+#endif
 }
 
 inline u192 genU192() {

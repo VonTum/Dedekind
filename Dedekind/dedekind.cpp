@@ -417,7 +417,7 @@ std::pair<uint64_t, uint64_t> getIntervalSizeFor(const MBFDecomposition<Variable
 
 			int numSubSets = countSuperSetPermutations(cur.func, start.func);
 			if(numSubSets < 1) {
-				__debugbreak();
+				//__debugbreak();
 				int numSubSets = countSuperSetPermutations(cur.func, start.func);
 			}
 
@@ -541,7 +541,7 @@ int main() {
 	doRevolution<5>();
 	doRevolution<6>();
 	doRevolution<7>();
-	doRevolution<8>();
+	//doRevolution<8>();
 	//doRevolution<9>();
 }
 #endif
