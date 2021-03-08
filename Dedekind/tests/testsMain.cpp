@@ -146,7 +146,7 @@ private:
 
 	void runTestFunc() const {
 		if(this->type == TestType::PROPERTY) {
-			for(int iter = 0; iter < 100; iter++) {
+			for(int iter = 0; iter < 1000; iter++) {
 				testFunc();
 			}
 		} else {

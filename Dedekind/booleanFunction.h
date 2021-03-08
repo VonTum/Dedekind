@@ -365,6 +365,17 @@ public:
 		return BooleanFunction(this->bitset & layerMask(layer));
 	}
 
+	BooleanFunction getTopLayer() const {
+		if(this->isEmpty()) {
+			return BooleanFunction::empty();
+		}
+		for(int l = Variables;; l--) {
+			BooleanFunction subLayer = this->getLayer(l);
+			if(!subLayer.isEmpty()) return subLayer;
+		}
+		assert(false);
+	}
+
 	// returns a FIBS where all elements which have a '0' where there is no superset above them that is '1'
 	BooleanFunction pred() const {
 		// remove a variable for every item and OR the results

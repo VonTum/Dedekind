@@ -13,7 +13,7 @@
 template<unsigned int Variables, bool UseCanonization>
 BooleanFunction<Variables> getIntervalBFRepresentation(const Monotonic<Variables>& bot, const Monotonic<Variables>& top) {
 	assert(bot <= top);
-	BooleanFunction<Variables> base = andnot(top.func, bot.func);
+	BooleanFunction<Variables> base = andnot(top.bf, bot.bf);
 	if constexpr(UseCanonization) {
 		return base.canonize();
 	} else {
@@ -64,7 +64,7 @@ uint64_t intervalSizeMemoized(const Monotonic<Variables>& intervalBot, const Mon
 	uint64_t v2 = 0;
 
 	AC top1acmAsAchain = top1acm.asAntiChain();
-	top1acmAsAchain.func.forEachSubSet([&](const BooleanFunction<Variables>& achainSubSet) { // this is to dodge the double function call of AntiChain::forEachSubSet
+	top1acmAsAchain.bf.forEachSubSet([&](const BooleanFunction<Variables>& achainSubSet) { // this is to dodge the double function call of AntiChain::forEachSubSet
 		AC ss(achainSubSet);
 		//MBF subSet = (top1acm.asAntiChain() - ss).asMonotonic();
 		if(ss != top1acmAsAchain) { // strict subsets
@@ -139,9 +139,9 @@ public:
 		}
 
 		if constexpr(UseCanonization) {
-			return intervalSizes.get(top.func.canonize());
+			return intervalSizes.get(top.bf.canonize());
 		} else {
-			return intervalSizes.get(top.func);
+			return intervalSizes.get(top.bf);
 		}
 	}
 

@@ -21,7 +21,7 @@
 // returns newMBFFoundCount
 template<unsigned int Variables>
 size_t findAllExpandedMBFsFast(const Monotonic<Variables>& curMBF, std::pair<Monotonic<Variables>, int>* expandedMBFs) {
-	BooleanFunction<Variables> newBits = andnot(curMBF.succ().func, curMBF.func);
+	BooleanFunction<Variables> newBits = andnot(curMBF.succ().bf, curMBF.bf);
 
 	size_t curSize = 0;
 
@@ -282,7 +282,7 @@ struct MBFDecomposition {
 	struct Layer {
 		LinkBufPtr* offsets;
 		LinkedNode* fullBuf;
-		Monotonic<Variables>* func;
+		Monotonic<Variables>* bf;
 	};
 	Layer* layers;
 
@@ -300,7 +300,7 @@ struct MBFDecomposition {
 		for(size_t i = 0; i < LAYER_COUNT; i++) {
 			layers[i].offsets = curOffsets;
 			layers[i].fullBuf = curFullBufs;
-			layers[i].func = curFibs;
+			layers[i].bf = curFibs;
 
 			curOffsets += getLayerSize<Variables>(i);
 			curFullBufs += getLinkCount<Variables>(i);
@@ -343,7 +343,7 @@ struct MBFDecomposition {
 	}
 
 	const Monotonic<Variables>& get(int layerI, int nodeInLayer) const {
-		return layers[layerI].func[nodeInLayer];
+		return layers[layerI].bf[nodeInLayer];
 	}
 };
 
@@ -355,7 +355,7 @@ struct MBFDecompositionWithHash : public MBFDecomposition<Variables> {
 		BufferedSet<Monotonic<Variables>> startSet(1);
 		Monotonic<Variables> empty;
 		startSet.add(empty);
-		new(&this->hashsets[0]) BakedSet<Monotonic<Variables>>(startSet, this->layers[0].func);
+		new(&this->hashsets[0]) BakedSet<Monotonic<Variables>>(startSet, this->layers[0].bf);
 
 		for(size_t layer = 1; layer < (1 << Variables); layer++) {
 			BufferedSet<Monotonic<Variables>> newBufSet(getLayerSize<Variables>(layer));
@@ -375,7 +375,7 @@ struct MBFDecompositionWithHash : public MBFDecomposition<Variables> {
 			}
 			assert(newBufSet.size() == getLayerSize<Variables>(layer));
 
-			new(&this->hashsets[layer]) BakedSet<Monotonic<Variables>>(newBufSet, this->layers[layer].func);
+			new(&this->hashsets[layer]) BakedSet<Monotonic<Variables>>(newBufSet, this->layers[layer].bf);
 		}
 	}
 };
@@ -405,7 +405,7 @@ MBFDecomposition<Variables> readFullMBFDecomposition() {
 	for(int layer = 0; layer < (1 << Variables); layer++) {
 		for(int mbfI = 0; mbfI < getLayerSize<Variables>(layer); mbfI++) {
 			mbfFile.read(reinterpret_cast<char*>(buf), getMBFSizeInBytes<Variables>());
-			result.layers[layer].func[mbfI] = deserializeMBF<Variables>(buf);
+			result.layers[layer].bf[mbfI] = deserializeMBF<Variables>(buf);
 		}
 	}
 
@@ -413,6 +413,13 @@ MBFDecomposition<Variables> readFullMBFDecomposition() {
 
 	return result;
 }
+
+
+template<unsigned int Variables>
+struct FullMBFMap {
+
+};
+
 
 
 template<unsigned int Variables, typename T>

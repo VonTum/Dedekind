@@ -127,7 +127,7 @@ uint64_t intervalSizeFast(const Monotonic<Variables>& intervalBot, const Monoton
 	uint64_t v2 = 0;
 
 	AC top1acmAsAchain = top1acm.asAntiChain();
-	top1acmAsAchain.func.forEachSubSet([&](const BooleanFunction<Variables>& achainSubSet) { // this is to dodge the double function call of AntiChain::forEachSubSet
+	top1acmAsAchain.bf.forEachSubSet([&](const BooleanFunction<Variables>& achainSubSet) { // this is to dodge the double function call of AntiChain::forEachSubSet
 		AC ss(achainSubSet);
 		//MBF subSet = (top1acm.asAntiChain() - ss).asMonotonic();
 		if(ss != top1acmAsAchain) { // strict subsets
@@ -145,3 +145,6 @@ uint64_t intervalSizeFast(const Monotonic<Variables>& intervalBot, const Monoton
 
 	return 2 * v1 + v2;
 }
+
+
+

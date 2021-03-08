@@ -192,7 +192,7 @@ void fourPartNonEquivalentWithBuffers(const AntiChain<Variables>& v, BufferedMap
 	
 	bufSet.clear();
 	v.forEachSubSet([&](const AC& p4) {
-		AC canon = AC(p4.func.canonizePreserving(v.func));
+		AC canon = AC(p4.bf.canonizePreserving(v.bf));
 		KeyValue<AC, int>* found = bufSet.find(canon);
 		if(found) {
 			found->value++;
@@ -339,11 +339,11 @@ bool operator!=(const TJOMN<Variables>& a, const TJOMN<Variables>& b) {
 template<unsigned int Variables>
 bool operator<(const TJOMN<Variables>& a, const TJOMN<Variables>& b) {
 	for(size_t i = 0; i < 3; i++) {
-		if(a.taus[i].func.bitset != b.taus[i].func.bitset) {
-			return a.taus[i].func.bitset < b.taus[i].func.bitset;
+		if(a.taus[i].bf.bitset != b.taus[i].bf.bitset) {
+			return a.taus[i].bf.bitset < b.taus[i].bf.bitset;
 		}
 	}
-	return a.delta.func.bitset < b.delta.func.bitset;
+	return a.delta.bf.bitset < b.delta.bf.bitset;
 }
 template<unsigned int Variables>
 bool operator>(const TJOMN<Variables>& a, const TJOMN<Variables>& b) {
@@ -495,10 +495,10 @@ bool operator!=(const TSize<Variables>& a, const TSize<Variables>& b) {
 }
 template<unsigned int Variables>
 bool operator<(const TSize<Variables>& a, const TSize<Variables>& b) {
-	if(a.t.func.bitset != b.t.func.bitset) {
-		return a.t.func.bitset < b.t.func.bitset;
+	if(a.t.bf.bitset != b.t.bf.bitset) {
+		return a.t.bf.bitset < b.t.bf.bitset;
 	}
-	return a.alpha.func.bitset < b.alpha.func.bitset;
+	return a.alpha.bf.bitset < b.alpha.bf.bitset;
 }
 template<unsigned int Variables>
 bool operator>(const TSize<Variables>& a, const TSize<Variables>& b) {
@@ -528,7 +528,7 @@ bool operator!=(const DSize<Variables>& a, const DSize<Variables>& b) {
 }
 template<unsigned int Variables>
 bool operator<(const DSize<Variables>& a, const DSize<Variables>& b) {
-	return a.d.func.bitset < b.d.func.bitset;
+	return a.d.bf.bitset < b.d.bf.bitset;
 }
 template<unsigned int Variables>
 bool operator>(const DSize<Variables>& a, const DSize<Variables>& b) {

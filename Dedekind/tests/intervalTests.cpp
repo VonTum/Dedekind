@@ -6,8 +6,8 @@
 
 #include "../interval.h"
 #include "../intervalSizeCache.h"
+#include "../intervalSizeFromBottom.h"
 #include "../MBFDecomposition.h"
-
 
 template<unsigned int Variables>
 struct BotToTopIntervalSize {
@@ -73,7 +73,7 @@ struct IntervalSizeCacheTest {
 
 		INT(e, a).forEach([&](const MBF& top) {
 			INT(e, top).forEach([&](const MBF& bot) {
-				logStream << "bot: " << bot.func.bitset << ", top: " << top.func.bitset << "\n";
+				logStream << "bot: " << bot.bf.bitset << ", top: " << top.bf.bitset << "\n";
 				uint64_t correctSize = intervalSizeFast(bot, top);
 				ASSERT(intervalSizes.getIntervalSize(bot, top) == correctSize);
 			});
@@ -115,4 +115,118 @@ TEST_CASE_SLOW(benchIntervalSizeFast) {
 	//std::cout << intervalSizeFast(getBot<7>(), getTop<7>());
 }
 
+TEST_PROPERTY(testIntervalSizeExtentionBetter) {
+	constexpr unsigned int Variables = 7;
+	using MBF = Monotonic<Variables>;
+	using BF = BooleanFunction<Variables>;
+	using INT = Interval<Variables>;
+	using AC = AntiChain<Variables>;
 
+	MBF mbf(generateMBF<Variables>());
+
+	INT base(MBF::getBot(), mbf);
+	uint64_t correctExtendedSize = intervalSizeFast(base.bot, base.top);
+
+	std::cout << mbf << ": ";
+
+	AC possibleExtentions = mbf.asAntiChain();
+
+	possibleExtentions.getTopLayer().forEachOne([&](size_t newBit) {
+		std::cout << FunctionInput{unsigned int(newBit)} << " ";
+		MBF smaller = mbf;
+		smaller.remove(newBit);
+
+		INT subInterval(MBF::getBot(), smaller);
+
+		uint64_t subIntervalSize = intervalSizeFast(subInterval.bot, subInterval.top);
+		std::cout << subIntervalSize << ", ";
+		uint64_t extendedSize = computeIntervalSizeExtention(smaller, subIntervalSize, newBit);
+
+		if(extendedSize != correctExtendedSize) {
+			std::cout << mbf << ": ";
+			std::cout << FunctionInput{unsigned int(newBit)} << " ";
+			std::cout << subIntervalSize << ", ";
+
+			std::cout << extendedSize << " != " << correctExtendedSize << "!\n";
+			__debugbreak();
+		}
+	});
+
+	std::cout << "\n";
+}
+
+TEST_CASE(testIntervalSizeExtentionABC_ABD) {
+	constexpr unsigned int Variables = 4;
+	using MBF = Monotonic<Variables>;
+	using BF = BooleanFunction<Variables>;
+	using INT = Interval<Variables>;
+	using AC = AntiChain<Variables>;
+
+	MBF mbf = AC{0b0111, 0b1011}.asMonotonic();
+
+	INT base(MBF::getBot(), mbf);
+	uint64_t correctExtendedSize = intervalSizeFast(base.bot, base.top);
+
+	//std::cout << mbf << ": ";
+
+	AC possibleExtentions = mbf.asAntiChain();
+
+	possibleExtentions.getTopLayer().forEachOne([&](size_t newBit) {
+		//std::cout << FunctionInput{unsigned int(newBit)} << " ";
+		MBF smaller = mbf;
+		smaller.remove(newBit);
+
+		INT subInterval(MBF::getBot(), smaller);
+
+		uint64_t subIntervalSize = intervalSizeFast(subInterval.bot, subInterval.top);
+		//std::cout << subIntervalSize << ", ";
+		uint64_t extendedSize = computeIntervalSizeExtention(smaller, subIntervalSize, newBit);
+
+		ASSERT(extendedSize == correctExtendedSize);
+	});
+
+	//std::cout << "\n";
+}
+
+
+TEST_CASE(testIntervalSizeExtentionABC_ABD_E) {
+	constexpr unsigned int Variables = 5;
+	using MBF = Monotonic<Variables>;
+	using BF = BooleanFunction<Variables>;
+	using INT = Interval<Variables>;
+	using AC = AntiChain<Variables>;
+	std::cout << "\n";
+
+	MBF mbf = AC{0b00111, 0b01011, 0b10000}.asMonotonic();
+
+	INT base(MBF::getBot(), mbf);
+	uint64_t correctExtendedSize = intervalSizeFast(base.bot, base.top);
+
+	//std::cout << mbf << ": ";
+
+	AC possibleExtentions = mbf.asAntiChain();
+
+	possibleExtentions.getTopLayer().forEachOne([&](size_t newBit) {
+		//std::cout << FunctionInput{unsigned int(newBit)} << " ";
+		MBF smaller = mbf;
+		smaller.remove(newBit);
+
+		INT subInterval(MBF::getBot(), smaller);
+
+		uint64_t subIntervalSize = intervalSizeFast(subInterval.bot, subInterval.top);
+		//std::cout << subIntervalSize << ", ";
+		uint64_t extendedSize = computeIntervalSizeExtention(smaller, subIntervalSize, newBit);
+		
+		if(extendedSize != correctExtendedSize) {
+			std::cout << "\n";
+			std::cout << mbf << ": ";
+			std::cout << FunctionInput{unsigned int(newBit)} << " ";
+			std::cout << subIntervalSize << ", ";
+
+			std::cout << extendedSize << " != " << correctExtendedSize << "!\n";
+			__debugbreak();
+		}
+	});
+
+	//std::cout << "\n";
+}

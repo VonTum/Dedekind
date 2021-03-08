@@ -26,12 +26,12 @@ static bool operator!=(const BitSet<Size>& bs, const std::vector<bool>& expected
 	return !(bs == expectedState);
 }
 template<unsigned int Variables>
-static bool operator==(const BooleanFunction<Variables>& func, const std::vector<bool>& expectedState) {
-	return func.bitset == expectedState;
+static bool operator==(const BooleanFunction<Variables>& bf, const std::vector<bool>& expectedState) {
+	return bf.bitset == expectedState;
 }
 template<unsigned int Variables>
-static bool operator!=(const BooleanFunction<Variables>& func, const std::vector<bool>& expectedState) {
-	return func.bitset != expectedState;
+static bool operator!=(const BooleanFunction<Variables>& bf, const std::vector<bool>& expectedState) {
+	return bf.bitset != expectedState;
 }
 template<size_t Size>
 static bool operator==(const std::vector<bool>& expectedState, const BitSet<Size>& bs) {
@@ -42,12 +42,12 @@ static bool operator!=(const std::vector<bool>& expectedState, const BitSet<Size
 	return bs != expectedState;
 }
 template<unsigned int Variables>
-static bool operator==(const std::vector<bool>& expectedState, const BooleanFunction<Variables>& func) {
-	return func == expectedState;
+static bool operator==(const std::vector<bool>& expectedState, const BooleanFunction<Variables>& bf) {
+	return bf == expectedState;
 }
 template<unsigned int Variables>
-static bool operator!=(const std::vector<bool>& expectedState, const BooleanFunction<Variables>& func) {
-	return func != expectedState;
+static bool operator!=(const std::vector<bool>& expectedState, const BooleanFunction<Variables>& bf) {
+	return bf != expectedState;
 }
 
 template<size_t Size>
@@ -62,8 +62,8 @@ static std::vector<bool> toVector(const BitSet<Size>& bs) {
 }
 
 template<unsigned int Variables>
-static std::vector<bool> toVector(const BooleanFunction<Variables>& func) {
-	return toVector(func.bitset);
+static std::vector<bool> toVector(const BooleanFunction<Variables>& bf) {
+	return toVector(bf.bitset);
 }
 
 template<unsigned int Variables>
@@ -100,27 +100,27 @@ template<unsigned int Variables>
 struct ShiftLeftTest {
 	static void run() {
 		for(size_t iter = 0; iter < LARGE_ITER; iter++) {
-			BooleanFunction<Variables> func = generateFibs<Variables>();
-			std::vector<bool> expectedState = toVector(func);
+			BooleanFunction<Variables> bf = generateFibs<Variables>();
+			std::vector<bool> expectedState = toVector(bf);
 
 			int shift = rand() % BooleanFunction<Variables>::maxSize();
 
 			if constexpr(Variables == 7) {
-				logStream << "data: " << std::hex << func.bitset.data.m128i_i64[0] << ", " << func.bitset.data.m128i_i64[1] << std::dec << " ";
+				logStream << "data: " << std::hex << bf.bitset.data.m128i_i64[0] << ", " << bf.bitset.data.m128i_i64[1] << std::dec << " ";
 			}
 
-			logStream << "Original: " << func << "\n";
+			logStream << "Original: " << bf << "\n";
 			logStream << "Shift: " << shift << "\n";
 
-			func <<= shift;
-			for(int i = func.maxSize() - 1; i >= shift; i--) {
+			bf <<= shift;
+			for(int i = bf.maxSize() - 1; i >= shift; i--) {
 				expectedState[i] = expectedState[i - shift];
 			}
 			for(int i = 0; i < shift; i++) {
 				expectedState[i] = false;
 			}
 
-			ASSERT(func == expectedState);
+			ASSERT(bf == expectedState);
 		}
 	}
 };
@@ -252,22 +252,22 @@ struct MoveVariableTest {
 		funcInputs.reserve(1 << Variables);
 		for(unsigned int var1 = 0; var1 < Variables; var1++) {
 			for(unsigned int var2 = 0; var2 < Variables; var2++) {
-				BooleanFunction<Variables> func = generateFibs<Variables>();
+				BooleanFunction<Variables> bf = generateFibs<Variables>();
 
-				func &= BooleanFunction<Variables>(~BooleanFunction<Variables>::varMask(var2));
+				bf &= BooleanFunction<Variables>(~BooleanFunction<Variables>::varMask(var2));
 
-				logStream << "Moving " << var1 << " to " << var2 << " in " << func << "\n";
+				logStream << "Moving " << var1 << " to " << var2 << " in " << bf << "\n";
 
 
-				for(unsigned int i = 0; i < func.maxSize(); i++) {
-					if(func.contains(FunctionInput{i})) {
+				for(unsigned int i = 0; i < bf.maxSize(); i++) {
+					if(bf.contains(FunctionInput{i})) {
 						funcInputs.push_back(i);
 					}
 				}
 
 
 				// do operation on both
-				func.move(var1, var2);
+				bf.move(var1, var2);
 				for(unsigned int& item : funcInputs) {
 					if(item & (1 << var1)) {
 						item &= ~(1 << var1);
@@ -280,7 +280,7 @@ struct MoveVariableTest {
 					checkFibs.add(item);
 				}
 
-				ASSERT(func == checkFibs);
+				ASSERT(bf == checkFibs);
 
 				funcInputs.clear();
 			}
@@ -295,20 +295,20 @@ struct SwapVariableTest {
 		funcInputs.reserve(1 << Variables);
 		for(unsigned int var1 = 0; var1 < Variables; var1++) {
 			for(unsigned int var2 = 0; var2 < Variables; var2++) {
-				BooleanFunction<Variables> func = generateFibs<Variables>();
+				BooleanFunction<Variables> bf = generateFibs<Variables>();
 
-				logStream << "Swapping " << var1 << " and " << var2 << " in " << func << "\n";
+				logStream << "Swapping " << var1 << " and " << var2 << " in " << bf << "\n";
 
 
-				for(unsigned int i = 0; i < func.maxSize(); i++) {
-					if(func.contains(FunctionInput{i})) {
+				for(unsigned int i = 0; i < bf.maxSize(); i++) {
+					if(bf.contains(FunctionInput{i})) {
 						funcInputs.push_back(i);
 					}
 				}
 
 
 				// do operation on both
-				func.swap(var1, var2);
+				bf.swap(var1, var2);
 				for(unsigned int& item : funcInputs) {
 					bool isVar1Active = item & (1 << var1);
 					bool isVar2Active = item & (1 << var2);
@@ -324,7 +324,7 @@ struct SwapVariableTest {
 					checkFibs.add(item);
 				}
 
-				ASSERT(func == checkFibs);
+				ASSERT(bf == checkFibs);
 
 				funcInputs.clear();
 			}
@@ -336,11 +336,11 @@ template<unsigned int Variables>
 struct CanonizeTest {
 	static void run() {
 		for(int iter = 0; iter < SMALL_ITER; iter++) {
-			BooleanFunction<Variables> func = generateFibs<Variables>();
+			BooleanFunction<Variables> bf = generateFibs<Variables>();
 
-			BooleanFunction<Variables> canonizedFibs = func.canonize();
+			BooleanFunction<Variables> canonizedFibs = bf.canonize();
 
-			func.forEachPermutation(0, Variables, [&canonizedFibs](const BooleanFunction<Variables>& permut) {
+			bf.forEachPermutation(0, Variables, [&canonizedFibs](const BooleanFunction<Variables>& permut) {
 				ASSERT(permut.canonize() == canonizedFibs);
 			});
 		}
@@ -348,18 +348,18 @@ struct CanonizeTest {
 };
 
 template<unsigned int Variables>
-bool isMonotonicNaive(const BooleanFunction<Variables>& func) {
+bool isMonotonicNaive(const BooleanFunction<Variables>& bf) {
 	for(size_t i = 0; i < (1 << Variables); i++) {
-		if(func.bitset.get(i)) {
+		if(bf.bitset.get(i)) {
 			for(size_t j = 0; j < (1 << Variables); j++) {
 				if((j & i) == j) { // j is subset of i
-					if(func.bitset.get(j) == false) return false;
+					if(bf.bitset.get(j) == false) return false;
 				}
 			}
 		} else {
 			for(size_t j = 0; j < (1 << Variables); j++) {
 				if((i & j) == i) { // j is superset of i
-					if(func.bitset.get(j) == true) return false;
+					if(bf.bitset.get(j) == true) return false;
 				}
 			}
 		}
@@ -492,14 +492,14 @@ struct SerializationTest {
 		for(int iter = 0; iter < LARGE_ITER; iter++) {
 			uint8_t buf[getMBFSizeInBytes<Variables>()];
 
-			BooleanFunction<Variables> func = generateFibs<Variables>();
+			BooleanFunction<Variables> bf = generateFibs<Variables>();
 
-			uint8_t* end = serializeBooleanFunction(func, buf);
+			uint8_t* end = serializeBooleanFunction(bf, buf);
 			ASSERT(end == buf + getMBFSizeInBytes<Variables>());
 
 			BooleanFunction<Variables> deserialfunc = deserializeBooleanFunction<Variables>(buf);
 
-			ASSERT(func == deserialfunc);
+			ASSERT(bf == deserialfunc);
 		}
 	}
 };
@@ -603,7 +603,7 @@ struct ACProdTest {
 			Monotonic<Variables> m1 = generateMonotonic<Variables>();
 			Monotonic<Variables> m2 = generateMonotonic<Variables>();
 
-			m2 = Monotonic<Variables>(andnot(m2.func.bitset, BooleanFunction<Variables>::multiVarMask(m1.getUniverse())));
+			m2 = Monotonic<Variables>(andnot(m2.bf.bitset, BooleanFunction<Variables>::multiVarMask(m1.getUniverse())));
 
 			//printVar(m1);
 			//printVar(m2);
@@ -698,11 +698,11 @@ TEST_CASE(testAntiChainMul) {
 /*TEST_CASE(benchCanonize) {
 	BooleanFunction<7> nonOptimizer;
 	size_t canonCount = 10000000;
-	BooleanFunction<7> func = generateFibs<7>();
+	BooleanFunction<7> bf = generateFibs<7>();
 	for(size_t iter = 0; iter < canonCount; iter++) {
-		func = func << 1 ^ func;
-		if(iter % 50 == 0) func ^= generateFibs<7>();
-		nonOptimizer ^= func.canonize();
+		bf = bf << 1 ^ bf;
+		if(iter % 50 == 0) bf ^= generateFibs<7>();
+		nonOptimizer ^= bf.canonize();
 	}
 	std::cout << nonOptimizer << "\n";
 	std::cout << "Ran " << canonCount << " canonisations! ";

@@ -8,7 +8,7 @@ template<unsigned int Variables>
 uint64_t getNumberOfOwnedChildClasses(const Monotonic<Variables>& cur) {
 	uint64_t total = 1;
 
-	BooleanFunction<Variables> newBits = andnot(cur.succ().func, cur.func);
+	BooleanFunction<Variables> newBits = andnot(cur.succ().bf, cur.bf);
 
 	newBits.forEachOne([&](size_t bit) {
 		Monotonic<Variables> newMBF = cur;
@@ -32,7 +32,7 @@ template<unsigned int Variables>
 uint64_t getNumberOfCanonicalOwnedChildClasses(const Monotonic<Variables>& cur) {
 	uint64_t total = 1;
 
-	BooleanFunction<Variables> newBits = andnot(cur.succ().func, cur.func);
+	BooleanFunction<Variables> newBits = andnot(cur.succ().bf, cur.bf);
 
 	newBits.forEachOne([&](size_t bit) {
 		Monotonic<Variables> newMBF = cur;

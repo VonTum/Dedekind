@@ -415,10 +415,10 @@ std::pair<uint64_t, uint64_t> getIntervalSizeFor(const MBFDecomposition<Variable
 
 			Monotonic<Variables> cur = dec.get(layer, dirtyIndex);
 
-			int numSubSets = countSuperSetPermutations(cur.func, start.func);
+			int numSubSets = countSuperSetPermutations(cur.bf, start.bf);
 			if(numSubSets < 1) {
 				//__debugbreak();
-				int numSubSets = countSuperSetPermutations(cur.func, start.func);
+				int numSubSets = countSuperSetPermutations(cur.bf, start.bf);
 			}
 
 			intervalSize += numSubSets;

@@ -28,9 +28,9 @@ void prettyFibs(std::ostream& os, const BooleanFunction<Variables>& ac) {
 }
 template<unsigned int Variables>
 void prettyInterval(std::ostream& os, const Interval<Variables>& i) {
-	prettyFibs(os, i.bot.func);
+	prettyFibs(os, i.bot.bf);
 	os << " - ";
-	prettyFibs(os, i.top.func);
+	prettyFibs(os, i.top.bf);
 }
 
 

@@ -43,8 +43,8 @@ constexpr size_t getMBFSizeInBytes() {
 
 // returns the end of the buffer
 template<unsigned int Variables>
-uint8_t* serializeBooleanFunction(const BooleanFunction<Variables>& func, uint8_t* outputBuf) {
-	typename BooleanFunction<Variables>::Bits bs = func.bitset;
+uint8_t* serializeBooleanFunction(const BooleanFunction<Variables>& bf, uint8_t* outputBuf) {
+	typename BooleanFunction<Variables>::Bits bs = bf.bitset;
 	if constexpr(Variables <= 3) {
 		*outputBuf++ = bs.data;
 	} else if constexpr(Variables <= 6) {
@@ -68,13 +68,13 @@ uint8_t* serializeBooleanFunction(const BooleanFunction<Variables>& func, uint8_
 // returns the end of the buffer
 template<unsigned int Variables>
 uint8_t* serializeMBF(const Monotonic<Variables>& m, uint8_t* outputBuf) {
-	return serializeBooleanFunction<Variables>(m.func, outputBuf);
+	return serializeBooleanFunction<Variables>(m.bf, outputBuf);
 }
 
 // returns the end of the buffer
 template<unsigned int Variables>
 uint8_t* serializeAC(const AntiChain<Variables>& m, uint8_t* outputBuf) {
-	return serializeBooleanFunction<Variables>(m.func, outputBuf);
+	return serializeBooleanFunction<Variables>(m.bf, outputBuf);
 }
 
 // returns the end of the buffer
