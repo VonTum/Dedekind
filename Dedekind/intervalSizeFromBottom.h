@@ -61,8 +61,48 @@ uint64_t getNumChoicesRecursiveDown(const BooleanFunction<Variables>& chooseable
 }
 
 template<unsigned int Variables>
+uint64_t getNumChoicesRecursiveUp(const BooleanFunction<Variables>& chooseableElements, const Monotonic<Variables>& conflictingMask) {
+	using MBF = Monotonic<Variables>;
+	using BF = BooleanFunction<Variables>;
+	using AC = AntiChain<Variables>;
+	using LR = Layer<Variables>;
+
+	BF conflictingElements = chooseableElements & conflictingMask.bf;
+
+	// none of the elements conflict with one another
+	if(conflictingElements.isEmpty()) {
+		return uint64_t(1) << chooseableElements.size();
+	}
+
+	int bottomLayerIndex = 0;
+	BF bottomLayer;
+	for(; ; bottomLayerIndex++) {
+		BF layerMask = BF(BF::layerMask(bottomLayerIndex));
+		bottomLayer = chooseableElements & layerMask;
+		if(!bottomLayer.isEmpty()) {
+			break;
+		}
+	}
+
+	BF furtherChoices = andnot(chooseableElements, bottomLayer);
+	
+	uint64_t numChoices = 0;
+	bottomLayer.forEachSubSet([&](const BF& chosenOff) {
+		BF forcedElements = chosenOff.monotonizeUp();
+
+		BF newChooseable = andnot(furtherChoices, forcedElements);
+
+		uint64_t subChoices = getNumChoicesRecursiveUp(newChooseable, conflictingMask);
+		numChoices += subChoices;
+	});
+
+	return numChoices;
+}
+
+template<unsigned int Variables>
 uint64_t getNumChoices(const BooleanFunction<Variables>& chooseableMask) {
-	return getNumChoicesRecursiveDown(chooseableMask);
+	Monotonic<Variables> conflicting(chooseableMask.pred().monotonizeDown());
+	return getNumChoicesRecursiveUp(chooseableMask, conflicting);
 }
 
 template<unsigned int Variables>

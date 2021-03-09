@@ -26,13 +26,13 @@ template<unsigned int Variables>
 struct IntervalSizeVsNaive {
 	static void run() {
 		for(int iter = 0; iter < LARGE_ITER; iter++) {
-			//std::cout << ".";
+			//logStream << ".";
 			Interval<Variables> i = generateInterval<Variables>();
 
-			/*prettyFibs(std::cout, i.bot.asAntiChain());
-			std::cout << " - ";
-			prettyFibs(std::cout, i.top.asAntiChain());
-			std::cout << "\n";*/
+			/*prettyFibs(logStream, i.bot.asAntiChain());
+			logStream << " - ";
+			prettyFibs(logStream, i.top.asAntiChain());
+			logStream << "\n";*/
 
 			ASSERT(i.intevalSizeNaive() == getIntervalSizeForNonNormal(i.bot, i.top));
 		}
@@ -47,7 +47,7 @@ template<unsigned int Variables>
 struct IntervalSizeFast {
 	static void run() {
 		for(int iter = 0; iter < (Variables == 6 ? 5 : SMALL_ITER * 10); iter++) {
-			if(iter % 100 == 1) std::cout << '.';
+			if(iter % 100 == 1) logStream << '.';
 			Interval<Variables> i = generateInterval<Variables>();
 
 			ASSERT(i.intevalSizeNaive() == intervalSizeFast(i.bot, i.top));
@@ -95,28 +95,28 @@ TEST_CASE(testIntervalSizeCache) {
 TEST_CASE_SLOW(benchIntervalSizeNaive) {
 	size_t totalSize = 0;
 	for(int iter = 0; iter < 50; iter++) {
-		if(iter % 100 == 0) std::cout << '.';
+		if(iter % 100 == 0) logStream << '.';
 		Interval<6> i = generateInterval<6>();
 
 		totalSize += i.intevalSizeNaive();
 	}
-	std::cout << totalSize;
-	//std::cout << intervalSizeFast(getBot<7>(), getTop<7>());
+	logStream << totalSize;
+	//logStream << intervalSizeFast(getBot<7>(), getTop<7>());
 }
 TEST_CASE_SLOW(benchIntervalSizeFast) {
 	size_t totalSize = 0;
 	for(int iter = 0; iter < 10000; iter++) {
-		if(iter % 100 == 0) std::cout << '.';
+		if(iter % 100 == 0) logStream << '.';
 		Interval<6> i = generateInterval<6>();
 
 		totalSize += intervalSizeFast(i.bot, i.top);
 	}
-	std::cout << totalSize;
-	//std::cout << intervalSizeFast(getBot<7>(), getTop<7>());
+	logStream << totalSize;
+	//logStream << intervalSizeFast(getBot<7>(), getTop<7>());
 }
 
 TEST_PROPERTY(testIntervalSizeExtentionBetter) {
-	constexpr unsigned int Variables = 7;
+	constexpr unsigned int Variables = 5;
 	using MBF = Monotonic<Variables>;
 	using BF = BooleanFunction<Variables>;
 	using INT = Interval<Variables>;
@@ -127,32 +127,32 @@ TEST_PROPERTY(testIntervalSizeExtentionBetter) {
 	INT base(MBF::getBot(), mbf);
 	uint64_t correctExtendedSize = intervalSizeFast(base.bot, base.top);
 
-	std::cout << mbf << ": ";
+	logStream << mbf << ": ";
 
 	AC possibleExtentions = mbf.asAntiChain();
 
 	possibleExtentions.getTopLayer().forEachOne([&](size_t newBit) {
-		std::cout << FunctionInput{unsigned int(newBit)} << " ";
+		logStream << FunctionInput{unsigned int(newBit)} << " ";
 		MBF smaller = mbf;
 		smaller.remove(newBit);
 
 		INT subInterval(MBF::getBot(), smaller);
 
 		uint64_t subIntervalSize = intervalSizeFast(subInterval.bot, subInterval.top);
-		std::cout << subIntervalSize << ", ";
+		logStream << subIntervalSize << ", ";
 		uint64_t extendedSize = computeIntervalSizeExtention(smaller, subIntervalSize, newBit);
 
 		if(extendedSize != correctExtendedSize) {
-			std::cout << mbf << ": ";
-			std::cout << FunctionInput{unsigned int(newBit)} << " ";
-			std::cout << subIntervalSize << ", ";
+			logStream << mbf << ": ";
+			logStream << FunctionInput{unsigned int(newBit)} << " ";
+			logStream << subIntervalSize << ", ";
 
-			std::cout << extendedSize << " != " << correctExtendedSize << "!\n";
+			logStream << extendedSize << " != " << correctExtendedSize << "!\n";
 			__debugbreak();
 		}
 	});
 
-	std::cout << "\n";
+	logStream << "\n";
 }
 
 TEST_CASE(testIntervalSizeExtentionABC_ABD) {
@@ -167,25 +167,25 @@ TEST_CASE(testIntervalSizeExtentionABC_ABD) {
 	INT base(MBF::getBot(), mbf);
 	uint64_t correctExtendedSize = intervalSizeFast(base.bot, base.top);
 
-	//std::cout << mbf << ": ";
+	//logStream << mbf << ": ";
 
 	AC possibleExtentions = mbf.asAntiChain();
 
 	possibleExtentions.getTopLayer().forEachOne([&](size_t newBit) {
-		//std::cout << FunctionInput{unsigned int(newBit)} << " ";
+		//logStream << FunctionInput{unsigned int(newBit)} << " ";
 		MBF smaller = mbf;
 		smaller.remove(newBit);
 
 		INT subInterval(MBF::getBot(), smaller);
 
 		uint64_t subIntervalSize = intervalSizeFast(subInterval.bot, subInterval.top);
-		//std::cout << subIntervalSize << ", ";
+		//logStream << subIntervalSize << ", ";
 		uint64_t extendedSize = computeIntervalSizeExtention(smaller, subIntervalSize, newBit);
 
 		ASSERT(extendedSize == correctExtendedSize);
 	});
 
-	//std::cout << "\n";
+	//logStream << "\n";
 }
 
 
@@ -195,38 +195,38 @@ TEST_CASE(testIntervalSizeExtentionABC_ABD_E) {
 	using BF = BooleanFunction<Variables>;
 	using INT = Interval<Variables>;
 	using AC = AntiChain<Variables>;
-	std::cout << "\n";
+	logStream << "\n";
 
 	MBF mbf = AC{0b00111, 0b01011, 0b10000}.asMonotonic();
 
 	INT base(MBF::getBot(), mbf);
 	uint64_t correctExtendedSize = intervalSizeFast(base.bot, base.top);
 
-	//std::cout << mbf << ": ";
+	//logStream << mbf << ": ";
 
 	AC possibleExtentions = mbf.asAntiChain();
 
 	possibleExtentions.getTopLayer().forEachOne([&](size_t newBit) {
-		//std::cout << FunctionInput{unsigned int(newBit)} << " ";
+		//logStream << FunctionInput{unsigned int(newBit)} << " ";
 		MBF smaller = mbf;
 		smaller.remove(newBit);
 
 		INT subInterval(MBF::getBot(), smaller);
 
 		uint64_t subIntervalSize = intervalSizeFast(subInterval.bot, subInterval.top);
-		//std::cout << subIntervalSize << ", ";
+		//logStream << subIntervalSize << ", ";
 		uint64_t extendedSize = computeIntervalSizeExtention(smaller, subIntervalSize, newBit);
 		
 		if(extendedSize != correctExtendedSize) {
-			std::cout << "\n";
-			std::cout << mbf << ": ";
-			std::cout << FunctionInput{unsigned int(newBit)} << " ";
-			std::cout << subIntervalSize << ", ";
+			logStream << "\n";
+			logStream << mbf << ": ";
+			logStream << FunctionInput{unsigned int(newBit)} << " ";
+			logStream << subIntervalSize << ", ";
 
-			std::cout << extendedSize << " != " << correctExtendedSize << "!\n";
+			logStream << extendedSize << " != " << correctExtendedSize << "!\n";
 			__debugbreak();
 		}
 	});
 
-	//std::cout << "\n";
+	//logStream << "\n";
 }

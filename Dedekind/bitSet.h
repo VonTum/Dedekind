@@ -60,6 +60,54 @@ inline constexpr uint8_t reverse2(uint8_t v) {
 	return (v << 1) | (v >> 1);
 }
 
+// kindly croudsourced from StackOverflow https://stackoverflow.com/questions/66091420/how-to-best-emulate-the-logical-meaning-of-mm-slli-si128-128-bit-bit-shift-n
+template<int i>
+inline __m128i slli_epi128(__m128i vec) {
+	static_assert(i >= 0 && i < 128);
+	// Handle couple trivial cases
+	if constexpr(0 == i)
+		return vec;
+	if constexpr(0 == (i % 8))
+		return _mm_slli_si128(vec, i / 8);
+
+	if constexpr(i > 64) {
+		// Shifting by more than 8 bytes, the lowest half will be all zeros
+		vec = _mm_slli_si128(vec, 8);
+		return _mm_slli_epi64(vec, i - 64);
+	} else {
+		// Shifting by less than 8 bytes.
+		// Need to propagate a few bits across 64-bit lanes.
+		__m128i low = _mm_slli_si128(vec, 8);
+		__m128i high = _mm_slli_epi64(vec, i);
+		low = _mm_srli_epi64(low, 64 - i);
+		return _mm_or_si128(low, high);
+	}
+}
+
+// kindly croudsourced from StackOverflow https://stackoverflow.com/questions/66091420/how-to-best-emulate-the-logical-meaning-of-mm-slli-si128-128-bit-bit-shift-n
+template<int i>
+inline __m128i srli_epi128(__m128i vec) {
+	static_assert(i >= 0 && i < 128);
+	// Handle couple trivial cases
+	if constexpr(0 == i)
+		return vec;
+	if constexpr(0 == (i % 8))
+		return _mm_srli_si128(vec, i / 8);
+
+	if constexpr(i > 64) {
+		// Shifting by more than 8 bytes, the lowest half will be all zeros
+		vec = _mm_srli_si128(vec, 8);
+		return _mm_srli_epi64(vec, i - 64);
+	} else {
+		// Shifting by less than 8 bytes.
+		// Need to propagate a few bits across 64-bit lanes.
+		__m128i low = _mm_srli_si128(vec, 8);
+		__m128i high = _mm_srli_epi64(vec, i);
+		low = _mm_slli_epi64(low, 64 - i);
+		return _mm_or_si128(low, high);
+	}
+}
+
 template<size_t Size>
 class BitSet {
 public:

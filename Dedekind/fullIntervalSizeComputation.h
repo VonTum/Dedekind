@@ -7,8 +7,9 @@
 #include "intervalSizeFromBottom.h"
 #include "parallelIter.h"
 #include "fileNames.h"
-#include <fstream>
 
+#include <fstream>
+#include <chrono>
 
 
 template<unsigned int Variables>
@@ -81,7 +82,8 @@ void computeIntervalsParallel() {
 	allMBFs.layers[2][0].value = 3;
 
 	for(int layer = 3; layer < (1 << Variables) + 1; layer++) {
-		std::cout << "Layer " << layer << ":\n";
+		std::cout << "Layer " << layer << ": " << std::flush;
+		auto start = std::chrono::high_resolution_clock::now();
 		iterCollectionInParallel(allMBFs.layers[layer], [&](KeyValue<MBF, uint64_t>& cur) {
 			//std::cout << "  " << cur.key;
 
@@ -100,6 +102,8 @@ void computeIntervalsParallel() {
 			uint64_t thisIntervalSize = computeIntervalSizeExtention(smallerMBF, smallerMBFIntervalSize, removedElement);
 			cur.value = thisIntervalSize;
 		});
+		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "µs per mbf" << std::endl;
 	}
 
 	if(allMBFs.layers.back()[0].value != dedekindNumbers[Variables]) {

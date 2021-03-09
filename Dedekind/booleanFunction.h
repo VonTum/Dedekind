@@ -380,30 +380,82 @@ public:
 	BooleanFunction pred() const {
 		// remove a variable for every item and OR the results
 
-		Bits forced = Bits::empty();
+		if constexpr(Variables == 7) {
+			__m128i bs = this->bitset.data;
 
-		for(unsigned int var = 0; var < Variables; var++) {
-			Bits whereVarActive = this->bitset & varMask(var);
-			Bits varRemoved = whereVarActive >> (1 << var);
-			forced |= varRemoved;
+			__m128i forced = _mm_setzero_si128();
+
+			__m128i v0Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(0xaaaaaaaaaaaaaaaa)), 1);
+			forced = _mm_or_si128(forced, v0Removed);
+			__m128i v1Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(0xcccccccccccccccc)), 2);
+			forced = _mm_or_si128(forced, v1Removed);
+			__m128i v2Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(0xF0F0F0F0F0F0F0F0)), 4);
+			forced = _mm_or_si128(forced, v2Removed);
+			__m128i v3Removed = _mm_srli_si128(_mm_and_si128(bs, _mm_set1_epi64x(0xFF00FF00FF00FF00)), 1);
+			forced = _mm_or_si128(forced, v3Removed);
+			__m128i v4Removed = _mm_srli_si128(_mm_and_si128(bs, _mm_set1_epi64x(0xFFFF0000FFFF0000)), 2);
+			forced = _mm_or_si128(forced, v4Removed);
+			__m128i v5Removed = _mm_srli_si128(_mm_and_si128(bs, _mm_set1_epi64x(0xFFFFFFFF00000000)), 4);
+			forced = _mm_or_si128(forced, v5Removed);
+			__m128i v6Removed = _mm_srli_si128(bs, 8);
+			forced = _mm_or_si128(forced, v6Removed);
+
+			BooleanFunction result;
+			result.bitset.data = forced;
+			return result;
+		} else {
+			Bits forced = Bits::empty();
+			for(unsigned int var = 0; var < Variables; var++) {
+				Bits whereVarActive = this->bitset & varMask(var);
+				Bits varRemoved = whereVarActive >> (1 << var);
+				forced |= varRemoved;
+			}
+			return BooleanFunction(forced);
 		}
-
-		return BooleanFunction(forced);
 	}
 
 	// returns a FIBS where all elements which have a '1' where there is no subset below them that is '0'
 	BooleanFunction succ() const {
-		// add a variable to every item and AND the results
+		if constexpr(Variables == 7) {
+			__m128i bs = (~this->bitset).data;
 
-		Bits forced = Bits::full();
+			__m128i forced = _mm_cmpeq_epi16(_mm_setzero_si128(), _mm_setzero_si128()); // all 1s
 
-		for(unsigned int var = 0; var < Variables; var++) {
-			Bits whereVarNotActive = (~this->bitset) & ~varMask(var);
-			Bits varAdded = whereVarNotActive << (1 << var);
-			forced &= ~varAdded; // anding by zeros is the forced spaces
+			__m128i v0Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(0xaaaaaaaaaaaaaaaa), bs), 1);
+			forced = _mm_andnot_si128(v0Added, forced);
+			__m128i v1Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(0xcccccccccccccccc), bs), 2);
+			forced = _mm_andnot_si128(v1Added, forced);
+			__m128i v2Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(0xF0F0F0F0F0F0F0F0), bs), 4);
+			forced = _mm_andnot_si128(v2Added, forced);
+			__m128i v3Added = _mm_slli_si128(_mm_andnot_si128(_mm_set1_epi64x(0xFF00FF00FF00FF00), bs), 1);
+			forced = _mm_andnot_si128(v3Added, forced);
+			__m128i v4Added = _mm_slli_si128(_mm_andnot_si128(_mm_set1_epi64x(0xFFFF0000FFFF0000), bs), 2);
+			forced = _mm_andnot_si128(v4Added, forced);
+			__m128i v5Added = _mm_slli_si128(_mm_andnot_si128(_mm_set1_epi64x(0xFFFFFFFF00000000), bs), 4);
+			forced = _mm_andnot_si128(v5Added, forced);
+			__m128i v6Added = _mm_slli_si128(bs, 8);
+			forced = _mm_andnot_si128(v6Added, forced);
+
+			BooleanFunction result;
+			result.bitset.data = forced;
+			return result;
+		} else {
+			Bits forced = Bits::full();
+
+			Bits bs = ~this->bitset;
+
+			for(unsigned int var = 0; var < Variables; var++) {
+				Bits whereVarNotActive = (bs & ~varMask(var));
+				Bits varAdded = whereVarNotActive << (1 << var);
+				forced &= ~varAdded; // anding by zeros is the forced spaces
+			}
+
+			return BooleanFunction(forced);
 		}
+	}
 
-		return BooleanFunction(forced);
+	BooleanFunction reverse() const {
+		return BooleanFunction(this->bitset.reverse());
 	}
 
 	BooleanFunction dual() const {
@@ -428,33 +480,81 @@ public:
 	// returns a new Monotonic BooleanFunction, with added 1s where needed
 	// this->isSubSetOf(result)
 	BooleanFunction monotonizeDown() const {
-		Bits resultbits = this->bitset;
+		if constexpr(Variables == 7) {
+			__m128i bs = this->bitset.data;
 
-		for(unsigned int var = 0; var < Variables; var++) {
-			Bits whereVarActive = resultbits & varMask(var);
-			Bits varRemoved = whereVarActive >> (1 << var);
-			resultbits |= varRemoved;
+			__m128i v0Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(0xaaaaaaaaaaaaaaaa)), 1);
+			bs = _mm_or_si128(bs, v0Removed);
+			__m128i v1Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(0xcccccccccccccccc)), 2);
+			bs = _mm_or_si128(bs, v1Removed);
+			__m128i v2Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(0xF0F0F0F0F0F0F0F0)), 4);
+			bs = _mm_or_si128(bs, v2Removed);
+			__m128i v3Removed = _mm_srli_si128(_mm_and_si128(bs, _mm_set1_epi64x(0xFF00FF00FF00FF00)), 1);
+			bs = _mm_or_si128(bs, v3Removed);
+			__m128i v4Removed = _mm_srli_si128(_mm_and_si128(bs, _mm_set1_epi64x(0xFFFF0000FFFF0000)), 2);
+			bs = _mm_or_si128(bs, v4Removed);
+			__m128i v5Removed = _mm_srli_si128(_mm_and_si128(bs, _mm_set1_epi64x(0xFFFFFFFF00000000)), 4);
+			bs = _mm_or_si128(bs, v5Removed);
+			__m128i v6Removed = _mm_srli_si128(bs, 8);
+			bs = _mm_or_si128(bs, v6Removed);
+
+			BooleanFunction result;
+			result.bitset.data = bs;
+			assert(result.isMonotonic());
+			return result;
+		} else {
+			Bits resultbits = this->bitset;
+
+			for(unsigned int var = 0; var < Variables; var++) {
+				Bits whereVarActive = resultbits & varMask(var);
+				Bits varRemoved = whereVarActive >> (1 << var);
+				resultbits |= varRemoved;
+			}
+
+			BooleanFunction result(resultbits);
+			assert(result.isMonotonic());
+			return result;
 		}
-
-		BooleanFunction result(resultbits);
-		assert(result.isMonotonic());
-		return result;
 	}
 
 	// returns a new Monotonic BooleanFunction, with added 1s where needed
 	// this->isSubSetOf(result)
 	BooleanFunction monotonizeUp() const {
-		Bits resultbits = this->bitset;
+		if constexpr(Variables == 7) {
+			__m128i bs = this->bitset.data;
 
-		for(unsigned int var = 0; var < Variables; var++) {
-			Bits whereVarNotActive = andnot(resultbits, varMask(var));
-			Bits varAdded = whereVarNotActive << (1 << var);
-			resultbits |= varAdded; // anding by zeros is the forced spaces
+			__m128i v0Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(0xaaaaaaaaaaaaaaaa), bs), 1);
+			bs = _mm_or_si128(bs, v0Added);
+			__m128i v1Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(0xcccccccccccccccc), bs), 2);
+			bs = _mm_or_si128(bs, v1Added);
+			__m128i v2Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(0xF0F0F0F0F0F0F0F0), bs), 4);
+			bs = _mm_or_si128(bs, v2Added);
+			__m128i v3Added = _mm_slli_si128(_mm_andnot_si128(_mm_set1_epi64x(0xFF00FF00FF00FF00), bs), 1);
+			bs = _mm_or_si128(bs, v3Added);
+			__m128i v4Added = _mm_slli_si128(_mm_andnot_si128(_mm_set1_epi64x(0xFFFF0000FFFF0000), bs), 2);
+			bs = _mm_or_si128(bs, v4Added);
+			__m128i v5Added = _mm_slli_si128(_mm_andnot_si128(_mm_set1_epi64x(0xFFFFFFFF00000000), bs), 4);
+			bs = _mm_or_si128(bs, v5Added);
+			__m128i v6Added = _mm_slli_si128(bs, 8);
+			bs = _mm_or_si128(bs, v6Added);
+
+			BooleanFunction result;
+			result.bitset.data = bs;
+			assert((~result).isMonotonic());
+			return result;
+		} else {
+			Bits resultbits = this->bitset;
+
+			for(unsigned int var = 0; var < Variables; var++) {
+				Bits whereVarNotActive = andnot(resultbits, varMask(var));
+				Bits varAdded = whereVarNotActive << (1 << var);
+				resultbits |= varAdded; // anding by zeros is the forced spaces
+			}
+
+			BooleanFunction result(resultbits);
+			assert((~result).isMonotonic());
+			return result;
 		}
-
-		BooleanFunction result(resultbits);
-		assert((~result).isMonotonic());
-		return result;
 	}
 
 	// takes a function of the form void(size_t bits)

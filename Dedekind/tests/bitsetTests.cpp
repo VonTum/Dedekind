@@ -100,7 +100,7 @@ template<unsigned int Variables>
 struct ShiftLeftTest {
 	static void run() {
 		for(size_t iter = 0; iter < LARGE_ITER; iter++) {
-			BooleanFunction<Variables> bf = generateFibs<Variables>();
+			BooleanFunction<Variables> bf = generateBF<Variables>();
 			std::vector<bool> expectedState = toVector(bf);
 
 			int shift = rand() % BooleanFunction<Variables>::maxSize();
@@ -129,7 +129,7 @@ template<unsigned int Variables>
 struct ShiftRightTest {
 	static void run() {
 		for(size_t iter = 0; iter < LARGE_ITER; iter++) {
-			BooleanFunction<Variables> fis = generateFibs<Variables>();
+			BooleanFunction<Variables> fis = generateBF<Variables>();
 			std::vector<bool> expectedState = toVector(fis);
 
 			int shift = rand() % BooleanFunction<Variables>::maxSize();
@@ -159,6 +159,17 @@ struct ReverseTest {
 			std::reverse(expectedState.begin(), expectedState.end());
 			BitSet<(1 << Variables)> reversed = bs.reverse();
 			ASSERT(reversed == expectedState);
+		}
+	}
+};
+
+template<unsigned int Variables>
+struct MonotonizeUpDownDuality {
+	static void run() {
+		for(int iter = 0; iter < LARGE_ITER; iter++) {
+			BooleanFunction<Variables> b = generateBF<Variables>();
+
+			ASSERT(b.monotonizeUp() == b.reverse().monotonizeDown().reverse());
 		}
 	}
 };
@@ -252,7 +263,7 @@ struct MoveVariableTest {
 		funcInputs.reserve(1 << Variables);
 		for(unsigned int var1 = 0; var1 < Variables; var1++) {
 			for(unsigned int var2 = 0; var2 < Variables; var2++) {
-				BooleanFunction<Variables> bf = generateFibs<Variables>();
+				BooleanFunction<Variables> bf = generateBF<Variables>();
 
 				bf &= BooleanFunction<Variables>(~BooleanFunction<Variables>::varMask(var2));
 
@@ -295,7 +306,7 @@ struct SwapVariableTest {
 		funcInputs.reserve(1 << Variables);
 		for(unsigned int var1 = 0; var1 < Variables; var1++) {
 			for(unsigned int var2 = 0; var2 < Variables; var2++) {
-				BooleanFunction<Variables> bf = generateFibs<Variables>();
+				BooleanFunction<Variables> bf = generateBF<Variables>();
 
 				logStream << "Swapping " << var1 << " and " << var2 << " in " << bf << "\n";
 
@@ -336,7 +347,7 @@ template<unsigned int Variables>
 struct CanonizeTest {
 	static void run() {
 		for(int iter = 0; iter < SMALL_ITER; iter++) {
-			BooleanFunction<Variables> bf = generateFibs<Variables>();
+			BooleanFunction<Variables> bf = generateBF<Variables>();
 
 			BooleanFunction<Variables> canonizedFibs = bf.canonize();
 
@@ -492,7 +503,7 @@ struct SerializationTest {
 		for(int iter = 0; iter < LARGE_ITER; iter++) {
 			uint8_t buf[getMBFSizeInBytes<Variables>()];
 
-			BooleanFunction<Variables> bf = generateFibs<Variables>();
+			BooleanFunction<Variables> bf = generateBF<Variables>();
 
 			uint8_t* end = serializeBooleanFunction(bf, buf);
 			ASSERT(end == buf + getMBFSizeInBytes<Variables>());
@@ -635,6 +646,10 @@ TEST_CASE(testReverse) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, ReverseTest>();
 }
 
+TEST_CASE(testMonotonizeUpDownDuality) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, MonotonizeUpDownDuality>();
+}
+
 TEST_CASE(testCompareTransitive) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, CompareTransitiveTest>();
 }
@@ -698,10 +713,10 @@ TEST_CASE(testAntiChainMul) {
 /*TEST_CASE(benchCanonize) {
 	BooleanFunction<7> nonOptimizer;
 	size_t canonCount = 10000000;
-	BooleanFunction<7> bf = generateFibs<7>();
+	BooleanFunction<7> bf = generateBF<7>();
 	for(size_t iter = 0; iter < canonCount; iter++) {
 		bf = bf << 1 ^ bf;
-		if(iter % 50 == 0) bf ^= generateFibs<7>();
+		if(iter % 50 == 0) bf ^= generateBF<7>();
 		nonOptimizer ^= bf.canonize();
 	}
 	std::cout << nonOptimizer << "\n";

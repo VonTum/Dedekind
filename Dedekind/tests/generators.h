@@ -40,7 +40,7 @@ BitSet<Size> generateBitSet() {
 }
 
 template<unsigned int Variables>
-BooleanFunction<Variables> generateFibs() {
+BooleanFunction<Variables> generateBF() {
 	return BooleanFunction<Variables>(generateBitSet<(1 << Variables)>());
 }
 
@@ -68,7 +68,7 @@ Monotonic<Variables> generateMonotonic() {
 
 template<unsigned int Variables>
 BooleanFunction<Variables> generateLayer(unsigned int layer) {
-	BooleanFunction<Variables> result = generateFibs<Variables>();
+	BooleanFunction<Variables> result = generateBF<Variables>();
 
 	result &= BooleanFunction<Variables>::layerMask(layer);
 

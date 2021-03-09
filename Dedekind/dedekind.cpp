@@ -54,7 +54,7 @@ static BitSet<Size> generateBitSet() {
 }
 
 template<unsigned int Variables>
-static BooleanFunction<Variables> generateFibs() {
+static BooleanFunction<Variables> generateBF() {
 	return BooleanFunction<Variables>(generateBitSet<(1 << Variables)>());
 }
 
@@ -546,7 +546,7 @@ int main() {
 	//doRevolution<8>();
 	//doRevolution<9>();
 
-	computeIntervalsParallel<6>();
-
+	TimeTracker timer;
+	computeIntervalsParallel<7>();
 }
 #endif
