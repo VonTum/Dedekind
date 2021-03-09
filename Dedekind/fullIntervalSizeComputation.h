@@ -51,6 +51,11 @@ void computeIntervals() {
 			//std::cout << ": " << thisIntervalSize << "\n";
 		}
 	}
+
+	if(allMBFs.layers.back()[0].value != dedekindNumbers[Variables]) {
+		throw "Not correct!";
+	}
+
 	std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary);
 	if(!intervalsFile.is_open()) throw "Error not found!";
 
@@ -95,6 +100,10 @@ void computeIntervalsParallel() {
 			uint64_t thisIntervalSize = computeIntervalSizeExtention(smallerMBF, smallerMBFIntervalSize, removedElement);
 			cur.value = thisIntervalSize;
 		});
+	}
+
+	if(allMBFs.layers.back()[0].value != dedekindNumbers[Variables]) {
+		throw "Not correct!";
 	}
 
 	std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary);

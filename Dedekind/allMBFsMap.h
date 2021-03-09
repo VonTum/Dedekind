@@ -20,18 +20,29 @@ struct AllMBFMap {
 
 	static AllMBFMap readKeysFile(std::ifstream& mbfFile) {
 		std::vector<BakedMap<Monotonic<Variables>, T>> layers(LAYER_COUNT);
+
+		size_t maxLayerSize = getMaxLayerSize<Variables>();
+		char* fileBuf = new char[maxLayerSize * getMBFSizeInBytes<Variables>()];
+
 		for(int layer = 0; layer < LAYER_COUNT; layer++) {
 			size_t size = getLayerSize<Variables>(layer);
+
+			size_t fileBytes = size * getMBFSizeInBytes<Variables>();
+			std::cout << "Read " << fileBytes << " file bytes" << std::endl;
+
+			mbfFile.read(fileBuf, fileBytes);
+
 			KeyValue<Monotonic<Variables>, T>* buf = new KeyValue<Monotonic<Variables>, T>[size];
 
 			for(size_t i = 0; i < size; i++) {
-				Monotonic<Variables> m = deserializeMBF<Variables>(mbfFile);
+				Monotonic<Variables> m = deserializeMBF<Variables>(reinterpret_cast<uint8_t*>(fileBuf + i * getMBFSizeInBytes<Variables>()));
 
 				buf[i].key = m;
 			}
 
 			layers[layer] = BakedMap<Monotonic<Variables>, T>(buf, size);
 		}
+		delete[] fileBuf;
 		return AllMBFMap(std::move(layers));
 	}
 

@@ -13,18 +13,21 @@ void printSet(const BooleanFunction<Variables>& bf) {
 	std::cout << "}\n";
 }
 
-
 template<unsigned int Variables>
-uint64_t getNumChoicesRecursive(const BooleanFunction<Variables>& chooseableMask, const BooleanFunction<Variables>& chosen1) {
+uint64_t getNumChoicesRecursiveDown(const BooleanFunction<Variables>& chooseableMask) {
 	using MBF = Monotonic<Variables>;
 	using BF = BooleanFunction<Variables>;
 	using AC = AntiChain<Variables>;
 	using LR = Layer<Variables>;
 	
-	if(chooseableMask.isEmpty()) {
+	size_t numChooseableElements = chooseableMask.size();
+	if(numChooseableElements == 0) {
 		//printSet(chosen1);
 		return 1;
+	} else if(numChooseableElements == 1) {
+		return 2;
 	}
+
 	int topLayerIndex = Variables;
 	BF layerMask;
 	BF topLayer;
@@ -36,6 +39,11 @@ uint64_t getNumChoicesRecursive(const BooleanFunction<Variables>& chooseableMask
 		}
 	}
 
+	if(topLayer == chooseableMask) {
+		// single layer left
+		return 1 << numChooseableElements;
+	}
+
 	BF furtherChoices = chooseableMask & ~layerMask;
 	assert(furtherChoices.isSubSetOf(layerMask.pred().monotonizeDown()));
 
@@ -45,11 +53,16 @@ uint64_t getNumChoicesRecursive(const BooleanFunction<Variables>& chooseableMask
 
 		BF newChooseable = andnot(furtherChoices, forcedElements);
 
-		uint64_t subChoices = getNumChoicesRecursive(newChooseable, chosen1 | chosenOn);
+		uint64_t subChoices = getNumChoicesRecursiveDown(newChooseable);
 		numChoices += subChoices;
 	});
 
 	return numChoices;
+}
+
+template<unsigned int Variables>
+uint64_t getNumChoices(const BooleanFunction<Variables>& chooseableMask) {
+	return getNumChoicesRecursiveDown(chooseableMask);
 }
 
 template<unsigned int Variables>
@@ -73,7 +86,7 @@ uint64_t computeIntervalSizeExtention(const Monotonic<Variables>& prevIntervalTo
 		return prevIntervalSize + 1;
 	}
 
-	return prevIntervalSize + getNumChoicesRecursive(chooseableElements, BF::empty());
+	return prevIntervalSize + getNumChoices(chooseableElements);
 
 	throw "unreachable";
 }

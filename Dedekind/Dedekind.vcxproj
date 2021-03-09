@@ -338,6 +338,7 @@
     <ClInclude Include="interval.h" />
     <ClInclude Include="intervalSizeCache.h" />
     <ClInclude Include="intervalSizeFromBottom.h" />
+    <ClInclude Include="keyValue.h" />
     <ClInclude Include="knownData.h" />
     <ClInclude Include="MBFDecomposition.h" />
     <ClInclude Include="codeGen.h" />
@@ -357,6 +358,7 @@
     <ClInclude Include="iteratorFactory.h" />
     <ClInclude Include="layerStack.h" />
     <ClInclude Include="math.h" />
+    <ClInclude Include="memoisationMap.h" />
     <ClInclude Include="parallelIter.h" />
     <ClInclude Include="r8Computation.h" />
     <ClInclude Include="serialization.h" />
