@@ -7,8 +7,6 @@
 * https://arxiv.org/pdf/1602.04675v1.pdf
 */
 
-
-
 #pragma once
 
 #define printAC(AC) do { std::cout << #AC << " : "; prettyFibs(std::cout, (AC).asAntiChain()); std::cout << "\n"; } while(false)

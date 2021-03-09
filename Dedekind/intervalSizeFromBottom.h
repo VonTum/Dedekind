@@ -58,7 +58,8 @@ uint64_t computeIntervalSizeExtention(const Monotonic<Variables>& prevIntervalTo
 	using BF = BooleanFunction<Variables>;
 	using AC = AntiChain<Variables>;
 
-	assert(prevIntervalTop.succ().bf.contains(extention) && !prevIntervalTop.bf.contains(extention));
+	assert(prevIntervalTop.succ().bf.contains(extention));
+	assert(!prevIntervalTop.bf.contains(extention));
 
 	// new size is the current size, plus all functions that do contain the new extention
 	// all extra functions *must* contain the extention

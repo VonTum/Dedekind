@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <algorithm>
 
 constexpr size_t hashMapPrimes[]{
 	53,97,193,389,769,1543,3079,6151,12289,24593,
@@ -306,19 +307,32 @@ class BakedHashBase {
 
 public:
 	BakedHashBase() : hashTable(nullptr), data(nullptr), buckets(0), itemCount(0) {}
-	BakedHashBase(T* dataBuffer, size_t size, size_t buckets) : hashTable(new unsigned int[buckets+1]), data(data), buckets(buckets), itemCount(size) {
+	BakedHashBase(T* dataBuffer, size_t size, size_t buckets) : hashTable(new unsigned int[buckets+1]), data(dataBuffer), buckets(buckets), itemCount(size) {
+		std::sort(dataBuffer, dataBuffer + size, [buckets](T& a, T& b) {return a.hash() % buckets < b.hash() % buckets; });
+		
 		unsigned int curBucket = 0;
-		this->hashTable[0] = 0;
-		for(size_t i = 0; i < size; i++) {
-			uint64_t hash = data[i].hash() % buckets;
-			while(hash != curBucket) {
-				this->hashTable[++curBucket] = i;
+		uint64_t firstBucket = data[0].hash() % buckets;
+
+		for(; curBucket < firstBucket; curBucket++) {
+			this->hashTable[curBucket] = 0;
+		}
+		this->hashTable[curBucket] = 0;
+
+		for(size_t i = 1; i < size; i++) {
+			uint64_t targetBucket = data[i].hash() % buckets;
+			assert(targetBucket >= curBucket);
+
+			while(targetBucket > curBucket) {
+				curBucket++;
+				this->hashTable[curBucket] = i;
+				assert(curBucket < buckets + 1);
 			}
 		}
-		do {
-			curBucket++;
+		assert(curBucket < buckets + 1);
+		curBucket++;
+		for(; curBucket < buckets + 1; curBucket++) {
 			this->hashTable[curBucket] = size;
-		} while(curBucket != buckets);
+		}
 	}
 	BakedHashBase(T* dataBuffer, size_t size) : BakedHashBase(dataBuffer, size, getNumberOfBucketsForSize(size)) {}
 	BakedHashBase(const HashBase<T>& from, T* dataBuffer) : hashTable(new unsigned int[from.buckets + 1]), data(dataBuffer), buckets(from.buckets), itemCount(from.itemCount) {
@@ -433,6 +447,7 @@ template<typename Key, typename Value>
 class BakedMap : private BakedHashBase<KeyValue<Key, Value>> {
 public:
 	BakedMap() = default;
+	BakedMap(KeyValue<Key, Value>* dataBuffer, size_t size) : BakedHashBase<KeyValue<Key, Value>>(dataBuffer, size) {}
 	BakedMap(const BufferedMap<Key, Value>& from, KeyValue<Key, Value>* dataBuffer) : BakedHashBase<KeyValue<Key, Value>>(static_cast<const HashBase<KeyValue<Key, Value>>&>(from), dataBuffer) {}
 	BakedMap(const BufferedSet<Key>& from, KeyValue<Key, Value>* dataBuffer) : BakedHashBase<KeyValue<Key, Value>>(static_cast<const HashBase<Key>&>(from), dataBuffer, [](const Key& k) {return KeyValue<Key, Value>{k, {}}; }) {}
 

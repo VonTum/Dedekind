@@ -14,6 +14,7 @@ Dedekind/Debug/
 Dedekind/Release/
 build/
 build_debug/
+data/
 *.mbf
 *.diagsession
 *.mbfLinks

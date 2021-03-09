@@ -14,6 +14,8 @@
 #include "r8Computation.h"
 #include "tjomn.h"
 
+#include "fullIntervalSizeComputation.h"
+
 /*
 Correct numbers
 	0: 2
@@ -537,11 +539,14 @@ int main() {
 	IntervalSizeCache<5>::generate(generateAllMBFsFast<5>().first);
 	IntervalSizeCache<6>::generate(generateAllMBFsFast<6>().first);*/
 
-	doRevolution<4>();
-	doRevolution<5>();
-	doRevolution<6>();
-	doRevolution<7>();
+	//doRevolution<4>();
+	//doRevolution<5>();
+	//doRevolution<6>();
+	//doRevolution<7>();
 	//doRevolution<8>();
 	//doRevolution<9>();
+
+	computeIntervalsParallel<6>();
+
 }
 #endif

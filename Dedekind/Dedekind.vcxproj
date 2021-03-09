@@ -325,15 +325,19 @@
   <ItemGroup>
     <ClInclude Include="aligned_alloc.h" />
     <ClInclude Include="aligned_set.h" />
+    <ClInclude Include="allMBFsMap.h" />
     <ClInclude Include="bfstream.h" />
     <ClInclude Include="bigint\endianness.h" />
     <ClInclude Include="bigint\uint128_t.h" />
     <ClInclude Include="bigint\uint256_t.h" />
     <ClInclude Include="bufferedMap.h" />
     <ClInclude Include="crossPlatformIntrinsics.h" />
+    <ClInclude Include="fileNames.h" />
+    <ClInclude Include="fullIntervalSizeComputation.h" />
     <ClInclude Include="funcTypes.h" />
     <ClInclude Include="interval.h" />
     <ClInclude Include="intervalSizeCache.h" />
+    <ClInclude Include="intervalSizeFromBottom.h" />
     <ClInclude Include="knownData.h" />
     <ClInclude Include="MBFDecomposition.h" />
     <ClInclude Include="codeGen.h" />

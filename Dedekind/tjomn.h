@@ -1,3 +1,12 @@
+/**
+* The algorithms described in this file are the work of Patrick De Causmaeker.
+*
+* https://www.kuleuven.be/wieiswie/en/person/00003471
+* https://arxiv.org/pdf/1103.2877v1.pdf
+* https://arxiv.org/pdf/1407.4288.pdf
+* https://arxiv.org/pdf/1602.04675v1.pdf
+*/
+
 #pragma once
 
 

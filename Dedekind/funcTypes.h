@@ -399,6 +399,10 @@ struct Layer {
 		return Layer(bf.succ());
 	}
 
+	size_t getFirst() const {
+		return this->bf.getFirst();
+	}
+
 	// expects a function of the form void(size_t index)
 	template<typename Func>
 	void forEachOne(const Func& bf) const {
