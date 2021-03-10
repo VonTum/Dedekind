@@ -64,7 +64,11 @@ std::pair<BufferedSet<Monotonic<Variables>>, size_t> generateAllMBFsFast() {
 
 	//std::cout << "Did predefined::  knownMBFs: " << (knownMBFs.load() - foundMBFs.begin()) << " nextToExpand: " << (nextToExpand.load() - foundMBFs.begin()) << "\n";
 
+#ifdef NO_MULTITHREAD
+	int numberOfThreads = 1;
+#else
 	int numberOfThreads = std::thread::hardware_concurrency();
+#endif
 	std::atomic<int> numberOfWaitingThreads(0);
 
 	auto threadFunc = [&foundMBFs, &nextToExpand , &knownMBFs, &newMBFMutex, &numberOfWaitingThreads, &numberOfThreads, &numberOfLinks]() {

@@ -16,6 +16,8 @@
 
 #include "fullIntervalSizeComputation.h"
 
+#include "fileNames.h"
+
 /*
 Correct numbers
 	0: 2
@@ -99,7 +101,7 @@ void runGenAllMBFs() {
 	std::cout << "R(" << Variables << ") == " << result.size() << "\n";
 
 	{
-		std::ofstream file(getFileName("allUniqueMBF", Variables, ".mbf"), std::ios::binary);
+		std::ofstream file(allMBFS(Variables), std::ios::binary);
 
 		for(const Monotonic<Variables>& item : result) {
 			serializeMBF(item, file);
@@ -108,7 +110,7 @@ void runGenAllMBFs() {
 	}
 
 	{
-		std::ofstream file(getFileName("allUniqueMBF", Variables, "info.txt"));
+		std::ofstream file(allMBFSInfo(Variables));
 
 
 		file << "R(" << Variables << ") == " << result.size() << "\n";
@@ -142,9 +144,9 @@ template<unsigned int Variables>
 void runSortAndComputeLinks() {
 	TimeTracker timer;
 
-	std::ifstream inputFile(getFileName("allUniqueMBF", Variables, ".mbf"), std::ios::binary);
-	std::ofstream sortedFile(getFileName("allUniqueMBFSorted", Variables, ".mbf"), std::ios::binary);
-	std::ofstream linkFile(getFileName("mbfLinks", Variables, ".mbfLinks"), std::ios::binary);
+	std::ifstream inputFile(allMBFS(Variables), std::ios::binary);
+	std::ofstream sortedFile(allMBFSSorted(Variables), std::ios::binary);
+	std::ofstream linkFile(mbfLinks(Variables), std::ios::binary);
 
 	sortAndComputeLinks<Variables>(inputFile, sortedFile, linkFile);
 
@@ -228,8 +230,8 @@ template<unsigned int Variables>
 void doLinkCount() {
 	size_t linkCounts[(1 << Variables) + 1];
 
-	std::ifstream linkFile(getFileName("mbfLinks", Variables, ".mbfLinks"), std::ios::binary);
-	std::ofstream linkStatsFile(getFileName("linkStats", Variables, ".txt"));
+	std::ifstream linkFile(mbfLinks(Variables), std::ios::binary);
+	std::ofstream linkStatsFile(linkStats(Variables));
 
 	size_t numLinksDistri[36];
 	for(size_t& item : numLinksDistri) item = 0;
@@ -295,7 +297,7 @@ void doLinkCount() {
 template<unsigned int Variables>
 void sampleIntervalSizes() {
 	std::ofstream intervalStatsFile;
-	/*std::ofstream intervalStatsFile(getFileName("intervalStats", Variables, ".txt"));
+	/*std::ofstream intervalStatsFile(intervalStats(Variables));
 
 	intervalStatsFile << "layer, intervalSize";
 	for(size_t layer = 0; layer < (1 << Variables); layer++) {
@@ -313,7 +315,7 @@ void sampleIntervalSizes() {
 		std::array<uint64_t, (1 << Variables)> counts = countAndIntervalSize.first;
 		uint64_t iSize = countAndIntervalSize.second;
 
-		intervalStatsFile.open(getFileName("intervalStats", Variables, ".txt"), std::ios::app);
+		intervalStatsFile.open(intervalStats(Variables), std::ios::app);
 		intervalStatsFile << layer << ", " << iSize;
 
 		uint64_t totalCount = 0;
@@ -517,9 +519,9 @@ int main() {
 
 	//MBFDecompositionWithHash<6> thing; // doesn't work
 
-	//runGenAllMBFs<5>(); // works
+	runGenAllMBFs<7>(); // works
 	
-	//runSortAndComputeLinks<5>(); // works
+	runSortAndComputeLinks<7>(); // works
 
 	//saveIntervalSizes<5>(); // works
 
@@ -546,7 +548,7 @@ int main() {
 	//doRevolution<8>();
 	//doRevolution<9>();
 
-	TimeTracker timer;
-	computeIntervals<6>();
+	//TimeTracker timer;
+	//computeIntervals<6>();
 }
 #endif

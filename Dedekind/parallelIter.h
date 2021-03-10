@@ -4,6 +4,8 @@
 #include <mutex>
 #include <vector>
 
+#define NO_MULTITHREAD
+
 template<typename Func>
 void runInParallel(const Func& work) {
 	unsigned int processorCount = std::thread::hardware_concurrency();

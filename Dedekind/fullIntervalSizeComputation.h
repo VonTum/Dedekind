@@ -17,7 +17,7 @@ void computeIntervals() {
 	using MBF = Monotonic<Variables>;
 	using LR = Layer<Variables>;
 
-	std::ifstream mbfFile(allMBFSSorted<Variables>(), std::ios::binary);
+	std::ifstream mbfFile(allMBFSSorted(Variables), std::ios::binary);
 	if(!mbfFile.is_open()) throw "Error not found!";
 
 	AllMBFMap<Variables, uint64_t> allMBFs = AllMBFMap<Variables, uint64_t>::readKeysFile(mbfFile);
@@ -30,7 +30,7 @@ void computeIntervals() {
 	allMBFs.layers[2][0].value = 3;*/
 
 	{
-		std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary);
+		std::ofstream intervalsFile(allIntervals(Variables), std::ios::binary);
 		if(!intervalsFile.is_open()) throw "Error not found!";
 
 		writeLayerToFile(intervalsFile, allMBFs.layers[0], 0, [](uint64_t intervalSize, std::ofstream& of) {
@@ -67,7 +67,7 @@ void computeIntervals() {
 		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;
 
 		{
-			std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary | std::ios::app);
+			std::ofstream intervalsFile(allIntervals(Variables), std::ios::binary | std::ios::app);
 			if(!intervalsFile.is_open()) throw "Error not found!";
 
 			writeLayerToFile(intervalsFile, allMBFs.layers[layer], layer, [](uint64_t intervalSize, std::ofstream& of) {
@@ -94,7 +94,7 @@ void computeIntervalsParallel() {
 	using MBF = Monotonic<Variables>;
 	using LR = Layer<Variables>;
 
-	std::ifstream mbfFile(allMBFSSorted<Variables>(), std::ios::binary);
+	std::ifstream mbfFile(allMBFSSorted(Variables), std::ios::binary);
 	if(!mbfFile.is_open()) throw "Error not found!";
 
 	AllMBFMap<Variables, uint64_t> allMBFs = AllMBFMap<Variables, uint64_t>::readKeysFile(mbfFile);
@@ -107,7 +107,7 @@ void computeIntervalsParallel() {
 	allMBFs.layers[2][0].value = 3;*/
 
 	{
-		std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary);
+		std::ofstream intervalsFile(allIntervals(Variables), std::ios::binary);
 		if(!intervalsFile.is_open()) throw "Error not found!";
 
 		writeLayerToFile(intervalsFile, allMBFs.layers[0], 0, [](uint64_t intervalSize, std::ofstream& of) {
@@ -142,7 +142,7 @@ void computeIntervalsParallel() {
 		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;
 
 		{
-			std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary | std::ios::app);
+			std::ofstream intervalsFile(allIntervals(Variables), std::ios::binary | std::ios::app);
 			if(!intervalsFile.is_open()) throw "Error not found!";
 
 			writeLayerToFile(intervalsFile, allMBFs.layers[layer], layer, [](uint64_t intervalSize, std::ofstream& of) {
@@ -153,7 +153,7 @@ void computeIntervalsParallel() {
 		}
 	}
 	/*
-	std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary);
+	std::ofstream intervalsFile(allIntervals(Variables), std::ios::binary);
 	if(!intervalsFile.is_open()) throw "Error not found!";
 
 	allMBFs.writeToFile(intervalsFile, [](uint64_t intervalSize, std::ofstream& of) {
