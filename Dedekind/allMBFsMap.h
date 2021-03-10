@@ -9,6 +9,17 @@
 #include <istream>
 #include <string>
 
+template<unsigned int Variables, typename T, typename ValueSerializer>
+void writeLayerToFile(std::ofstream& mapFile, const BakedMap<Monotonic<Variables>, T>& map, size_t layerIndex, const ValueSerializer& serializer) {
+	size_t size = getLayerSize<Variables>(layerIndex);
+
+	for(size_t i = 0; i < size; i++) {
+		const KeyValue<Monotonic<Variables>, T>& cur = map[i];
+		serializeMBF<Variables>(cur.key, mapFile);
+		serializer(cur.value, mapFile);
+	}
+}
+
 template<unsigned int Variables, typename T>
 struct AllMBFMap {
 	constexpr static int LAYER_COUNT = (1 << Variables) + 1;
@@ -70,13 +81,7 @@ struct AllMBFMap {
 	template<typename ValueSerializer>
 	void writeToFile(std::ofstream& mapFile, const ValueSerializer& serializer) {
 		for(int layer = 0; layer < LAYER_COUNT; layer++) {
-			size_t size = getLayerSize<Variables>(layer);
-
-			for(size_t i = 0; i < size; i++) {
-				KeyValue<Monotonic<Variables>, T>& cur = this->layers[layer][i];
-				serializeMBF<Variables>(cur.key, mapFile);
-				serializer(cur.value, mapFile);
-			}
+			writeLayerToFile(mapFile, this->layers[layer], layer, serializer);
 		}
 	}
 };

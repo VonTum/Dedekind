@@ -547,6 +547,6 @@ int main() {
 	//doRevolution<9>();
 
 	TimeTracker timer;
-	computeIntervalsParallel<7>();
+	computeIntervals<6>();
 }
 #endif

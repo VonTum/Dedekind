@@ -24,13 +24,25 @@ void computeIntervals() {
 
 	assert(allMBFs.layers[0][0].key.isEmpty());
 	allMBFs.layers[0][0].value = 1;
-	assert(allMBFs.layers[1][0].key == AntiChain<Variables>{0}.asMonotonic());
+	/*assert(allMBFs.layers[1][0].key == AntiChain<Variables>{0}.asMonotonic());
 	allMBFs.layers[1][0].value = 2;
 	assert(allMBFs.layers[2][0].key == AntiChain<Variables>{1}.asMonotonic());
-	allMBFs.layers[2][0].value = 3;
+	allMBFs.layers[2][0].value = 3;*/
 
-	for(int layer = 3; layer < (1 << Variables) + 1; layer++) {
-		std::cout << "Layer " << layer << ":\n";
+	{
+		std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary);
+		if(!intervalsFile.is_open()) throw "Error not found!";
+
+		writeLayerToFile(intervalsFile, allMBFs.layers[0], 0, [](uint64_t intervalSize, std::ofstream& of) {
+			serializeU64(intervalSize, of);
+		});
+
+		intervalsFile.close();
+	}
+
+	for(int layer = 1; layer < (1 << Variables) + 1; layer++) {
+		std::cout << "Layer " << layer << ": " << std::flush;
+		auto start = std::chrono::high_resolution_clock::now();
 		for(KeyValue<MBF, uint64_t>& cur : allMBFs.layers[layer]) {
 			//std::cout << "  " << cur.key;
 
@@ -51,18 +63,31 @@ void computeIntervals() {
 
 			//std::cout << ": " << thisIntervalSize << "\n";
 		}
-	}
+		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;
 
-	if(allMBFs.layers.back()[0].value != dedekindNumbers[Variables]) {
-		throw "Not correct!";
-	}
+		{
+			std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary | std::ios::app);
+			if(!intervalsFile.is_open()) throw "Error not found!";
 
+			writeLayerToFile(intervalsFile, allMBFs.layers[layer], layer, [](uint64_t intervalSize, std::ofstream& of) {
+				serializeU64(intervalSize, of);
+			});
+
+			intervalsFile.close();
+		}
+	}
+	/*
 	std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary);
 	if(!intervalsFile.is_open()) throw "Error not found!";
 
 	allMBFs.writeToFile(intervalsFile, [](uint64_t intervalSize, std::ofstream& of) {
 		serializeU64(intervalSize, of);
 	});
+	*/
+	if(allMBFs.layers.back()[0].value != dedekindNumbers[Variables]) {
+		std::cout << "Not correct!" << std::endl;
+	}
 }
 template<unsigned int Variables>
 void computeIntervalsParallel() {
@@ -76,12 +101,23 @@ void computeIntervalsParallel() {
 
 	assert(allMBFs.layers[0][0].key.isEmpty());
 	allMBFs.layers[0][0].value = 1;
-	assert(allMBFs.layers[1][0].key == AntiChain<Variables>{0}.asMonotonic());
+	/*assert(allMBFs.layers[1][0].key == AntiChain<Variables>{0}.asMonotonic());
 	allMBFs.layers[1][0].value = 2;
 	assert(allMBFs.layers[2][0].key == AntiChain<Variables>{1}.asMonotonic());
-	allMBFs.layers[2][0].value = 3;
+	allMBFs.layers[2][0].value = 3;*/
 
-	for(int layer = 3; layer < (1 << Variables) + 1; layer++) {
+	{
+		std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary);
+		if(!intervalsFile.is_open()) throw "Error not found!";
+
+		writeLayerToFile(intervalsFile, allMBFs.layers[0], 0, [](uint64_t intervalSize, std::ofstream& of) {
+			serializeU64(intervalSize, of);
+		});
+
+		intervalsFile.close();
+	}
+
+	for(int layer = 1; layer < (1 << Variables) + 1; layer++) {
 		std::cout << "Layer " << layer << ": " << std::flush;
 		auto start = std::chrono::high_resolution_clock::now();
 		iterCollectionInParallel(allMBFs.layers[layer], [&](KeyValue<MBF, uint64_t>& cur) {
@@ -103,18 +139,29 @@ void computeIntervalsParallel() {
 			cur.value = thisIntervalSize;
 		});
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
-		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "µs per mbf" << std::endl;
-	}
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;
 
-	if(allMBFs.layers.back()[0].value != dedekindNumbers[Variables]) {
-		throw "Not correct!";
-	}
+		{
+			std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary | std::ios::app);
+			if(!intervalsFile.is_open()) throw "Error not found!";
 
+			writeLayerToFile(intervalsFile, allMBFs.layers[layer], layer, [](uint64_t intervalSize, std::ofstream& of) {
+				serializeU64(intervalSize, of);
+			});
+
+			intervalsFile.close();
+		}
+	}
+	/*
 	std::ofstream intervalsFile(allIntervals<Variables>(), std::ios::binary);
 	if(!intervalsFile.is_open()) throw "Error not found!";
 
 	allMBFs.writeToFile(intervalsFile, [](uint64_t intervalSize, std::ofstream& of) {
 		serializeU64(intervalSize, of);
 	});
+	*/
+	if(allMBFs.layers.back()[0].value != dedekindNumbers[Variables]) {
+		std::cout << "Not correct!" << std::endl;
+	}
 }
 

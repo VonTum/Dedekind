@@ -167,7 +167,7 @@ template<unsigned int Variables>
 struct MonotonizeUpDownDuality {
 	static void run() {
 		for(int iter = 0; iter < LARGE_ITER; iter++) {
-			BooleanFunction<Variables> b = generateBF<Variables>();
+			BooleanFunction<Variables> b = generateMonotonic<Variables>().asAntiChain().bf;
 
 			ASSERT(b.monotonizeUp() == b.reverse().monotonizeDown().reverse());
 		}
