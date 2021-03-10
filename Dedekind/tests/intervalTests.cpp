@@ -132,7 +132,7 @@ TEST_PROPERTY(testIntervalSizeExtentionBetter) {
 	AC possibleExtentions = mbf.asAntiChain();
 
 	possibleExtentions.getTopLayer().forEachOne([&](size_t newBit) {
-		logStream << FunctionInput{unsigned int(newBit)} << " ";
+		logStream << FunctionInput{uint32_t(newBit)} << " ";
 		MBF smaller = mbf;
 		smaller.remove(newBit);
 
@@ -144,11 +144,11 @@ TEST_PROPERTY(testIntervalSizeExtentionBetter) {
 
 		if(extendedSize != correctExtendedSize) {
 			logStream << mbf << ": ";
-			logStream << FunctionInput{unsigned int(newBit)} << " ";
+			logStream << FunctionInput{uint32_t(newBit)} << " ";
 			logStream << subIntervalSize << ", ";
 
 			logStream << extendedSize << " != " << correctExtendedSize << "!\n";
-			__debugbreak();
+			//__debugbreak();
 		}
 	});
 
@@ -220,11 +220,11 @@ TEST_CASE(testIntervalSizeExtentionABC_ABD_E) {
 		if(extendedSize != correctExtendedSize) {
 			logStream << "\n";
 			logStream << mbf << ": ";
-			logStream << FunctionInput{unsigned int(newBit)} << " ";
+			logStream << FunctionInput{uint32_t(newBit)} << " ";
 			logStream << subIntervalSize << ", ";
 
 			logStream << extendedSize << " != " << correctExtendedSize << "!\n";
-			__debugbreak();
+			//__debugbreak();
 		}
 	});
 

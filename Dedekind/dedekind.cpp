@@ -515,13 +515,14 @@ void doRevolution() {
 
 #ifndef RUN_TESTS
 int main() {
+	std::cout << "Detected " << std::thread::hardware_concurrency() << " threads" << std::endl;
 	//doRAMTest();  // works
 
 	//MBFDecompositionWithHash<6> thing; // doesn't work
 
-	runGenAllMBFs<7>(); // works
+	//runGenAllMBFs<7>(); // works
 	
-	runSortAndComputeLinks<7>(); // works
+	//runSortAndComputeLinks<7>(); // works
 
 	//saveIntervalSizes<5>(); // works
 
@@ -541,11 +542,11 @@ int main() {
 	IntervalSizeCache<5>::generate(generateAllMBFsFast<5>().first);
 	IntervalSizeCache<6>::generate(generateAllMBFsFast<6>().first);*/
 
-	//doRevolution<4>();
-	//doRevolution<5>();
-	//doRevolution<6>();
-	//doRevolution<7>();
-	//doRevolution<8>();
+	doRevolution<4>();
+	doRevolution<5>();
+	doRevolution<6>();
+	doRevolution<7>();
+	doRevolution<8>();
 	//doRevolution<9>();
 
 	//TimeTracker timer;
