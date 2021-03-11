@@ -9,6 +9,21 @@
 #include <istream>
 #include <string>
 
+template<unsigned int Variables, typename T, typename ValueDeserializer>
+BakedMap<Monotonic<Variables>, T> readLayerFromFile(std::ifstream& mapFile, size_t layerIndex, const ValueDeserializer& deserializer) {
+	size_t size = getLayerSize<Variables>(layerIndex);
+	KeyValue<Monotonic<Variables>, T>* buf = new KeyValue<Monotonic<Variables>, T>[size];
+
+	for(size_t i = 0; i < size; i++) {
+		Monotonic<Variables> m = deserializeMBF<Variables>(mapFile);
+
+		buf[i].key = m;
+		buf[i].value = deserializer(mapFile);
+	}
+
+	return BakedMap<Monotonic<Variables>, T>(buf, size);
+}
+
 template<unsigned int Variables, typename T, typename ValueSerializer>
 void writeLayerToFile(std::ofstream& mapFile, const BakedMap<Monotonic<Variables>, T>& map, size_t layerIndex, const ValueSerializer& serializer) {
 	size_t size = getLayerSize<Variables>(layerIndex);
@@ -57,22 +72,12 @@ struct AllMBFMap {
 		return AllMBFMap(std::move(layers));
 	}
 
-	// expects a function of the form Monotonic<Variables>(std::ifstream&)
+	// expects a function of the form T(std::ifstream&)
 	template<typename ValueDeserializer>
 	static AllMBFMap readMapFile(std::ifstream& mapFile, const ValueDeserializer& deserializer) {
 		std::vector<BakedMap<Monotonic<Variables>, T>> layers(LAYER_COUNT);
 		for(int layer = 0; layer < LAYER_COUNT; layer++) {
-			size_t size = getLayerSize<Variables>(layer);
-			KeyValue<Monotonic<Variables>, T>* buf = new KeyValue<Monotonic<Variables>, T>[size];
-
-			for(size_t i = 0; i < size; i++) {
-				Monotonic<Variables> m = deserializeMBF<Variables>(mapFile);
-
-				buf[i].key = m;
-				buf[i].value = deserializer(mapFile);
-			}
-
-			layers[layer] = BakedMap<Monotonic<Variables>, T>(buf, size);
+			layers[layer] = readLayerFromFile<Variables, T, ValueDeserializer>(mapFile, layer, deserializer);
 		}
 		return AllMBFMap(std::move(layers));
 	}
@@ -84,6 +89,9 @@ struct AllMBFMap {
 			writeLayerToFile(mapFile, this->layers[layer], layer, serializer);
 		}
 	}
+
+	auto begin() const { return layers.begin(); }
+	auto end() const { return layers.end(); }
 };
 
 

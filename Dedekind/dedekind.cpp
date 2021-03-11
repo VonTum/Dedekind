@@ -542,14 +542,16 @@ int main() {
 	IntervalSizeCache<5>::generate(generateAllMBFsFast<5>().first);
 	IntervalSizeCache<6>::generate(generateAllMBFsFast<6>().first);*/
 
-	doRevolution<4>();
+	/*doRevolution<4>();
 	doRevolution<5>();
 	doRevolution<6>();
 	doRevolution<7>();
-	doRevolution<8>();
+	doRevolution<8>();*/
 	//doRevolution<9>();
 
 	//TimeTracker timer;
 	//computeIntervals<6>();
+
+	verifyIntervalsCorrect<7>();
 }
 #endif

@@ -165,3 +165,27 @@ void computeIntervalsParallel() {
 	}
 }
 
+
+
+template<unsigned int Variables>
+void verifyIntervalsCorrect() {
+	std::ifstream intervalsFile(allIntervals(Variables), std::ios::binary);
+	if(!intervalsFile.is_open()) throw "Error not found!";
+
+	for(size_t layer = 0; layer < (1 << Variables) + 1; layer++) {
+		auto map = readLayerFromFile<Variables, uint64_t>(intervalsFile, layer, [](std::ifstream& is) {return deserializeU64(is); });
+		for(const KeyValue<Monotonic<Variables>, uint64_t>& item : map) {
+			if(item.key.size() != layer) {
+				throw "Bad map key! Key size is not layer size";
+			}
+			uint64_t realSize = intervalSizeFast(Monotonic<Variables>::getBot(), item.key);
+			if(item.value != realSize) {
+				throw "Bad interval size!";
+			}
+		}
+		std::cout << ".";
+	}
+
+	intervalsFile.close();
+}
+
