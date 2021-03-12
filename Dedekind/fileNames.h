@@ -2,7 +2,7 @@
 
 #include <string>
 
-
+namespace FileName {
 inline std::string allMBFSInfo(unsigned int Variables) {
 	std::string name = "../data/allUniqueMBF";
 	name.append(std::to_string(Variables));
@@ -51,3 +51,4 @@ inline std::string allIntervals(unsigned int Variables) {
 	name.append(".intervals");
 	return name;
 }
+};

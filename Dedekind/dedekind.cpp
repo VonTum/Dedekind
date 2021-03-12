@@ -101,7 +101,7 @@ void runGenAllMBFs() {
 	std::cout << "R(" << Variables << ") == " << result.size() << "\n";
 
 	{
-		std::ofstream file(allMBFS(Variables), std::ios::binary);
+		std::ofstream file(FileName::allMBFS(Variables), std::ios::binary);
 
 		for(const Monotonic<Variables>& item : result) {
 			serializeMBF(item, file);
@@ -110,7 +110,7 @@ void runGenAllMBFs() {
 	}
 
 	{
-		std::ofstream file(allMBFSInfo(Variables));
+		std::ofstream file(FileName::allMBFSInfo(Variables));
 
 
 		file << "R(" << Variables << ") == " << result.size() << "\n";
@@ -144,9 +144,9 @@ template<unsigned int Variables>
 void runSortAndComputeLinks() {
 	TimeTracker timer;
 
-	std::ifstream inputFile(allMBFS(Variables), std::ios::binary);
-	std::ofstream sortedFile(allMBFSSorted(Variables), std::ios::binary);
-	std::ofstream linkFile(mbfLinks(Variables), std::ios::binary);
+	std::ifstream inputFile(FileName::allMBFS(Variables), std::ios::binary);
+	std::ofstream sortedFile(FileName::allMBFSSorted(Variables), std::ios::binary);
+	std::ofstream linkFile(FileName::mbfLinks(Variables), std::ios::binary);
 
 	sortAndComputeLinks<Variables>(inputFile, sortedFile, linkFile);
 
@@ -230,8 +230,8 @@ template<unsigned int Variables>
 void doLinkCount() {
 	size_t linkCounts[(1 << Variables) + 1];
 
-	std::ifstream linkFile(mbfLinks(Variables), std::ios::binary);
-	std::ofstream linkStatsFile(linkStats(Variables));
+	std::ifstream linkFile(FileName::mbfLinks(Variables), std::ios::binary);
+	std::ofstream linkStatsFile(FileName::linkStats(Variables));
 
 	size_t numLinksDistri[36];
 	for(size_t& item : numLinksDistri) item = 0;
@@ -315,7 +315,7 @@ void sampleIntervalSizes() {
 		std::array<uint64_t, (1 << Variables)> counts = countAndIntervalSize.first;
 		uint64_t iSize = countAndIntervalSize.second;
 
-		intervalStatsFile.open(intervalStats(Variables), std::ios::app);
+		intervalStatsFile.open(FileName::intervalStats(Variables), std::ios::app);
 		intervalStatsFile << layer << ", " << iSize;
 
 		uint64_t totalCount = 0;
@@ -542,16 +542,18 @@ int main() {
 	IntervalSizeCache<5>::generate(generateAllMBFsFast<5>().first);
 	IntervalSizeCache<6>::generate(generateAllMBFsFast<6>().first);*/
 
-	/*doRevolution<4>();
-	doRevolution<5>();
-	doRevolution<6>();
-	doRevolution<7>();
-	doRevolution<8>();*/
+	//doRevolution<4>();
+	//doRevolution<5>();
+	//doRevolution<6>();
+	//doRevolution<7>();
+	//doRevolution<8>();
 	//doRevolution<9>();
 
 	//TimeTracker timer;
 	//computeIntervals<6>();
 
-	verifyIntervalsCorrect<7>();
+	checkIntervalLayers<7>(52);
+
+	//verifyIntervalsCorrect<7>();
 }
 #endif

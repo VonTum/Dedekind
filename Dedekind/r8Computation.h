@@ -14,7 +14,7 @@ uint64_t getNumberOfOwnedChildClasses(const Monotonic<Variables>& cur) {
 		Monotonic<Variables> newMBF = cur;
 		newMBF.add(bit);
 
-		if(isUniqueExtention(newMBF, bit)) {
+		if(newMBF.asAntiChain().bf.getFirst() == bit) {
 			total += getNumberOfOwnedChildClasses(newMBF);
 		}
 	});
@@ -40,7 +40,7 @@ uint64_t getNumberOfCanonicalOwnedChildClasses(const Monotonic<Variables>& cur) 
 
 		// incorrect still work to do
 		if(newMBF == newMBF.canonize()) {
-			if(isUniqueExtention(newMBF, bit)) {
+			if(newMBF.asAntiChain().bf.getFirst() == bit) {
 				total += getNumberOfCanonicalOwnedChildClasses(newMBF);
 			}
 		}

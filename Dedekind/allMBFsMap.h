@@ -35,6 +35,18 @@ void writeLayerToFile(std::ofstream& mapFile, const BakedMap<Monotonic<Variables
 	}
 }
 
+template<unsigned int Variables>
+void skipLayersInFile(std::ifstream& file, size_t startLayer, size_t endLayer, size_t extraDataSize = 0) {
+	size_t sizePerElement = getMBFSizeInBytes<Variables>() + extraDataSize;
+
+	std::streamsize totalToSkip = 0;
+	for(size_t l = startLayer; l < endLayer; l++) {
+		totalToSkip += getLayerSize<Variables>(l) * sizePerElement;
+	}
+
+	file.ignore(totalToSkip);
+}
+
 template<unsigned int Variables, typename T>
 struct AllMBFMap {
 	constexpr static int LAYER_COUNT = (1 << Variables) + 1;
