@@ -13,6 +13,29 @@
 
 
 template<unsigned int Variables>
+uint64_t computeExtendedIntervalOf(const BakedMap<Monotonic<Variables>, uint64_t>& prevLayer, const Monotonic<Variables>& cur) {
+	//std::cout << "  " << cur;
+
+	Layer<Variables> topLayer = cur.getTopLayer();
+
+	size_t removedElement = topLayer.getFirst();
+
+	Monotonic<Variables> smallerMBF = cur;
+	smallerMBF.remove(removedElement);
+
+	//for(auto& i : prevLayer) std::cout << i.key << " ";
+
+	uint64_t smallerMBFIntervalSize = prevLayer.get(smallerMBF.canonize());
+
+	uint64_t thisIntervalSize = computeIntervalSizeExtention(smallerMBF, smallerMBFIntervalSize, removedElement);
+	assert(thisIntervalSize == intervalSizeFast(Monotonic<Variables>::getBot(), cur));
+
+	//std::cout << ": " << thisIntervalSize << "\n";
+	return thisIntervalSize;
+}
+
+
+template<unsigned int Variables>
 void computeIntervals() {
 	using MBF = Monotonic<Variables>;
 	using LR = Layer<Variables>;
@@ -42,26 +65,10 @@ void computeIntervals() {
 
 	for(int layer = 1; layer < (1 << Variables) + 1; layer++) {
 		std::cout << "Layer " << layer << ": " << std::flush;
+		BakedMap<MBF, uint64_t>& prevLayer = allMBFs.layers[layer - 1];
 		auto start = std::chrono::high_resolution_clock::now();
 		for(KeyValue<MBF, uint64_t>& cur : allMBFs.layers[layer]) {
-			//std::cout << "  " << cur.key;
-
-			LR topLayer = cur.key.getTopLayer();
-
-			size_t removedElement = topLayer.getFirst();
-
-			MBF smallerMBF = cur.key;
-			smallerMBF.remove(removedElement);
-
-			BakedMap<MBF, uint64_t>& prevLayer = allMBFs.layers[layer - 1];
-			//for(auto& i : prevLayer) std::cout << i.key << " ";
-
-			uint64_t smallerMBFIntervalSize = prevLayer.get(smallerMBF.canonize());
-
-			uint64_t thisIntervalSize = computeIntervalSizeExtention(smallerMBF, smallerMBFIntervalSize, removedElement);
-			cur.value = thisIntervalSize;
-
-			//std::cout << ": " << thisIntervalSize << "\n";
+			cur.value = computeExtendedIntervalOf(prevLayer, cur.key);
 		}
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
 		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;
@@ -119,24 +126,10 @@ void computeIntervalsParallel() {
 
 	for(int layer = 1; layer < (1 << Variables) + 1; layer++) {
 		std::cout << "Layer " << layer << ": " << std::flush;
+		BakedMap<MBF, uint64_t>& prevLayer = allMBFs.layers[layer - 1];
 		auto start = std::chrono::high_resolution_clock::now();
 		iterCollectionInParallel(allMBFs.layers[layer], [&](KeyValue<MBF, uint64_t>& cur) {
-			//std::cout << "  " << cur.key;
-
-			LR topLayer = cur.key.getTopLayer();
-
-			size_t removedElement = topLayer.getFirst();
-
-			MBF smallerMBF = cur.key;
-			smallerMBF.remove(removedElement);
-
-			BakedMap<MBF, uint64_t>& prevLayer = allMBFs.layers[layer - 1];
-			//for(auto& i : prevLayer) std::cout << i.key << " ";
-
-			uint64_t smallerMBFIntervalSize = prevLayer.get(smallerMBF.canonize());
-
-			uint64_t thisIntervalSize = computeIntervalSizeExtention(smallerMBF, smallerMBFIntervalSize, removedElement);
-			cur.value = thisIntervalSize;
+			cur.value = computeExtendedIntervalOf(prevLayer, cur.key);
 		});
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
 		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;

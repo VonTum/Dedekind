@@ -549,7 +549,7 @@ int main() {
 	//doRevolution<8>();
 	//doRevolution<9>();
 
-	//TimeTracker timer;
+	TimeTracker timer;
 	//computeIntervals<6>();
 
 	checkIntervalLayers<7>(52);

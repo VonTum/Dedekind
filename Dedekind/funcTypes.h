@@ -489,3 +489,52 @@ template<unsigned int Variables>
 Layer<Variables> andnot(const Layer<Variables>& a, const BooleanFunction<Variables>& b) {
 	return Layer<Variables>(andnot(a.bf, b));
 }
+
+
+template<unsigned int Variables>
+Layer<Variables> getBiggestLayer(const BooleanFunction<Variables>& boolFunc) {
+	Layer<Variables> biggestLayer(boolFunc.getLayer(1));
+	int biggestLayerSize = biggestLayer.size();
+
+	for(int i = 2; i <= Variables; i++) {
+		Layer<Variables> l = boolFunc.getLayer(i);
+		int lSize = l.size();
+		if(lSize > biggestLayerSize) {
+			biggestLayer = l;
+			biggestLayerSize = lSize;
+		}
+	}
+
+	return biggestLayer;
+}
+
+template<unsigned int Variables>
+Layer<Variables> getTopLayer(const BooleanFunction<Variables>& bf) {
+	for(int i = Variables; i > 0; i--) {
+		BooleanFunction<Variables> l = bf.getLayer(i);
+		if(!l.isEmpty()) {
+			return Layer<Variables>(l);
+		}
+	}
+	return Layer<Variables>(bf);
+}
+
+template<unsigned int Variables>
+Layer<Variables> getBottomLayer(const BooleanFunction<Variables>& bf) {
+	for(int i = 0; i < Variables; i--) {
+		BooleanFunction<Variables> l = bf.getLayer(i);
+		if(!l.isEmpty()) {
+			return Layer<Variables>(l);
+		}
+	}
+	return Layer<Variables>(bf);
+}
+
+template<unsigned int Variables>
+Layer<Variables> getTopLayer(const Monotonic<Variables>& m) {
+	return getTopLayer(m.bf);
+}
+template<unsigned int Variables>
+Layer<Variables> getTopLayer(const AntiChain<Variables>& ac) {
+	return getTopLayer(ac.bf);
+}
