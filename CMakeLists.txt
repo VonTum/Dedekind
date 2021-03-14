@@ -26,6 +26,7 @@ add_library(dedelib
   Dedekind/intervalDecomposition.cpp
   Dedekind/layerDecomposition.cpp
   Dedekind/valuedDecomposition.cpp
+  Dedekind/fileNames.cpp
 
   Dedekind/bigint/uint128_t.cpp
   Dedekind/bigint/uint256_t.cpp

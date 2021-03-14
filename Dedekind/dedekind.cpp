@@ -17,6 +17,7 @@
 #include "fullIntervalSizeComputation.h"
 
 #include "fileNames.h"
+#include "cmdParser.h"
 
 /*
 Correct numbers
@@ -511,11 +512,19 @@ void doRevolution() {
 	revolutionParallel<DedekindOrder - 3>();
 }
 
-#include "bigint/uint256_t.h"
-
 #ifndef RUN_TESTS
-int main() {
+int main(int argc, const char** argv) {
 	std::cout << "Detected " << std::thread::hardware_concurrency() << " threads" << std::endl;
+
+	ParsedArgs parsed(argc, argv);
+
+	std::string dataDir = parsed.getOptional("dataDir");
+	if(!dataDir.empty()) {
+		FileName::setDataPath(dataDir);
+	}
+
+
+
 	//doRAMTest();  // works
 
 	//MBFDecompositionWithHash<6> thing; // doesn't work
@@ -550,9 +559,9 @@ int main() {
 	//doRevolution<9>();
 
 	TimeTracker timer;
-	//computeIntervals<6>();
+	computeIntervalsParallel<7>();
 
-	checkIntervalLayers<7>(52);
+	//checkIntervalLayers<7>(80);
 
 	//verifyIntervalsCorrect<7>();
 }

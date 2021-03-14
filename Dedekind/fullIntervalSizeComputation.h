@@ -101,7 +101,7 @@ void computeIntervalsParallel() {
 	using MBF = Monotonic<Variables>;
 	using LR = Layer<Variables>;
 
-	std::ifstream mbfFile(allMBFSSorted(Variables), std::ios::binary);
+	std::ifstream mbfFile(FileName::allMBFSSorted(Variables), std::ios::binary);
 	if(!mbfFile.is_open()) throw "Error not found!";
 
 	AllMBFMap<Variables, uint64_t> allMBFs = AllMBFMap<Variables, uint64_t>::readKeysFile(mbfFile);
@@ -186,7 +186,10 @@ void verifyIntervalsCorrect() {
 template<unsigned int Variables>
 std::array<BakedMap<Monotonic<Variables>, uint64_t>, 2> getTwoIntervalLayers(size_t bottomLayer) {
 	std::ifstream intervalFile(FileName::allIntervals(Variables), std::ios::binary);
-	if(!intervalFile.is_open()) throw "File not found!";
+	if(!intervalFile.is_open()) {
+		std::cout << FileName::allIntervals(Variables);
+		throw "File not found! ";
+	}
 
 	skipLayersInFile<Variables>(intervalFile, 0, bottomLayer, sizeof(uint64_t));
 
@@ -208,6 +211,8 @@ void checkIntervalLayers(size_t bottomLayer) {
 	BakedMap<Monotonic<Variables>, uint64_t>& layer1 = layers[0];
 	BakedMap<Monotonic<Variables>, uint64_t>& layer2 = layers[1];
 
+	auto totalStart = std::chrono::high_resolution_clock::now();
+	//int count = 0;
 	for(KeyValue<Monotonic<Variables>, uint64_t>& cur : layer2) {
 		LR topLayer = cur.key.getTopLayer();
 
@@ -220,15 +225,29 @@ void checkIntervalLayers(size_t bottomLayer) {
 
 		auto start = std::chrono::high_resolution_clock::now();
 		uint64_t thisIntervalSize = computeIntervalSizeExtention(smallerMBF, smallerMBFIntervalSize, removedElement);
-		assert(cur.value == thisIntervalSize);
-
-		auto deltaMillis = (std::chrono::high_resolution_clock::now() - start).count() / 1000000.0;
-		if(deltaMillis > 36.0) {
-			std::cout << "\n" << cur.key << "+" << FunctionInput{uint32_t(removedElement)} << ": " << deltaMillis << "ms\n";
-			__debugbreak();
-		} else {
-			std::cout << '.' << deltaMillis << "ms ";
+		if(cur.value != thisIntervalSize) {
+			std::cout << "\nIncorrect size: cur.value: " << cur.value << "   thisIntervalSize: " << thisIntervalSize << std::endl;
+			throw "END";
 		}
+
+		{
+			auto deltaMillis = (std::chrono::high_resolution_clock::now() - start).count() / 1000000.0;
+			//if(deltaMillis > 36.0) {
+			//	std::cout << "\n" << cur.key << "+" << FunctionInput{uint32_t(removedElement)} << ": " << deltaMillis << "ms\n";
+				//throw "END";
+			//} else {
+				std::cout << '.' << deltaMillis << "ms ";
+			//}
+		}
+
+		// for benchmarking
+		/*count++;
+		if(count >= 10000) {
+			auto deltaMills = (std::chrono::high_resolution_clock::now() - totalStart).count() / 1000000.0;
+
+			std::cout << "Time: " << deltaMills << "  time per: " << deltaMills / count << "\n";
+			throw "END";
+		}*/
 	}
 }
 

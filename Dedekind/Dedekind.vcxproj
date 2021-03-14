@@ -388,6 +388,7 @@
     <ClCompile Include="bigint\uint256_t.cpp" />
     <ClCompile Include="codeGen.cpp" />
     <ClCompile Include="dedekind.cpp" />
+    <ClCompile Include="fileNames.cpp" />
     <ClCompile Include="intervalDecomposition.cpp" />
     <ClCompile Include="tests\bigintTests.cpp" />
     <ClCompile Include="tests\bitsetTests.cpp" />
@@ -409,6 +410,7 @@
     <ClInclude Include="bigint\uint128_t.h" />
     <ClInclude Include="bigint\uint256_t.h" />
     <ClInclude Include="bufferedMap.h" />
+    <ClInclude Include="cmdParser.h" />
     <ClInclude Include="crossPlatformIntrinsics.h" />
     <ClInclude Include="fileNames.h" />
     <ClInclude Include="fullIntervalSizeComputation.h" />
