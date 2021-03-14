@@ -2,6 +2,8 @@
 #include <iostream>
 #include <fstream>
 #include <random>
+#include <map>
+#include <string>
 #include "dedekindDecomposition.h"
 #include "valuedDecomposition.h"
 #include "toString.h"
@@ -512,6 +514,124 @@ void doRevolution() {
 	revolutionParallel<DedekindOrder - 3>();
 }
 
+inline void runCommands(const ParsedArgs& args) {
+	std::map<std::string, void(*)()> commands{
+		{"ramTest", []() {doRAMTest(); }},
+
+		{"revolution4", []() {doRevolution<4>(); }},
+		{"revolution5", []() {doRevolution<5>(); }},
+		{"revolution6", []() {doRevolution<6>(); }},
+		{"revolution7", []() {doRevolution<7>(); }},
+		{"revolution8", []() {doRevolution<8>(); }},
+		{"revolution9", []() {doRevolution<9>(); }},
+
+		{"genAllMBF1", []() {runGenAllMBFs<1>(); }},
+		{"genAllMBF2", []() {runGenAllMBFs<2>(); }},
+		{"genAllMBF3", []() {runGenAllMBFs<3>(); }},
+		{"genAllMBF4", []() {runGenAllMBFs<4>(); }},
+		{"genAllMBF5", []() {runGenAllMBFs<5>(); }},
+		{"genAllMBF6", []() {runGenAllMBFs<6>(); }},
+		{"genAllMBF7", []() {runGenAllMBFs<7>(); }},
+		{"genAllMBF8", []() {runGenAllMBFs<8>(); }},
+		{"genAllMBF9", []() {runGenAllMBFs<9>(); }},
+
+		{"sortAndComputeLinks1", []() {runSortAndComputeLinks<1>(); }},
+		{"sortAndComputeLinks2", []() {runSortAndComputeLinks<2>(); }},
+		{"sortAndComputeLinks3", []() {runSortAndComputeLinks<3>(); }},
+		{"sortAndComputeLinks4", []() {runSortAndComputeLinks<4>(); }},
+		{"sortAndComputeLinks5", []() {runSortAndComputeLinks<5>(); }},
+		{"sortAndComputeLinks6", []() {runSortAndComputeLinks<6>(); }},
+		{"sortAndComputeLinks7", []() {runSortAndComputeLinks<7>(); }},
+		//{"sortAndComputeLinks8", []() {runSortAndComputeLinks<8>(); }},
+		//{"sortAndComputeLinks9", []() {runSortAndComputeLinks<9>(); }},
+
+		//{"saveIntervalSizes1", []() {saveIntervalSizes<1>(); }},
+		//{"saveIntervalSizes2", []() {saveIntervalSizes<2>(); }},
+		//{"saveIntervalSizes3", []() {saveIntervalSizes<3>(); }},
+		//{"saveIntervalSizes4", []() {saveIntervalSizes<4>(); }},
+		//{"saveIntervalSizes5", []() {saveIntervalSizes<5>(); }},
+		//{"saveIntervalSizes6", []() {saveIntervalSizes<6>(); }},
+		//{"saveIntervalSizes7", []() {saveIntervalSizes<7>(); }},
+		//{"saveIntervalSizes8", []() {saveIntervalSizes<8>(); }},
+		//{"saveIntervalSizes9", []() {saveIntervalSizes<9>(); }},
+
+		{"linkCount1", []() {doLinkCount<1>(); }},
+		{"linkCount2", []() {doLinkCount<2>(); }},
+		{"linkCount3", []() {doLinkCount<3>(); }},
+		{"linkCount4", []() {doLinkCount<4>(); }},
+		{"linkCount5", []() {doLinkCount<5>(); }},
+		{"linkCount6", []() {doLinkCount<6>(); }},
+		{"linkCount7", []() {doLinkCount<7>(); }},
+		//{"linkCount8", []() {doLinkCount<8>(); }},
+		//{"linkCount9", []() {doLinkCount<9>(); }},
+
+		//{"sampleIntervalSizes1", []() {sampleIntervalSizes<1>(); }},
+		//{"sampleIntervalSizes2", []() {sampleIntervalSizes<2>(); }},
+		//{"sampleIntervalSizes3", []() {sampleIntervalSizes<3>(); }},
+		//{"sampleIntervalSizes4", []() {sampleIntervalSizes<4>(); }},
+		//{"sampleIntervalSizes5", []() {sampleIntervalSizes<5>(); }},
+		//{"sampleIntervalSizes6", []() {sampleIntervalSizes<6>(); }},
+		//{"sampleIntervalSizes7", []() {sampleIntervalSizes<7>(); }},
+		//{"sampleIntervalSizes8", []() {sampleIntervalSizes<8>(); }},
+		//{"sampleIntervalSizes9", []() {sampleIntervalSizes<9>(); }},
+
+		{"computeIntervalsParallel1", []() {computeIntervalsParallel<1>(); }},
+		{"computeIntervalsParallel2", []() {computeIntervalsParallel<2>(); }},
+		{"computeIntervalsParallel3", []() {computeIntervalsParallel<3>(); }},
+		{"computeIntervalsParallel4", []() {computeIntervalsParallel<4>(); }},
+		{"computeIntervalsParallel5", []() {computeIntervalsParallel<5>(); }},
+		{"computeIntervalsParallel6", []() {computeIntervalsParallel<6>(); }},
+		{"computeIntervalsParallel7", []() {computeIntervalsParallel<7>(); }},
+		//{"computeIntervalsParallel8", []() {computeIntervalsParallel<8>(); }},
+		//{"computeIntervalsParallel9", []() {computeIntervalsParallel<9>(); }},
+
+		{"verifyIntervalsCorrect1", []() {verifyIntervalsCorrect<1>(); }},
+		{"verifyIntervalsCorrect2", []() {verifyIntervalsCorrect<2>(); }},
+		{"verifyIntervalsCorrect3", []() {verifyIntervalsCorrect<3>(); }},
+		{"verifyIntervalsCorrect4", []() {verifyIntervalsCorrect<4>(); }},
+		{"verifyIntervalsCorrect5", []() {verifyIntervalsCorrect<5>(); }},
+		{"verifyIntervalsCorrect6", []() {verifyIntervalsCorrect<6>(); }},
+		{"verifyIntervalsCorrect7", []() {verifyIntervalsCorrect<7>(); }},
+		//{"verifyIntervalsCorrect8", []() {verifyIntervalsCorrect<8>(); }},
+		//{"verifyIntervalsCorrect9", []() {verifyIntervalsCorrect<9>(); }}
+
+		//checkIntervalLayers<7>(80);
+	};
+
+	std::map<std::string, void(*)(const std::string&)> commandsWithArg{
+		{"checkIntervalLayers1", [](const std::string& size) {checkIntervalLayers<1>(std::stoi(size)); }},
+		{"checkIntervalLayers2", [](const std::string& size) {checkIntervalLayers<2>(std::stoi(size)); }},
+		{"checkIntervalLayers3", [](const std::string& size) {checkIntervalLayers<3>(std::stoi(size)); }},
+		{"checkIntervalLayers4", [](const std::string& size) {checkIntervalLayers<4>(std::stoi(size)); }},
+		{"checkIntervalLayers5", [](const std::string& size) {checkIntervalLayers<5>(std::stoi(size)); }},
+		{"checkIntervalLayers6", [](const std::string& size) {checkIntervalLayers<6>(std::stoi(size)); }},
+		{"checkIntervalLayers7", [](const std::string& size) {checkIntervalLayers<7>(std::stoi(size)); }},
+		//{"checkIntervalLayers8", [](const std::string& size) {checkIntervalLayers<8>(std::stoi(size)); }},
+		//{"checkIntervalLayers9", [](const std::string& size) {checkIntervalLayers<9>(std::stoi(size)); }}
+	};
+
+	for(size_t i = 0; i < args.argCount(); i++) {
+		const std::string& cmd = args[i];
+
+		auto found = commands.find(cmd);
+		if(found != commands.end()) {
+			std::cout << "running " << cmd.c_str() << std::endl;
+			TimeTracker timer;
+			(*found).second();
+		} else {
+			auto foundWithArg = commandsWithArg.find(cmd);
+			if(foundWithArg != commandsWithArg.end()) {
+				i++;
+				const std::string& arg = args[i];
+
+				std::cout << "running " << cmd.c_str() << "(" << arg.c_str() << ")" << std::endl;
+				TimeTracker timer;
+				(*foundWithArg).second(arg);
+			}
+		}
+	}
+}
+
 #ifndef RUN_TESTS
 int main(int argc, const char** argv) {
 	std::cout << "Detected " << std::thread::hardware_concurrency() << " threads" << std::endl;
@@ -523,7 +643,7 @@ int main(int argc, const char** argv) {
 		FileName::setDataPath(dataDir);
 	}
 
-
+	if(parsed.argCount() > 0) runCommands(parsed);
 
 	//doRAMTest();  // works
 
@@ -558,8 +678,8 @@ int main(int argc, const char** argv) {
 	//doRevolution<8>();
 	//doRevolution<9>();
 
-	TimeTracker timer;
-	computeIntervalsParallel<7>();
+	//TimeTracker timer;
+	//computeIntervalsParallel<7>();
 
 	//checkIntervalLayers<7>(80);
 
