@@ -107,21 +107,22 @@ void iterCollectionInParallelWithPerThreadBuffer(Collection& col, BufferFunc buf
 // expects two functions, one function for work, and another function for constructing the buffer that will be reused for the work:
 // funcToRun = void(T& item, ThreadTotal& localTotal)
 // localTotal = initialTotal
+// totalMergeFunc = void(ThreadTotal& globalTotal, const ThreadTotal& localTotal)
 template<typename Iter, typename IterEnd, typename ThreadTotal, typename Func, typename ThreadTotalMergeFunc>
-ThreadTotal finishIterPartitionedWithSeparateTotals(Iter iter, IterEnd iterEnd, const ThreadTotal& initialPerThreadTotal, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc) {
+ThreadTotal finishIterPartitionedWithSeparateTotals(Iter iter, IterEnd iterEnd, const ThreadTotal& initialTotal, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc) {
 #ifndef NO_MULTITHREAD
 	unsigned int processorCount = std::thread::hardware_concurrency();
 	if(processorCount > 1) {
 		std::mutex iterMutex;
 
-		ThreadTotal fullTotal = initialPerThreadTotal;
+		ThreadTotal fullTotal = initialTotal;
 		std::mutex fullTotalMutex;
 
 		auto work = [&]() {
-			ThreadTotal selfTotal = initialPerThreadTotal;
-			whileIterGrab(iter, iterEnd, iterMutex, funcToRun, selfTotal);
+			ThreadTotal localTotal = initialTotal;
+			whileIterGrab(iter, iterEnd, iterMutex, funcToRun, localTotal);
 			fullTotalMutex.lock();
-			totalMergeFunc(fullTotal, selfTotal);
+			totalMergeFunc(fullTotal, localTotal);
 			fullTotalMutex.unlock();
 		};
 
@@ -131,7 +132,7 @@ ThreadTotal finishIterPartitionedWithSeparateTotals(Iter iter, IterEnd iterEnd, 
 	} else
 #endif
 	{
-		ThreadTotal total = initialPerThreadTotal;
+		ThreadTotal total = initialTotal;
 		for(; iter != iterEnd; ++iter) {
 			funcToRun(*iter, total);
 		}

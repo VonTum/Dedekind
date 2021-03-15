@@ -9,6 +9,40 @@
 #include "bitSet.h"
 
 #include "crossPlatformIntrinsics.h"
+#include "knownData.h"
+
+template<unsigned int Variables>
+class BooleanFunction;
+
+// todo Optimization
+/*template<unsigned int V1, unsigned int V2>
+inline __m128i swapConstExpr(__m128i data) {
+	_mm_bslli_si128()
+}
+
+template<typename Func>
+inline void forEachSubPermFor7From3(const BooleanFunction<7>& bf, const Func& funcToRun) {
+	// a-b-c-d
+	funcToRun(bf);
+
+	__m128i abcd = bf.bitset.data;
+
+	// swap 3-4
+	__m128i bacd = 
+	// b-a-c-d
+
+	
+	// swap 4-5
+	// b-c-a-d
+
+	// swap 3-4
+	// b-c-d-a
+
+	// swap 3-4
+
+	// swap 3-4
+
+}*/
 
 template<unsigned int Variables>
 class BooleanFunction {
@@ -284,6 +318,10 @@ public:
 
 	template<typename Func, unsigned int CurVar = 0>
 	void forEachPermutation(const Func& func) {
+		//if constexpr(Variables == 7 && CurVar == 3) {
+			//forEachSubPermFor7From3(*this, func);
+			// return;
+		//}
 		if constexpr(CurVar == Variables) {
 			func(*this);
 		} else {
@@ -866,6 +904,20 @@ public:
 		});
 
 		return best;
+	}
+
+	unsigned int countNonEquivalentVariants() const {
+		unsigned int totalEqual = 0;
+
+		BooleanFunction copy = *this;
+		copy.forEachPermutation([this, &totalEqual](BooleanFunction& permuted) {
+			if(permuted == *this) {
+				totalEqual++;
+			}
+		});
+
+		constexpr unsigned int totalPermutations = factorial(Variables);
+		return totalPermutations / totalEqual;
 	}
 };
 

@@ -9,6 +9,22 @@
 #include <istream>
 #include <string>
 
+
+template<unsigned int Variables, typename T, typename ValueDeserializer>
+KeyValue<Monotonic<Variables>, T>* readBufFromFile(std::ifstream& mapFile, size_t layerIndex, const ValueDeserializer& deserializer) {
+	size_t size = getLayerSize<Variables>(layerIndex);
+	KeyValue<Monotonic<Variables>, T>* buf = new KeyValue<Monotonic<Variables>, T>[size];
+
+	for(size_t i = 0; i < size; i++) {
+		Monotonic<Variables> m = deserializeMBF<Variables>(mapFile);
+
+		buf[i].key = m;
+		buf[i].value = deserializer(mapFile);
+	}
+
+	return buf;
+}
+
 template<unsigned int Variables, typename T, typename ValueDeserializer>
 BakedMap<Monotonic<Variables>, T> readLayerFromFile(std::ifstream& mapFile, size_t layerIndex, const ValueDeserializer& deserializer) {
 	size_t size = getLayerSize<Variables>(layerIndex);

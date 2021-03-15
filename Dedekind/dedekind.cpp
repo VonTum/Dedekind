@@ -514,6 +514,37 @@ void doRevolution() {
 	revolutionParallel<DedekindOrder - 3>();
 }
 
+template<unsigned int Variables>
+void computeDPlus1() {
+	std::ifstream intervals(FileName::allIntervals(Variables), std::ios::binary);
+
+	u128 totalWork = 0;
+	u128 dedekindNumber = 0;
+	for(size_t layer = 0; layer < (1 << Variables) + 1; layer++) {
+		std::cout << "Layer " << layer << ": ";
+		auto start = std::chrono::high_resolution_clock::now();
+
+		KeyValue<Monotonic<Variables>, uint64_t>* foundLayer = readBufFromFile<Variables, uint64_t>(intervals, layer, [](std::ifstream& is) {return deserializeU64(is); });
+		size_t size = getLayerSize<Variables>(layer);
+
+		for(size_t i = 0; i < size; i++) {
+			totalWork += u128(foundLayer[i].value);
+		}
+
+		u128 fullTotalForThisLayer = finishIterPartitionedWithSeparateTotals(foundLayer, foundLayer + size, u128(0), [&](const KeyValue<Monotonic<Variables>, uint64_t>& kv, u128& localTotal) {
+			localTotal += umul128(kv.value, kv.key.bf.countNonEquivalentVariants());
+		}, [](u128& a, const u128& b) {a += b; });
+
+		dedekindNumber += fullTotalForThisLayer;
+
+		double deltaMicros = (std::chrono::high_resolution_clock::now() - start).count() / 1000.0;
+		std::cout << " Time taken: " << deltaMicros / 1000000.0 << "s for " << size << " mbfs at " << deltaMicros / size << "us per mbf" << std::endl;
+	}
+
+	std::cout << "Amount of work: " << totalWork << std::endl;
+	std::cout << "D(" << Variables + 1 << "): " << dedekindNumber << std::endl;
+}
+
 inline void runCommands(const ParsedArgs& args) {
 	std::map<std::string, void(*)()> commands{
 		{"ramTest", []() {doRAMTest(); }},
@@ -593,7 +624,17 @@ inline void runCommands(const ParsedArgs& args) {
 		{"verifyIntervalsCorrect6", []() {verifyIntervalsCorrect<6>(); }},
 		{"verifyIntervalsCorrect7", []() {verifyIntervalsCorrect<7>(); }},
 		//{"verifyIntervalsCorrect8", []() {verifyIntervalsCorrect<8>(); }},
-		//{"verifyIntervalsCorrect9", []() {verifyIntervalsCorrect<9>(); }}
+		//{"verifyIntervalsCorrect9", []() {verifyIntervalsCorrect<9>(); }},
+
+		{"computeDedekindFromIntervals1", []() {computeDPlus1<1>(); }},
+		{"computeDedekindFromIntervals2", []() {computeDPlus1<2>(); }},
+		{"computeDedekindFromIntervals3", []() {computeDPlus1<3>(); }},
+		{"computeDedekindFromIntervals4", []() {computeDPlus1<4>(); }},
+		{"computeDedekindFromIntervals5", []() {computeDPlus1<5>(); }},
+		{"computeDedekindFromIntervals6", []() {computeDPlus1<6>(); }},
+		{"computeDedekindFromIntervals7", []() {computeDPlus1<7>(); }},
+		//{"computeDedekindFromIntervals8", []() {computeDPlus1<8>(); }},
+		//{"computeDedekindFromIntervals9", []() {computeDPlus1<9>(); }},
 
 		//checkIntervalLayers<7>(80);
 	};

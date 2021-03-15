@@ -338,14 +338,14 @@ public:
 		delete[] this->hashTable;
 	}
 
-	BakedHashBase(BakedHashBase&& other) : hashTable(other.hashTable), data(other.data), buckets(other.buckets), itemCount(other.itemCount) {
+	BakedHashBase(BakedHashBase&& other) noexcept : hashTable(other.hashTable), data(other.data), buckets(other.buckets), itemCount(other.itemCount) {
 		other.hashTable = nullptr;
 		other.data = nullptr;
 		other.buckets = 0;
 		other.itemCount = 0;
 	}
 
-	BakedHashBase& operator=(BakedHashBase&& other) {
+	BakedHashBase& operator=(BakedHashBase&& other) noexcept {
 		std::swap(hashTable, other.hashTable);
 		std::swap(data, other.data);
 		std::swap(buckets, other.buckets);

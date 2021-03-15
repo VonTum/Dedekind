@@ -1,5 +1,21 @@
 #pragma once
 
+constexpr unsigned int factorial(unsigned int value) {
+	unsigned int total = 1;
+	for(unsigned int i = 2; i <= value; i++) {
+		total *= i;
+	}
+	return total;
+}
+constexpr unsigned int choose(unsigned int from, unsigned int count) {
+	if(count <= from / 2) count = from - count;
+	unsigned int total = 1;
+	for(unsigned int i = count + 1; i <= from; i++) {
+		total *= i;
+	}
+	total /= factorial(from - count);
+	return total;
+}
 
 constexpr size_t mbfCounts[]{2, 3, 5, 10, 30, 210, 16353, 490013148};
 constexpr size_t MAX_EXPANSION = 40; // greater than 35, which is the max for 7, leave some leeway
