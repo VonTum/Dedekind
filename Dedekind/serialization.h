@@ -7,6 +7,27 @@
 #include <iostream>
 #include <cstdint>
 
+inline void serializeU8(uint8_t value, uint8_t* outputBuf) {
+	*outputBuf = value;
+}
+
+inline uint8_t deserializeU8(const uint8_t* outputBuf) {
+	return *outputBuf;
+}
+
+inline void serializeU16(uint16_t value, uint8_t* outputBuf) {
+	for(size_t i = 0; i < 2; i++) {
+		*outputBuf++ = static_cast<uint8_t>(value >> (8 - i * 8));
+	}
+}
+
+inline uint16_t deserializeU16(const uint8_t* outputBuf) {
+	uint16_t result = 0;
+	for(size_t i = 0; i < 2; i++) {
+		result |= static_cast<uint16_t>(*outputBuf++) << (8 - i * 8);
+	}
+	return result;
+}
 
 inline void serializeU32(uint32_t value, uint8_t* outputBuf) {
 	for(size_t i = 0; i < 4; i++) {
@@ -18,6 +39,20 @@ inline uint32_t deserializeU32(const uint8_t* outputBuf) {
 	uint32_t result = 0;
 	for(size_t i = 0; i < 4; i++) {
 		result |= static_cast<uint32_t>(*outputBuf++) << (24 - i * 8);
+	}
+	return result;
+}
+
+inline void serializeU48(uint64_t value, uint8_t* outputBuf) {
+	for(size_t i = 0; i < 6; i++) {
+		*outputBuf++ = static_cast<uint8_t>(value >> (40 - i * 8));
+	}
+}
+
+inline uint64_t deserializeU48(const uint8_t* outputBuf) {
+	uint64_t result = 0;
+	for(size_t i = 0; i < 6; i++) {
+		result |= static_cast<uint64_t>(*outputBuf++) << (40 - i * 8);
 	}
 	return result;
 }
@@ -121,7 +156,10 @@ inline TYPE DESERIALIZE(std::istream& is) { uint8_t buf[SIZE]; is.read(reinterpr
 template<unsigned int Variables> void SERIALIZE(TYPE val, std::ostream& os) { uint8_t buf[SIZE]; SERIALIZE<Variables>(val, buf); os.write(reinterpret_cast<const char*>(buf), SIZE);}\
 template<unsigned int Variables> TYPE DESERIALIZE(std::istream& is) { uint8_t buf[SIZE]; is.read(reinterpret_cast<char*>(buf), SIZE); return DESERIALIZE<Variables>(buf);}
 
+MAKE_SERIALIZER(uint8_t, serializeU8, deserializeU8, 1);
+MAKE_SERIALIZER(uint16_t, serializeU16, deserializeU16, 2);
 MAKE_SERIALIZER(uint32_t, serializeU32, deserializeU32, 4);
+MAKE_SERIALIZER(uint64_t, serializeU48, deserializeU48, 6);
 MAKE_SERIALIZER(uint64_t, serializeU64, deserializeU64, 8);
 
 MAKE_VARIABLE_SERIALIZER(BooleanFunction<Variables>, serializeBooleanFunction, deserializeBooleanFunction, getMBFSizeInBytes<Variables>());

@@ -213,6 +213,36 @@ void sortAndComputeLinks(std::ifstream& allClassesSorted, std::ofstream& outputM
 	}
 }
 
+template<unsigned int Variables>
+void computeLinksForMap() {
+	std::ifstream mapFile(FileName::allIntervalSymmetries(Variables));
+	//Monotonic<Variables>* buf = new Monotonic<Variables>[getMaxLayerSize<Variables>()];
+
+	for(size_t layer = 0; layer <= (1 << Variables); layer++) {
+		if(layer != 0) { // skip first layer, nothing links to first layer
+			std::cout << "Linking layer " << layer << " with " << (layer - 1) << "\n";
+			for(const Monotonic<Variables>& element : prevSet) {
+				std::pair<Monotonic<Variables>, int> expandedMBFBuf[MAX_EXPANSION];
+				size_t foundNumber = findAllExpandedMBFsFast(element, expandedMBFBuf);
+				todooooooTODOOOOOO
+				LinkedNode linkedNodeBuf[MAX_EXPANSION];
+
+				for(size_t i = 0; i < foundNumber; i++) {
+					Monotonic<Variables>* expanded = fisSet.find(expandedMBFBuf[i].first);
+					linkedNodeBuf[i].count = expandedMBFBuf[i].second;
+					linkedNodeBuf[i].index = expanded - fisSet.begin();
+				}
+
+				uint8_t lnBuf[MAX_EXPANSION * 5];
+				size_t bytesCount = serializeLinkedNodeList(linkedNodeBuf, foundNumber, lnBuf);
+				linkNodeFile.write(reinterpret_cast<char*>(lnBuf), bytesCount);
+			}
+		}
+
+		prevSet = std::move(fisSet);
+	}
+}
+
 struct LinkBufPtr {
 	int offset;
 	int size;

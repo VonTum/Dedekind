@@ -10,6 +10,7 @@
 #include <string>
 
 
+// expects a function of the form T(std::ifstream&)
 template<unsigned int Variables, typename T, typename ValueDeserializer>
 KeyValue<Monotonic<Variables>, T>* readBufFromFile(std::ifstream& mapFile, size_t layerIndex, const ValueDeserializer& deserializer) {
 	size_t size = getLayerSize<Variables>(layerIndex);
@@ -25,30 +26,30 @@ KeyValue<Monotonic<Variables>, T>* readBufFromFile(std::ifstream& mapFile, size_
 	return buf;
 }
 
+// expects a function of the form T(std::ifstream&)
 template<unsigned int Variables, typename T, typename ValueDeserializer>
 BakedMap<Monotonic<Variables>, T> readLayerFromFile(std::ifstream& mapFile, size_t layerIndex, const ValueDeserializer& deserializer) {
 	size_t size = getLayerSize<Variables>(layerIndex);
-	KeyValue<Monotonic<Variables>, T>* buf = new KeyValue<Monotonic<Variables>, T>[size];
-
-	for(size_t i = 0; i < size; i++) {
-		Monotonic<Variables> m = deserializeMBF<Variables>(mapFile);
-
-		buf[i].key = m;
-		buf[i].value = deserializer(mapFile);
-	}
-
-	return BakedMap<Monotonic<Variables>, T>(buf, size);
+	
+	return BakedMap<Monotonic<Variables>, T>(readBufFromFile<Variables, T, ValueDeserializer>(mapFile, layerIndex, deserializer), size);
 }
 
+// expects a function of the form void(const T&, std::ofstream&)
 template<unsigned int Variables, typename T, typename ValueSerializer>
-void writeLayerToFile(std::ofstream& mapFile, const BakedMap<Monotonic<Variables>, T>& map, size_t layerIndex, const ValueSerializer& serializer) {
+void writeBufToFile(std::ofstream& mapFile, const KeyValue<Monotonic<Variables>, T>* buf, size_t layerIndex, const ValueSerializer& serializer) {
 	size_t size = getLayerSize<Variables>(layerIndex);
 
 	for(size_t i = 0; i < size; i++) {
-		const KeyValue<Monotonic<Variables>, T>& cur = map[i];
+		const KeyValue<Monotonic<Variables>, T>& cur = buf[i];
 		serializeMBF<Variables>(cur.key, mapFile);
 		serializer(cur.value, mapFile);
 	}
+}
+
+// expects a function of the form void(const T&, std::ofstream&)
+template<unsigned int Variables, typename T, typename ValueSerializer>
+void writeLayerToFile(std::ofstream& mapFile, const BakedMap<Monotonic<Variables>, T>& map, size_t layerIndex, const ValueSerializer& serializer) {
+	writeBufToFile<Variables, T, ValueSerializer>(mapFile, map.begin(), layerIndex, serializer);
 }
 
 template<unsigned int Variables>

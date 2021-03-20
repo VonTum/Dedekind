@@ -906,7 +906,7 @@ public:
 		return best;
 	}
 
-	unsigned int countNonEquivalentVariants() const {
+	unsigned int countDuplicatePermutations() const {
 		unsigned int totalEqual = 0;
 
 		BooleanFunction copy = *this;
@@ -916,8 +916,12 @@ public:
 			}
 		});
 
+		return totalEqual;
+	}
+
+	unsigned int countNonDuplicatePermutations() const {
 		constexpr unsigned int totalPermutations = factorial(Variables);
-		return totalPermutations / totalEqual;
+		return totalPermutations / countDuplicatePermutations();
 	}
 };
 

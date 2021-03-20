@@ -11,4 +11,5 @@ std::string linkStats(unsigned int Variables);
 std::string intervalStats(unsigned int Variables);
 std::string allMBFSSorted(unsigned int Variables);
 std::string allIntervals(unsigned int Variables);
+std::string allIntervalSymmetries(unsigned int Variables);
 };

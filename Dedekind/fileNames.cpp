@@ -65,4 +65,11 @@ std::string allIntervals(unsigned int Variables) {
 	name.append(".intervals");
 	return name;
 }
+
+std::string allIntervalSymmetries(unsigned int Variables) {
+	std::string name = dataPath + "allIntervalSymmetries";
+	name.append(std::to_string(Variables));
+	name.append(".intervalSymmetries");
+	return name;
+}
 };

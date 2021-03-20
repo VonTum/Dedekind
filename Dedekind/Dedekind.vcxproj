@@ -411,11 +411,13 @@
     <ClInclude Include="bigint\uint256_t.h" />
     <ClInclude Include="bufferedMap.h" />
     <ClInclude Include="cmdParser.h" />
+    <ClInclude Include="connectGraph.h" />
     <ClInclude Include="crossPlatformIntrinsics.h" />
     <ClInclude Include="fileNames.h" />
     <ClInclude Include="fullIntervalSizeComputation.h" />
     <ClInclude Include="funcTypes.h" />
     <ClInclude Include="interval.h" />
+    <ClInclude Include="intervalAndSymmetriesMap.h" />
     <ClInclude Include="intervalSizeCache.h" />
     <ClInclude Include="intervalSizeFromBottom.h" />
     <ClInclude Include="keyValue.h" />
@@ -440,6 +442,7 @@
     <ClInclude Include="math.h" />
     <ClInclude Include="memoisationMap.h" />
     <ClInclude Include="parallelIter.h" />
+    <ClInclude Include="pcoeff.h" />
     <ClInclude Include="r8Computation.h" />
     <ClInclude Include="serialization.h" />
     <ClInclude Include="set.h" />

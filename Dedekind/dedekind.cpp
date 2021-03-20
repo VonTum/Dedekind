@@ -17,6 +17,8 @@
 #include "tjomn.h"
 
 #include "fullIntervalSizeComputation.h"
+#include "intervalAndSymmetriesMap.h"
+#include "pcoeff.h"
 
 #include "fileNames.h"
 #include "cmdParser.h"
@@ -514,37 +516,6 @@ void doRevolution() {
 	revolutionParallel<DedekindOrder - 3>();
 }
 
-template<unsigned int Variables>
-void computeDPlus1() {
-	std::ifstream intervals(FileName::allIntervals(Variables), std::ios::binary);
-
-	u128 totalWork = 0;
-	u128 dedekindNumber = 0;
-	for(size_t layer = 0; layer < (1 << Variables) + 1; layer++) {
-		std::cout << "Layer " << layer << ": ";
-		auto start = std::chrono::high_resolution_clock::now();
-
-		KeyValue<Monotonic<Variables>, uint64_t>* foundLayer = readBufFromFile<Variables, uint64_t>(intervals, layer, [](std::ifstream& is) {return deserializeU64(is); });
-		size_t size = getLayerSize<Variables>(layer);
-
-		for(size_t i = 0; i < size; i++) {
-			totalWork += u128(foundLayer[i].value);
-		}
-
-		u128 fullTotalForThisLayer = finishIterPartitionedWithSeparateTotals(foundLayer, foundLayer + size, u128(0), [&](const KeyValue<Monotonic<Variables>, uint64_t>& kv, u128& localTotal) {
-			localTotal += umul128(kv.value, kv.key.bf.countNonEquivalentVariants());
-		}, [](u128& a, const u128& b) {a += b; });
-
-		dedekindNumber += fullTotalForThisLayer;
-
-		double deltaMicros = (std::chrono::high_resolution_clock::now() - start).count() / 1000.0;
-		std::cout << " Time taken: " << deltaMicros / 1000000.0 << "s for " << size << " mbfs at " << deltaMicros / size << "us per mbf" << std::endl;
-	}
-
-	std::cout << "Amount of work: " << totalWork << std::endl;
-	std::cout << "D(" << Variables + 1 << "): " << dedekindNumber << std::endl;
-}
-
 inline void runCommands(const ParsedArgs& args) {
 	std::map<std::string, void(*)()> commands{
 		{"ramTest", []() {doRAMTest(); }},
@@ -635,6 +606,16 @@ inline void runCommands(const ParsedArgs& args) {
 		{"computeDedekindFromIntervals7", []() {computeDPlus1<7>(); }},
 		//{"computeDedekindFromIntervals8", []() {computeDPlus1<8>(); }},
 		//{"computeDedekindFromIntervals9", []() {computeDPlus1<9>(); }},
+
+		{"addSymmetriesToIntervalFile1", []() {addSymmetriesToIntervalFile<1>(); }},
+		{"addSymmetriesToIntervalFile2", []() {addSymmetriesToIntervalFile<2>(); }},
+		{"addSymmetriesToIntervalFile3", []() {addSymmetriesToIntervalFile<3>(); }},
+		{"addSymmetriesToIntervalFile4", []() {addSymmetriesToIntervalFile<4>(); }},
+		{"addSymmetriesToIntervalFile5", []() {addSymmetriesToIntervalFile<5>(); }},
+		{"addSymmetriesToIntervalFile6", []() {addSymmetriesToIntervalFile<6>(); }},
+		{"addSymmetriesToIntervalFile7", []() {addSymmetriesToIntervalFile<7>(); }},
+		//{"addSymmetriesToIntervalFile8", []() {addSymmetriesToIntervalFile<8>(); }},
+		//{"addSymmetriesToIntervalFile9", []() {addSymmetriesToIntervalFile<9>(); }},
 
 		//checkIntervalLayers<7>(80);
 	};
