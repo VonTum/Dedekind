@@ -82,6 +82,12 @@ struct AntiChain {
 		return *this;
 	}
 
+	// only equals *this -= other.asAntiChain() if other <= *this
+	AntiChain& operator-=(const Monotonic<Variables>& other) {
+		this->bf = andnot(this->bf, other.bf);
+		return *this;
+	}
+
 	AntiChain canonize() const {
 		return AntiChain(this->bf.canonize());
 	}
@@ -104,6 +110,11 @@ bool operator!=(const AntiChain<Variables>& a, const AntiChain<Variables>& b) {
 }
 template<unsigned int Variables>
 AntiChain<Variables> operator-(const AntiChain<Variables>& a, const AntiChain<Variables>& b) {
+	return AntiChain<Variables>(andnot(a.bf, b.bf));
+}
+// only equals a - b.asAntiChain() if b <= a
+template<unsigned int Variables>
+AntiChain<Variables> operator-(const AntiChain<Variables>& a, const Monotonic<Variables>& b) {
 	return AntiChain<Variables>(andnot(a.bf, b.bf));
 }
 template<unsigned int Variables>
@@ -140,6 +151,9 @@ struct Monotonic {
 	}
 	Monotonic succ() const {
 		return Monotonic(bf.succ());
+	}
+	Monotonic dual() const {
+		return Monotonic(bf.dual());
 	}
 
 	void add(size_t index) {

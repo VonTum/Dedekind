@@ -516,6 +516,7 @@ void doRevolution() {
 	revolutionParallel<DedekindOrder - 3>();
 }
 
+#ifndef MANUAL
 inline void runCommands(const ParsedArgs& args) {
 	std::map<std::string, void(*)()> commands{
 		{"ramTest", []() {doRAMTest(); }},
@@ -617,7 +618,13 @@ inline void runCommands(const ParsedArgs& args) {
 		//{"addSymmetriesToIntervalFile8", []() {addSymmetriesToIntervalFile<8>(); }},
 		//{"addSymmetriesToIntervalFile9", []() {addSymmetriesToIntervalFile<9>(); }},
 
-		//checkIntervalLayers<7>(80);
+		{"naivePCoeffMethodMainBot1", []() {naivePCoeffMethodMainBot<1>(); }},
+		{"naivePCoeffMethodMainBot2", []() {naivePCoeffMethodMainBot<2>(); }},
+		{"naivePCoeffMethodMainBot3", []() {naivePCoeffMethodMainBot<3>(); }},
+		{"naivePCoeffMethodMainBot4", []() {naivePCoeffMethodMainBot<4>(); }},
+		{"naivePCoeffMethodMainBot5", []() {naivePCoeffMethodMainBot<5>(); }},
+		{"naivePCoeffMethodMainBot6", []() {naivePCoeffMethodMainBot<6>(); }},
+		{"naivePCoeffMethodMainBot7", []() {naivePCoeffMethodMainBot<7>(); }},
 	};
 
 	std::map<std::string, void(*)(const std::string&)> commandsWithArg{
@@ -653,7 +660,7 @@ inline void runCommands(const ParsedArgs& args) {
 		}
 	}
 }
-
+#endif
 #ifndef RUN_TESTS
 int main(int argc, const char** argv) {
 	std::cout << "Detected " << std::thread::hardware_concurrency() << " threads" << std::endl;
@@ -665,7 +672,15 @@ int main(int argc, const char** argv) {
 		FileName::setDataPath(dataDir);
 	}
 
-	if(parsed.argCount() > 0) runCommands(parsed);
+#ifndef MANUAL
+	if(parsed.argCount() > 0) {
+		runCommands(parsed);
+		return 0;
+	}
+#else
+
+	TimeTracker timer;
+	std::cout << naivePCoeffMethodMainBot<4>() << std::endl;
 
 	//doRAMTest();  // works
 
@@ -706,5 +721,6 @@ int main(int argc, const char** argv) {
 	//checkIntervalLayers<7>(80);
 
 	//verifyIntervalsCorrect<7>();
+#endif
 }
 #endif

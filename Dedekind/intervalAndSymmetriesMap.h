@@ -50,7 +50,8 @@ void addSymmetriesToIntervalFile() {
 
 template<unsigned int Variables>
 AllMBFMap<Variables, ExtraData> readAllMBFsMapExtraData() {
-	std::ifstream symFile(FileName::allIntervalSymmetries(Variables));
+	std::ifstream symFile(FileName::allIntervalSymmetries(Variables), std::ios::binary);
+	if(!symFile.is_open()) throw "File not opened!";
 	return AllMBFMap<Variables, ExtraData>::readMapFile(symFile, deserializeExtraData);
 }
 

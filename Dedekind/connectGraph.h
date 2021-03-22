@@ -99,4 +99,16 @@ std::vector<Monotonic<Variables>> connectFast(const AntiChain<Variables>& ss, co
 	return res;
 }
 
+/*
+	Counts the connected groups within a given antichain ss where they are linked by links not on d
+
+	Count the size of the list of subset achains of the achain ss such that
+	for two achains a,b in the list, a & b <= d holds
+	and for two sets A,B in an achain c in the list
+	not ({A & B} <= d) holds.
+*/
+template<unsigned int Variables>
+size_t countConnected(const AntiChain<Variables>& ss, const Monotonic<Variables>& d) {
+	return connectFast(ss, d).size();
+}
 

@@ -119,6 +119,13 @@ struct AllMBFMap {
 		}
 	}
 
+	T& get(const Monotonic<Variables>& mbf) {
+		return this->layers[mbf.size()].get(mbf);
+	}
+	const T& get(const Monotonic<Variables>& mbf) const {
+		return this->layers[mbf.size()].get(mbf);
+	}
+
 	auto begin() const { return layers.begin(); }
 	auto end() const { return layers.end(); }
 };

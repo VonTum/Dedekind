@@ -70,6 +70,16 @@ inline u192 umul192(u128 a, uint64_t b) {
 }
 
 #ifdef _MSC_VER
+inline u128& operator+=(u128& a, uint64_t b) {
+	unsigned char c = 0;
+	c = _addcarry_u64(c, a.low, b, &a.low);
+	if(c) a.high++;
+	return a;
+}
+inline u128 operator+(u128 a, uint64_t b) {
+	a += b;
+	return a;
+}
 inline u128& operator+=(u128& a, u128 b) {
 	unsigned char c = 0;
 	c = _addcarry_u64(c, a.low, b.low, &a.low);
@@ -110,6 +120,27 @@ inline u192& operator+=(u192& a, u192 b) {
 }
 #endif
 inline u192 operator+(u192 a, u192 b) {
+	a += b;
+	return a;
+}
+
+#ifdef _MSC_VER
+inline u192& operator+=(u192& a, uint64_t b) {
+	unsigned char c = 0;
+	c = _addcarry_u64(c, a.low, b, &a.low);
+	c = _addcarry_u64(c, a.mid, 0, &a.mid);
+	if(c) a.high++;
+	return a;
+}
+#else
+inline u192& operator+=(u192& a, uint64_t b) {
+	a.low += b;
+	a.mid += (a.low < b); // add carry, gcc optimizes this
+	a.high += (a.mid == 0); // add carry, gcc optimizes this
+	return a;
+}
+#endif
+inline u192 operator+(u192 a, uint64_t b) {
 	a += b;
 	return a;
 }

@@ -212,7 +212,7 @@ void sortAndComputeLinks(std::ifstream& allClassesSorted, std::ofstream& outputM
 		prevSet = std::move(fisSet);
 	}
 }
-
+/*
 template<unsigned int Variables>
 void computeLinksForMap() {
 	std::ifstream mapFile(FileName::allIntervalSymmetries(Variables));
@@ -242,7 +242,7 @@ void computeLinksForMap() {
 		prevSet = std::move(fisSet);
 	}
 }
-
+*/
 struct LinkBufPtr {
 	int offset;
 	int size;
