@@ -49,7 +49,7 @@ uint64_t threejoinmeetnumberveryfast(const AntiChain<Variables>& t0, const AntiC
 	r02 -= epsilonsigma;
 	r12 -= epsilonsigma;
 
-	std::vector<MBF> connectedSets = connectFast(epsilonsigma - delta.asAntiChain(), delta);
+	SmallVector<MBF, getMaxLayerWidth(Variables)> connectedSets = connectFast(epsilonsigma - delta.asAntiChain(), delta);
 
 	// bound to 64 bit integer, for even D(7) this can at most be 3^(7 choose 3) (7 choose 3 is max antiChain size, hence max size of connectedSets)
 	uint64_t res = 1;

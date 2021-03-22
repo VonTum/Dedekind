@@ -2,7 +2,7 @@
 
 
 #include "funcTypes.h"
-#include <vector>
+#include "smallVector.h"
 
 /*
 	Finds the connected groups within a given antichain ss where they are linked by links not on d
@@ -13,11 +13,11 @@
 	not ({A & B} <= d) holds.
 */
 template<unsigned int Variables>
-std::vector<Monotonic<Variables>> connect(const AntiChain<Variables>& ss, const Monotonic<Variables>& d) {
+SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> connect(const AntiChain<Variables>& ss, const Monotonic<Variables>& d) {
 	using AC = AntiChain<Variables>;
 	using MBF = Monotonic<Variables>;
 
-	std::vector<MBF> res;
+	SmallVector<MBF, getMaxLayerWidth(Variables)> res;
 	ss.forEachOne([&res](size_t index) {
 		res.push_back(AC{index}.asMonotonic());
 	});
@@ -25,8 +25,8 @@ std::vector<Monotonic<Variables>> connect(const AntiChain<Variables>& ss, const 
 	bool running = true;
 	while(running) {
 		running = false;
-		std::vector<MBF> vres;
-		std::vector<MBF> nres;
+		SmallVector<MBF, getMaxLayerWidth(Variables)> vres;
+		SmallVector<MBF, getMaxLayerWidth(Variables)> nres;
 		for(size_t i = 0; i < res.size(); i++) {
 			for(size_t j = i + 1; j < res.size(); j++) {
 				if(!((res[i] & res[j]) <= d)) {
@@ -75,11 +75,11 @@ std::vector<Monotonic<Variables>> connect(const AntiChain<Variables>& ss, const 
 	not ({A & B} <= d) holds.
 */
 template<unsigned int Variables>
-std::vector<Monotonic<Variables>> connectFast(const AntiChain<Variables>& ss, const Monotonic<Variables>& d) {
+SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> connectFast(const AntiChain<Variables>& ss, const Monotonic<Variables>& d) {
 	using AC = AntiChain<Variables>;
 	using MBF = Monotonic<Variables>;
 
-	std::vector<MBF> res;
+	SmallVector<MBF, getMaxLayerWidth(Variables)> res;
 	ss.forEachOne([&res](size_t index) {
 		res.push_back(AC{index}.asMonotonic());
 	});

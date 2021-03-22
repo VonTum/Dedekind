@@ -34,6 +34,13 @@ bool unordered_equals(const std::vector<T>& a, std::vector<T> b) {
 	return unordered_contains_all(a.begin(), a.end(), b.begin(), b.end());
 }
 
+template<typename T, size_t Capacity>
+bool unordered_equals(const SmallVector<T, Capacity>& a, SmallVector<T, Capacity> b) {
+	if(a.size() != b.size()) return false;
+
+	return unordered_contains_all(a.begin(), a.end(), b.begin(), b.end());
+}
+
 template<unsigned int Variables>
 struct ConnectTest {
 	static void run() {
@@ -43,7 +50,7 @@ struct ConnectTest {
 			MBF ss = generateMonotonic<Variables>();
 			MBF d = generateMonotonic<Variables>();
 
-			std::vector<MBF> res = connect(ss.asAntiChain(), d);
+			SmallVector<MBF, getMaxLayerWidth(Variables)> res = connect(ss.asAntiChain(), d);
 
 			// no path between items
 			for(size_t i = 0; i < res.size(); i++) {
@@ -94,8 +101,8 @@ struct ConnectFastTest {
 			//printVar(ss);
 			//printVar(d);
 
-			std::vector<MBF> a = connect(ss.asAntiChain(), d);
-			std::vector<MBF> b = connectFast(ss.asAntiChain(), d);
+			SmallVector<MBF, getMaxLayerWidth(Variables)> a = connect(ss.asAntiChain(), d);
+			SmallVector<MBF, getMaxLayerWidth(Variables)> b = connectFast(ss.asAntiChain(), d);
 
 			//printVar(a);
 			//printVar(b);

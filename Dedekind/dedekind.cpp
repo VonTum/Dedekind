@@ -617,14 +617,6 @@ inline void runCommands(const ParsedArgs& args) {
 		{"addSymmetriesToIntervalFile7", []() {addSymmetriesToIntervalFile<7>(); }},
 		//{"addSymmetriesToIntervalFile8", []() {addSymmetriesToIntervalFile<8>(); }},
 		//{"addSymmetriesToIntervalFile9", []() {addSymmetriesToIntervalFile<9>(); }},
-
-		{"naivePCoeffMethodMainBot1", []() {naivePCoeffMethodMainBot<1>(); }},
-		{"naivePCoeffMethodMainBot2", []() {naivePCoeffMethodMainBot<2>(); }},
-		{"naivePCoeffMethodMainBot3", []() {naivePCoeffMethodMainBot<3>(); }},
-		{"naivePCoeffMethodMainBot4", []() {naivePCoeffMethodMainBot<4>(); }},
-		{"naivePCoeffMethodMainBot5", []() {naivePCoeffMethodMainBot<5>(); }},
-		{"naivePCoeffMethodMainBot6", []() {naivePCoeffMethodMainBot<6>(); }},
-		{"naivePCoeffMethodMainBot7", []() {naivePCoeffMethodMainBot<7>(); }},
 	};
 
 	std::map<std::string, void(*)(const std::string&)> commandsWithArg{
@@ -679,9 +671,15 @@ int main(int argc, const char** argv) {
 	}
 #else
 
-	TimeTracker timer;
-	std::cout << naivePCoeffMethodMainBot<4>() << std::endl;
-
+	/*{
+		TimeTracker timer;
+		std::cout << naivePCoeffMethod<5>() << std::endl;
+	}*/
+	{
+		TimeTracker timer;
+		for(int i = 0; i < 100; i++)
+			std::cout << basicSymmetriesPCoeffMethod<5>() << std::endl;
+	}
 	//doRAMTest();  // works
 
 	//MBFDecompositionWithHash<6> thing; // doesn't work

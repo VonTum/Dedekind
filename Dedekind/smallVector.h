@@ -68,6 +68,10 @@ public:
 		buf[sz] = std::move(item);
 		return buf[sz++];
 	}
+	void pop_back() {
+		assert(sz >= 1);
+		sz--;
+	}
 	template<typename... Args>
 	T& emplace_back(Args&&... args) {
 		assert(sz + 1 <= MaxSize);
