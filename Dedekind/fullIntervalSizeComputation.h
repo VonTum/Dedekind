@@ -133,7 +133,7 @@ void computeIntervalsParallel() {
 		});
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
 		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;
-
+		
 		{
 			std::ofstream intervalsFile(FileName::allIntervals(Variables), std::ios::binary | std::ios::app);
 			if(!intervalsFile.is_open()) throw "Error not found!";
