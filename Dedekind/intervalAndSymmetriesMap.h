@@ -4,9 +4,14 @@
 #include "funcTypes.h"
 #include "parallelIter.h"
 
+struct DownConnection {
+	uint32_t id;
+};
+
 struct ExtraData {
 	uint64_t symmetries : 16;
 	uint64_t intervalSizeToBottom : 48;
+	DownConnection* downConnections;
 };
 
 void serializeExtraData(const ExtraData& item, std::ofstream& os) {
@@ -19,6 +24,33 @@ ExtraData deserializeExtraData(std::ifstream& is) {
 	result.symmetries = deserializeU16(is);
 	result.intervalSizeToBottom = deserializeU48(is);
 	return result;
+}
+
+template<unsigned int Variables>
+void addDownConnections(BakedMap<Monotonic<Variables>, ExtraData>& upper, const BakedMap<Monotonic<Variables>, ExtraData>& lower, DownConnection* connectionbuf) {
+	for(KeyValue<Monotonic<Variables>, ExtraData>& kv : upper) {
+		AntiChain<Variables> removeableElements = kv.key.asAntiChain();
+
+		SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> foundBelowElements;
+
+		removeableElements.forEachOne([&](size_t elementIndex) {
+			Monotonic<Variables> elementBelow = kv.key;
+			elementBelow.remove(elementIndex);
+
+			elementBelow = elementBelow.canonize();
+
+			if(!foundBelowElements.contains(elementBelow)) {
+				foundBelowElements.push_back(elementBelow);
+			}
+		});
+
+		kv.value.downConnections = connectionbuf;
+		for(const Monotonic<Variables>& item : foundBelowElements) {
+			connectionbuf->id = static_cast<uint32_t>(lower.indexOf(item));
+			connectionbuf++;
+		}
+		(&kv+1)->value.downConnections = connectionbuf;
+	}
 }
 
 template<unsigned int Variables>
@@ -49,10 +81,25 @@ void addSymmetriesToIntervalFile() {
 }
 
 template<unsigned int Variables>
-AllMBFMap<Variables, ExtraData> readAllMBFsMapExtraData() {
+AllMBFMap<Variables, ExtraData> readAllMBFsMapIntervalSymmetries() {
 	std::ifstream symFile(FileName::allIntervalSymmetries(Variables), std::ios::binary);
 	if(!symFile.is_open()) throw "File not opened!";
 	return AllMBFMap<Variables, ExtraData>::readMapFile(symFile, deserializeExtraData);
+}
+
+template<unsigned int Variables>
+AllMBFMap<Variables, ExtraData> readAllMBFsMapExtraDownLinks() {
+	AllMBFMap<Variables, ExtraData> map = readAllMBFsMapIntervalSymmetries<Variables>();
+	iterCollectionInParallel(IntRange<size_t>{1, map.layers.size()+1}, [&](size_t layerIndex) {
+		BakedMap<Monotonic<Variables>, ExtraData>& upperLayer = map.layers[layerIndex];
+		const BakedMap<Monotonic<Variables>, ExtraData>& lowerLayer = map.layers[layerIndex-1];
+
+		size_t linkCountInLayer = getLinkCount<Variables>(layerIndex);
+		DownConnection* downLinksBuf = new DownConnection[linkCountInLayer];
+
+		addDownConnections(upperLayer, lowerLayer, downLinksBuf);
+	});
+	return map;
 }
 
 

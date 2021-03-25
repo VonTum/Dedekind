@@ -14,7 +14,7 @@
 template<unsigned int Variables, typename T, typename ValueDeserializer>
 KeyValue<Monotonic<Variables>, T>* readBufFromFile(std::ifstream& mapFile, size_t layerIndex, const ValueDeserializer& deserializer) {
 	size_t size = getLayerSize<Variables>(layerIndex);
-	KeyValue<Monotonic<Variables>, T>* buf = new KeyValue<Monotonic<Variables>, T>[size];
+	KeyValue<Monotonic<Variables>, T>* buf = new KeyValue<Monotonic<Variables>, T>[size+1]; // make buf 1 element larger for implementations which require that extra element
 
 	for(size_t i = 0; i < size; i++) {
 		Monotonic<Variables> m = deserializeMBF<Variables>(mapFile);
@@ -87,7 +87,7 @@ struct AllMBFMap {
 
 			mbfFile.read(fileBuf, fileBytes);
 
-			KeyValue<Monotonic<Variables>, T>* buf = new KeyValue<Monotonic<Variables>, T>[size];
+			KeyValue<Monotonic<Variables>, T>* buf = new KeyValue<Monotonic<Variables>, T>[size+1]; // make buf 1 element larger for implementations which require that extra element
 
 			for(size_t i = 0; i < size; i++) {
 				Monotonic<Variables> m = deserializeMBF<Variables>(reinterpret_cast<uint8_t*>(fileBuf + i * getMBFSizeInBytes<Variables>()));

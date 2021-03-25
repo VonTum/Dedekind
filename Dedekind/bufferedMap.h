@@ -453,6 +453,10 @@ public:
 		return BakedHashBase<KeyValue<Key, Value>>::find(key) != nullptr;
 	}
 
+	size_t indexOf(const Key& key) const {
+		return BakedHashBase<KeyValue<Key, Value>>::indexOf(key);
+	}
+
 	size_t size() const { return BakedHashBase<KeyValue<Key, Value>>::size(); }
 	const KeyValue<Key, Value>& operator[](size_t index) const { return BakedHashBase<KeyValue<Key, Value>>::operator[](index); }
 	KeyValue<Key, Value>& operator[](size_t index) { return BakedHashBase<KeyValue<Key, Value>>::operator[](index); }

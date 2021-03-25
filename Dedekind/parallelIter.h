@@ -67,6 +67,33 @@ void iterCollectionInParallel(Collection& col, Func funcToRun) {
 	finishIterInParallel(col.begin(), col.end(), std::move(funcToRun));
 }
 
+template<typename IntType = size_t>
+struct IntIter {
+	IntType cur;
+
+	IntIter& operator++() {
+		++cur;
+		return *this;
+	}
+	IntType operator*() const {
+		return cur;
+	}
+	bool operator!=(const IntIter& other) const {
+		return this->cur != other.cur;
+	}
+};
+template<typename IntType = size_t>
+struct IntRange {
+	IntType start;
+	IntType fin;
+
+	IntIter<IntType> begin() const {
+		return IntIter<IntType>{start};
+	}
+	IntIter<IntType> end() const {
+		return IntIter<IntType>{fin};
+	}
+};
 
 // expects two functions, one function for work, and another function for constructing the buffer that will be reused for the work:
 // funcToRun = void(T& item, decltype(bufferProducer()))
