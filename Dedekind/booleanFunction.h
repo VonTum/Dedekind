@@ -317,7 +317,7 @@ public:
 	}
 
 	template<typename Func, unsigned int CurVar = 0>
-	void forEachPermutation(const Func& func) {
+	void forEachPermutation(const Func& func) const {
 		//if constexpr(Variables == 7 && CurVar == 3) {
 			//forEachSubPermFor7From3(*this, func);
 			// return;
@@ -327,9 +327,9 @@ public:
 		} else {
 			this->forEachPermutation<Func, CurVar + 1>(func);
 			for(unsigned int swapping = CurVar + 1; swapping < Variables; swapping++) {
-				this->swap(CurVar, swapping);
-				this->forEachPermutation<Func, CurVar + 1>(func);
-				this->swap(CurVar, swapping);
+				BooleanFunction copy = *this;
+				copy.swap(CurVar, swapping);
+				copy.forEachPermutation<Func, CurVar + 1>(func);
 			}
 		}
 	}

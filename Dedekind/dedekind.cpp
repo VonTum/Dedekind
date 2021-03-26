@@ -677,11 +677,11 @@ int main(int argc, const char** argv) {
 	}*/
 	{
 		TimeTracker timer;
-		std::cout << basicSymmetriesPCoeffMethod<6>() << std::endl;
+		std::cout << noCanonizationPCoeffMethod<6>() << std::endl;
 	}
 	{
 		TimeTracker timer;
-		std::cout << noCanonizationPCoeffMethod<6>() << std::endl;
+		std::cout << basicSymmetriesPCoeffMethod<6>() << std::endl;
 	}
 	//doRAMTest();  // works
 

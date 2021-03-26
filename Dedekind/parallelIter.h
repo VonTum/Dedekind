@@ -24,7 +24,7 @@ void whileIterGrab(Iter& iter, const IterEnd& iterEnd, std::mutex& iterMutex, co
 	while(true) {
 		iterMutex.lock();
 		if(iter != iterEnd) {
-			auto& item = *iter;
+			decltype(*iter) item = *iter;
 			++iter;
 			iterMutex.unlock();
 

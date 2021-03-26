@@ -90,11 +90,11 @@ AllMBFMap<Variables, ExtraData> readAllMBFsMapIntervalSymmetries() {
 template<unsigned int Variables>
 AllMBFMap<Variables, ExtraData> readAllMBFsMapExtraDownLinks() {
 	AllMBFMap<Variables, ExtraData> map = readAllMBFsMapIntervalSymmetries<Variables>();
-	iterCollectionInParallel(IntRange<size_t>{1, map.layers.size()+1}, [&](size_t layerIndex) {
+	iterCollectionInParallel(IntRange<size_t>{1, map.layers.size()}, [&](size_t layerIndex) {
 		BakedMap<Monotonic<Variables>, ExtraData>& upperLayer = map.layers[layerIndex];
 		const BakedMap<Monotonic<Variables>, ExtraData>& lowerLayer = map.layers[layerIndex-1];
 
-		size_t linkCountInLayer = getLinkCount<Variables>(layerIndex);
+		size_t linkCountInLayer = getLinkCount<Variables>(layerIndex-1);
 		DownConnection* downLinksBuf = new DownConnection[linkCountInLayer];
 
 		addDownConnections(upperLayer, lowerLayer, downLinksBuf);

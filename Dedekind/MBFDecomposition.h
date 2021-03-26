@@ -462,69 +462,58 @@ struct SwapperLayers {
 
 	using IndexType = uint32_t;
 
-	T* sourceCounts;
-	T* destinationCounts;
+	T defaultValue;
 
-	IndexType* dirtySourceList;
-	IndexType* dirtyDestinationList;
+	std::vector<T> sourceCounts;
+	std::vector<T> destinationCounts;
 
-	size_t dirtySourceListSize;
-	size_t dirtyDestinationListSize;
+	std::vector<IndexType> dirtySourceList;
+	std::vector<IndexType> dirtyDestinationList;
 
-
-	SwapperLayers() :
-		sourceCounts(new T[MAX_SIZE]),
-		destinationCounts(new T[MAX_SIZE]),
-		dirtySourceList(new IndexType[MAX_SIZE]),
-		dirtyDestinationList(new IndexType[MAX_SIZE]),
-		dirtySourceListSize(0),
-		dirtyDestinationListSize(0) {
+	SwapperLayers(T defaultValue = 0) :
+		defaultValue(defaultValue),
+		sourceCounts(MAX_SIZE),
+		destinationCounts(MAX_SIZE),
+		dirtySourceList(0),
+		dirtyDestinationList(0) {
 
 		for(size_t i = 0; i < MAX_SIZE; i++) {
-			sourceCounts[i] = 0;
-			destinationCounts[i] = 0;
+			sourceCounts[i] = defaultValue;
+			destinationCounts[i] = defaultValue;
 		}
-	}
-
-	~SwapperLayers() {
-		delete[] sourceCounts;
-		delete[] destinationCounts;
 	}
 
 	void pushNext() {
 		std::swap(sourceCounts, destinationCounts);
 		std::swap(dirtySourceList, dirtyDestinationList);
-		std::swap(dirtySourceListSize, dirtyDestinationListSize);
 
-		for(size_t i = 0; i < dirtyDestinationListSize; i++) {
-			destinationCounts[dirtyDestinationList[i]] = 0;
+		for(IndexType indexToClear : dirtyDestinationList) {
+			destinationCounts[indexToClear] = defaultValue;
 		}
 
-		dirtyDestinationListSize = 0;
+		dirtyDestinationList.clear();
 	}
 
-	IndexType* begin() { return this->dirtySourceList; }
-	const IndexType* begin() const { return this->dirtySourceList; }
-	IndexType* end() { return this->dirtySourceList + this->dirtySourceListSize; }
-	const IndexType* end() const { return this->dirtySourceList + this->dirtySourceListSize; }
+	auto begin() { return this->dirtySourceList.begin(); }
+	const auto begin() const { return this->dirtySourceList.begin(); }
+	auto end() { return this->dirtySourceList.end(); }
+	const auto end() const { return this->dirtySourceList.end(); }
 
 	T& operator[](IndexType index) { assert(index < MAX_SIZE); return sourceCounts[index]; }
 	const T& operator[](IndexType index) const { assert(index < MAX_SIZE); return sourceCounts[index]; }
 	
-	void add(IndexType to, unsigned int count) {
+	void add(IndexType to, T count) {
 		assert(to < MAX_SIZE);
-		if(destinationCounts[to] == 0) {
-			dirtyDestinationList[dirtyDestinationListSize++] = to;
-			assert(dirtyDestinationListSize <= MAX_SIZE);
+		if(destinationCounts[to] == defaultValue) {
+			dirtyDestinationList.push_back(to);
 		}
 
 		destinationCounts[to] += count;
 	}
 	void set(IndexType to) {
 		assert(to < MAX_SIZE);
-		if(destinationCounts[to] == 0) {
-			dirtyDestinationList[dirtyDestinationListSize++] = to;
-			assert(dirtyDestinationListSize <= MAX_SIZE);
+		if(destinationCounts[to] == defaultValue) {
+			dirtyDestinationList.push_back(to);
 		}
 
 		destinationCounts[to] = true;

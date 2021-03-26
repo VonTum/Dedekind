@@ -344,7 +344,6 @@ struct PerThreadTotals {
 	u192 totalResult;
 };
 
-// expects a function of the form void(const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& delta, uint64_t eqClassSize, uint64_t solutionCount)
 template<unsigned int Variables>
 PerThreadTotals tjomnCountInParallel() {
 	using AC = AntiChain<Variables>;

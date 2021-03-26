@@ -61,6 +61,11 @@ struct AntiChain {
 		this->bf.forEachOne(bf);
 	}
 
+	template<typename Func>
+	void forEachPermutation(const Func& func) const {
+		this->bf.forEachPermutation([&func](const BooleanFunction<Variables>& bf) {func(AntiChain(bf)); });
+	}
+
 	Layer<Variables> getTopLayer() const {
 		return Layer<Variables>(this->bf.getTopLayer());
 	}
@@ -174,6 +179,11 @@ struct Monotonic {
 	template<typename Func>
 	void forEachOne(const Func& bf) const {
 		this->bf.forEachOne(bf);
+	}
+
+	template<typename Func>
+	void forEachPermutation(const Func& func) const {
+		this->bf.forEachPermutation([&func](const BooleanFunction<Variables>& bf) {func(Monotonic(bf)); });
 	}
 
 	bool isEmpty() const {
@@ -403,6 +413,12 @@ struct Layer {
 			func(Layer(bf)); 
 		});
 	}
+
+	template<typename Func>
+	void forEachPermutation(const Func& func) const {
+		this->bf.forEachPermutation([&func](const BooleanFunction<Variables>& bf) {func(Layer(bf)); });
+	}
+
 	// returns the minimally required supporting layer below this layer for it to be monotonic
 	// returns the layer below this layer of all elements connected to '1' elements in this layer
 	Layer pred() const {
