@@ -15,6 +15,19 @@ uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Va
 }
 
 template<unsigned int Variables>
+uint64_t computePCoefficient(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& top, const Monotonic<Variables>& bot) {
+	SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> resultingTop;
+	for(const Monotonic<Variables>& mbf : top) {
+		if(!(mbf <= bot)) {
+			resultingTop.push_back(mbf);
+		}
+	}
+	size_t connectCount = countConnected(resultingTop, bot);
+	uint64_t pcoeff = uint64_t(1) << connectCount;
+	return pcoeff;
+}
+
+template<unsigned int Variables>
 u192 naivePCoeffMethod() {
 	AllMBFMap<Variables, ExtraData> allIntervalSizes = readAllMBFsMapIntervalSymmetries<Variables>();
 
@@ -106,12 +119,13 @@ u192 noCanonizationPCoeffMethod() {
 
 			//std::cout << "top: " << top << " topIntervalSize: " << topIntervalSize << " topDuplicity: " << topDuplicity << std::endl;
 			AntiChain<Variables> topAC = top.asAntiChain();
+			SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> splitTop = splitAC(topAC);
 
 			// have to hardcode special cases to make iteration below simpler
 			subTotal += topKV.value.intervalSizeToBottom; // top == bot -> pcoeff == 1
 			totalPCoeffs++;
 			//std::cout << top << ": " << 1 << ": ";
-			subTotal += 2; // bot == 0 -> intervalSizeToBottom(bot) == 1
+			subTotal += 2; // bot == {} -> intervalSizeToBottom(bot) == 1
 			totalPCoeffs++;
 			//std::cout << "{}" << ": " << 2 << "; ";
 
@@ -130,7 +144,7 @@ u192 noCanonizationPCoeffMethod() {
 					botKV.key.forEachPermutation([&](const Monotonic<Variables>& bot) {
 						if(bot <= top) {
 							localPCoeffsCount++;
-							uint64_t pcoeff = computePCoefficient(topAC, bot);
+							uint64_t pcoeff = computePCoefficient(splitTop, bot);
 
 							//std::cout << bot << ": " << pcoeff << ", ";
 

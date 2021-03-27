@@ -50,7 +50,7 @@ struct ConnectTest {
 			MBF ss = generateMonotonic<Variables>();
 			MBF d = generateMonotonic<Variables>();
 
-			SmallVector<MBF, getMaxLayerWidth(Variables)> res = connect(ss.asAntiChain(), d);
+			SmallVector<MBF, getMaxLayerWidth(Variables)> res = connectFast(ss.asAntiChain(), d);
 
 			// no path between items
 			for(size_t i = 0; i < res.size(); i++) {
@@ -90,35 +90,8 @@ struct ConnectTest {
 	}
 };
 
-template<unsigned int Variables>
-struct ConnectFastTest {
-	static void run() {
-		using MBF = Monotonic<Variables>;
-		for(int iter = 0; iter < (Variables == 6 ? 5 : SMALL_ITER * 10); iter++) {
-			MBF ss = generateMonotonic<Variables>();
-			MBF d = generateMonotonic<Variables>();
-
-			//printVar(ss);
-			//printVar(d);
-
-			SmallVector<MBF, getMaxLayerWidth(Variables)> a = connect(ss.asAntiChain(), d);
-			SmallVector<MBF, getMaxLayerWidth(Variables)> b = connectFast(ss.asAntiChain(), d);
-
-			//printVar(a);
-			//printVar(b);
-
-			ASSERT(unordered_equals(a, b));
-		}
-	}
-};
-
-
 TEST_CASE(testConnect) {
 	runFunctionRange<1, 7, ConnectTest>();
-}
-
-TEST_CASE(testConnectFast) {
-	runFunctionRange<1, 7, ConnectFastTest>();
 }
 
 TEST_CASE(testKnownTJOMN) {
