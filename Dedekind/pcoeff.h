@@ -6,6 +6,7 @@
 #include "fileNames.h"
 #include "intervalAndSymmetriesMap.h"
 #include "parallelIter.h"
+#include "blockIterator.h"
 
 template<unsigned int Variables>
 uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Variables>& bot) {
@@ -93,6 +94,14 @@ u192 basicSymmetriesPCoeffMethod() {
 	return total;
 }
 
+constexpr size_t TOPS_PER_BLOCK = 16;
+
+template<unsigned int Variables>
+struct SubTopInfo {
+	u128 subTotal;
+	AntiChain<Variables> topAC;
+	SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> splitTop;
+};
 
 template<unsigned int Variables>
 u192 noCanonizationPCoeffMethod() {
@@ -110,26 +119,21 @@ u192 noCanonizationPCoeffMethod() {
 		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = allIntervalSizesAndDownLinks.layers[topLayer];
 		std::cout << "Layer " << topLayer << "  ";
 		auto start = std::chrono::high_resolution_clock::now();
-		iterCollectionInParallelWithPerThreadBuffer(curLayer, []() {return SwapperLayers<Variables, bool>(); }, [&](const KeyValue<Monotonic<Variables>, ExtraData>& topKV, SwapperLayers<Variables, bool>& touchedEqClasses) {
-			u128 subTotal = 0;
-			const Monotonic<Variables>& top = topKV.key;
+		iterCollectionInParallelWithPerThreadBuffer(iterInBlocks<TOPS_PER_BLOCK>(curLayer), []() {return SwapperLayers<Variables, bool>(); }, 
+													[&](const SmallVector<const KeyValue<Monotonic<Variables>, ExtraData>*, TOPS_PER_BLOCK>& topKVs, SwapperLayers<Variables, bool>& touchedEqClasses) {
 
-			uint64_t topDuplicity = topKV.value.symmetries;
-			uint64_t topIntervalSize = allIntervalSizesAndDownLinks.get(top.dual().canonize()).intervalSizeToBottom;
+			std::array<SubTopInfo<Variables>, TOPS_PER_BLOCK> tops;
+			for(size_t i = 0; i < topKVs.size(); i++) {
+				tops[i].subTotal = 0;
+				tops[i].topAC = topKVs[i]->key.asAntiChain();
+				tops[i].splitTop = splitAC(tops[i].topAC);
 
-			//std::cout << "top: " << top << " topIntervalSize: " << topIntervalSize << " topDuplicity: " << topDuplicity << std::endl;
-			AntiChain<Variables> topAC = top.asAntiChain();
-			SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> splitTop = splitAC(topAC);
-
-			// have to hardcode special cases to make iteration below simpler
-			subTotal += topKV.value.intervalSizeToBottom; // top == bot -> pcoeff == 1
-			totalPCoeffs++;
-			//std::cout << top << ": " << 1 << ": ";
-			subTotal += 2; // bot == {} -> intervalSizeToBottom(bot) == 1
-			totalPCoeffs++;
-			//std::cout << "{}" << ": " << 2 << "; ";
-
-
+				// have to hardcode special cases to make iteration below simpler
+				tops[i].subTotal += topKVs[i]->value.intervalSizeToBottom; // top == bot -> pcoeff == 1
+				totalPCoeffs++;
+				tops[i].subTotal += 2; // bot == {} -> intervalSizeToBottom(bot) == 1
+				totalPCoeffs++;
+			}
 
 			// skips the class itself as well as class 0
 			for(size_t belowLayerI = topLayer-1; belowLayerI > 0; belowLayerI--) {
@@ -140,30 +144,43 @@ u192 noCanonizationPCoeffMethod() {
 					uint64_t botIntervalSize = botKV.value.intervalSizeToBottom;
 					
 					uint64_t localPCoeffsCount = 0;
-					uint64_t pcoeffSum = 0;
+					std::array<uint64_t, TOPS_PER_BLOCK> pcoeffSums; for(uint64_t& item : pcoeffSums) { item = 0; }
 					botKV.key.forEachPermutation([&](const Monotonic<Variables>& bot) {
-						if(bot <= top) {
-							localPCoeffsCount++;
-							uint64_t pcoeff = computePCoefficient(splitTop, bot);
+						for(size_t i = 0; i < topKVs.size(); i++) {
+							if(bot <= topKVs[i]->key) {
+								localPCoeffsCount++;
+								uint64_t pcoeff = computePCoefficient(tops[i].splitTop, bot);
 
-							//std::cout << bot << ": " << pcoeff << ", ";
+								//std::cout << bot << ": " << pcoeff << ", ";
 
-							pcoeffSum += pcoeff;
+								pcoeffSums[i] += pcoeff;
+							}
 						}
 					});
 					uint64_t duplication = factorial(Variables) / botKV.value.symmetries;
 					assert(localPCoeffsCount % duplication == 0);
-					totalPCoeffs += localPCoeffsCount;// / duplication;
-					pcoeffSum /= duplication; // remove duplicates
+					totalPCoeffs += localPCoeffsCount;
 
-					subTotal += umul128(botIntervalSize, pcoeffSum);
+					for(size_t i = 0; i < topKVs.size(); i++) {
+						tops[i].subTotal += umul128(botIntervalSize, pcoeffSums[i] / duplication); // divide to remove duplicates
+					}
 				}
 			}
 
-			std::lock_guard<std::mutex> lg(totalMutex);
+
 			// saves on big multiplications within inner loop
 			// topDuplicity * topIntervalSize is allowed since this will be < 64 bits for D(9)
-			total += umul192(subTotal, topDuplicity * topIntervalSize);
+
+			u192 totalToAddToTotal = 0;
+
+			for(size_t i = 0; i < topKVs.size(); i++) {
+				uint64_t topDuplicity = topKVs[i]->value.symmetries;
+				uint64_t topIntervalSize = allIntervalSizesAndDownLinks.get(topKVs[i]->key.dual().canonize()).intervalSizeToBottom;
+				u192 addToTotal = umul192(tops[i].subTotal, topDuplicity * topIntervalSize);
+				totalToAddToTotal += addToTotal;
+			}
+			std::lock_guard<std::mutex> lg(totalMutex);
+			total += totalToAddToTotal;
 		});
 		//std::cout << total;
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;

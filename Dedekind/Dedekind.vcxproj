@@ -553,6 +553,7 @@
     <ClInclude Include="bigint\endianness.h" />
     <ClInclude Include="bigint\uint128_t.h" />
     <ClInclude Include="bigint\uint256_t.h" />
+    <ClInclude Include="blockIterator.h" />
     <ClInclude Include="bufferedMap.h" />
     <ClInclude Include="cmdParser.h" />
     <ClInclude Include="connectGraph.h" />
