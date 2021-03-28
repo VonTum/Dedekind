@@ -95,6 +95,8 @@ u192 basicSymmetriesPCoeffMethod() {
 }
 
 constexpr size_t TOPS_PER_BLOCK = 16;
+constexpr double swapperCutoff = 0.5;
+static std::atomic<size_t> totalPCoeffs = 0;
 
 template<unsigned int Variables>
 struct SubTopInfo {
@@ -103,11 +105,39 @@ struct SubTopInfo {
 	SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> splitTop;
 };
 
+
+template<unsigned int Variables>
+void addBotToSubTotals(const SmallVector<const KeyValue<Monotonic<Variables>, ExtraData>*, TOPS_PER_BLOCK>& topKVs, std::array<SubTopInfo<Variables>, TOPS_PER_BLOCK>& tops, const KeyValue<Monotonic<Variables>, ExtraData>& botKV) {
+	uint64_t botIntervalSize = botKV.value.intervalSizeToBottom;
+
+	uint64_t localPCoeffsCount = 0;
+	std::array<uint64_t, TOPS_PER_BLOCK> pcoeffSums; for(uint64_t& item : pcoeffSums) { item = 0; }
+	botKV.key.forEachPermutation([&](const Monotonic<Variables>& bot) {
+		for(size_t i = 0; i < topKVs.size(); i++) {
+			if(bot <= topKVs[i]->key) {
+				localPCoeffsCount++;
+				uint64_t pcoeff = computePCoefficient(tops[i].splitTop, bot);
+
+				//std::cout << bot << ": " << pcoeff << ", ";
+
+				pcoeffSums[i] += pcoeff;
+			}
+		}
+	});
+	uint64_t duplication = factorial(Variables) / botKV.value.symmetries;
+	assert(localPCoeffsCount % duplication == 0);
+	totalPCoeffs += localPCoeffsCount;
+
+	for(size_t i = 0; i < topKVs.size(); i++) {
+		tops[i].subTotal += umul128(botIntervalSize, pcoeffSums[i] / duplication); // divide to remove duplicates
+	}
+}
+
+
 template<unsigned int Variables>
 u192 noCanonizationPCoeffMethod() {
 	AllMBFMap<Variables, ExtraData> allIntervalSizesAndDownLinks = readAllMBFsMapExtraDownLinks<Variables>();
 
-	std::atomic<size_t> totalPCoeffs = 0;
 	std::mutex totalMutex;
 	u192 total = 0;
 
@@ -115,12 +145,14 @@ u192 noCanonizationPCoeffMethod() {
 	total += allIntervalSizesAndDownLinks.layers.back()[0].value.intervalSizeToBottom;
 	totalPCoeffs++;
 	
-	for(size_t topLayer = 1; topLayer < (1 << Variables) + 1; topLayer++) {
+	for(int topLayer = 1; topLayer < (1 << Variables) + 1; topLayer++) {
 		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = allIntervalSizesAndDownLinks.layers[topLayer];
 		std::cout << "Layer " << topLayer << "  ";
 		auto start = std::chrono::high_resolution_clock::now();
-		iterCollectionInParallelWithPerThreadBuffer(iterInBlocks<TOPS_PER_BLOCK>(curLayer), []() {return SwapperLayers<Variables, bool>(); }, 
-													[&](const SmallVector<const KeyValue<Monotonic<Variables>, ExtraData>*, TOPS_PER_BLOCK>& topKVs, SwapperLayers<Variables, bool>& touchedEqClasses) {
+		iterCollectionInParallelWithPerThreadBuffer(iterInBlocks<TOPS_PER_BLOCK>(curLayer), []() {return SwapperLayers<Variables, BitSet<TOPS_PER_BLOCK>>(BitSet<TOPS_PER_BLOCK>::empty()); }, 
+													[&](const SmallVector<const KeyValue<Monotonic<Variables>, ExtraData>*, TOPS_PER_BLOCK>& topKVs, SwapperLayers<Variables, BitSet<TOPS_PER_BLOCK>>& touchedEqClasses) {
+			touchedEqClasses.clearSource();
+			touchedEqClasses.clearDestination();
 
 			std::array<SubTopInfo<Variables>, TOPS_PER_BLOCK> tops;
 			for(size_t i = 0; i < topKVs.size(); i++) {
@@ -133,37 +165,49 @@ u192 noCanonizationPCoeffMethod() {
 				totalPCoeffs++;
 				tops[i].subTotal += 2; // bot == {} -> intervalSizeToBottom(bot) == 1
 				totalPCoeffs++;
+
+				DownConnection* from = topKVs[i]->value.downConnections;
+				DownConnection* to = (topKVs[i]+1)->value.downConnections;
+				for(; from != to; from++) {
+					touchedEqClasses.dest(from->id).set(i);
+				}
+			}
+			touchedEqClasses.pushNext();
+
+			int belowLayerI = topLayer - 1;
+			// skips the class itself as well as class 0
+			for(; belowLayerI > 0; belowLayerI--) {
+				const BakedMap<Monotonic<Variables>, ExtraData>& belowLayer = allIntervalSizesAndDownLinks.layers[belowLayerI];
+
+				// simplest first, just iter the whole layer
+				for(int index : touchedEqClasses) {
+					assert(index < getLayerSize<Variables>(belowLayerI));
+					const KeyValue<Monotonic<Variables>, ExtraData>& botKV = belowLayer[index];
+					addBotToSubTotals(topKVs, tops, botKV);
+
+					DownConnection* from = botKV.value.downConnections;
+					DownConnection* to = (&botKV + 1)->value.downConnections;
+					
+					for(; from != to; from++) {
+						assert(from->id < getLayerSize<Variables>(belowLayerI - 1));
+						touchedEqClasses.dest(from->id) |= touchedEqClasses[index];
+					}
+				}
+
+				touchedEqClasses.pushNext();
+				if(touchedEqClasses.dirtyDestinationList.size() >= swapperCutoff * getLayerSize<Variables>(belowLayerI)) {
+					belowLayerI--;
+					break;
+				}
 			}
 
 			// skips the class itself as well as class 0
-			for(size_t belowLayerI = topLayer-1; belowLayerI > 0; belowLayerI--) {
+			for(; belowLayerI > 0; belowLayerI--) {
 				const BakedMap<Monotonic<Variables>, ExtraData>& belowLayer = allIntervalSizesAndDownLinks.layers[belowLayerI];
 
 				// simplest first, just iter the whole layer
 				for(const KeyValue<Monotonic<Variables>, ExtraData>& botKV : belowLayer) {
-					uint64_t botIntervalSize = botKV.value.intervalSizeToBottom;
-					
-					uint64_t localPCoeffsCount = 0;
-					std::array<uint64_t, TOPS_PER_BLOCK> pcoeffSums; for(uint64_t& item : pcoeffSums) { item = 0; }
-					botKV.key.forEachPermutation([&](const Monotonic<Variables>& bot) {
-						for(size_t i = 0; i < topKVs.size(); i++) {
-							if(bot <= topKVs[i]->key) {
-								localPCoeffsCount++;
-								uint64_t pcoeff = computePCoefficient(tops[i].splitTop, bot);
-
-								//std::cout << bot << ": " << pcoeff << ", ";
-
-								pcoeffSums[i] += pcoeff;
-							}
-						}
-					});
-					uint64_t duplication = factorial(Variables) / botKV.value.symmetries;
-					assert(localPCoeffsCount % duplication == 0);
-					totalPCoeffs += localPCoeffsCount;
-
-					for(size_t i = 0; i < topKVs.size(); i++) {
-						tops[i].subTotal += umul128(botIntervalSize, pcoeffSums[i] / duplication); // divide to remove duplicates
-					}
+					addBotToSubTotals(topKVs, tops, botKV);
 				}
 			}
 

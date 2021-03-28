@@ -464,31 +464,46 @@ struct SwapperLayers {
 
 	T defaultValue;
 
-	std::vector<T> sourceCounts;
-	std::vector<T> destinationCounts;
+	std::vector<T> sourceList;
+	std::vector<T> destinationList;
 
 	std::vector<IndexType> dirtySourceList;
 	std::vector<IndexType> dirtyDestinationList;
 
 	SwapperLayers(T defaultValue = 0) :
 		defaultValue(defaultValue),
-		sourceCounts(MAX_SIZE),
-		destinationCounts(MAX_SIZE),
+		sourceList(MAX_SIZE),
+		destinationList(MAX_SIZE),
 		dirtySourceList(0),
 		dirtyDestinationList(0) {
 
 		for(size_t i = 0; i < MAX_SIZE; i++) {
-			sourceCounts[i] = defaultValue;
-			destinationCounts[i] = defaultValue;
+			sourceList[i] = defaultValue;
+			destinationList[i] = defaultValue;
 		}
 	}
 
+	void clearSource() {
+		for(IndexType indexToClear : dirtySourceList) {
+			sourceList[indexToClear] = defaultValue;
+		}
+
+		dirtySourceList.clear();
+	}
+	void clearDestination() {
+		for(IndexType indexToClear : dirtyDestinationList) {
+			destinationList[indexToClear] = defaultValue;
+		}
+
+		dirtyDestinationList.clear();
+	}
+
 	void pushNext() {
-		std::swap(sourceCounts, destinationCounts);
+		std::swap(sourceList, destinationList);
 		std::swap(dirtySourceList, dirtyDestinationList);
 
 		for(IndexType indexToClear : dirtyDestinationList) {
-			destinationCounts[indexToClear] = defaultValue;
+			destinationList[indexToClear] = defaultValue;
 		}
 
 		dirtyDestinationList.clear();
@@ -499,24 +514,25 @@ struct SwapperLayers {
 	auto end() { return this->dirtySourceList.end(); }
 	const auto end() const { return this->dirtySourceList.end(); }
 
-	T& operator[](IndexType index) { assert(index < MAX_SIZE); return sourceCounts[index]; }
-	const T& operator[](IndexType index) const { assert(index < MAX_SIZE); return sourceCounts[index]; }
+	T& operator[](IndexType index) { assert(index < MAX_SIZE); return sourceList[index]; }
+	const T& operator[](IndexType index) const { assert(index < MAX_SIZE); return sourceList[index]; }
 	
-	void add(IndexType to, T count) {
-		assert(to < MAX_SIZE);
-		if(destinationCounts[to] == defaultValue) {
-			dirtyDestinationList.push_back(to);
+	T& dest(IndexType index) {
+		assert(index < MAX_SIZE);
+		if(destinationList[index] == defaultValue) {
+			dirtyDestinationList.push_back(index);
 		}
 
-		destinationCounts[to] += count;
+		return destinationList[index];
 	}
+
 	void set(IndexType to) {
 		assert(to < MAX_SIZE);
-		if(destinationCounts[to] == defaultValue) {
+		if(destinationList[to] == defaultValue) {
 			dirtyDestinationList.push_back(to);
 		}
 
-		destinationCounts[to] = true;
+		destinationList[to] = true;
 	}
 };
 
@@ -541,7 +557,7 @@ std::pair<std::array<uint64_t, (1 << Variables)>, uint64_t> computeIntervalSize(
 	//getLinkLayer(linkFile, getLayerSize<Variables>(nodeLayer-1), offsetBuf, linkBuf); // start layer
 
 	SwapperLayers<Variables, int> swapper{};
-	swapper.add(nodeIndex, 1);
+	swapper.dest(nodeIndex) += 1;
 
 	swapper.pushNext();
 
@@ -567,7 +583,7 @@ std::pair<std::array<uint64_t, (1 << Variables)>, uint64_t> computeIntervalSize(
 			for(int subLinkIdx = 0; subLinkIdx < subLinkPtr.size; subLinkIdx++) {
 				LinkedNode ln = linkBuf[subLinkPtr.offset + subLinkIdx];
 				//std::cout << "    subLink " << ln.count << "x" << ln.index << "\n";
-				swapper.add(ln.index, ln.count * count);
+				swapper.add(ln.index) += ln.count * count;
 			}
 		}
 		numberOfClassesPerLayer[i] = swapper.dirtyDestinationListSize;

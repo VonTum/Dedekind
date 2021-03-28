@@ -340,7 +340,7 @@ void sampleIntervalSizes() {
 template<unsigned int Variables>
 uint64_t getIntervalSizeForFast(const MBFDecomposition<Variables>& dec, int nodeLayer, int nodeIndex) {
 	SwapperLayers<Variables, int> swapper;
-	swapper.add(nodeIndex, 1);
+	swapper.dest(nodeIndex) += 1;
 	swapper.pushNext();
 
 	BooleanFunction<Variables> start = dec.get(nodeLayer, nodeIndex);
@@ -368,7 +368,7 @@ uint64_t getIntervalSizeForFast(const MBFDecomposition<Variables>& dec, int node
 
 				uint64_t multiplier = getFormationCountWithout(to, start, modifiedLayer);
 
-				swapper.add(ln.index, ln.count * count * multiplier);
+				swapper.dest(ln.index) += ln.count * count * multiplier;
 			}
 		}
 		swapper.pushNext();
