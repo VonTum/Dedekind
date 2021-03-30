@@ -80,3 +80,41 @@ size_t countConnected(const AntiChain<Variables>& ss, const Monotonic<Variables>
 	return connectFast(ss, d).size();
 }
 
+template<unsigned int Variables>
+bool areAlwaysCombined(const Monotonic<Variables>& a, const Monotonic<Variables>& b, const std::array<int, Variables + 1>& dLayerSizes) {
+	Monotonic<Variables> combined = a & b;
+
+	for(int layer = Variables; layer > 0; layer--) {
+		int combinedLayerSize = combined.getLayer(layer).size();
+
+		if(combinedLayerSize > dLayerSizes[layer]) { // no possible permutation could cover the whole layer of combined, since the area to cover is larger than the covering area. That means the combination can always be made
+			return true;
+		}
+	}
+
+	return false;
+}
+
+template<unsigned int Variables>
+std::array<int, Variables+1> getLayerSizes(const Monotonic<Variables>& dClass) {
+	std::array<int, Variables + 1> dLayerSizes;
+	for(int i = 0; i < Variables + 1; i++) {
+		dLayerSizes[i] = dClass.getLayer(i).size();
+	}
+	return dLayerSizes;
+}
+
+template<unsigned int Variables>
+void preCombineConnected(SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& res, const std::array<int, Variables + 1>& dLayerSizes) {
+	for(size_t i = 0; i < res.size(); i++) {
+		doAgain:;
+		for(size_t j = i + 1; j < res.size(); j++) {
+			if(areAlwaysCombined(res[i], res[j], dLayerSizes)) {
+				res[i] = res[i] | res[j];
+				res[j] = res.back();
+				res.pop_back();
+				goto doAgain;
+			}
+		}
+	}
+}

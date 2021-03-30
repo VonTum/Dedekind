@@ -202,6 +202,10 @@ struct Monotonic {
 		return Monotonic(this->bf.canonize());
 	}
 
+	Layer<Variables> getLayer(unsigned int layer) const {
+		return Layer<Variables>(this->bf.getLayer(layer));
+	}
+
 	size_t size() const {
 		return this->bf.size();
 	}

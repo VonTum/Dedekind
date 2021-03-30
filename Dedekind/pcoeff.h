@@ -7,10 +7,14 @@
 #include "intervalAndSymmetriesMap.h"
 #include "parallelIter.h"
 #include "blockIterator.h"
+#include <atomic>
+
+static std::atomic<uint64_t> connectedHistogram[50];
 
 template<unsigned int Variables>
 uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Variables>& bot) {
 	size_t connectCount = countConnected(top - bot, bot);
+	++connectedHistogram[connectCount];
 	uint64_t pcoeff = uint64_t(1) << connectCount;
 	return pcoeff;
 }
@@ -132,7 +136,6 @@ std::array<u128, TOPS_PER_BLOCK> getBotToSubTotals(
 	return result;
 }
 
-
 template<unsigned int Variables>
 u192 noCanonizationPCoeffMethod() {
 	AllMBFMap<Variables, ExtraData> allIntervalSizesAndDownLinks = readAllMBFsMapExtraDownLinks<Variables>();
@@ -176,7 +179,7 @@ u192 noCanonizationPCoeffMethod() {
 
 			int belowLayerI = topLayer - 1;
 			// skips the class itself as well as class 0
-			for(; belowLayerI > 0; belowLayerI--) {
+			for(; belowLayerI > std::max(0, topLayer - 10); belowLayerI--) {
 				const BakedMap<Monotonic<Variables>, ExtraData>& belowLayer = allIntervalSizesAndDownLinks.layers[belowLayerI];
 
 				// simplest first, just iter the whole layer
@@ -231,7 +234,13 @@ u192 noCanonizationPCoeffMethod() {
 
 				// simplest first, just iter the whole layer
 				for(const KeyValue<Monotonic<Variables>, ExtraData>& botKV : belowLayer) {
-					std::array<u128, TOPS_PER_BLOCK> extraSubTotals = getBotToSubTotals(topMBFs, splitTops, botKV, topKVs.size());
+					std::array<SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>, TOPS_PER_BLOCK> modifiedSplitTops = splitTops;
+					std::array<int, Variables + 1> dLayerSizes = getLayerSizes(botKV.key);
+					for(size_t i = 0; i < topKVs.size(); i++) {
+						preCombineConnected(modifiedSplitTops[i], dLayerSizes);
+					}
+
+					std::array<u128, TOPS_PER_BLOCK> extraSubTotals = getBotToSubTotals(topMBFs, modifiedSplitTops, botKV, topKVs.size());
 
 					for(size_t i = 0; i < topKVs.size(); i++) {
 						subTotals[i] += extraSubTotals[i];
@@ -260,6 +269,7 @@ u192 noCanonizationPCoeffMethod() {
 	}
 
 	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
+	std::cout << "D(" << (Variables + 2) << ") = " << total << std::endl;
 
 	return total;
 }

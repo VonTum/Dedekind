@@ -910,7 +910,7 @@ public:
 		unsigned int totalEqual = 0;
 
 		BooleanFunction copy = *this;
-		copy.forEachPermutation([this, &totalEqual](BooleanFunction& permuted) {
+		copy.forEachPermutation([this, &totalEqual](const BooleanFunction& permuted) {
 			if(permuted == *this) {
 				totalEqual++;
 			}

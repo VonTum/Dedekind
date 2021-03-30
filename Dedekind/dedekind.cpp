@@ -178,7 +178,7 @@ void RAMTestBenchFunc(size_t numHops, size_t numCurs, uint32_t* curs, uint32_t* 
 void doRAMTest() {
 	std::cout << "RAM test\n";
 	constexpr size_t numCurs = 32;
-	constexpr std::size_t size = std::size_t(1) << 30;
+	constexpr std::size_t size = std::size_t(1) << 28;
 
 	std::cout << "Making random generator\n";
 	std::default_random_engine generator;
@@ -617,6 +617,14 @@ inline void runCommands(const ParsedArgs& args) {
 		{"addSymmetriesToIntervalFile7", []() {addSymmetriesToIntervalFile<7>(); }},
 		//{"addSymmetriesToIntervalFile8", []() {addSymmetriesToIntervalFile<8>(); }},
 		//{"addSymmetriesToIntervalFile9", []() {addSymmetriesToIntervalFile<9>(); }},
+
+		{"noCanonizationPCoeffMethod1", []() {noCanonizationPCoeffMethod<1>(); }},
+		{"noCanonizationPCoeffMethod2", []() {noCanonizationPCoeffMethod<2>(); }},
+		{"noCanonizationPCoeffMethod3", []() {noCanonizationPCoeffMethod<3>(); }},
+		{"noCanonizationPCoeffMethod4", []() {noCanonizationPCoeffMethod<4>(); }},
+		{"noCanonizationPCoeffMethod5", []() {noCanonizationPCoeffMethod<5>(); }},
+		{"noCanonizationPCoeffMethod6", []() {noCanonizationPCoeffMethod<6>(); }},
+		{"noCanonizationPCoeffMethod7", []() {noCanonizationPCoeffMethod<7>(); }},
 	};
 
 	std::map<std::string, void(*)(const std::string&)> commandsWithArg{
