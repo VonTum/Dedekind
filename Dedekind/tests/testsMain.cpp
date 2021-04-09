@@ -43,7 +43,7 @@ void logf(const char* format, ...) {
 	
 	va_list args;
 	va_start(args, format);
-	int length = std::vsnprintf(logBuffer, 1<<16, format, args);
+	std::vsnprintf(logBuffer, 1<<16, format, args);
 	va_end(args);
 
 	logStream << logBuffer << '\n';
@@ -75,8 +75,6 @@ static ifstream getFileStream(const char* fileName) {
 
 static void printFileSlice(const char* fileName, int line) {
 	ifstream inFile = getFileStream(fileName);
-
-	int t = 0;
 
 	if(inFile.good()) {
 		// skip lines until right before first line to show
@@ -128,17 +126,17 @@ public:
 	const char* filePath;
 	const char* fileName;
 	const char* funcName;
-	TestType type;
 	void(*testFunc)();
+	TestType type;
 
 	Test() : 
-		filePath(nullptr), funcName(nullptr), fileName(nullptr), testFunc(nullptr), type(TestType::NORMAL) {};
+		filePath(nullptr), fileName(nullptr), funcName(nullptr), testFunc(nullptr), type(TestType::NORMAL) {};
 	Test(const char* filePath, const char* funcName, void(*testFunc)(), TestType type) : 
-		filePath(filePath), 
+		filePath(filePath),
+		fileName(std::strrchr(this->filePath, sepChar) ? std::strrchr(this->filePath, sepChar) + 1 : this->filePath), 
 		funcName(funcName), 
 		testFunc(testFunc), 
-		type(type),
-		fileName(std::strrchr(this->filePath, sepChar) ? std::strrchr(this->filePath, sepChar) + 1 : this->filePath) {}
+		type(type) {}
 private:
 	void printFailure() const {
 		dumpLog();
@@ -230,7 +228,7 @@ public:
 	}
 };
 
-AssertionError::AssertionError(int line, const char* info) : line(line), info(info) {}
+AssertionError::AssertionError(int line, const char* info) : info(info), line(line) {}
 const char* AssertionError::what() const noexcept { return info; }
 
 // For some reason having this in static memory breaks it, a pointer seems to work
@@ -354,11 +352,6 @@ int main(int argc, char* argv[]) {
 	}
 }
 #endif
-
-static void logAssertError(string text) {
-	setColor(TerminalColor::RED);
-	cout << text.c_str();
-}
 
 TestAdder::TestAdder(const char* file, const char* name, void(*f)(), TestType isSlow) {
 	if (tests == nullptr) tests = new vector<Test>();

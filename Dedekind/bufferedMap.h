@@ -12,8 +12,8 @@ public:
 
 	std::atomic<unsigned int>* hashTable;
 	std::atomic<unsigned int>* nextNodeBuffer;
-	size_t buckets;
 	T* data;
+	size_t buckets;
 	size_t itemCount;
 
 public:
@@ -224,7 +224,7 @@ public:
 		unsigned int newNodeIdx = this->size();
 		data[newNodeIdx] = item;
 		nextNodeBuffer[newNodeIdx].store(index);
-		assert(index == -1 || index < newNodeIdx);
+		assert(index == BAD_INDEX || index < newNodeIdx);
 		cur->store(newNodeIdx);
 		this->itemCount++;
 		return true;
@@ -280,8 +280,8 @@ class BakedHashBase {
 	size_t itemCount;
 
 public:
-	BakedHashBase() : hashTable(nullptr), data(nullptr), buckets(0), itemCount(0) {}
-	BakedHashBase(T* dataBuffer, size_t size, size_t buckets) : hashTable(new unsigned int[buckets+1]), data(dataBuffer), buckets(buckets), itemCount(size) {
+	BakedHashBase() : data(nullptr), hashTable(nullptr), buckets(0), itemCount(0) {}
+	BakedHashBase(T* dataBuffer, size_t size, size_t buckets) : data(dataBuffer), hashTable(new unsigned int[buckets+1]), buckets(buckets), itemCount(size) {
 		std::sort(dataBuffer, dataBuffer + size, [buckets](T& a, T& b) {return a.hash() % buckets < b.hash() % buckets; });
 		
 		unsigned int curBucket = 0;
@@ -309,7 +309,7 @@ public:
 		}
 	}
 	BakedHashBase(T* dataBuffer, size_t size) : BakedHashBase(dataBuffer, size, getNumberOfBucketsForSize(size)) {}
-	BakedHashBase(const HashBase<T>& from, T* dataBuffer) : hashTable(new unsigned int[from.buckets + 1]), data(dataBuffer), buckets(from.buckets), itemCount(from.itemCount) {
+	BakedHashBase(const HashBase<T>& from, T* dataBuffer) : data(dataBuffer), hashTable(new unsigned int[from.buckets + 1]), buckets(from.buckets), itemCount(from.itemCount) {
 		unsigned int dataIndex = 0;
 		for(size_t bucketI = 0; bucketI < from.buckets; bucketI++) {
 			this->hashTable[bucketI] = dataIndex;
@@ -322,7 +322,7 @@ public:
 	}
 
 	template<typename OtherT, typename ConvertFunc>
-	BakedHashBase(const HashBase<OtherT>& from, T* dataBuffer, const ConvertFunc& convert) : hashTable(new unsigned int[from.buckets + 1]), data(dataBuffer), buckets(from.buckets), itemCount(from.itemCount) {
+	BakedHashBase(const HashBase<OtherT>& from, T* dataBuffer, const ConvertFunc& convert) : data(dataBuffer), hashTable(new unsigned int[from.buckets + 1]), buckets(from.buckets), itemCount(from.itemCount) {
 		unsigned int dataIndex = 0;
 		for(size_t bucketI = 0; bucketI < from.buckets; bucketI++) {
 			this->hashTable[bucketI] = dataIndex;
@@ -338,7 +338,7 @@ public:
 		delete[] this->hashTable;
 	}
 
-	BakedHashBase(BakedHashBase&& other) noexcept : hashTable(other.hashTable), data(other.data), buckets(other.buckets), itemCount(other.itemCount) {
+	BakedHashBase(BakedHashBase&& other) noexcept : data(other.data), hashTable(other.hashTable), buckets(other.buckets), itemCount(other.itemCount) {
 		other.hashTable = nullptr;
 		other.data = nullptr;
 		other.buckets = 0;

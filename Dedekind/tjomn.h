@@ -68,7 +68,6 @@ uint64_t threejoinmeetnumberveryfast(const AntiChain<Variables>& t0, const AntiC
 template<unsigned int Variables, typename Func>
 void fourPartNonEquivalent(const AntiChain<Variables>& v, const Func& func) {
 	using AC = AntiChain<Variables>;
-	using BF = BooleanFunction<Variables>;
 
 	AC e = AC{};
 	v.forEachSubSet([&](AC p4) {
@@ -102,7 +101,6 @@ void fourPartNonEquivalent(const AntiChain<Variables>& v, const Func& func) {
 template<unsigned int Variables, typename Func>
 void fourPartNonEquivalentWithBuffers(const AntiChain<Variables>& v, BufferedMap<AntiChain<Variables>, int>& bufSet, const Func& func) {
 	using AC = AntiChain<Variables>;
-	using BF = BooleanFunction<Variables>;
 
 	
 	bufSet.clear();
@@ -459,7 +457,6 @@ bool operator<=(const DSize<Variables>& a, const DSize<Variables>& b) {
 
 template<unsigned int Variables>
 uint256_t revolution() {
-	using AC = AntiChain<Variables>;
 	using MBF = Monotonic<Variables>;
 	using INT = Interval<Variables>;
 
@@ -514,11 +511,9 @@ uint256_t revolution() {
 
 template<unsigned int Variables>
 u192 revolutionMemoized() {
-	using AC = AntiChain<Variables>;
 	using MBF = Monotonic<Variables>;
 	using INT = Interval<Variables>;
 
-	MBF e = MBF::getBot();
 	MBF a = MBF::getTop();
 
 	IntervalSizeCache<Variables> intervalSizes = IntervalSizeCache<Variables>::generate();

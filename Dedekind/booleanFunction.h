@@ -310,7 +310,7 @@ public:
 			}
 		} else {
 			Bits mask2 = BooleanFunction::varMask(var2);
-			Bits stayingElems = bitset & (~(mask1 | mask2) | mask1 & mask2);
+			Bits stayingElems = bitset & (~(mask1 | mask2) | (mask1 & mask2));
 			unsigned int shift = (1 << var2) - (1 << var1);
 			bitset = ((bitset & andnot(mask1, mask2)) << shift) | ((bitset & andnot(mask2, mask1)) >> shift) | stayingElems;
 		}
@@ -670,7 +670,7 @@ public:
 	}
 
 	BooleanFunction canonize() const {
-		if(this->bitset.isEmpty() || this->bitset.get(0) == 1 && this->bitset.count() == 1) return *this;
+		if(this->bitset.isEmpty() || ((this->bitset.get(0) == 1) && (this->bitset.count() == 1))) return *this;
 
 		BooleanFunction copy = *this;
 
@@ -886,7 +886,7 @@ public:
 
 
 	BooleanFunction canonizePreserving(const BooleanFunction& referenceToMatch) const {
-		if(this->bitset.isEmpty() || this->bitset.get(0) == 1 && this->bitset.count() == 1) return *this;
+		if(this->bitset.isEmpty() || ((this->bitset.get(0) == 1) && (this->bitset.count() == 1))) return *this;
 
 		std::array<BooleanFunction, 2> combo;
 		combo[0] = referenceToMatch;

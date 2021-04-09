@@ -45,18 +45,18 @@ struct FunctionInput {
 	underlyingType inputBits = 0;
 
 	static FunctionInput allOnes(int count) {
-		return FunctionInput{(1U << count) - 1};
+		return FunctionInput{(underlyingType(1) << count) - 1};
 	}
 
 	inline bool operator[](int index) const {
-		return (inputBits & (1 << index)) != 0;
+		return (inputBits & (underlyingType(1) << index)) != 0;
 	}
 
 	inline void enableInput(int index) {
-		inputBits |= (1 << index);
+		inputBits |= (underlyingType(1) << index);
 	}
 	inline void disableInput(int index) {
-		inputBits &= !(1 << index);
+		inputBits &= !(underlyingType(1) << index);
 	}
 	inline int getNumberEnabled() const {
 		return popcnt32(inputBits);

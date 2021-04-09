@@ -177,8 +177,8 @@ public:
 		for(size_t i = 0; i < layer.size() + 1; i++) {
 			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& curMap = this->subSizeMaps[i];
 			BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& inverseMap = this->subSizeMaps[layer.size() - i];
-			for(int i = 0; i < curMap.size(); i++) {
-				assert(inverseMap[curMap[i].inverse].inverse == i);
+			for(size_t i = 0; i < curMap.size(); i++) {
+				assert(size_t(inverseMap[curMap[i].inverse].inverse) == i);
 			}
 		}
 #endif
@@ -273,7 +273,7 @@ public:
 		*/
 		int numberOfDuplicateChoices = 1;
 
-		for(int curSize = sizeOfStartingNode; curSize < this->subSizeMaps.size(); curSize++) {
+		for(size_t curSize = sizeOfStartingNode; curSize < this->subSizeMaps.size(); curSize++) {
 			const BakedEquivalenceClassMap<EquivalenceClassInfo<ExtraInfo>>& curMap = this->subSizeMaps[curSize];
 			for(int item : buf.usedCurClasses) {
 				const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& currentlyPropagating = curMap[item];
@@ -318,7 +318,7 @@ public:
 	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
 	template<typename Func>
 	void forEachSuperClassOfClass(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& node, Func func) const {
-		int curSize = node.eqClass.size();
+		size_t curSize = node.eqClass.size();
 		forEachSuperClassOfClass(curSize, this->subSizeMaps[curSize].indexOf(node), std::move(func));
 	}
 
@@ -341,7 +341,7 @@ public:
 	// expects a function void(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& cl, countInt occurences)
 	template<typename Func>
 	void forEachSuperClassOfClass(const BakedEquivalenceClass<EquivalenceClassInfo<ExtraInfo>>& node, ForEachBuffer& buf, Func func) const {
-		int curSize = node.eqClass.size();
+		size_t curSize = node.eqClass.size();
 		forEachSuperClassOfClass(curSize, this->subSizeMaps[curSize].indexOf(node), buf, std::move(func));
 	}
 

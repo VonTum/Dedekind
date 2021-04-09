@@ -63,7 +63,6 @@ TEST_CASE_SLOW(testIntervalSizeFast) {
 template<unsigned int Variables>
 struct IntervalSizeCacheTest {
 	static void run() {
-		using AC = AntiChain<Variables>;
 		using MBF = Monotonic<Variables>;
 		using INT = Interval<Variables>;
 		IntervalSizeCache<Variables> intervalSizes = IntervalSizeCache<Variables>::generate();
@@ -118,7 +117,6 @@ TEST_CASE_SLOW(benchIntervalSizeFast) {
 TEST_PROPERTY(testIntervalSizeExtentionBetter) {
 	constexpr unsigned int Variables = 5;
 	using MBF = Monotonic<Variables>;
-	using BF = BooleanFunction<Variables>;
 	using INT = Interval<Variables>;
 	using AC = AntiChain<Variables>;
 
@@ -158,7 +156,6 @@ TEST_PROPERTY(testIntervalSizeExtentionBetter) {
 TEST_CASE(testIntervalSizeExtentionABC_ABD) {
 	constexpr unsigned int Variables = 4;
 	using MBF = Monotonic<Variables>;
-	using BF = BooleanFunction<Variables>;
 	using INT = Interval<Variables>;
 	using AC = AntiChain<Variables>;
 
@@ -192,7 +189,6 @@ TEST_CASE(testIntervalSizeExtentionABC_ABD) {
 TEST_CASE(testIntervalSizeExtentionABC_ABD_E) {
 	constexpr unsigned int Variables = 5;
 	using MBF = Monotonic<Variables>;
-	using BF = BooleanFunction<Variables>;
 	using INT = Interval<Variables>;
 	using AC = AntiChain<Variables>;
 	logStream << "\n";

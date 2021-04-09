@@ -100,7 +100,7 @@ u192 basicSymmetriesPCoeffMethod() {
 
 constexpr size_t TOPS_PER_BLOCK = 4;
 constexpr double swapperCutoff = 0.5;
-static std::atomic<size_t> totalPCoeffs = 0;
+static std::atomic<size_t> totalPCoeffs(0);
 
 template<unsigned int Variables>
 std::array<u128, TOPS_PER_BLOCK> getBotToSubTotals(
@@ -183,7 +183,7 @@ u192 noCanonizationPCoeffMethod() {
 				const BakedMap<Monotonic<Variables>, ExtraData>& belowLayer = allIntervalSizesAndDownLinks.layers[belowLayerI];
 
 				// simplest first, just iter the whole layer
-				for(int index : touchedEqClasses) {
+				for(size_t index : touchedEqClasses) {
 					assert(index < getLayerSize<Variables>(belowLayerI));
 					BitSet<TOPS_PER_BLOCK> touchedPerMBF = touchedEqClasses[index];
 

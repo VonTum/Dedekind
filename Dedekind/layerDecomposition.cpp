@@ -18,15 +18,6 @@ static void incrementLinkBetween(KeyValue<EquivalenceClass, TempEquivClassInfo>&
 	createLinkBetween(cl, extended, 1);
 }
 
-static KeyValue<EquivalenceClass, TempEquivClassInfo>* oneOfListContains(const std::vector<KeyValue<EquivalenceClass, TempEquivClassInfo>*>& list, const PreprocessedFunctionInputSet& preprocessed) {
-	for(KeyValue<EquivalenceClass, TempEquivClassInfo>* existingClass : list) {
-		if(existingClass->key.contains(preprocessed)) {
-			return existingClass;
-		}
-	}
-	return nullptr;
-}
-
 static const size_t layer7Sizes[]{
 	1,1,3,10,38,137,509,1760,5557,15709,39433,87659,172933,303277,473827,660950,824410,920446,920446,824410,660950,473827,303277,172933,87659,39433,15709,5557,1760,509,137,38,10,3,1,1
 };

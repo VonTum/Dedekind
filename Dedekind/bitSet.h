@@ -253,48 +253,48 @@ public:
 		}
 		return result;
 	}
-	constexpr BitSet& operator<<=(unsigned int shift) {
-		int blockOffset = shift >> 6;
+	constexpr BitSet& operator<<=(size_t shift) {
+		size_t blockOffset = shift >> 6;
 
-		int relativeShift = shift & 0x3F;
+		size_t relativeShift = shift & 0x3F;
 
 		if(relativeShift != 0) {
-			for(int i = BLOCK_COUNT - 1; i > blockOffset; i--) {
+			for(size_t i = BLOCK_COUNT - 1; i > blockOffset; i--) {
 				this->data[i] = this->data[i - blockOffset] << relativeShift | this->data[i - blockOffset - 1] >> (64 - relativeShift);
 			}
 
 			this->data[blockOffset] = this->data[0] << relativeShift;
 		} else {
-			for(int i = BLOCK_COUNT - 1; i >= blockOffset; i--) {
+			for(size_t i = BLOCK_COUNT - 1; i >= blockOffset; i--) {
 				this->data[i] = this->data[i - blockOffset];
 			}
 		}
 
-		for(int i = 0; i < blockOffset; i++) {
+		for(size_t i = 0; i < blockOffset; i++) {
 			this->data[i] = uint64_t(0);
 		}
 
 		return *this;
 	}
 
-	constexpr BitSet& operator>>=(unsigned int shift) {
-		int blockOffset = shift >> 6;
+	constexpr BitSet& operator>>=(size_t shift) {
+		size_t blockOffset = shift >> 6;
 
-		int relativeShift = shift & 0x3F;
+		size_t relativeShift = shift & 0x3F;
 
 		if(relativeShift != 0) {
-			for(int i = 0; i < BLOCK_COUNT - blockOffset - 1; i++) {
+			for(size_t i = 0; i < BLOCK_COUNT - blockOffset - 1; i++) {
 				this->data[i] = this->data[i + blockOffset] >> relativeShift | this->data[i + blockOffset + 1] << (64 - relativeShift);
 			}
 
 			this->data[BLOCK_COUNT - blockOffset - 1] = this->data[BLOCK_COUNT - 1] >> relativeShift;
 		} else {
-			for(int i = 0; i < BLOCK_COUNT - blockOffset; i++) {
+			for(size_t i = 0; i < BLOCK_COUNT - blockOffset; i++) {
 				this->data[i] = this->data[i + blockOffset];
 			}
 		}
 
-		for(int i = BLOCK_COUNT - blockOffset; i < BLOCK_COUNT; i++) {
+		for(size_t i = BLOCK_COUNT - blockOffset; i < BLOCK_COUNT; i++) {
 			this->data[i] = uint64_t(0);
 		}
 
@@ -504,7 +504,7 @@ public:
 		result.data = _mm_xor_si128(this->data, _mm_cmpeq_epi32(_mm_setzero_si128(), _mm_setzero_si128()));
 		return result;
 	}
-	BitSet& operator<<=(unsigned int shift) {
+	BitSet& operator<<=(size_t shift) {
 		assert(shift < size());
 
 		__m128i shifted64 = _mm_slli_si128(this->data, 8);
@@ -517,7 +517,7 @@ public:
 		}
 		return *this;
 	}
-	BitSet& operator>>=(unsigned int shift) {
+	BitSet& operator>>=(size_t shift) {
 		assert(shift < size());
 		__m128i shifted64 = _mm_srli_si128(this->data, 8);
 		if(shift < 64) {
@@ -703,12 +703,12 @@ public:
 		result.data = ~this->data;
 		return result;
 	}
-	constexpr BitSet& operator<<=(unsigned int shift) {
+	constexpr BitSet& operator<<=(size_t shift) {
 		assert(shift < size());
 		this->data <<= shift;
 		return *this;
 	}
-	constexpr BitSet& operator>>=(unsigned int shift) {
+	constexpr BitSet& operator>>=(size_t shift) {
 		assert(shift < size());
 		this->data >>= shift;
 		return *this;
@@ -860,12 +860,12 @@ public:
 		result.data = ~this->data;
 		return result;
 	}
-	constexpr BitSet& operator<<=(unsigned int shift) {
+	constexpr BitSet& operator<<=(size_t shift) {
 		assert(shift < size());
 		this->data <<= shift;
 		return *this;
 	}
-	constexpr BitSet& operator>>=(unsigned int shift) {
+	constexpr BitSet& operator>>=(size_t shift) {
 		assert(shift < size());
 		this->data >>= shift;
 		return *this;
@@ -1018,12 +1018,12 @@ public:
 		return result;
 	}
 
-	constexpr BitSet& operator<<=(unsigned int shift) {
+	constexpr BitSet& operator<<=(size_t shift) {
 		assert(shift < size());
 		this->data <<= shift;
 		return *this;
 	}
-	constexpr BitSet& operator>>=(unsigned int shift) {
+	constexpr BitSet& operator>>=(size_t shift) {
 		assert(shift < size());
 		this->data >>= shift;
 		return *this;
@@ -1175,12 +1175,12 @@ public:
 		result.data = ~this->data;
 		return result;
 	}
-	constexpr BitSet& operator<<=(unsigned int shift) {
+	constexpr BitSet& operator<<=(size_t shift) {
 		assert(shift < size());
 		this->data <<= shift;
 		return *this;
 	}
-	constexpr BitSet& operator>>=(unsigned int shift) {
+	constexpr BitSet& operator>>=(size_t shift) {
 		assert(shift < size());
 		this->data >>= shift;
 		return *this;
@@ -1332,12 +1332,12 @@ public:
 		result.data = ~this->data & 0b1111;
 		return result;
 	}
-	constexpr BitSet& operator<<=(unsigned int shift) {
+	constexpr BitSet& operator<<=(size_t shift) {
 		assert(shift < size());
 		this->data <<= shift;
 		return *this;
 	}
-	constexpr BitSet& operator>>=(unsigned int shift) {
+	constexpr BitSet& operator>>=(size_t shift) {
 		assert(shift < size());
 		this->data >>= shift;
 		return *this;
@@ -1489,12 +1489,12 @@ public:
 		result.data = ~this->data & 0b11;
 		return result;
 	}
-	constexpr BitSet& operator<<=(unsigned int shift) {
+	constexpr BitSet& operator<<=(size_t shift) {
 		assert(shift < size());
 		this->data <<= shift;
 		return *this;
 	}
-	constexpr BitSet& operator>>=(unsigned int shift) {
+	constexpr BitSet& operator>>=(size_t shift) {
 		assert(shift < size());
 		this->data >>= shift;
 		return *this;

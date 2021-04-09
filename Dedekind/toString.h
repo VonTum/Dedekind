@@ -98,7 +98,8 @@ inline std::ostream& operator<<(std::ostream& os, FunctionInput f) {
 template<size_t Size>
 inline std::ostream& operator<<(std::ostream& os, const BitSet<Size>& bitset) {
 	for(size_t i = 0; i < Size; i++) {
-		os << bitset.get(Size - i - 1) ? '1' : '0';
+		char bit = bitset.get(Size - i - 1) ? '1' : '0';
+		os << bit;
 	}
 	return os;
 }
@@ -132,7 +133,8 @@ inline std::ostream& printHex(std::ostream& os, const BooleanFunction<Variables>
 template<>
 inline std::ostream& operator<<(std::ostream& os, const std::vector<bool>& fis) {
 	for(FunctionInput::underlyingType i = 0; i < fis.size(); i++) {
-		os << fis[fis.size() - i - 1] ? '1' : '0';
+		char bit = fis[fis.size() - i - 1] ? '1' : '0';
+		os << bit;
 	}
 	return os;
 }

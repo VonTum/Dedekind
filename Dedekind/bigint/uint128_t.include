@@ -79,7 +79,7 @@ class uint128_t{
             : LOWER(rhs), UPPER(0)
 #endif
         {
-            if (std::is_signed<T>::value) {
+            if constexpr (std::is_signed<T>::value) {
                 if (rhs < 0) {
                     UPPER = -1;
                 }

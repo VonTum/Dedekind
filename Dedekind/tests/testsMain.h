@@ -64,7 +64,7 @@ const char* errMsg(const R& first, const P& second, const char* sep) {
 
 	const char* data = msg.c_str();
 	char* dataBuf = new char[msg.size() + 1];
-	for (int i = 0; i < msg.size() + 1; i++)
+	for (size_t i = 0; i < msg.size() + 1; i++)
 		dataBuf[i] = data[i];
 
 	return dataBuf;
@@ -118,6 +118,8 @@ struct AssertBuilder {
 
 #define TEST_CASE(func) void func(); static TestAdder __JOIN(tAdder, __LINE__)(__FILE__, #func, func, TestType::NORMAL); void func()
 #define TEST_CASE_SLOW(func) void func(); static TestAdder __JOIN(tAdder, __LINE__)(__FILE__, #func, func, TestType::SLOW); void func()
+
+#pragma GCC diagnostic ignored "-Wparentheses"
 
 #define ASSERT(condition) do {if(!(AssertBuilder(__LINE__) < condition).arg) {throw AssertionError(__LINE__, "false");}__testInterface.markAssert(); }while(false)
 #define ASSERT_TRUE(condition) do {if(!(condition)) throw AssertionError(__LINE__, "false");__testInterface.markAssert(); }while(false)

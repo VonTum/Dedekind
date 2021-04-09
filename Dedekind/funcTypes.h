@@ -358,7 +358,7 @@ std::ostream& operator<<(std::ostream& os, const AntiChain<Variables>& ac) {
 		if(index == 0) {
 			os << '/';
 		} else {
-			for(int bit = 0; bit < Variables; bit++) {
+			for(unsigned int bit = 0; bit < Variables; bit++) {
 				if(index & (1 << bit)) {
 					os << char('a' + bit);
 				}

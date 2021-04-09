@@ -78,6 +78,7 @@ public:
 			}
 		}
 		assert(false); // Cannot happen, this should be a full decomposition of the entire layer
+		throw "Unreachable";
 	}
 
 	BakedEquivalenceClass<V>& operator[](size_t index) { assert(index >= 0 && index < numberOfClasses); return allClasses[index]; }

@@ -15,10 +15,7 @@ void printSet(const BooleanFunction<Variables>& bf) {
 
 template<unsigned int Variables>
 uint64_t getNumChoicesRecursiveDown(const BooleanFunction<Variables>& chooseableMask) {
-	using MBF = Monotonic<Variables>;
 	using BF = BooleanFunction<Variables>;
-	using AC = AntiChain<Variables>;
-	using LR = Layer<Variables>;
 	
 	size_t numChooseableElements = chooseableMask.size();
 	if(numChooseableElements == 0) {
@@ -112,6 +109,7 @@ inline uint64_t getNumChoicesForLast2LayersFallback(const AntiChain<7>& lowerLay
 /*
 * AVX
 */
+#ifdef __AVX2__
 inline __m256i monotonizeUp6AVX256(__m256i bs) {
 	__m256i v0Added = _mm256_slli_epi64(_mm256_andnot_si256(_mm256_set1_epi64x(0xaaaaaaaaaaaaaaaa), bs), 1);
 	bs = _mm256_or_si256(bs, v0Added);
@@ -195,10 +193,12 @@ inline uint64_t getNumChoicesLast2LayersAVX256(uint64_t bits0, uint64_t bits1, u
 
 	return custom_mm256_hsum_epi64(totals);
 }
+#endif
 
 /*
 * AVX512
 */
+#ifdef __AVX512F__
 inline __m512i monotonizeUp6AVX512(__m512i bs) {
 	__m512i v0Added = _mm512_slli_epi64(_mm512_andnot_si512(_mm512_set1_epi64(0xaaaaaaaaaaaaaaaa), bs), 1);
 	bs = _mm512_or_si512(bs, v0Added);
@@ -288,6 +288,7 @@ inline uint64_t getNumChoicesLast2LayersAVX512(uint64_t bits0, uint64_t bits1, u
 
 	return custom_mm512_hsum_epi64(totals);
 }
+#endif
 
 /*
 * AVX512 END
@@ -334,10 +335,8 @@ inline uint64_t getNumChoicesForLast2Layers(const AntiChain<7>& lowerLayer, cons
 
 template<unsigned int Variables>
 uint64_t getNumChoicesRecursiveUp(const BooleanFunction<Variables>& chooseableElements, const Monotonic<Variables>& conflictingMask) {
-	using MBF = Monotonic<Variables>;
 	using BF = BooleanFunction<Variables>;
 	using AC = AntiChain<Variables>;
-	using LR = Layer<Variables>;
 
 	BF conflictingElements = chooseableElements & conflictingMask.bf;
 

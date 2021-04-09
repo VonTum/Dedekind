@@ -13,24 +13,25 @@ using AvailableChoiceFis = SmallVector<FunctionInputSet, MAX_PREPROCESSED-1>;
 
 static_assert(MAX_PREPROCESSED <= 7, "This implementation is specific to Dedekind 7 and below");
 struct CompressedAvailableChoices {
-	union {
-		uint64_t largePart;
-		struct {
-			uint64_t layer6 : 4;  // up to 8
-			uint64_t layer5 : 12; // up to 1044
-			uint64_t layer4 : 24; // up to 7013320
-			uint64_t layer3 : 24; // up to 7013320
-		};
-	};
+
 	union {
 		uint16_t smallPart;
 		struct {
-			uint16_t layer2 : 12; // up to 1044
 			uint16_t layer1 : 4;  // up to 8
+			uint16_t layer2 : 12; // up to 1044
+		};
+	};
+	union {
+		uint64_t largePart;
+		struct {
+			uint64_t layer3 : 24; // up to 7013320
+			uint64_t layer4 : 24; // up to 7013320
+			uint64_t layer5 : 12; // up to 1044
+			uint64_t layer6 : 4;  // up to 8
 		};
 	};
 
-	CompressedAvailableChoices(uint64_t largePart, uint16_t smallPart) : largePart(largePart), smallPart(smallPart) {}
+	CompressedAvailableChoices(uint64_t largePart, uint16_t smallPart) : smallPart(smallPart), largePart(largePart) {}
 	CompressedAvailableChoices(eqClassIndexInt layer1, eqClassIndexInt layer2, eqClassIndexInt layer3, eqClassIndexInt layer4, eqClassIndexInt layer5, eqClassIndexInt layer6) :
 		layer1(layer1), layer2(layer2), layer3(layer3), layer4(layer4), layer5(layer5), layer6(layer6) {
 	
@@ -72,7 +73,7 @@ class MemoizedRecursiveChoices {
 			uint64_t numChoices : 48;
 
 			Element() : smallPart(0), numChoices(0) {}
-			Element(uint16_t smallPart, valueInt numChoices) : smallPart(smallPart), numChoices(numChoices) { assert(numChoices < (uint64_t(1) << 48)); }
+			Element(uint16_t smallPart, valueInt numChoices) : smallPart(smallPart), numChoices(numChoices) { assert(uint64_t(numChoices) < (uint64_t(1) << 48)); }
 		};
 
 		Element* data;
@@ -170,7 +171,7 @@ valueInt MemoizedRecursiveChoices::getOrCompute(const DedekindDecomposition<Inte
 		for(; foundElem->smallPart < avc.smallPart && foundElem != slab.end(); foundElem++);
 
 		if(foundElem->smallPart == avc.smallPart) {
-			assert(foundElem->numChoices == totalChoices);
+			assert(foundElem->numChoices == static_cast<decltype(foundElem->numChoices)>(totalChoices));
 			lock.unlock();
 			return totalChoices;
 		}
@@ -190,8 +191,6 @@ valueInt MemoizedRecursiveChoices::getOrCompute(const DedekindDecomposition<Inte
 }
 
 static valueInt computeIntervalSizeToBottom(const DedekindDecomposition<IntervalSize>& decomp, size_t curLayerIndex, const EqClass<IntervalSize>& currentlyFindingIntervalSizeFor, MemoizedRecursiveChoices& memoMap) {
-	const LayerDecomposition<IntervalSize>& curLayer = decomp[curLayerIndex];
-
 	FunctionInputSet fis = currentlyFindingIntervalSizeFor.eqClass.asFunctionInputSet();
 	AvailableChoiceFis forcedInPrevLayers(curLayerIndex);
 	for(size_t i = 1; i < curLayerIndex; i++) {

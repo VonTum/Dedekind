@@ -5,8 +5,8 @@
 #include <iostream>
 
 class TimeTracker {
-	std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
 	std::string message;
+	std::chrono::time_point<std::chrono::high_resolution_clock> startTime;
 public:
 	TimeTracker(std::string message) : message(message), startTime(std::chrono::high_resolution_clock::now()) {}
 	TimeTracker() : message("Time taken: "), startTime(std::chrono::high_resolution_clock::now()) {}

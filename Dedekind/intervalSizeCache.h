@@ -129,7 +129,6 @@ public:
 
 	uint64_t getIntervalSizeFromBot(const Monotonic<Variables>& top) const {
 		using MBF = Monotonic<Variables>;
-		using AC = AntiChain<Variables>;
 
 		if(top.isEmpty()) { // top == bot
 			return 1;

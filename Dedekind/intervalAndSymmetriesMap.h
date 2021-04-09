@@ -58,8 +58,6 @@ void addSymmetriesToIntervalFile() {
 	std::ifstream intervals(FileName::allIntervals(Variables), std::ios::binary);
 	std::ofstream intervalSymmetries(FileName::allIntervalSymmetries(Variables), std::ios::binary);
 
-	u128 totalWork = 0;
-	u128 dedekindNumber = 0;
 	for(size_t layer = 0; layer < (1 << Variables) + 1; layer++) {
 		std::cout << "Layer " << layer << ": ";
 		auto start = std::chrono::high_resolution_clock::now();

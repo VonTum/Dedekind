@@ -98,7 +98,7 @@ bool areAlwaysCombined(const Monotonic<Variables>& a, const Monotonic<Variables>
 template<unsigned int Variables>
 std::array<int, Variables+1> getLayerSizes(const Monotonic<Variables>& dClass) {
 	std::array<int, Variables + 1> dLayerSizes;
-	for(int i = 0; i < Variables + 1; i++) {
+	for(unsigned int i = 0; i < Variables + 1; i++) {
 		dLayerSizes[i] = dClass.getLayer(i).size();
 	}
 	return dLayerSizes;

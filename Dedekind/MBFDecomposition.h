@@ -139,13 +139,13 @@ std::pair<BufferedSet<Monotonic<Variables>>, size_t> generateAllMBFsFast() {
 	};
 
 	std::thread* threads = new std::thread[numberOfThreads - 1];
-	for(unsigned int i = 0; i < numberOfThreads - 1; i++) {
+	for(int i = 0; i < numberOfThreads - 1; i++) {
 		threads[i] = std::thread(threadFunc);
 	}
 
 	threadFunc();
 
-	for(unsigned int i = 0; i < numberOfThreads - 1; i++) {
+	for(int i = 0; i < numberOfThreads - 1; i++) {
 		threads[i].join();
 	}
 	delete[] threads;
@@ -324,7 +324,7 @@ struct MBFDecomposition {
 	LinkedNode* allFullBufs;
 	Monotonic<Variables>* allFibs;
 
-	constexpr static unsigned int LAYER_COUNT = (1 << Variables) + 1;
+	constexpr static size_t LAYER_COUNT = (size_t(1) << Variables) + 1;
 
 	MBFDecomposition() : layers(new Layer[LAYER_COUNT]), allOffsets(new LinkBufPtr[mbfCounts[Variables]]), allFullBufs(new LinkedNode[getTotalLinkCount<Variables>()]), allFibs(new Monotonic<Variables>[mbfCounts[Variables]]) {
 		LinkBufPtr* curOffsets = allOffsets;

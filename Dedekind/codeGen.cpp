@@ -147,15 +147,6 @@ static void genCodeForLargePermut(std::ostream& os, int permutSize) {
 	}
 }
 
-static void genCodeForAllLargePermut(std::ostream& os) {
-	for(int i = maxSmallPermuteSize+1; i <= groupCount; i++) {
-		os << "inline bool permute" << i << "() {\n";
-		genCodeForLargePermut(os, i);
-		os << "\treturn false;\n";
-		os << "}\n";
-	}
-}
-
 void genCodeForAllPermut() {
 	std::ofstream os("permuteCode.txt");
 

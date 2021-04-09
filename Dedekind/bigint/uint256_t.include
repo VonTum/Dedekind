@@ -74,7 +74,7 @@ class uint256_t{
             : LOWER(rhs), UPPER(uint128_0)
 #endif
         {
-            if (std::is_signed<T>::value) {
+            if constexpr (std::is_signed<T>::value) {
                 if (rhs < 0) {
                     UPPER = uint128_t(-1, -1);
                 }

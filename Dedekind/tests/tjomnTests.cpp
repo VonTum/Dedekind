@@ -95,7 +95,7 @@ TEST_CASE(testConnect) {
 }
 
 TEST_CASE(testKnownTJOMN) {
-	ASSERT(threejoinmeetnumberveryfast(AntiChain<3>{0b011}, AntiChain<3>{0b111}, AntiChain<3>{0b101}, AntiChain<3>{0b001}.asMonotonic()) == 3);
+	ASSERT(threejoinmeetnumberveryfast(AntiChain<3>{0b011}, AntiChain<3>{0b111}, AntiChain<3>{0b101}, AntiChain<3>{0b001}.asMonotonic()) == uint64_t(3));
 }
 
 // Manual inspection
@@ -119,7 +119,6 @@ TEST_CASE(testGenerateTaus) {
 
 // Manual inspection
 TEST_CASE(testGenerateNonEquivalentMonotonics) {
-	using AC = AntiChain<3>;
 	using MBF = Monotonic<3>;
 	std::cout << "\n";
 	BufferedMap<MBF, int> allChains = generateNonEquivalentMonotonics<3>();
@@ -132,8 +131,6 @@ TEST_CASE(testGenerateNonEquivalentMonotonics) {
 // Manual inspection
 TEST_CASE(testThreeJoinOneMeetDecompositionsFast) {
 	constexpr unsigned int Degree = 3;
-	using AC = AntiChain<Degree>;
-	using MBF = Monotonic<Degree>;
 	std::cout << "\n";
 	
 	std::map<TJOMN<Degree>, TJOMNInfo> result = threeJoinOneMeetDecompositionsFast<Degree>();
@@ -158,8 +155,6 @@ TEST_CASE(testThreeJoinOneMeetDecompositionsFast) {
 // Manual inspection
 TEST_CASE(testRevolution) {
 	constexpr unsigned int Degree = 4;
-	using AC = AntiChain<Degree>;
-	using MBF = Monotonic<Degree>;
 	std::cout << "\n";
 
 	uint256_t d = revolution<Degree>();
@@ -170,8 +165,6 @@ TEST_CASE(testRevolution) {
 // Manual inspection
 TEST_CASE(testRevolutionMemoized) {
 	constexpr unsigned int Degree = 4;
-	using AC = AntiChain<Degree>;
-	using MBF = Monotonic<Degree>;
 	std::cout << "\n";
 
 	u192 d = revolutionMemoized<Degree>();

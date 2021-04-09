@@ -38,7 +38,6 @@ uint64_t computeExtendedIntervalOf(const BakedMap<Monotonic<Variables>, uint64_t
 template<unsigned int Variables>
 void computeIntervals() {
 	using MBF = Monotonic<Variables>;
-	using LR = Layer<Variables>;
 
 	std::ifstream mbfFile(FileName::allMBFSSorted(Variables), std::ios::binary);
 	if(!mbfFile.is_open()) throw "Error not found!";
@@ -99,7 +98,6 @@ void computeIntervals() {
 template<unsigned int Variables>
 void computeIntervalsParallel() {
 	using MBF = Monotonic<Variables>;
-	using LR = Layer<Variables>;
 
 	std::ifstream mbfFile(FileName::allMBFSSorted(Variables), std::ios::binary);
 	if(!mbfFile.is_open()) throw "Error not found!";
@@ -211,7 +209,7 @@ void checkIntervalLayers(size_t bottomLayer) {
 	BakedMap<Monotonic<Variables>, uint64_t>& layer1 = layers[0];
 	BakedMap<Monotonic<Variables>, uint64_t>& layer2 = layers[1];
 
-	auto totalStart = std::chrono::high_resolution_clock::now();
+	//auto totalStart = std::chrono::high_resolution_clock::now();
 	//int count = 0;
 	for(KeyValue<Monotonic<Variables>, uint64_t>& cur : layer2) {
 		LR topLayer = cur.key.getTopLayer();
