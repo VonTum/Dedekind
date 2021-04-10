@@ -507,6 +507,15 @@ void produceDualU64File(const char* inputName, const char* dualName) {
 }
 */
 
+template<unsigned int Variables>
+void preComputeFiles() {
+	runGenAllMBFs<Variables>();
+	runSortAndComputeLinks<Variables>();
+	computeIntervalsParallel<Variables>();
+	computeDPlus1<Variables>();
+	addSymmetriesToIntervalFile<Variables>();
+}
+
 template<unsigned int DedekindOrder>
 void doRevolution() {
 	std::cout << "Computing D(" << DedekindOrder << ")...\n";
@@ -617,6 +626,14 @@ inline void runCommands(const ParsedArgs& args) {
 		{"addSymmetriesToIntervalFile7", []() {addSymmetriesToIntervalFile<7>(); }},
 		//{"addSymmetriesToIntervalFile8", []() {addSymmetriesToIntervalFile<8>(); }},
 		//{"addSymmetriesToIntervalFile9", []() {addSymmetriesToIntervalFile<9>(); }},
+
+		{"preCompute1", []() {preComputeFiles<1>(); }},
+		{"preCompute2", []() {preComputeFiles<2>(); }},
+		{"preCompute3", []() {preComputeFiles<3>(); }},
+		{"preCompute4", []() {preComputeFiles<4>(); }},
+		{"preCompute5", []() {preComputeFiles<5>(); }},
+		{"preCompute6", []() {preComputeFiles<6>(); }},
+		{"preCompute7", []() {preComputeFiles<7>(); }},
 
 		{"noCanonizationPCoeffMethod1", []() {noCanonizationPCoeffMethod<1>(); }},
 		{"noCanonizationPCoeffMethod2", []() {noCanonizationPCoeffMethod<2>(); }},

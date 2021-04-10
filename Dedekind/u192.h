@@ -136,7 +136,7 @@ inline u192& operator+=(u192& a, uint64_t b) {
 inline u192& operator+=(u192& a, uint64_t b) {
 	a.low += b;
 	a.mid += (a.low < b); // add carry, gcc optimizes this
-	a.high += (a.mid == 0); // add carry, gcc optimizes this
+	a.high += (a.mid == 0) && (a.low < b); // add carry, gcc optimizes this
 	return a;
 }
 #endif
@@ -145,6 +145,14 @@ inline u192 operator+(u192 a, uint64_t b) {
 	return a;
 }
 
+inline u192& operator+=(u192& a, u128 b) {
+	a += u192(b);
+	return a;
+}
+inline u192 operator+(u192 a, u128 b) {
+	a += b;
+	return a;
+}
 
 #include "bigint/uint256_t.h"
 

@@ -141,10 +141,12 @@ u192 noCanonizationPCoeffMethod() {
 	AllMBFMap<Variables, ExtraData> allIntervalSizesAndDownLinks = readAllMBFsMapExtraDownLinks<Variables>();
 
 	std::mutex totalMutex;
-	u192 total = 0;
+	u192 total(0);
+
+	u128 intervalSize0 = allIntervalSizesAndDownLinks.layers.back()[0].value.intervalSizeToBottom;
 
 	// size to top is D(Variables), one instance, size to bot is 1. pcoeff = 1
-	total += allIntervalSizesAndDownLinks.layers.back()[0].value.intervalSizeToBottom;
+	total += intervalSize0;
 	totalPCoeffs++;
 	
 	for(int topLayer = 1; topLayer < (1 << Variables) + 1; topLayer++) {
@@ -263,7 +265,6 @@ u192 noCanonizationPCoeffMethod() {
 			std::lock_guard<std::mutex> lg(totalMutex);
 			total += totalToAddToTotal;
 		});
-		//std::cout << total;
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
 		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayer)) << "us per mbf" << std::endl;
 	}
