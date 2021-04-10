@@ -11,8 +11,13 @@
 
 static std::atomic<uint64_t> connectedHistogram[50];
 
+constexpr size_t TOPS_PER_BLOCK = 4;
+constexpr double swapperCutoff = 0.5;
+static std::atomic<size_t> totalPCoeffs(0);
+
 template<unsigned int Variables>
 uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Variables>& bot) {
+	//++totalPCoeffs;
 	size_t connectCount = countConnected(top - bot, bot);
 	++connectedHistogram[connectCount];
 	uint64_t pcoeff = uint64_t(1) << connectCount;
@@ -21,6 +26,7 @@ uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Va
 
 template<unsigned int Variables>
 uint64_t computePCoefficient(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& top, const Monotonic<Variables>& bot) {
+	//++totalPCoeffs;
 	SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> resultingTop;
 	for(const Monotonic<Variables>& mbf : top) {
 		if(!(mbf <= bot)) {
@@ -55,7 +61,6 @@ template<unsigned int Variables>
 u192 basicSymmetriesPCoeffMethod() {
 	AllMBFMap<Variables, ExtraData> allIntervalSizes = readAllMBFsMapIntervalSymmetries<Variables>();
 
-	std::atomic<size_t> totalPCoeffs = 0;
 	std::mutex totalMutex;
 	u192 total = 0;
 
@@ -74,7 +79,7 @@ u192 basicSymmetriesPCoeffMethod() {
 			AntiChain<Variables> topAC = top.asAntiChain();
 			forEachMonotonicFunctionUpTo<Variables>(top, [&](const Monotonic<Variables>& bot) {
 				uint64_t botIntervalSize = allIntervalSizes.get(bot.canonize()).intervalSizeToBottom;
-				uint64_t pcoeff = computePCoefficient(topAC, bot); totalPCoeffs++;
+				uint64_t pcoeff = computePCoefficient(topAC, bot);
 				//std::cout << "  bot: " << bot << " botIntervalSize: " << botIntervalSize << " pcoeff: " << pcoeff << std::endl;
 
 				//std::cout << bot << ": " << pcoeff << ", ";
@@ -98,10 +103,6 @@ u192 basicSymmetriesPCoeffMethod() {
 	return total;
 }
 
-constexpr size_t TOPS_PER_BLOCK = 4;
-constexpr double swapperCutoff = 0.5;
-static std::atomic<size_t> totalPCoeffs(0);
-
 template<unsigned int Variables>
 std::array<u128, TOPS_PER_BLOCK> getBotToSubTotals(
 	const std::array<Monotonic<Variables>, TOPS_PER_BLOCK>& topMBFs, 
@@ -111,12 +112,10 @@ std::array<u128, TOPS_PER_BLOCK> getBotToSubTotals(
 
 	uint64_t botIntervalSize = botKV.value.intervalSizeToBottom;
 
-	uint64_t localPCoeffsCount = 0;
 	std::array<uint64_t, TOPS_PER_BLOCK> pcoeffSums; for(uint64_t& item : pcoeffSums) { item = 0; }
 	botKV.key.forEachPermutation([&](const Monotonic<Variables>& bot) {
 		for(size_t i = 0; i < size; i++) {
 			if(bot <= topMBFs[i]) {
-				localPCoeffsCount++;
 				uint64_t pcoeff = computePCoefficient(splitTops[i], bot);
 
 				//std::cout << bot << ": " << pcoeff << ", ";
@@ -127,7 +126,6 @@ std::array<u128, TOPS_PER_BLOCK> getBotToSubTotals(
 	});
 	uint64_t duplication = factorial(Variables) / botKV.value.symmetries;
 	assert(localPCoeffsCount % duplication == 0);
-	totalPCoeffs += localPCoeffsCount;
 
 	std::array<u128, TOPS_PER_BLOCK> result;
 	for(size_t i = 0; i < size; i++) {
@@ -147,7 +145,6 @@ u192 noCanonizationPCoeffMethod() {
 
 	// size to top is D(Variables), one instance, size to bot is 1. pcoeff = 1
 	total += intervalSize0;
-	totalPCoeffs++;
 	
 	for(int topLayer = 1; topLayer < (1 << Variables) + 1; topLayer++) {
 		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = allIntervalSizesAndDownLinks.layers[topLayer];
@@ -167,9 +164,7 @@ u192 noCanonizationPCoeffMethod() {
 
 				// have to hardcode special cases to make iteration below simpler
 				subTotals[i] += topKVs[i]->value.intervalSizeToBottom; // top == bot -> pcoeff == 1
-				totalPCoeffs++;
 				subTotals[i] += 2; // bot == {} -> intervalSizeToBottom(bot) == 1
-				totalPCoeffs++;
 
 				DownConnection* from = topKVs[i]->value.downConnections;
 				DownConnection* to = (topKVs[i]+1)->value.downConnections;
@@ -307,12 +302,6 @@ u192 computePCoeffSum(size_t topLayer, const KeyValue<Monotonic<Variables>, Extr
 	return umul192(subTotal, topKV.value.symmetries * topKVDual.intervalSizeToBottom);
 }
 
-
-
-
-
-
-
 template<unsigned int Variables>
 u192 pcoeffMethodV2() {
 	AllMBFMap<Variables, ExtraData> allIntervalSizesAndDownLinks = readAllMBFsMapExtraDownLinks<Variables>();
@@ -322,15 +311,15 @@ u192 pcoeffMethodV2() {
 
 	// size to top is D(Variables), one instance, size to bot is 1. pcoeff = 1
 	total += allIntervalSizesAndDownLinks.layers.back()[0].value.intervalSizeToBottom;
-	totalPCoeffs++;
 	
 	for(int topLayer = 1; topLayer < (1 << Variables) + 1; topLayer++) {
 		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = allIntervalSizesAndDownLinks.layers[topLayer];
 		std::cout << "Layer " << topLayer << "  ";
 		auto start = std::chrono::high_resolution_clock::now();
-		iterCollectionInParallel(curLayer, [&](const KeyValue<Monotonic<Variables>, ExtraData>& topKV) {
-			total += computePCoeffSum(topLayer, topKV, allIntervalSizesAndDownLinks);
-		});
+		std::mutex totalMutex;
+		total += iterCollectionPartitionedWithSeparateTotals(curLayer, u192(0), [&](const KeyValue<Monotonic<Variables>, ExtraData>& topKV, u192& subTotal) {
+			subTotal += computePCoeffSum(topLayer, topKV, allIntervalSizesAndDownLinks);
+		}, [](u192& a, u192 b) {a += b; });
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
 		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayer)) << "us per mbf" << std::endl;
 	}
@@ -340,5 +329,3 @@ u192 pcoeffMethodV2() {
 
 	return total;
 }
-
-

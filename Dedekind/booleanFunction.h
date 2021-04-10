@@ -44,6 +44,35 @@ inline void forEachSubPermFor7From3(const BooleanFunction<7>& bf, const Func& fu
 
 }*/
 
+template<unsigned int Variables, unsigned int Current, typename Func>
+void forEachPermutationImpl(BooleanFunction<Variables> cur, const Func& func) {
+	if constexpr(Current == Variables - 1) {
+		func(cur);
+	} else if constexpr(Current == Variables - 2) {
+		func(cur); // 1 2
+		cur.swap(Current, Current + 1);
+		func(cur); // 2 1
+	} else if constexpr(Current == Variables - 3) {
+		func(cur); // 1 2 3
+		cur.swap(Current, Current + 1);
+		func(cur); // 2 1 3
+		cur.swap(Current, Current + 2);
+		func(cur); // 3 1 2
+		cur.swap(Current, Current + 1);
+		func(cur); // 1 3 2
+		cur.swap(Current, Current + 2);
+		func(cur); // 2 3 1
+		cur.swap(Current, Current + 1);
+		func(cur); // 3 2 1
+	} else {
+		forEachPermutationImpl<Variables, Current + 1, Func>(cur, func);
+		for(unsigned int swapping = Current + 1; swapping < Variables; swapping++) {
+			cur.swap(Current, swapping);
+			forEachPermutationImpl<Variables, Current + 1, Func>(cur, func);
+		}
+	}
+}
+
 template<unsigned int Variables>
 class BooleanFunction {
 	static_assert(Variables >= 1, "Cannot make 0 variable BooleanFunction");
@@ -316,22 +345,9 @@ public:
 		}
 	}
 
-	template<typename Func, unsigned int CurVar = 0>
+	template<typename Func>
 	void forEachPermutation(const Func& func) const {
-		//if constexpr(Variables == 7 && CurVar == 3) {
-			//forEachSubPermFor7From3(*this, func);
-			// return;
-		//}
-		if constexpr(CurVar == Variables) {
-			func(*this);
-		} else {
-			this->forEachPermutation<Func, CurVar + 1>(func);
-			for(unsigned int swapping = CurVar + 1; swapping < Variables; swapping++) {
-				BooleanFunction copy = *this;
-				copy.swap(CurVar, swapping);
-				copy.forEachPermutation<Func, CurVar + 1>(func);
-			}
-		}
+		forEachPermutationImpl<Variables, 0, Func>(*this, func);
 	}
 
 	template<size_t Size, typename Func, unsigned int CurVar = 0>
