@@ -642,6 +642,14 @@ inline void runCommands(const ParsedArgs& args) {
 		{"noCanonizationPCoeffMethod5", []() {noCanonizationPCoeffMethod<5>(); }},
 		{"noCanonizationPCoeffMethod6", []() {noCanonizationPCoeffMethod<6>(); }},
 		{"noCanonizationPCoeffMethod7", []() {noCanonizationPCoeffMethod<7>(); }},
+
+		{"newPCoeff1", []() {pcoeffMethodV2<1>(); }},
+		{"newPCoeff2", []() {pcoeffMethodV2<2>(); }},
+		{"newPCoeff3", []() {pcoeffMethodV2<3>(); }},
+		{"newPCoeff4", []() {pcoeffMethodV2<4>(); }},
+		{"newPCoeff5", []() {pcoeffMethodV2<5>(); }},
+		{"newPCoeff6", []() {pcoeffMethodV2<6>(); }},
+		{"newPCoeff7", []() {pcoeffMethodV2<7>(); }},
 	};
 
 	std::map<std::string, void(*)(const std::string&)> commandsWithArg{

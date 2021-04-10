@@ -301,7 +301,7 @@ public:
 				
 				__m128i shiftReg = _mm_set1_epi64x(relshift);
 
-				__m128i stayingElems = _mm_blend_epi32(_mm_and_si128(mask1.data, bitset.data), _mm_andnot_si128(mask1.data, bitset.data), 0b0011);
+				__m128i stayingElems = _mm_blend_epi16(_mm_and_si128(mask1.data, bitset.data), _mm_andnot_si128(mask1.data, bitset.data), 0b00001111);
 				
 				__m128i shiftedLeft = _mm_srl_epi64(_mm_slli_si128(_mm_and_si128(mask1.data, bitset.data), 8), shiftReg);
 				__m128i shiftedRight = _mm_sll_epi64(_mm_srli_si128(_mm_andnot_si128(mask1.data, bitset.data), 8), shiftReg);

@@ -275,4 +275,70 @@ u192 noCanonizationPCoeffMethod() {
 	return total;
 }
 
+template<unsigned int Variables>
+u192 computePCoeffSum(size_t topLayer, const KeyValue<Monotonic<Variables>, ExtraData>& topKV, const AllMBFMap<Variables, ExtraData>& allIntervalSizesAndDownLinks) {
+	uint64_t withItself = topKV.value.intervalSizeToBottom;
+	uint64_t withBot = 2;
+	
+	u128 subTotal(withItself + withBot);
+	
+	AntiChain<Variables> topAC = topKV.key.asAntiChain();
+	SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> splitTopAC = splitAC(topAC);
+
+	for(int belowLayerI = topLayer - 1; belowLayerI > 0; belowLayerI--) {
+		const BakedMap<Monotonic<Variables>, ExtraData>& belowLayer = allIntervalSizesAndDownLinks.layers[belowLayerI];
+
+		// simplest first, just iter the whole layer
+		for(const KeyValue<Monotonic<Variables>, ExtraData>& botKV : belowLayer) {
+			uint64_t totalPCoeff = 0;
+			botKV.key.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
+				if(permutedBot <= topKV.key) {
+					totalPCoeff += computePCoefficient(splitTopAC, permutedBot);
+				}
+			});
+
+			uint64_t duplication = factorial(Variables) / botKV.value.symmetries;
+			totalPCoeff /= duplication;
+			subTotal += umul128(totalPCoeff, botKV.value.intervalSizeToBottom);
+		}
+	}
+
+	const ExtraData& topKVDual = allIntervalSizesAndDownLinks.get(topKV.key.dual().canonize());
+	return umul192(subTotal, topKV.value.symmetries * topKVDual.intervalSizeToBottom);
+}
+
+
+
+
+
+
+
+template<unsigned int Variables>
+u192 pcoeffMethodV2() {
+	AllMBFMap<Variables, ExtraData> allIntervalSizesAndDownLinks = readAllMBFsMapExtraDownLinks<Variables>();
+
+	std::mutex totalMutex;
+	u192 total(0);
+
+	// size to top is D(Variables), one instance, size to bot is 1. pcoeff = 1
+	total += allIntervalSizesAndDownLinks.layers.back()[0].value.intervalSizeToBottom;
+	totalPCoeffs++;
+	
+	for(int topLayer = 1; topLayer < (1 << Variables) + 1; topLayer++) {
+		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = allIntervalSizesAndDownLinks.layers[topLayer];
+		std::cout << "Layer " << topLayer << "  ";
+		auto start = std::chrono::high_resolution_clock::now();
+		iterCollectionInParallel(curLayer, [&](const KeyValue<Monotonic<Variables>, ExtraData>& topKV) {
+			total += computePCoeffSum(topLayer, topKV, allIntervalSizesAndDownLinks);
+		});
+		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayer)) << "us per mbf" << std::endl;
+	}
+
+	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
+	std::cout << "D(" << (Variables + 2) << ") = " << total << std::endl;
+
+	return total;
+}
+
 
