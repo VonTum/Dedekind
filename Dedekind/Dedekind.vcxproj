@@ -536,6 +536,7 @@
     <ClCompile Include="intervalDecomposition.cpp" />
     <ClCompile Include="tests\bigintTests.cpp" />
     <ClCompile Include="tests\bitsetTests.cpp" />
+    <ClCompile Include="tests\connectTests.cpp" />
     <ClCompile Include="tests\indent.cpp" />
     <ClCompile Include="tests\intervalTests.cpp" />
     <ClCompile Include="tests\terminalColor.cpp" />
@@ -592,6 +593,7 @@
     <ClInclude Include="serialization.h" />
     <ClInclude Include="set.h" />
     <ClInclude Include="sharedLockGuard.h" />
+    <ClInclude Include="sjomn.h" />
     <ClInclude Include="smallVector.h" />
     <ClInclude Include="tests\generators.h" />
     <ClInclude Include="tests\indent.h" />

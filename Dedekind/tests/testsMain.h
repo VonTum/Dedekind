@@ -41,16 +41,6 @@ void logf(const char* format, ...);
 
 // Testing utils:
 
-template<typename T, std::size_t Size>
-std::ostream& operator<<(std::ostream& ostream, const std::array<T, Size>& arr) {
-	ostream << '{' << arr[0];
-	for(std::size_t i = 1; i < Size; i++) {
-		ostream << ", " << arr[i];
-	}
-	ostream << '}';
-	return ostream;
-}
-
 template<typename R, typename P>
 const char* errMsg(const R& first, const P& second, const char* sep) {
 	std::stringstream s;

@@ -9,15 +9,15 @@
 #include "blockIterator.h"
 #include <atomic>
 
-static std::atomic<uint64_t> connectedHistogram[50];
+static uint64_t connectedHistogram[50];
 
 constexpr size_t TOPS_PER_BLOCK = 4;
 constexpr double swapperCutoff = 0.5;
-static std::atomic<size_t> totalPCoeffs(0);
+static size_t totalPCoeffs(0);
 
 template<unsigned int Variables>
 uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Variables>& bot) {
-	//++totalPCoeffs;
+	++totalPCoeffs;
 	size_t connectCount = countConnected(top - bot, bot);
 	++connectedHistogram[connectCount];
 	uint64_t pcoeff = uint64_t(1) << connectCount;
@@ -26,7 +26,7 @@ uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Va
 
 template<unsigned int Variables>
 uint64_t computePCoefficient(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& top, const Monotonic<Variables>& bot) {
-	//++totalPCoeffs;
+	++totalPCoeffs;
 	SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> resultingTop;
 	for(const Monotonic<Variables>& mbf : top) {
 		if(!(mbf <= bot)) {
@@ -34,6 +34,7 @@ uint64_t computePCoefficient(const SmallVector<Monotonic<Variables>, getMaxLayer
 		}
 	}
 	size_t connectCount = countConnected(resultingTop, bot);
+	++connectedHistogram[connectCount];
 	uint64_t pcoeff = uint64_t(1) << connectCount;
 	return pcoeff;
 }
@@ -55,6 +56,19 @@ u192 naivePCoeffMethod() {
 		});
 	});
 	return total;
+}
+
+static void printHistogramAndPCoeffs(unsigned int Variables) {
+	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
+
+	std::cout << "Connections: \n";
+	for(size_t i = 0; i <= getMaxLayerWidth(Variables); i++) {
+		std::cout << i << ": " << connectedHistogram[i] << "\n";
+		connectedHistogram[i] = 0;
+	}
+
+	totalPCoeffs = 0;
+
 }
 
 template<unsigned int Variables>
@@ -125,7 +139,6 @@ std::array<u128, TOPS_PER_BLOCK> getBotToSubTotals(
 		}
 	});
 	uint64_t duplication = factorial(Variables) / botKV.value.symmetries;
-	assert(localPCoeffsCount % duplication == 0);
 
 	std::array<u128, TOPS_PER_BLOCK> result;
 	for(size_t i = 0; i < size; i++) {
@@ -264,7 +277,7 @@ u192 noCanonizationPCoeffMethod() {
 		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayer)) << "us per mbf" << std::endl;
 	}
 
-	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
+	printHistogramAndPCoeffs(Variables);
 	std::cout << "D(" << (Variables + 2) << ") = " << total << std::endl;
 
 	return total;
@@ -324,7 +337,7 @@ u192 pcoeffMethodV2() {
 		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayer)) << "us per mbf" << std::endl;
 	}
 
-	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
+	printHistogramAndPCoeffs(Variables);
 	std::cout << "D(" << (Variables + 2) << ") = " << total << std::endl;
 
 	return total;

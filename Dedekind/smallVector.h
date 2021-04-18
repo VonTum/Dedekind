@@ -88,6 +88,18 @@ public:
 		return false;
 	}
 
+	// expects a function of type bool(const T&)
+	// returns true if this list has an element for which the predicate is true
+	template<typename Pred>
+	bool hasMatching(const Pred& predicate) const {
+		for(size_t i = 0; i < sz; i++) {
+			if(predicate(buf[i])) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	void reserve(size_t size) {
 		assert(size <= MaxSize);
 	}

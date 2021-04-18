@@ -4,11 +4,15 @@
 #include <initializer_list>
 #include <ostream>
 
-template<unsigned int Variables>
-struct Monotonic;
 
 template<unsigned int Variables>
+struct AntiChain;
+template<unsigned int Variables>
+struct Monotonic;
+template<unsigned int Variables>
 struct Layer;
+template<unsigned int Variables>
+struct SingletonAntiChain;
 
 template<unsigned int Variables>
 struct AntiChain {
@@ -76,6 +80,10 @@ struct AntiChain {
 
 	bool isEmpty() const {
 		return this->bf.isEmpty();
+	}
+
+	bool contains(SingletonAntiChain<Variables> item) const {
+		return this->bf.contains(item.index);
 	}
 
 	unsigned int getUniverse() const {
@@ -263,6 +271,11 @@ bool operator<=(const Monotonic<Variables>& a, const Monotonic<Variables>& b) {
 	return a.bf.isSubSetOf(b.bf);
 }
 
+template<unsigned int Variables>
+bool operator<=(const AntiChain<Variables>& a, const Monotonic<Variables>& b) {
+	return a.bf.isSubSetOf(b.bf);
+}
+
 template<unsigned int Variables, typename Func>
 void forEachMonotonicFunctionRecursive(const Monotonic<Variables>& cur, const Func& func) {
 	func(cur);
@@ -350,33 +363,6 @@ Monotonic<Variables> acProd(const Monotonic<Variables>& a, const Monotonic<Varia
 }
 
 template<unsigned int Variables>
-std::ostream& operator<<(std::ostream& os, const AntiChain<Variables>& ac) {
-	bool isFirst = true;
-	ac.forEachOne([&](size_t index) {
-		os << (isFirst ? "{" : ", ");
-		isFirst = false;
-		if(index == 0) {
-			os << '/';
-		} else {
-			for(unsigned int bit = 0; bit < Variables; bit++) {
-				if(index & (1 << bit)) {
-					os << char('a' + bit);
-				}
-			}
-		}
-	});
-	if(isFirst) os << '{';
-	os << '}';
-	return os;
-}
-
-template<unsigned int Variables>
-std::ostream& operator<<(std::ostream& os, const Monotonic<Variables>& ac) {
-	os << ac.asAntiChain();
-	return os;
-}
-
-template<unsigned int Variables>
 struct Layer {
 	using BF = BooleanFunction<Variables>;
 	using MBF = Monotonic<Variables>;
@@ -447,6 +433,10 @@ struct Layer {
 		return this->bf.isEmpty();
 	}
 
+	bool contains(SingletonAntiChain<Variables> item) const {
+		return this->bf.contains(item.index);
+	}
+
 	unsigned int getUniverse() const {
 		return bf.getUniverse();
 	}
@@ -471,11 +461,6 @@ bool operator==(const Layer<Variables>& a, const Layer<Variables>& b) {
 template<unsigned int Variables>
 bool operator!=(const Layer<Variables>& a, const Layer<Variables>& b) {
 	return a.bf != b.bf;
-}
-template<unsigned int Variables>
-std::ostream& operator<<(std::ostream& os, const Layer<Variables>& l) {
-	os << l.asAntiChain();
-	return os;
 }
 
 template<unsigned int Variables>
@@ -505,6 +490,11 @@ Layer<Variables> operator&(const Layer<Variables>& a, const BooleanFunction<Vari
 template<unsigned int Variables>
 Layer<Variables> operator&(const BooleanFunction<Variables>& a, const Layer<Variables>& b) {
 	return Layer<Variables>(a & b.bf);
+}
+
+template<unsigned int Variables>
+bool operator<=(const Layer<Variables>& a, const Monotonic<Variables>& b) {
+	return a.bf.isSubSetOf(b.bf);
 }
 
 template<unsigned int Variables>
@@ -571,4 +561,42 @@ Layer<Variables> getTopLayer(const Monotonic<Variables>& m) {
 template<unsigned int Variables>
 Layer<Variables> getTopLayer(const AntiChain<Variables>& ac) {
 	return getTopLayer(ac.bf);
+}
+
+template<unsigned int Variables>
+struct SingletonAntiChain {
+	size_t index;
+
+	constexpr SingletonAntiChain() = default;
+	constexpr SingletonAntiChain(size_t index) : index(index) { assert(index < (size_t(1) << Variables)); }
+
+	AntiChain<Variables> asAntiChain() const {
+		return AntiChain<Variables>{index};
+	}
+	Monotonic<Variables> asMonotonic() const {
+		return AntiChain<Variables>{index}.asMonotonic();
+	}
+	Layer<Variables> asLayer() const {
+		return Layer<Variables>{index};
+	}
+
+	// no bot
+	static constexpr SingletonAntiChain top() {
+		return SingletonAntiChain(Variables - 1);
+	}
+};
+
+template<unsigned int Variables>
+SingletonAntiChain<Variables> operator&(SingletonAntiChain<Variables> a, SingletonAntiChain<Variables> b) {
+	return SingletonAntiChain<Variables>(a.index & b.index);
+}
+
+template<unsigned int Variables>
+bool operator<=(const SingletonAntiChain<Variables>& a, const Monotonic<Variables>& b) {
+	return b.bf.contains(a.index);
+}
+
+template<unsigned int Variables>
+bool operator<=(const SingletonAntiChain<Variables>& a, const SingletonAntiChain<Variables>& b) {
+	return (a.index & b.index) == a.index;
 }

@@ -15,6 +15,7 @@
 #include "MBFDecomposition.h"
 #include "r8Computation.h"
 #include "tjomn.h"
+#include "sjomn.h"
 
 #include "fullIntervalSizeComputation.h"
 #include "intervalAndSymmetriesMap.h"
@@ -703,63 +704,7 @@ int main(int argc, const char** argv) {
 		return 0;
 	}
 #else
-
-	/*{
-		TimeTracker timer;
-		std::cout << naivePCoeffMethod<5>() << std::endl;
-	}*/
-	/*{
-		TimeTracker timer;
-		std::cout << tjomnCountInParallel<4>().totalResult << std::endl;
-	}*/
-	{
-		TimeTracker timer;
-		std::cout << noCanonizationPCoeffMethod<6>() << std::endl;
-	}
-	return 0;
-	{
-		TimeTracker timer;
-		std::cout << basicSymmetriesPCoeffMethod<6>() << std::endl;
-	}
-	//doRAMTest();  // works
-
-	//MBFDecompositionWithHash<6> thing; // doesn't work
-
-	//runGenAllMBFs<7>(); // works
-	
-	//runSortAndComputeLinks<7>(); // works
-
-	//saveIntervalSizes<5>(); // works
-
-	//doLinkCount<5>(); // works
-
-	//runGenLayerDecomposition(); // works
-	
-	//sampleIntervalSizes<5>(); // works
-
-	//std::cout << "D=" << getD<6>() << "\n"; // works
-	//std::cout << "R=" << getR<6>(); // doesn't work
-
-	/*IntervalSizeCache<1>::generate(generateAllMBFsFast<1>().first);
-	IntervalSizeCache<2>::generate(generateAllMBFsFast<2>().first);
-	IntervalSizeCache<3>::generate(generateAllMBFsFast<3>().first);
-	IntervalSizeCache<4>::generate(generateAllMBFsFast<4>().first);
-	IntervalSizeCache<5>::generate(generateAllMBFsFast<5>().first);
-	IntervalSizeCache<6>::generate(generateAllMBFsFast<6>().first);*/
-
-	//doRevolution<4>();
-	//doRevolution<5>();
-	//doRevolution<6>();
-	//doRevolution<7>();
-	//doRevolution<8>();
-	//doRevolution<9>();
-
-	//TimeTracker timer;
-	//computeIntervalsParallel<7>();
-
-	//checkIntervalLayers<7>(80);
-
-	//verifyIntervalsCorrect<7>();
+	sjomnumbertablesymmetric<2>([]() {});
 #endif
 }
 #endif

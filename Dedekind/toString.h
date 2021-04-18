@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <set>
 #include <ostream>
 #include "functionInput.h"
 #include "functionInputSet.h"
@@ -9,6 +10,7 @@
 #include "equivalenceClassMap.h"
 #include "layerStack.h"
 #include "smallVector.h"
+#include "funcTypes.h"
 
 #include "dedekindDecomposition.h"
 #include "valuedDecomposition.h"
@@ -17,11 +19,9 @@
 #include "set.h"
 #include "aligned_set.h"
 
-template<typename T>
-inline std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
+template<typename Iter, typename IterEnd>
+inline void printIter(std::ostream& os, Iter iter, const IterEnd& iterEnd) {
 	os << '{';
-	auto iter = vec.begin();
-	auto iterEnd = vec.end();
 	if(iter != iterEnd) {
 		os << *iter;
 		++iter;
@@ -30,51 +30,31 @@ inline std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
 		}
 	}
 	os << '}';
+}
+
+template<typename T>
+inline std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
+	printIter(os, vec.begin(), vec.end());
+	return os;
+}
+template<typename T, size_t Size>
+inline std::ostream& operator<<(std::ostream& os, const std::array<T, Size>& arr) {
+	printIter(os, arr.begin(), arr.end());
 	return os;
 }
 template<typename T>
-inline std::ostream& operator<<(std::ostream& os, const set<T>& vec) {
-	os << '{';
-	auto iter = vec.begin();
-	auto iterEnd = vec.end();
-	if(iter != iterEnd) {
-		os << *iter;
-		++iter;
-		for(; iter != iterEnd; ++iter) {
-			os << ',' << *iter;
-		}
-	}
-	os << '}';
+inline std::ostream& operator<<(std::ostream& os, const std::set<T>& vec) {
+	printIter(os, vec.begin(), vec.end());
 	return os;
 }
 template<typename T, size_t Align>
 inline std::ostream& operator<<(std::ostream& os, const aligned_set<T, Align>& vec) {
-	os << '{';
-	auto iter = vec.begin();
-	auto iterEnd = vec.end();
-	if(iter != iterEnd) {
-		os << *iter;
-		++iter;
-		for(; iter != iterEnd; ++iter) {
-			os << ',' << *iter;
-		}
-	}
-	os << '}';
+	printIter(os, vec.begin(), vec.end());
 	return os;
 }
 template<typename T, size_t MaxSize>
 inline std::ostream& operator<<(std::ostream& os, const SmallVector<T, MaxSize>& vec) {
-	os << '{';
-	auto iter = vec.begin();
-	auto iterEnd = vec.end();
-	if(iter != iterEnd) {
-		os << *iter;
-		++iter;
-		for(; iter != iterEnd; ++iter) {
-			os << ',' << *iter;
-		}
-	}
-	os << '}';
+	printIter(os, vec.begin(), vec.end());
 	return os;
 }
 
@@ -124,6 +104,55 @@ inline std::ostream& printHex(std::ostream& os, const BitSet<Size>& bitset) {
 	}
 	return os;
 }
+
+template<unsigned int Variables>
+void printACComponent(std::ostream& os, size_t index) {
+	if(index == 0) {
+		os << '/';
+	} else {
+		for(unsigned int bit = 0; bit < Variables; bit++) {
+			if(index & (size_t(1) << bit)) {
+				os << char('a' + bit);
+			}
+		}
+	}
+}
+
+template<unsigned int Variables>
+std::ostream& operator<<(std::ostream& os, const AntiChain<Variables>& ac) {
+	bool isFirst = true;
+	ac.forEachOne([&](size_t index) {
+		os << (isFirst ? "{" : ", ");
+		isFirst = false;
+		printACComponent<Variables>(os, index);
+	});
+	if(isFirst) os << '{';
+	os << '}';
+	return os;
+}
+
+template<unsigned int Variables>
+std::ostream& operator<<(std::ostream& os, const Monotonic<Variables>& ac) {
+	os << ac.asAntiChain();
+	return os;
+}
+template<unsigned int Variables>
+std::ostream& operator<<(std::ostream& os, const Layer<Variables>& l) {
+	os << l.asAntiChain();
+	return os;
+}
+template<unsigned int Variables>
+std::ostream& operator<<(std::ostream& os, const SingletonAntiChain<Variables>& s) {
+	os << "{";
+	printACComponent<Variables>(os, s.index);
+	os << "}";
+	return os;
+}
+
+
+
+
+
 template<unsigned int Variables>
 inline std::ostream& printHex(std::ostream& os, const BooleanFunction<Variables>& fis) {
 	printHex(os, fis.bitset);

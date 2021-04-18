@@ -118,3 +118,27 @@ void preCombineConnected(SmallVector<Monotonic<Variables>, getMaxLayerWidth(Vari
 		}
 	}
 }
+
+// assumes that no subgraph contains an element which is dominated by an element of another subgraph
+template<unsigned int Variables>
+uint64_t countConnectedVeryFast(const BooleanFunction<Variables>& graph) {
+	BooleanFunction<Variables> totalToEliminate = BooleanFunction<Variables>::empty();
+	for(unsigned int shiftUpVar = 0; shiftUpVar < Variables; shiftUpVar++) {
+		BooleanFunction<Variables> justUpVar = graph & BooleanFunction<Variables>(~BooleanFunction<Variables>::varMask(shiftUpVar));
+		BooleanFunction<Variables> eliminaterMask = (justUpVar << (1 << shiftUpVar)) & graph; // these elements, moving upwards, will eliminate all above them, minus the current var
+
+		for(unsigned int shiftDownVar = shiftUpVar + 1; shiftDownVar < Variables; shiftDownVar++) {
+			BooleanFunction<Variables> justDownVar = eliminaterMask & BooleanFunction<Variables>(BooleanFunction<Variables>::varMask(shiftDownVar));
+			BooleanFunction<Variables> addedElements = justDownVar >> (1 << shiftDownVar);
+			eliminaterMask |= addedElements;
+		}
+
+		totalToEliminate |= eliminaterMask;
+	}
+
+	BooleanFunction<Variables> groupRepresentatives = graph & ~totalToEliminate;
+	return groupRepresentatives.size();
+}
+
+
+
