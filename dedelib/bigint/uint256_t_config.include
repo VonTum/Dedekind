@@ -1,13 +1,8 @@
 #ifndef _UINT256_T_CONFIG_
   #define _UINT256_T_CONFIG_
   #if defined(_MSC_VER)
-    #if defined(_DLL)
-      #define _UINT256_T_EXPORT __declspec(dllexport)
-      #define _UINT256_T_IMPORT __declspec(dllimport)
-    #else
-      #define _UINT256_T_EXPORT
-      #define _UINT256_T_IMPORT
-    #endif
+    #define _UINT256_T_EXPORT
+    #define _UINT256_T_IMPORT
   #else
     // All modules on Unix are compiled with -fvisibility=hidden
     // All API symbols get visibility default

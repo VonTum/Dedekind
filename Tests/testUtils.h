@@ -3,10 +3,10 @@
 #include <ostream>
 
 #include "testsMain.h"
-#include "../toString.h"
-#include "../functionInput.h"
-#include "../booleanFunction.h"
-#include "../interval.h"
+#include "../dedelib/toString.h"
+#include "../dedelib/functionInput.h"
+#include "../dedelib/booleanFunction.h"
+#include "../dedelib/interval.h"
 
 #define TEST_FROM 3
 #define TEST_UPTO 9

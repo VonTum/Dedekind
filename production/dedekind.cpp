@@ -4,25 +4,25 @@
 #include <random>
 #include <map>
 #include <string>
-#include "dedekindDecomposition.h"
-#include "valuedDecomposition.h"
-#include "toString.h"
-#include "serialization.h"
+#include "../dedelib/dedekindDecomposition.h"
+#include "../dedelib/valuedDecomposition.h"
+#include "../dedelib/toString.h"
+#include "../dedelib/serialization.h"
 
-#include "timeTracker.h"
-#include "codeGen.h"
+#include "../dedelib/timeTracker.h"
+#include "../dedelib/codeGen.h"
 
-#include "MBFDecomposition.h"
-#include "r8Computation.h"
-#include "tjomn.h"
-#include "sjomn.h"
+#include "../dedelib/MBFDecomposition.h"
+#include "../dedelib/r8Computation.h"
+#include "../dedelib/tjomn.h"
+#include "../dedelib/sjomn.h"
 
-#include "fullIntervalSizeComputation.h"
-#include "intervalAndSymmetriesMap.h"
-#include "pcoeff.h"
+#include "../dedelib/fullIntervalSizeComputation.h"
+#include "../dedelib/intervalAndSymmetriesMap.h"
+#include "../dedelib/pcoeff.h"
 
-#include "fileNames.h"
-#include "cmdParser.h"
+#include "../dedelib/fileNames.h"
+#include "../dedelib/cmdParser.h"
 
 /*
 Correct numbers
@@ -526,7 +526,6 @@ void doRevolution() {
 	revolutionParallel<DedekindOrder - 3>();
 }
 
-#ifndef MANUAL
 inline void runCommands(const ParsedArgs& args) {
 	std::map<std::string, void(*)()> commands{
 		{"ramTest", []() {doRAMTest(); }},
@@ -686,8 +685,7 @@ inline void runCommands(const ParsedArgs& args) {
 		}
 	}
 }
-#endif
-#ifndef RUN_TESTS
+
 int main(int argc, const char** argv) {
 	std::cout << "Detected " << std::thread::hardware_concurrency() << " threads" << std::endl;
 
@@ -698,13 +696,8 @@ int main(int argc, const char** argv) {
 		FileName::setDataPath(dataDir);
 	}
 
-#ifndef MANUAL
 	if(parsed.argCount() > 0) {
 		runCommands(parsed);
-		return 0;
 	}
-#else
-	sjomnumbertablesymmetric<2>([]() {});
-#endif
+	return 0;
 }
-#endif

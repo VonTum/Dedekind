@@ -11,7 +11,7 @@
 
 #include <chrono>
 
-#include "terminalColor.h"
+#include "../dedelib/terminalColor.h"
 
 #if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
 static const char sepChar = '\\';
@@ -323,7 +323,6 @@ ParsedInput parseInput(int argc, char* argv[]) {
 	return result;
 }
 
-#ifdef RUN_TESTS
 int main(int argc, char* argv[]) {
 	initConsole();
 
@@ -351,7 +350,6 @@ int main(int argc, char* argv[]) {
 		}
 	}
 }
-#endif
 
 TestAdder::TestAdder(const char* file, const char* name, void(*f)(), TestType isSlow) {
 	if (tests == nullptr) tests = new vector<Test>();

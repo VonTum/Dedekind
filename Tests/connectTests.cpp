@@ -1,8 +1,8 @@
 #include "testsMain.h"
 #include "testUtils.h"
-#include "generators.h"
+#include "../dedelib/generators.h"
 
-#include "../connectGraph.h"
+#include "../dedelib/connectGraph.h"
 
 template<unsigned int Variables>
 struct TestConnectCountVeryFast {

@@ -1,13 +1,13 @@
 #include "testsMain.h"
 #include "testUtils.h"
-#include "generators.h"
-#include "../knownData.h"
-#include "../toString.h"
+#include "../dedelib/generators.h"
+#include "../dedelib/knownData.h"
+#include "../dedelib/toString.h"
 
-#include "../interval.h"
+#include "../dedelib/interval.h"
 
-#include "../tjomn.h"
-#include "../collectionOperations.h"
+#include "../dedelib/tjomn.h"
+#include "../dedelib/collectionOperations.h"
 
 // destroys b
 template<typename AIter, typename BIter>

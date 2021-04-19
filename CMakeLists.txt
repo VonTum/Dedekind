@@ -16,38 +16,44 @@ else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -march=native")
   
   # profiling
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer -fno-inline-small-functions")
-  add_definitions(-DNO_MULTITHREAD)
+  # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -fno-omit-frame-pointer -fno-inline-small-functions")
+  # add_definitions(-DNO_MULTITHREAD)
 
   # set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -lasan -fsanitize=address")
   set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -Wno-unused-variable")
 endif()
 
 add_library(dedelib
-  Dedekind/aligned_alloc.cpp
-  Dedekind/codeGen.cpp
-  Dedekind/equivalenceClass.cpp
-  Dedekind/intervalDecomposition.cpp
-  Dedekind/layerDecomposition.cpp
-  Dedekind/valuedDecomposition.cpp
-  Dedekind/fileNames.cpp
+  dedelib/aligned_alloc.cpp
+  dedelib/codeGen.cpp
+  dedelib/equivalenceClass.cpp
+  dedelib/intervalDecomposition.cpp
+  dedelib/layerDecomposition.cpp
+  dedelib/valuedDecomposition.cpp
+  dedelib/fileNames.cpp
+  dedelib/terminalColor.cpp
 
-  Dedekind/bigint/uint128_t.cpp
-  Dedekind/bigint/uint256_t.cpp
+  dedelib/bigint/uint128_t.cpp
+  dedelib/bigint/uint256_t.cpp
 )
 
-add_executable(dedekind
-  Dedekind/dedekind.cpp
+add_executable(production
+  production/dedekind.cpp
+)
+add_executable(indev
+  indev/indev.cpp
 )
 add_executable(tests
-  Dedekind/tests/testsMain.cpp
-  Dedekind/tests/bigintTests.cpp
-  Dedekind/tests/indent.cpp
-  Dedekind/tests/intervalTests.cpp
-  Dedekind/tests/terminalColor.cpp
-  Dedekind/tests/tjomnTests.cpp
+  tests/testsMain.cpp
+  tests/bigintTests.cpp
+  tests/indent.cpp
+  tests/intervalTests.cpp
+  tests/tjomnTests.cpp
 )
-target_compile_definitions(tests PUBLIC RUN_TESTS)
+add_executable(benchmarks
+  benchmarks/benchmarks.cpp
+  benchmarks/connectBenchmarks.cpp
+)
 
 target_link_libraries(dedekind dedelib)
 target_link_libraries(tests dedelib)

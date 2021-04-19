@@ -1,12 +1,12 @@
-#include "../toString.h"
+#include "../dedelib/toString.h"
 
 #include "testsMain.h"
 #include "testUtils.h"
-#include "generators.h"
+#include "../dedelib/generators.h"
 
-#include "../functionInput.h"
-#include "../booleanFunction.h"
-#include "../serialization.h"
+#include "../dedelib/functionInput.h"
+#include "../dedelib/booleanFunction.h"
+#include "../dedelib/serialization.h"
 
 #include <random>
 #include <iostream>

@@ -1,11 +1,11 @@
 #pragma once
 
 #include <random>
-#include "../bitSet.h"
-#include "../booleanFunction.h"
-#include "../interval.h"
-#include "../funcTypes.h"
-#include "../u192.h"
+#include "bitSet.h"
+#include "booleanFunction.h"
+#include "interval.h"
+#include "funcTypes.h"
+#include "u192.h"
 
 inline bool genBool() {
 	return rand() % 2 == 1;

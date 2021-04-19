@@ -1,13 +1,13 @@
 #include "testsMain.h"
 #include "testUtils.h"
-#include "generators.h"
-#include "../knownData.h"
-#include "../toString.h"
+#include "../dedelib/generators.h"
+#include "../dedelib/knownData.h"
+#include "../dedelib/toString.h"
 
-#include "../interval.h"
-#include "../intervalSizeCache.h"
-#include "../intervalSizeFromBottom.h"
-#include "../MBFDecomposition.h"
+#include "../dedelib/interval.h"
+#include "../dedelib/intervalSizeCache.h"
+#include "../dedelib/intervalSizeFromBottom.h"
+#include "../dedelib/MBFDecomposition.h"
 
 template<unsigned int Variables>
 struct BotToTopIntervalSize {

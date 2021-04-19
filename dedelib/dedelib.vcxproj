@@ -113,46 +113,46 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Manual Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Tests Debug|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Manual Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Profiling|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Tests Release|x64'" Label="Configuration">
-    <ConfigurationType>Application</ConfigurationType>
+    <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -531,17 +531,9 @@
     <ClCompile Include="bigint\uint128_t.cpp" />
     <ClCompile Include="bigint\uint256_t.cpp" />
     <ClCompile Include="codeGen.cpp" />
-    <ClCompile Include="dedekind.cpp" />
     <ClCompile Include="fileNames.cpp" />
     <ClCompile Include="intervalDecomposition.cpp" />
-    <ClCompile Include="tests\bigintTests.cpp" />
-    <ClCompile Include="tests\bitsetTests.cpp" />
-    <ClCompile Include="tests\connectTests.cpp" />
-    <ClCompile Include="tests\indent.cpp" />
-    <ClCompile Include="tests\intervalTests.cpp" />
-    <ClCompile Include="tests\terminalColor.cpp" />
-    <ClCompile Include="tests\testsMain.cpp" />
-    <ClCompile Include="tests\tjomnTests.cpp" />
+    <ClCompile Include="terminalColor.cpp" />
     <ClCompile Include="valuedDecomposition.cpp" />
     <ClCompile Include="equivalenceClass.cpp" />
     <ClCompile Include="layerDecomposition.cpp" />
@@ -562,6 +554,7 @@
     <ClInclude Include="fileNames.h" />
     <ClInclude Include="fullIntervalSizeComputation.h" />
     <ClInclude Include="funcTypes.h" />
+    <ClInclude Include="generators.h" />
     <ClInclude Include="interval.h" />
     <ClInclude Include="intervalAndSymmetriesMap.h" />
     <ClInclude Include="intervalSizeCache.h" />
@@ -595,11 +588,7 @@
     <ClInclude Include="sharedLockGuard.h" />
     <ClInclude Include="sjomn.h" />
     <ClInclude Include="smallVector.h" />
-    <ClInclude Include="tests\generators.h" />
-    <ClInclude Include="tests\indent.h" />
-    <ClInclude Include="tests\terminalColor.h" />
-    <ClInclude Include="tests\testsMain.h" />
-    <ClInclude Include="tests\testUtils.h" />
+    <ClInclude Include="terminalColor.h" />
     <ClInclude Include="timeTracker.h" />
     <ClInclude Include="tjomn.h" />
     <ClInclude Include="toString.h" />

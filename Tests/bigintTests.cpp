@@ -1,10 +1,10 @@
 #include "testsMain.h"
 
-#include "../bigint/uint128_t.h"
-#include "../bigint/uint128_t.h"
-#include "../u192.h"
+#include "../dedelib/bigint/uint128_t.h"
+#include "../dedelib/bigint/uint128_t.h"
+#include "../dedelib/u192.h"
 
-#include "generators.h"
+#include "../dedelib/generators.h"
 
 #include <iostream>
 
