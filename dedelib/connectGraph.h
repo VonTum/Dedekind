@@ -1,8 +1,8 @@
 #pragma once
 
 
-#include "funcTypes.h"
 #include "smallVector.h"
+#include "funcTypes.h"
 
 template<unsigned int Variables>
 SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> splitAC(const AntiChain<Variables>& ss) {
@@ -119,12 +119,54 @@ void preCombineConnected(SmallVector<Monotonic<Variables>, getMaxLayerWidth(Vari
 	}
 }
 
+// returns a mask, that when anded with the original graph yields the elements that have connected elements, and when andnot'ed, yields the singleton elements
+template<unsigned int Variables>
+BooleanFunction<Variables> getGroupingMaskNaive(const BooleanFunction<Variables>& graph) {
+	BooleanFunction<Variables> totalMaskOut = BooleanFunction<Variables>::empty();
+	for(unsigned int v = 0; v < Variables; v++) {
+		BooleanFunction<Variables> mask(BooleanFunction<Variables>::varMask(v));
+
+		size_t shift = size_t(1) << v;
+
+		totalMaskOut |= ((graph & mask) >> shift) | (andnot(graph, mask) << shift);
+	}
+
+	return totalMaskOut;
+}
+
+// returns a mask, that when anded with the original graph yields the elements that have connected elements, and when andnot'ed, yields the singleton elements
+template<unsigned int Variables>
+BooleanFunction<Variables> getGroupingMask(const BooleanFunction<Variables>& graph) {
+	if constexpr(Variables == 7) {
+		__m128i graphData = graph.bitset.data;
+		__m128i totalMaskOut = _mm_shuffle_epi32(graphData, _MM_SHUFFLE(1, 0, 3, 2)); // 6
+		totalMaskOut = _mm_or_si128(totalMaskOut, _mm_shuffle_epi32(graphData, _MM_SHUFFLE(2, 3, 0, 1))); // 5
+		totalMaskOut = _mm_or_si128(totalMaskOut, _mm_or_si128(_mm_slli_epi32(graphData, 16), _mm_srli_epi32(graphData, 16))); // 4
+		totalMaskOut = _mm_or_si128(totalMaskOut, _mm_or_si128(_mm_slli_epi16(graphData, 8), _mm_srli_epi16(graphData, 8))); // 3
+		__m128i mask4 = _mm_set1_epi8(0b11110000);
+		totalMaskOut = _mm_or_si128(totalMaskOut, _mm_or_si128(_mm_slli_epi16(_mm_andnot_si128(mask4, graphData), 4), _mm_srli_epi16(_mm_and_si128(mask4, graphData), 4))); // 2
+		__m128i mask2 = _mm_set1_epi8(0b11001100);
+		totalMaskOut = _mm_or_si128(totalMaskOut, _mm_or_si128(_mm_slli_epi16(_mm_andnot_si128(mask2, graphData), 2), _mm_srli_epi16(_mm_and_si128(mask2, graphData), 2))); // 1
+		__m128i mask1 = _mm_set1_epi8(0b10101010);
+		totalMaskOut = _mm_or_si128(totalMaskOut, _mm_or_si128(_mm_slli_epi16(_mm_andnot_si128(mask1, graphData), 1), _mm_srli_epi16(_mm_and_si128(mask1, graphData), 1))); // 0
+		BooleanFunction<Variables> result;
+		result.bitset.data = totalMaskOut;
+		return result;
+	} else {
+		return getGroupingMaskNaive(graph);
+	}
+}
+
 // assumes that no subgraph contains an element which is dominated by an element of another subgraph
 template<unsigned int Variables>
-uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph) {
-	assert(!graph.isEmpty()); // expect this function not to be called on empty graph, this is trivial and should have been handled earlier, saving one check
-	uint64_t totalConnectedComponents = 0;
-	do {
+uint64_t countConnectedVeryFast(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& splitTop, BooleanFunction<Variables> graph) {
+	BooleanFunction<Variables> groupingMask = getGroupingMask(graph);
+
+	BooleanFunction<Variables> singletons = andnot(graph, groupingMask);
+	uint64_t totalConnectedComponents = singletons.size();
+
+	graph = graph & groupingMask; // remove singleton elements, reduces rest of the workload
+	while(!graph.isEmpty()) {
 		totalConnectedComponents++;
 		BooleanFunction<Variables> currentlyExpanding = BooleanFunction<Variables>::empty();
 		currentlyExpanding.add(graph.getFirst()); // picks the smallest component, no expansion downward, first expand upward
@@ -137,7 +179,7 @@ uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph) {
 			if(expandedDown == expandedUp) break;
 		} while(true); // can't just test expandedDown here for some stupid reason, not in scope
 		graph = andnot(graph, expandedUp);
-	} while(!graph.isEmpty());
+	}
 
 	return totalConnectedComponents;
 }

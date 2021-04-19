@@ -588,6 +588,7 @@
     <ClInclude Include="sharedLockGuard.h" />
     <ClInclude Include="sjomn.h" />
     <ClInclude Include="smallVector.h" />
+    <ClInclude Include="swapperLayers.h" />
     <ClInclude Include="terminalColor.h" />
     <ClInclude Include="timeTracker.h" />
     <ClInclude Include="tjomn.h" />

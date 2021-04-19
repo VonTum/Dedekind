@@ -1,5 +1,6 @@
 #pragma once
 
+#include "u192.h"
 #include "connectGraph.h"
 #include "allMBFsMap.h"
 #include "funcTypes.h"
@@ -17,8 +18,8 @@ static size_t totalPCoeffs(0);
 
 template<unsigned int Variables>
 uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Variables>& bot) {
-	++totalPCoeffs;
 	size_t connectCount = countConnected(top - bot, bot);
+	++totalPCoeffs;
 	++connectedHistogram[connectCount];
 	uint64_t pcoeff = uint64_t(1) << connectCount;
 	return pcoeff;
@@ -26,7 +27,6 @@ uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Va
 
 template<unsigned int Variables>
 uint64_t computePCoefficient(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& top, const Monotonic<Variables>& bot) {
-	++totalPCoeffs;
 	SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> resultingTop;
 	for(const Monotonic<Variables>& mbf : top) {
 		if(!(mbf <= bot)) {
@@ -34,6 +34,16 @@ uint64_t computePCoefficient(const SmallVector<Monotonic<Variables>, getMaxLayer
 		}
 	}
 	size_t connectCount = countConnected(resultingTop, bot);
+	++totalPCoeffs;
+	++connectedHistogram[connectCount];
+	uint64_t pcoeff = uint64_t(1) << connectCount;
+	return pcoeff;
+}
+
+template<unsigned int Variables>
+uint64_t computePCoefficientFast(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& splitTop, const BooleanFunction<Variables>& graph) {
+	size_t connectCount = countConnectedVeryFast(splitTop, graph);
+	++totalPCoeffs;
 	++connectedHistogram[connectCount];
 	uint64_t pcoeff = uint64_t(1) << connectCount;
 	return pcoeff;
@@ -56,6 +66,28 @@ u192 naivePCoeffMethod() {
 		});
 	});
 	return total;
+}
+
+template<unsigned int Variables>
+uint64_t computePermutationPCoeffSum(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& splitTop, const Monotonic<Variables>& top, const Monotonic<Variables>& botClass) {
+	uint64_t totalPCoeff = 0;
+	botClass.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
+		if(permutedBot <= top) {
+			totalPCoeff += computePCoefficient(splitTop, permutedBot);
+		}
+	});
+	return totalPCoeff;
+}
+
+template<unsigned int Variables>
+uint64_t computePermutationPCoeffSumFast(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& splitTop, const Monotonic<Variables>& top, const Monotonic<Variables>& botClass) {
+	uint64_t totalPCoeff = 0;
+	botClass.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
+		if(permutedBot <= top) {
+			totalPCoeff += computePCoefficientFast(splitTop, andnot(top.bf, permutedBot.bf));
+		}
+	});
+	return totalPCoeff;
 }
 
 static void printHistogramAndPCoeffs(unsigned int Variables) {
@@ -298,16 +330,9 @@ u192 computePCoeffSum(size_t topLayer, const KeyValue<Monotonic<Variables>, Extr
 
 		// simplest first, just iter the whole layer
 		for(const KeyValue<Monotonic<Variables>, ExtraData>& botKV : belowLayer) {
-			uint64_t totalPCoeff = 0;
-			botKV.key.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
-				if(permutedBot <= topKV.key) {
-					totalPCoeff += computePCoefficient(splitTopAC, permutedBot);
-				}
-			});
-
+			uint64_t totalPCoeff = computePermutationPCoeffSum(splitTopAC, topKV.key, botKV.key);
 			uint64_t duplication = factorial(Variables) / botKV.value.symmetries;
-			totalPCoeff /= duplication;
-			subTotal += umul128(totalPCoeff, botKV.value.intervalSizeToBottom);
+			subTotal += umul128(totalPCoeff / duplication, botKV.value.intervalSizeToBottom);
 		}
 	}
 
