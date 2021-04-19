@@ -568,7 +568,7 @@ struct SingletonAntiChain {
 	size_t index;
 
 	constexpr SingletonAntiChain() = default;
-	constexpr SingletonAntiChain(size_t index) : index(index) { assert(index < (size_t(1) << Variables)); }
+	constexpr explicit SingletonAntiChain(size_t index) : index(index) { assert(index < (size_t(1) << Variables)); }
 
 	AntiChain<Variables> asAntiChain() const {
 		return AntiChain<Variables>{index};

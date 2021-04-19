@@ -121,7 +121,30 @@ void preCombineConnected(SmallVector<Monotonic<Variables>, getMaxLayerWidth(Vari
 
 // assumes that no subgraph contains an element which is dominated by an element of another subgraph
 template<unsigned int Variables>
-uint64_t countConnectedVeryFast(const BooleanFunction<Variables>& graph) {
+uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph) {
+	assert(!graph.isEmpty()); // expect this function not to be called on empty graph, this is trivial and should have been handled earlier, saving one check
+	uint64_t totalConnectedComponents = 0;
+	do {
+		totalConnectedComponents++;
+		BooleanFunction<Variables> currentlyExpanding = BooleanFunction<Variables>::empty();
+		currentlyExpanding.add(graph.getFirst()); // picks the smallest component, no expansion downward, first expand upward
+
+		BooleanFunction<Variables> expandedUp = currentlyExpanding.monotonizeUp() & graph; // will always be an expansion, since singletons have been filtered out first
+		do {
+			BooleanFunction<Variables> expandedDown = expandedUp.monotonizeDown() & graph;
+			if(expandedDown == expandedUp) break;
+			expandedUp = expandedDown.monotonizeUp() & graph;
+			if(expandedDown == expandedUp) break;
+		} while(true); // can't just test expandedDown here for some stupid reason, not in scope
+		graph = andnot(graph, expandedUp);
+	} while(!graph.isEmpty());
+
+	return totalConnectedComponents;
+}
+
+// assumes that no subgraph contains an element which is dominated by an element of another subgraph
+template<unsigned int Variables>
+uint64_t countConnectedVeryVeryFastBroken(const BooleanFunction<Variables>& graph) {
 	BooleanFunction<Variables> totalToEliminate = BooleanFunction<Variables>::empty();
 	for(unsigned int shiftUpVar = 0; shiftUpVar < Variables; shiftUpVar++) {
 		BooleanFunction<Variables> justUpVar = graph & BooleanFunction<Variables>(~BooleanFunction<Variables>::varMask(shiftUpVar));
@@ -139,6 +162,5 @@ uint64_t countConnectedVeryFast(const BooleanFunction<Variables>& graph) {
 	BooleanFunction<Variables> groupRepresentatives = graph & ~totalToEliminate;
 	return groupRepresentatives.size();
 }
-
 
 
