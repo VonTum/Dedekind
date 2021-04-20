@@ -157,21 +157,31 @@ BooleanFunction<Variables> getGroupingMask(const BooleanFunction<Variables>& gra
 	}
 }
 
-// assumes that no subgraph contains an element which is dominated by an element of another subgraph
 template<unsigned int Variables>
-uint64_t countConnectedVeryFast(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& splitTop, BooleanFunction<Variables> graph) {
+uint64_t separateSingletons(BooleanFunction<Variables>& graph) {
 	BooleanFunction<Variables> groupingMask = getGroupingMask(graph);
 
 	BooleanFunction<Variables> singletons = andnot(graph, groupingMask);
-	uint64_t totalConnectedComponents = singletons.size();
 
 	graph = graph & groupingMask; // remove singleton elements, reduces rest of the workload
-	while(!graph.isEmpty()) {
-		totalConnectedComponents++;
-		BooleanFunction<Variables> currentlyExpanding = BooleanFunction<Variables>::empty();
-		currentlyExpanding.add(graph.getFirst()); // picks the smallest component, no expansion downward, first expand upward
 
-		BooleanFunction<Variables> expandedUp = currentlyExpanding.monotonizeUp() & graph; // will always be an expansion, since singletons have been filtered out first
+	return singletons.size();
+}
+
+// assumes that no subgraph contains an element which is dominated by an element of another subgraph
+template<unsigned int Variables>
+uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph, const BooleanFunction<Variables>& initialGuess) {
+	assert(!graph.isEmpty());
+	uint64_t totalConnectedComponents = 0;
+
+	BooleanFunction<Variables> expandedUp = initialGuess;
+
+	do {
+		totalConnectedComponents++;
+		expandedUp = BooleanFunction<Variables>::empty();
+		expandedUp.add(graph.getFirst()); // picks the smallest component, no expansion downward, first expand upward
+
+		expandedUp = expandedUp.monotonizeUp() & graph; // will always be an expansion, since singletons have been filtered out first
 		do {
 			BooleanFunction<Variables> expandedDown = expandedUp.monotonizeDown() & graph;
 			if(expandedDown == expandedUp) break;
@@ -179,9 +189,21 @@ uint64_t countConnectedVeryFast(const SmallVector<Monotonic<Variables>, getMaxLa
 			if(expandedDown == expandedUp) break;
 		} while(true); // can't just test expandedDown here for some stupid reason, not in scope
 		graph = andnot(graph, expandedUp);
-	}
+	} while(!graph.isEmpty());
 
 	return totalConnectedComponents;
+}
+
+// assumes that no subgraph contains an element which is dominated by an element of another subgraph
+template<unsigned int Variables>
+uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph) {
+	assert(!graph.isEmpty());
+	
+	BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
+	initialGuess.add(graph.getFirst());
+	initialGuess = initialGuess.monotonizeUp() & graph;
+
+	return countConnectedVeryFast<Variables>(graph, initialGuess);
 }
 
 // assumes that no subgraph contains an element which is dominated by an element of another subgraph

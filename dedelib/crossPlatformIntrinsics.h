@@ -94,16 +94,16 @@ inline int clz8(uint8_t x) {
 }
 #else
 inline int clz64(uint64_t x) {
-	return __builtin_clzll(x);
+	return sizeof(long long) * 8 - __builtin_clzll(x);
 }
 inline int clz32(uint32_t x) {
-	return __builtin_clzl(x);
+	return sizeof(long) * 8 - __builtin_clzl(x);
 }
 inline int clz16(uint16_t x) {
-	return __builtin_clz(x);
+	return sizeof(int) * 8 - __builtin_clz(x);
 }
 inline int clz8(uint8_t x) {
-	return __builtin_clz(x);
+	return sizeof(int) * 8 - __builtin_clz(x);
 }
 #endif
 

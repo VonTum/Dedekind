@@ -171,17 +171,17 @@ public:
 		return Size;
 	}
 
-	size_t count() const {
-		size_t result = 0;
-		for(uint64_t item : this->data) {
-			result += static_cast<size_t>(popcnt64(item));
-		}
-		return result;
-	}
 	uint64_t hash() const {
 		uint64_t result = 0;
 		for(uint64_t item : this->data) {
 			result ^= item;
+		}
+		return result;
+	}
+	size_t count() const {
+		size_t result = 0;
+		for(uint64_t item : this->data) {
+			result += static_cast<size_t>(popcnt64(item));
 		}
 		return result;
 	}
@@ -193,6 +193,15 @@ public:
 			}
 		}
 		return Size;
+	}
+	size_t getLastOnBit() const {
+		for(size_t curBlockI = BLOCK_COUNT; curBlockI-- > 0;) { // decrement is done after the compare!
+			uint64_t curBlock = data[curBlockI];
+			if(curBlock != 0) {
+				return clz64(curBlock) + 64 * curBlockI;
+			}
+		}
+		return 0;
 	}
 
 	constexpr bool get(size_t index) const {
@@ -432,11 +441,11 @@ public:
 	static constexpr size_t size() {
 		return 128;
 	}
-	size_t count() const {
-		return popcnt64(_mm_extract_epi64(this->data, 0)) + popcnt64(_mm_extract_epi64(this->data, 1));
-	}
 	uint64_t hash() const {
 		return _mm_extract_epi64(this->data, 0) ^ _mm_extract_epi64(this->data, 1);
+	}
+	size_t count() const {
+		return popcnt64(_mm_extract_epi64(this->data, 0)) + popcnt64(_mm_extract_epi64(this->data, 1));
 	}
 	size_t getFirstOnBit() const {
 		uint64_t firstPart = _mm_extract_epi64(this->data, 0);
@@ -445,9 +454,20 @@ public:
 		}
 		uint64_t secondPart = _mm_extract_epi64(this->data, 1);
 		if(secondPart != 0) {
-			return ctz64(secondPart) + 64;
+			return ctz64(secondPart) + size_t(64);
 		}
 		return 128;
+	}
+	size_t getLastOnBit() const {
+		uint64_t secondPart = _mm_extract_epi64(this->data, 1);
+		if(secondPart != 0) {
+			return clz64(secondPart) + size_t(64);
+		}
+		uint64_t firstPart = _mm_extract_epi64(this->data, 0);
+		if(firstPart != 0) {
+			return clz64(firstPart);
+		}
+		return 0;
 	}
 
 	bool get(size_t index) const {
@@ -650,14 +670,17 @@ public:
 	static constexpr size_t size() {
 		return 64;
 	}
-	size_t count() const {
-		return popcnt64(this->data);
-	}
 	uint64_t hash() const {
 		return static_cast<uint64_t>(this->data);
 	}
+	size_t count() const {
+		return popcnt64(this->data);
+	}
 	size_t getFirstOnBit() const {
 		return ctz64(this->data);
+	}
+	size_t getLastOnBit() const {
+		return clz64(this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -807,14 +830,17 @@ public:
 	static constexpr size_t size() {
 		return 32;
 	}
-	size_t count() const {
-		return popcnt32(this->data);
-	}
 	uint64_t hash() const {
 		return static_cast<uint64_t>(this->data);
 	}
+	size_t count() const {
+		return popcnt32(this->data);
+	}
 	size_t getFirstOnBit() const {
 		return ctz32(this->data);
+	}
+	size_t getLastOnBit() const {
+		return clz32(this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -964,14 +990,17 @@ public:
 	static constexpr size_t size() {
 		return 16;
 	}
-	size_t count() const {
-		return popcnt16(this->data);
-	}
 	uint64_t hash() const {
 		return static_cast<uint64_t>(this->data);
 	}
+	size_t count() const {
+		return popcnt16(this->data);
+	}
 	size_t getFirstOnBit() const {
 		return ctz16(this->data);
+	}
+	size_t getLastOnBit() const {
+		return clz16(this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -1122,14 +1151,17 @@ public:
 	static constexpr size_t size() {
 		return 8;
 	}
-	size_t count() const {
-		return popcnt8(static_cast<uint16_t>(this->data));
-	}
 	uint64_t hash() const {
 		return static_cast<uint64_t>(this->data);
 	}
+	size_t count() const {
+		return popcnt8(static_cast<uint16_t>(this->data));
+	}
 	size_t getFirstOnBit() const {
 		return ctz8(this->data);
+	}
+	size_t getLastOnBit() const {
+		return clz8(this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -1279,14 +1311,17 @@ public:
 	static constexpr size_t size() {
 		return 4;
 	}
-	size_t count() const {
-		return popcnt8(static_cast<uint16_t>(this->data));
-	}
 	uint64_t hash() const {
 		return static_cast<uint64_t>(this->data);
 	}
+	size_t count() const {
+		return popcnt8(static_cast<uint16_t>(this->data));
+	}
 	size_t getFirstOnBit() const {
 		return ctz8(this->data);
+	}
+	size_t getLastOnBit() const {
+		return clz8(this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -1436,14 +1471,17 @@ public:
 	static constexpr size_t size() {
 		return 2;
 	}
-	size_t count() const {
-		return popcnt8(static_cast<uint16_t>(this->data));
-	}
 	uint64_t hash() const {
 		return static_cast<uint64_t>(this->data);
 	}
+	size_t count() const {
+		return popcnt8(static_cast<uint16_t>(this->data));
+	}
 	size_t getFirstOnBit() const {
 		return ctz8(this->data);
+	}
+	size_t getLastOnBit() const {
+		return clz8(this->data);
 	}
 
 	constexpr bool get(size_t index) const {

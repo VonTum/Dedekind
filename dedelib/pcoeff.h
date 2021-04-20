@@ -42,7 +42,7 @@ uint64_t computePCoefficient(const SmallVector<Monotonic<Variables>, getMaxLayer
 
 template<unsigned int Variables>
 uint64_t computePCoefficientFast(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& splitTop, const BooleanFunction<Variables>& graph) {
-	size_t connectCount = countConnectedVeryFast(splitTop, graph);
+	size_t connectCount = countConnectedVeryFast(graph); // TODOO
 	++totalPCoeffs;
 	++connectedHistogram[connectCount];
 	uint64_t pcoeff = uint64_t(1) << connectCount;

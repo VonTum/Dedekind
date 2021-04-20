@@ -641,6 +641,10 @@ public:
 		return bitset.getFirstOnBit();
 	}
 
+	size_t getLast() const {
+		return bitset.getLastOnBit();
+	}
+
 	// takes a function of the form void(const BooleanFunction& expanded)
 	template<typename Func>
 	void forEachUpExpansion(const Func& func) const {

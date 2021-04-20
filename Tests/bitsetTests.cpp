@@ -151,6 +151,28 @@ struct ShiftRightTest {
 };
 
 template<unsigned int Variables>
+struct BitScanTest {
+	static void run() {
+		for(size_t iter = 0; iter < LARGE_ITER; iter++) {
+			BooleanFunction<Variables> fis = BooleanFunction<Variables>::empty();
+
+			size_t max = 0;
+			size_t min = size_t(1) << Variables;
+			for(int i = 0; i < 10; i++) {
+				size_t set = generateSize_t(size_t(1) << Variables);
+				max = std::max(max, set);
+				min = std::min(min, set);
+
+				fis.add(set);
+			}
+
+			ASSERT(fis.getFirst() == min);
+			ASSERT(fis.getLast() == max);
+		}
+	}
+};
+
+template<unsigned int Variables>
 struct ReverseTest {
 	static void run() {
 		for(size_t iter = 0; iter < LARGE_ITER; iter++) {
@@ -640,6 +662,10 @@ TEST_CASE(testShiftLeft) {
 
 TEST_CASE(testShiftRight) {
 	runFunctionRange<TEST_FROM, TEST_UPTO, ShiftRightTest>();
+}
+
+TEST_CASE(testBitScan) {
+	runFunctionRange<TEST_FROM, TEST_UPTO, BitScanTest>();
 }
 
 TEST_CASE(testReverse) {

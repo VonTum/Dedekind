@@ -17,7 +17,7 @@ struct TestConnectCountVeryFast {
 
 				if(top == bot) return; // continue
 				size_t originalCount = countConnected(top.asAntiChain() - bot, bot);
-				size_t newCount = countConnectedVeryFast(splitAC(top.asAntiChain()), diff);
+				size_t newCount = countConnectedVeryFast(diff);
 
 				std::cout << newCount << "\n";
 
