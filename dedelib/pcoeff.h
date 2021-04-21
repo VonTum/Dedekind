@@ -18,6 +18,25 @@ static size_t totalPCoeffs(0);
 
 static uint64_t preconnectHistogram[50];
 
+
+static void printHistogramAndPCoeffs(unsigned int Variables) {
+	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
+
+	std::cout << "Connections: \n";
+	for(size_t i = 0; i <= getMaxLayerWidth(Variables); i++) {
+		std::cout << i << ": " << connectedHistogram[i] << "\n";
+		connectedHistogram[i] = 0;
+	}
+
+	totalPCoeffs = 0;
+
+	std::cout << "Preconnections: \n";
+	for(size_t i = 0; i <= getMaxLayerWidth(Variables); i++) {
+		std::cout << i << ": " << preconnectHistogram[i] << "\n";
+		preconnectHistogram[i] = 0;
+	}
+}
+
 template<unsigned int Variables>
 uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Variables>& bot) {
 	size_t connectCount = countConnected(top - bot, bot);
@@ -81,9 +100,33 @@ uint64_t computePermutationPCoeffSum(const SmallVector<Monotonic<Variables>, get
 	return totalPCoeff;
 }
 
+template<size_t Size>
+bool atLeastOneIsLarger(const std::array<int, Size>& a, const std::array<int, Size>& b) {
+	for(size_t i = 0; i < Size; i++) {
+		if(a[i] > b[i]) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// expects a function of the form uint64_t(BooleanFunction<Variables> graph)
+template<unsigned int Variables, typename Func>
+uint64_t sumPermutedPCoeffsOver(const Monotonic<Variables>& top, const Monotonic<Variables>& botClass, const Func& computePCoeff) {
+	uint64_t totalPCoeff = 0;
+	botClass.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
+		if(permutedBot <= top) {
+			BooleanFunction<Variables> graph = andnot(top.bf, permutedBot.bf);
+			totalPCoeff += computePCoeff(graph);
+		}
+	});
+	return totalPCoeff;
+}
+
 template<unsigned int Variables>
 uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> splitTop, const Monotonic<Variables>& top, const Monotonic<Variables>& botClass) {
-	
+	assert(splitTop.size() >= 1);
+
 	std::array<int, Variables + 1> botLayerSizes = getLayerSizes(botClass);
 
 	preCombineConnected(splitTop, botLayerSizes);
@@ -98,49 +141,60 @@ uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMa
 		}
 	}
 
+	switch(splitTop.size()) {
+	case 1:
+		return sumPermutedPCoeffsOver(top, botClass, [&](const BooleanFunction<Variables>& graph) {
+			++totalPCoeffs;
+			++connectedHistogram[1];
+			return 2;
+		});
+	/*case 2:
+	{
+		Monotonic<Variables> overlap01 = splitTop[0] & splitTop[1];
+		return sumPermutedPCoeffsOver(top, botClass, [&](const BooleanFunction<Variables>& graph) {
+			if((graph & overlap01.bf).isEmpty()) {
+				return 2; // 2 groups (no overlap)
+			} else {
+				return 4; // 1 group
+			}
+		});
+	}*/
+	/*case 3:
+	{
+		Monotonic<Variables> overlap01 = splitTop[0] & splitTop[1];
+		Monotonic<Variables> overlap02 = splitTop[0] & splitTop[2];
+		Monotonic<Variables> overlap12 = splitTop[1] & splitTop[2];
+		
+		return sumPermutedPCoeffsOver(top, botClass, [&](const BooleanFunction<Variables>& graph) {
+			int numOverlaps = 0;
+			if(!(graph & overlap01.bf).isEmpty()) numOverlaps++;
+			if(!(graph & overlap02.bf).isEmpty()) numOverlaps++;
+			if(!(graph & overlap12.bf).isEmpty()) numOverlaps++;
+
+			int overlapsResults[4]{8,4,2,2};
+			return overlapsResults[numOverlaps];
+		});
+	}*/
+	}
 	std::array<int, Variables + 1> biggestGuessSizes = getLayerSizes(biggestGuess);
-	for(size_t i = 0; i < Variables + 1; i++) {
-		if(biggestGuessSizes[i] > botLayerSizes[i]) { // there is one layer which will always be larger than bot, so it's guaranteed to be included
-			uint64_t totalPCoeff = 0;
-			botClass.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
-				if(permutedBot <= top) {
-					BooleanFunction<Variables> graph = andnot(top.bf, permutedBot.bf);
-					BooleanFunction<Variables> initialGuess = biggestGuess.bf & graph;
-					assert(!initialGuess.isEmpty());
-					totalPCoeff += computePCoefficientFast(graph, initialGuess);
-				}
-			});
-			return totalPCoeff;
-		}
+
+	if(atLeastOneIsLarger(biggestGuessSizes, botLayerSizes)) { // there is one layer which will always be larger than bot, so it's guaranteed to be included
+		return sumPermutedPCoeffsOver(top, botClass, [&](const BooleanFunction<Variables>& graph) {
+			BooleanFunction<Variables> initialGuess = biggestGuess.bf & graph;
+			assert(!initialGuess.isEmpty());
+			return computePCoefficientFast(graph, initialGuess);
+		});
 	}
 
-	uint64_t totalPCoeff = 0;
-	botClass.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
-		if(permutedBot <= top) {
-			BooleanFunction<Variables> graph = andnot(top.bf, permutedBot.bf);
-			//totalPCoeff += eliminateSingletons(graph); // seems to have no effect, or slight pessimization
+	return sumPermutedPCoeffsOver(top, botClass, [&](const BooleanFunction<Variables>& graph) {
+		//totalPCoeff += eliminateSingletons(graph); // seems to have no effect, or slight pessimization
 
-			size_t initialGuessIndex = graph.getLast();
-			BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
-			initialGuess.add(initialGuessIndex);
-			initialGuess = initialGuess.monotonizeDown() & graph;
-			totalPCoeff += computePCoefficientFast(graph, initialGuess);
-		}
+		size_t initialGuessIndex = graph.getLast();
+		BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
+		initialGuess.add(initialGuessIndex);
+		initialGuess = initialGuess.monotonizeDown() & graph;
+		return computePCoefficientFast(graph, initialGuess);
 	});
-	return totalPCoeff;
-}
-
-static void printHistogramAndPCoeffs(unsigned int Variables) {
-	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
-
-	std::cout << "Connections: \n";
-	for(size_t i = 0; i <= getMaxLayerWidth(Variables); i++) {
-		std::cout << i << ": " << connectedHistogram[i] << "\n";
-		connectedHistogram[i] = 0;
-	}
-
-	totalPCoeffs = 0;
-
 }
 
 template<unsigned int Variables>
@@ -370,7 +424,7 @@ u192 computePCoeffSum(size_t topLayer, const KeyValue<Monotonic<Variables>, Extr
 
 		// simplest first, just iter the whole layer
 		for(const KeyValue<Monotonic<Variables>, ExtraData>& botKV : belowLayer) {
-			uint64_t totalPCoeff = computePermutationPCoeffSum(splitTopAC, topKV.key, botKV.key);
+			uint64_t totalPCoeff = computePermutationPCoeffSumFast(splitTopAC, topKV.key, botKV.key);
 			uint64_t duplication = factorial(Variables) / botKV.value.symmetries;
 			subTotal += umul128(totalPCoeff / duplication, botKV.value.intervalSizeToBottom);
 		}

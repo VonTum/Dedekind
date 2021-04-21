@@ -37,12 +37,12 @@ TEST_CASE(testConnectCountVeryFast) {
 template<unsigned int Variables>
 struct TestPCoeffSumFast {
 	static void run() {
-		for(size_t iter = 0; iter < 10000; iter++) {
+		for(size_t iter = 0; iter < 100000; iter++) {
 			again:
 			Monotonic<Variables> top(generateMBF<Variables>());
 			Monotonic<Variables> bot(generateMBF<Variables>());
 			if(!(bot <= top)) goto again;
-			if(bot == top) return; // continue;
+			if(bot == top) continue;
 
 			BooleanFunction<Variables> diff = andnot(top.bf, bot.bf);
 
@@ -56,12 +56,14 @@ struct TestPCoeffSumFast {
 			ASSERT(newCount == originalCount);
 			if(iter % 1000 == 0) std::cout << '.';
 		}
+
+		printHistogramAndPCoeffs(Variables);
 	}
 };
 
 TEST_CASE(testTestPCoeffSumFast) {
 	rand();
-	runFunctionRange<6, 7, TestPCoeffSumFast>();
+	runFunctionRange<7, 7, TestPCoeffSumFast>();
 }
 
 TEST_CASE(testGroupingMaskOptimisation) {
