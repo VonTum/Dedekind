@@ -158,7 +158,7 @@ BooleanFunction<Variables> getGroupingMask(const BooleanFunction<Variables>& gra
 }
 
 template<unsigned int Variables>
-uint64_t separateSingletons(BooleanFunction<Variables>& graph) {
+uint64_t eliminateSingletons(BooleanFunction<Variables>& graph) {
 	BooleanFunction<Variables> groupingMask = getGroupingMask(graph);
 
 	BooleanFunction<Variables> singletons = andnot(graph, groupingMask);
@@ -172,24 +172,30 @@ uint64_t separateSingletons(BooleanFunction<Variables>& graph) {
 template<unsigned int Variables>
 uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph, const BooleanFunction<Variables>& initialGuess) {
 	assert(!graph.isEmpty());
-	uint64_t totalConnectedComponents = 0;
+	assert(!initialGuess.isEmpty());
+	assert(initialGuess.isSubSetOf(graph));
 
-	BooleanFunction<Variables> expandedUp = initialGuess;
+	uint64_t totalConnectedComponents = 1;
 
-	do {
-		totalConnectedComponents++;
-		expandedUp = BooleanFunction<Variables>::empty();
-		expandedUp.add(graph.getFirst()); // picks the smallest component, no expansion downward, first expand upward
+	BooleanFunction<Variables> expandedDown = initialGuess;
 
-		expandedUp = expandedUp.monotonizeUp() & graph; // will always be an expansion, since singletons have been filtered out first
+	while(true) {
 		do {
-			BooleanFunction<Variables> expandedDown = expandedUp.monotonizeDown() & graph;
-			if(expandedDown == expandedUp) break;
-			expandedUp = expandedDown.monotonizeUp() & graph;
-			if(expandedDown == expandedUp) break;
-		} while(true); // can't just test expandedDown here for some stupid reason, not in scope
-		graph = andnot(graph, expandedUp);
-	} while(!graph.isEmpty());
+			BooleanFunction<Variables> expandedUp = expandedDown.monotonizeUp() & graph;
+			if(expandedUp == expandedDown) break;
+			expandedDown = expandedUp.monotonizeDown() & graph;
+			if(expandedUp == expandedDown) break;
+		} while(true); // can't just test expandedUp here for some stupid reason, not in scope
+		graph = andnot(graph, expandedDown);
+
+		if(graph.isEmpty()) break;
+
+		totalConnectedComponents++;
+		expandedDown = BooleanFunction<Variables>::empty();
+		expandedDown.add(graph.getLast()); // picks the largest component, first expand downward
+
+		expandedDown = expandedDown.monotonizeDown() & graph; // will always be an expansion, since singletons have been filtered out first
+	}
 
 	return totalConnectedComponents;
 }
@@ -200,8 +206,8 @@ uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph) {
 	assert(!graph.isEmpty());
 	
 	BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
-	initialGuess.add(graph.getFirst());
-	initialGuess = initialGuess.monotonizeUp() & graph;
+	initialGuess.add(graph.getLast());
+	initialGuess = initialGuess.monotonizeDown() & graph;
 
 	return countConnectedVeryFast<Variables>(graph, initialGuess);
 }

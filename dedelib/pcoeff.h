@@ -16,6 +16,8 @@ constexpr size_t TOPS_PER_BLOCK = 4;
 constexpr double swapperCutoff = 0.5;
 static size_t totalPCoeffs(0);
 
+static uint64_t preconnectHistogram[50];
+
 template<unsigned int Variables>
 uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Variables>& bot) {
 	size_t connectCount = countConnected(top - bot, bot);
@@ -41,8 +43,8 @@ uint64_t computePCoefficient(const SmallVector<Monotonic<Variables>, getMaxLayer
 }
 
 template<unsigned int Variables>
-uint64_t computePCoefficientFast(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& splitTop, const BooleanFunction<Variables>& graph) {
-	size_t connectCount = countConnectedVeryFast(graph); // TODOO
+uint64_t computePCoefficientFast(const BooleanFunction<Variables>& initialGuess, const BooleanFunction<Variables>& graph) {
+	size_t connectCount = countConnectedVeryFast(initialGuess, graph);
 	++totalPCoeffs;
 	++connectedHistogram[connectCount];
 	uint64_t pcoeff = uint64_t(1) << connectCount;
@@ -80,11 +82,49 @@ uint64_t computePermutationPCoeffSum(const SmallVector<Monotonic<Variables>, get
 }
 
 template<unsigned int Variables>
-uint64_t computePermutationPCoeffSumFast(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& splitTop, const Monotonic<Variables>& top, const Monotonic<Variables>& botClass) {
+uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> splitTop, const Monotonic<Variables>& top, const Monotonic<Variables>& botClass) {
+	
+	std::array<int, Variables + 1> botLayerSizes = getLayerSizes(botClass);
+
+	preCombineConnected(splitTop, botLayerSizes);
+	preconnectHistogram[splitTop.size()]++;
+	Monotonic<Variables> biggestGuess = splitTop[0];
+	size_t biggestGuessSize = biggestGuess.size();
+	for(size_t i = 1; i < splitTop.size(); i++) {
+		size_t guessSize = splitTop[i].size();
+		if(guessSize > biggestGuessSize) {
+			biggestGuessSize = guessSize;
+			biggestGuess = splitTop[i];
+		}
+	}
+
+	std::array<int, Variables + 1> biggestGuessSizes = getLayerSizes(biggestGuess);
+	for(size_t i = 0; i < Variables + 1; i++) {
+		if(biggestGuessSizes[i] > botLayerSizes[i]) { // there is one layer which will always be larger than bot, so it's guaranteed to be included
+			uint64_t totalPCoeff = 0;
+			botClass.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
+				if(permutedBot <= top) {
+					BooleanFunction<Variables> graph = andnot(top.bf, permutedBot.bf);
+					BooleanFunction<Variables> initialGuess = biggestGuess.bf & graph;
+					assert(!initialGuess.isEmpty());
+					totalPCoeff += computePCoefficientFast(graph, initialGuess);
+				}
+			});
+			return totalPCoeff;
+		}
+	}
+
 	uint64_t totalPCoeff = 0;
 	botClass.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
 		if(permutedBot <= top) {
-			totalPCoeff += computePCoefficientFast(splitTop, andnot(top.bf, permutedBot.bf));
+			BooleanFunction<Variables> graph = andnot(top.bf, permutedBot.bf);
+			//totalPCoeff += eliminateSingletons(graph); // seems to have no effect, or slight pessimization
+
+			size_t initialGuessIndex = graph.getLast();
+			BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
+			initialGuess.add(initialGuessIndex);
+			initialGuess = initialGuess.monotonizeDown() & graph;
+			totalPCoeff += computePCoefficientFast(graph, initialGuess);
 		}
 	});
 	return totalPCoeff;

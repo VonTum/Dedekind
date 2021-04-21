@@ -113,12 +113,12 @@ public:
 	}
 
 	constexpr void add(FunctionInput::underlyingType index) {
-		assert(bitset.get(index) == false); // assert bit was off
+		//assert(bitset.get(index) == false); // assert bit was off
 		return bitset.set(index);
 	}
 
 	constexpr void remove(FunctionInput::underlyingType index) {
-		assert(bitset.get(index) == true); // assert bit was on
+		//assert(bitset.get(index) == true); // assert bit was on
 		return bitset.reset(index);
 	}
 

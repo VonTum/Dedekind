@@ -94,16 +94,16 @@ inline int clz8(uint8_t x) {
 }
 #else
 inline int clz64(uint64_t x) {
-	return sizeof(long long) * 8 - __builtin_clzll(x);
+	return __builtin_clzll(x) ^ (sizeof(unsigned long long) * 8 - 1); // gcc can optimize these into a single 'bsr' instruction
 }
 inline int clz32(uint32_t x) {
-	return sizeof(long) * 8 - __builtin_clzl(x);
+	return __builtin_clzl(x) ^ (sizeof(unsigned long) * 8 - 1);
 }
 inline int clz16(uint16_t x) {
-	return sizeof(int) * 8 - __builtin_clz(x);
+	return __builtin_clz(x) ^ (sizeof(unsigned int) * 8 - 1);
 }
 inline int clz8(uint8_t x) {
-	return sizeof(int) * 8 - __builtin_clz(x);
+	return __builtin_clz(x) ^ (sizeof(unsigned int) * 8 - 1);
 }
 #endif
 
