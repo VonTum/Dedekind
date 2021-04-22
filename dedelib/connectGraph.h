@@ -157,15 +157,48 @@ BooleanFunction<Variables> getGroupingMask(const BooleanFunction<Variables>& gra
 	}
 }
 
+
+template<unsigned int Variables>
+void eliminateLeaves(BooleanFunction<Variables>& graph) {
+	// all elements with exactly one connection upward can be removed, they are leaves that do not affect the group count
+	BooleanFunction<Variables> shiftedDown0 = (BooleanFunction<Variables>::varMask(0) & graph.bitset) >> 1;
+	BooleanFunction<Variables> occuredAtLeastOnce = shiftedDown0;
+	BooleanFunction<Variables> blockedElements = BooleanFunction<Variables>::empty();
+
+	for(unsigned int v = 1; v < Variables; v++) {
+		BooleanFunction<Variables> shiftedFromAbove((BooleanFunction<Variables>::varMask(v) & graph.bitset) >> (size_t(1) << v));
+		blockedElements |= occuredAtLeastOnce & shiftedFromAbove;
+		occuredAtLeastOnce |= shiftedFromAbove;
+	}
+
+	// need to also block from below
+	for(unsigned int v = 0; v < Variables; v++) {
+		BooleanFunction<Variables> shiftedFromAbove(andnot(graph.bitset, BooleanFunction<Variables>::varMask(v)) << (size_t(1) << v));
+		blockedElements |= shiftedFromAbove;
+	}
+
+	BooleanFunction<Variables> elementsToCull = andnot(occuredAtLeastOnce, blockedElements);
+
+	graph = andnot(graph, elementsToCull);
+}
+
+
+static uint64_t singletonCountHistogram[50];
+
 template<unsigned int Variables>
 uint64_t eliminateSingletons(BooleanFunction<Variables>& graph) {
+	eliminateLeaves(graph);
+
 	BooleanFunction<Variables> groupingMask = getGroupingMask(graph);
 
 	BooleanFunction<Variables> singletons = andnot(graph, groupingMask);
+	size_t singletonCount = singletons.size();
 
 	graph = graph & groupingMask; // remove singleton elements, reduces rest of the workload
 
-	return singletons.size();
+	singletonCountHistogram[singletonCount]++;
+
+	return singletonCount;
 }
 
 // assumes that no subgraph contains an element which is dominated by an element of another subgraph

@@ -48,7 +48,7 @@ template<unsigned int Variables>
 BooleanFunction<Variables> generateMBF() {
 	BooleanFunction<Variables> result = BooleanFunction<Variables>::empty();
 
-	unsigned int numberOfSeeds = rand() % (Variables * 2);
+	unsigned int numberOfSeeds = Variables * 2;
 
 	for(unsigned int i = 0; i < numberOfSeeds; i++) {
 		result.bitset.set(rand() % (1 << Variables));

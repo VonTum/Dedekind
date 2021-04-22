@@ -35,6 +35,12 @@ static void printHistogramAndPCoeffs(unsigned int Variables) {
 		std::cout << i << ": " << preconnectHistogram[i] << "\n";
 		preconnectHistogram[i] = 0;
 	}
+
+	std::cout << "Singleton counts: \n";
+	for(size_t i = 0; i <= getMaxLayerWidth(Variables); i++) {
+		std::cout << i << ": " << singletonCountHistogram[i] << "\n";
+		singletonCountHistogram[i] = 0;
+	}
 }
 
 template<unsigned int Variables>
@@ -62,8 +68,16 @@ uint64_t computePCoefficient(const SmallVector<Monotonic<Variables>, getMaxLayer
 }
 
 template<unsigned int Variables>
-uint64_t computePCoefficientFast(const BooleanFunction<Variables>& initialGuess, const BooleanFunction<Variables>& graph) {
-	size_t connectCount = countConnectedVeryFast(initialGuess, graph);
+uint64_t computePCoefficientFast(const BooleanFunction<Variables>& graph, const BooleanFunction<Variables>& initialGuess) {
+	size_t connectCount = countConnectedVeryFast(graph, initialGuess);
+	++totalPCoeffs;
+	++connectedHistogram[connectCount];
+	uint64_t pcoeff = uint64_t(1) << connectCount;
+	return pcoeff;
+}
+template<unsigned int Variables>
+uint64_t computePCoefficientFast(const BooleanFunction<Variables>& graph) {
+	size_t connectCount = countConnectedVeryFast(graph);
 	++totalPCoeffs;
 	++connectedHistogram[connectCount];
 	uint64_t pcoeff = uint64_t(1) << connectCount;
@@ -141,14 +155,14 @@ uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMa
 		}
 	}
 
-	switch(splitTop.size()) {
+	/*switch(splitTop.size()) {
 	case 1:
 		return sumPermutedPCoeffsOver(top, botClass, [&](const BooleanFunction<Variables>& graph) {
 			++totalPCoeffs;
 			++connectedHistogram[1];
 			return 2;
 		});
-	/*case 2:
+	case 2:
 	{
 		Monotonic<Variables> overlap01 = splitTop[0] & splitTop[1];
 		return sumPermutedPCoeffsOver(top, botClass, [&](const BooleanFunction<Variables>& graph) {
@@ -158,8 +172,8 @@ uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMa
 				return 4; // 1 group
 			}
 		});
-	}*/
-	/*case 3:
+	}
+	case 3:
 	{
 		Monotonic<Variables> overlap01 = splitTop[0] & splitTop[1];
 		Monotonic<Variables> overlap02 = splitTop[0] & splitTop[2];
@@ -174,26 +188,36 @@ uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMa
 			int overlapsResults[4]{8,4,2,2};
 			return overlapsResults[numOverlaps];
 		});
-	}*/
 	}
+	}*/
 	std::array<int, Variables + 1> biggestGuessSizes = getLayerSizes(biggestGuess);
 
-	if(atLeastOneIsLarger(biggestGuessSizes, botLayerSizes)) { // there is one layer which will always be larger than bot, so it's guaranteed to be included
-		return sumPermutedPCoeffsOver(top, botClass, [&](const BooleanFunction<Variables>& graph) {
+	if(atLeastOneIsLarger(biggestGuessSizes, botLayerSizes) && biggestGuess.asAntiChain().size() >= 2) { // there is one layer which will always be larger than bot, so it's guaranteed to be included
+		return sumPermutedPCoeffsOver(top, botClass, [&](BooleanFunction<Variables> graph) {
+			uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
+
 			BooleanFunction<Variables> initialGuess = biggestGuess.bf & graph;
 			assert(!initialGuess.isEmpty());
-			return computePCoefficientFast(graph, initialGuess);
+			connectCount += countConnectedVeryFast(graph, initialGuess);
+			++totalPCoeffs;
+			++connectedHistogram[connectCount];
+			return uint64_t(1) << connectCount;
 		});
 	}
 
-	return sumPermutedPCoeffsOver(top, botClass, [&](const BooleanFunction<Variables>& graph) {
-		//totalPCoeff += eliminateSingletons(graph); // seems to have no effect, or slight pessimization
+	return sumPermutedPCoeffsOver(top, botClass, [&](BooleanFunction<Variables> graph) {
+		uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
 
-		size_t initialGuessIndex = graph.getLast();
-		BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
-		initialGuess.add(initialGuessIndex);
-		initialGuess = initialGuess.monotonizeDown() & graph;
-		return computePCoefficientFast(graph, initialGuess);
+		if(!graph.isEmpty()) {
+			size_t initialGuessIndex = graph.getLast();
+			BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
+			initialGuess.add(initialGuessIndex);
+			initialGuess = initialGuess.monotonizeDown() & graph;
+			connectCount += countConnectedVeryFast(graph, initialGuess);
+		}
+		++totalPCoeffs;
+		++connectedHistogram[connectCount];
+		return uint64_t(1) << connectCount;
 	});
 }
 
