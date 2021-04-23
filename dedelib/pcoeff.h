@@ -228,11 +228,11 @@ u192 basicSymmetriesPCoeffMethod() {
 	std::mutex totalMutex;
 	u192 total = 0;
 
-	for(size_t topLayer = 0; topLayer < (1 << Variables) + 1; topLayer++) {
-		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = allIntervalSizes.layers[topLayer];
-		std::cout << "Layer " << topLayer << "  ";
+	for(size_t topLayerI = 0; topLayerI < (1 << Variables) + 1; topLayerI++) {
+		const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizes.layers[topLayerI];
+		std::cout << "Layer " << topLayerI << "  ";
 		auto start = std::chrono::high_resolution_clock::now();
-		iterCollectionInParallel(curLayer, [&](const KeyValue<Monotonic<Variables>, ExtraData>& topKV) {
+		iterCollectionInParallel(topLayer, [&](const KeyValue<Monotonic<Variables>, ExtraData>& topKV) {
 			u128 subTotal = 0;
 			const Monotonic<Variables>& top = topKV.key;
 
@@ -259,7 +259,7 @@ u192 basicSymmetriesPCoeffMethod() {
 
 		//std::cout << total;
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
-		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayer)) << "us per mbf" << std::endl;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayerI) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayerI)) << "us per mbf" << std::endl;
 	}
 
 	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
@@ -309,11 +309,11 @@ u192 noCanonizationPCoeffMethod() {
 	// size to top is D(Variables), one instance, size to bot is 1. pcoeff = 1
 	total += intervalSize0;
 	
-	for(int topLayer = 1; topLayer < (1 << Variables) + 1; topLayer++) {
-		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = allIntervalSizesAndDownLinks.layers[topLayer];
-		std::cout << "Layer " << topLayer << "  ";
+	for(int topLayerI = 1; topLayerI < (1 << Variables) + 1; topLayerI++) {
+		const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
+		std::cout << "Layer " << topLayerI << "  ";
 		auto start = std::chrono::high_resolution_clock::now();
-		iterCollectionInParallelWithPerThreadBuffer(iterInBlocks<TOPS_PER_BLOCK>(curLayer), []() {return SwapperLayers<Variables, BitSet<TOPS_PER_BLOCK>>(BitSet<TOPS_PER_BLOCK>::empty()); }, 
+		iterCollectionInParallelWithPerThreadBuffer(iterInBlocks<TOPS_PER_BLOCK>(topLayer), []() {return SwapperLayers<Variables, BitSet<TOPS_PER_BLOCK>>(BitSet<TOPS_PER_BLOCK>::empty()); }, 
 													[&](const SmallVector<const KeyValue<Monotonic<Variables>, ExtraData>*, TOPS_PER_BLOCK>& topKVs, SwapperLayers<Variables, BitSet<TOPS_PER_BLOCK>>& touchedEqClasses) {
 			touchedEqClasses.clearSource();
 			touchedEqClasses.clearDestination();
@@ -337,9 +337,9 @@ u192 noCanonizationPCoeffMethod() {
 			}
 			touchedEqClasses.pushNext();
 
-			int belowLayerI = topLayer - 1;
+			int belowLayerI = topLayerI - 1;
 			// skips the class itself as well as class 0
-			for(; belowLayerI > std::max(0, topLayer - 10); belowLayerI--) {
+			for(; belowLayerI > std::max(0, topLayerI - 10); belowLayerI--) {
 				const BakedMap<Monotonic<Variables>, ExtraData>& belowLayer = allIntervalSizesAndDownLinks.layers[belowLayerI];
 
 				// simplest first, just iter the whole layer
@@ -424,7 +424,7 @@ u192 noCanonizationPCoeffMethod() {
 			total += totalToAddToTotal;
 		});
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
-		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayer)) << "us per mbf" << std::endl;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayerI) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayerI)) << "us per mbf" << std::endl;
 	}
 
 	printHistogramAndPCoeffs(Variables);
@@ -434,7 +434,7 @@ u192 noCanonizationPCoeffMethod() {
 }
 
 template<unsigned int Variables>
-u192 computePCoeffSum(size_t topLayer, const KeyValue<Monotonic<Variables>, ExtraData>& topKV, const AllMBFMap<Variables, ExtraData>& allIntervalSizesAndDownLinks) {
+u192 computePCoeffSum(size_t topLayerI, const KeyValue<Monotonic<Variables>, ExtraData>& topKV, const AllMBFMap<Variables, ExtraData>& allIntervalSizesAndDownLinks) {
 	uint64_t withItself = topKV.value.intervalSizeToBottom;
 	uint64_t withBot = 2;
 	
@@ -443,7 +443,7 @@ u192 computePCoeffSum(size_t topLayer, const KeyValue<Monotonic<Variables>, Extr
 	AntiChain<Variables> topAC = topKV.key.asAntiChain();
 	SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> splitTopAC = splitAC(topAC);
 
-	for(int belowLayerI = topLayer - 1; belowLayerI > 0; belowLayerI--) {
+	for(int belowLayerI = topLayerI - 1; belowLayerI > 0; belowLayerI--) {
 		const BakedMap<Monotonic<Variables>, ExtraData>& belowLayer = allIntervalSizesAndDownLinks.layers[belowLayerI];
 
 		// simplest first, just iter the whole layer
@@ -468,20 +468,64 @@ u192 pcoeffMethodV2() {
 	// size to top is D(Variables), one instance, size to bot is 1. pcoeff = 1
 	total += allIntervalSizesAndDownLinks.layers.back()[0].value.intervalSizeToBottom;
 	
-	for(int topLayer = 1; topLayer < (1 << Variables) + 1; topLayer++) {
-		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = allIntervalSizesAndDownLinks.layers[topLayer];
-		std::cout << "Layer " << topLayer << "  ";
+	for(int topLayerI = 1; topLayerI < (1 << Variables) + 1; topLayerI++) {
+		const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
+		std::cout << "Layer " << topLayerI << "  ";
 		auto start = std::chrono::high_resolution_clock::now();
 		std::mutex totalMutex;
-		total += iterCollectionPartitionedWithSeparateTotals(curLayer, u192(0), [&](const KeyValue<Monotonic<Variables>, ExtraData>& topKV, u192& subTotal) {
-			subTotal += computePCoeffSum(topLayer, topKV, allIntervalSizesAndDownLinks);
+		total += iterCollectionPartitionedWithSeparateTotals(topLayer, u192(0), [&](const KeyValue<Monotonic<Variables>, ExtraData>& topKV, u192& subTotal) {
+			subTotal += computePCoeffSum(topLayerI, topKV, allIntervalSizesAndDownLinks);
 		}, [](u192& a, u192 b) {a += b; });
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
-		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayer)) << "us per mbf" << std::endl;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayerI) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayerI)) << "us per mbf" << std::endl;
 	}
 
 	printHistogramAndPCoeffs(Variables);
 	std::cout << "D(" << (Variables + 2) << ") = " << total << std::endl;
 
 	return total;
+}
+
+#include <random>
+
+template<unsigned int Variables>
+void pcoeffTimeEstimate() {
+	AllMBFMap<Variables, ExtraData> allIntervalSizesAndDownLinks = readAllMBFsMapExtraDownLinks<Variables>();
+
+	// size to top is D(Variables), one instance, size to bot is 1. pcoeff = 1
+	//total += allIntervalSizesAndDownLinks.layers.back()[0].value.intervalSizeToBottom;
+
+	std::default_random_engine generator;
+	std::mutex mtx;
+
+	double totalSeconds = 0.0;
+
+	iterCollectionInParallel(IntRange<int>{1, 1 << Variables}, [&](size_t topLayerI) {
+		const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
+		
+		auto start = std::chrono::high_resolution_clock::now();
+
+		mtx.lock();
+		//std::uniform_int_distribution<size_t> distribution(0, topLayerI);
+		//size_t selectedIndex = distribution(generator);
+		//const KeyValue<Monotonic<Variables>, ExtraData>& topKV = topLayer[selectedIndex];
+		const KeyValue<Monotonic<Variables>, ExtraData>& topKV = *topLayer.begin();
+		mtx.unlock();
+		assert(topKV.key.bf.isMonotonic());
+
+		u192 subTotal = computePCoeffSum(topLayerI, topKV, allIntervalSizesAndDownLinks);
+		
+		mtx.lock();
+		std::cout << "Layer " << topLayerI << "  " << subTotal << "\n";
+
+		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
+		double secondsTaken = timeTaken.count() / 1000000000.0;
+		double estTotalSeconds = secondsTaken * getLayerSize<Variables>(topLayerI);
+		std::cout << "time taken: " << secondsTaken << "s for 1 mbf, " << getLayerSize<Variables>(topLayerI) << " mbfs totalling " << estTotalSeconds << " core seconds in total" << std::endl;
+		totalSeconds += estTotalSeconds;
+		mtx.unlock();
+	});
+
+	printHistogramAndPCoeffs(Variables);
+	std::cout << "Estimated total seconds: " << totalSeconds << std::endl;
 }

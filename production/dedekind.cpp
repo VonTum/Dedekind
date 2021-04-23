@@ -649,7 +649,15 @@ inline void runCommands(const ParsedArgs& args) {
 		{"newPCoeff4", []() {pcoeffMethodV2<4>(); }},
 		{"newPCoeff5", []() {pcoeffMethodV2<5>(); }},
 		{"newPCoeff6", []() {pcoeffMethodV2<6>(); }},
-		{"newPCoeff7", []() {pcoeffMethodV2<7>(); }},
+		{"newPCoeff7", []() {pcoeffMethodV2<7>(); }}, 
+
+		{"pcoeffTimeEstimate1", []() {pcoeffTimeEstimate<1>(); }},
+		{"pcoeffTimeEstimate2", []() {pcoeffTimeEstimate<2>(); }},
+		{"pcoeffTimeEstimate3", []() {pcoeffTimeEstimate<3>(); }},
+		{"pcoeffTimeEstimate4", []() {pcoeffTimeEstimate<4>(); }},
+		{"pcoeffTimeEstimate5", []() {pcoeffTimeEstimate<5>(); }},
+		{"pcoeffTimeEstimate6", []() {pcoeffTimeEstimate<6>(); }},
+		{"pcoeffTimeEstimate7", []() {pcoeffTimeEstimate<7>(); }},
 	};
 
 	std::map<std::string, void(*)(const std::string&)> commandsWithArg{
