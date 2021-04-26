@@ -351,7 +351,8 @@ PerThreadTotals tjomnCountInParallel() {
 	BufferedMap<MBF, int> alltaus = generateNonEquivalentMonotonics<Variables>();
 	
 	IntervalSizeCache<Variables> intervalSizes = IntervalSizeCache<Variables>::generate();
-	return iterCollectionPartitionedWithSeparateTotalsWithBuffers(alltaus, PerThreadTotals{0, 0, 0}, [&](const KeyValue<MBF, int>& veetau, PerThreadTotals& localTotal, BufferedMap<AntiChain<Variables>, int>& bufSet) {
+	return iterCollectionPartitionedWithSeparateTotalsWithBuffers(alltaus, PerThreadTotals{0, 0, 0}, []() { return BufferedMap<AntiChain<Variables>, int>(dedekindNumbers[Variables]); }, 
+	[&](const KeyValue<MBF, int>& veetau, PerThreadTotals& localTotal, BufferedMap<AntiChain<Variables>, int>& bufSet) {
 		std::cout << '.' << std::flush;
 		
 		generateTausWithBuffers(veetau.key, bufSet, [&](const MBF& tau0, const MBF& tau1, const MBF& tau2, const MBF& minDelta, const MBF& maxDelta, unsigned int nr) {
@@ -386,8 +387,6 @@ PerThreadTotals tjomnCountInParallel() {
 		total.totalResult += localTotal.totalResult;
 		total.counting += localTotal.counting;
 		total.systemCount += localTotal.systemCount;
-	}, []() {
-		return BufferedMap<AntiChain<Variables>, int>(dedekindNumbers[Variables]);
 	});
 }
 

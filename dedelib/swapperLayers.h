@@ -56,6 +56,15 @@ struct SwapperLayers {
 		dirtyDestinationList.clear();
 	}
 
+	// expects a function of the form void(IndexType index, const T& item)
+	// the destination may be altered while this is running
+	template<typename Func>
+	void forEachSourceElement(const Func& func) {
+		for(const IndexType& dirtyIndex : dirtySourceList) {
+			func(dirtyIndex, sourceList[dirtyIndex]);
+		}
+	}
+
 	auto begin() { return this->dirtySourceList.begin(); }
 	const auto begin() const { return this->dirtySourceList.begin(); }
 	auto end() { return this->dirtySourceList.end(); }
