@@ -51,11 +51,13 @@ add_executable(tests
   tests/tjomnTests.cpp
 )
 add_executable(benchmarks
-  benchmarks/benchmarks.cpp
+  benchmarks/benchmark.cpp
   benchmarks/connectBenchmarks.cpp
 )
 
-target_link_libraries(dedekind dedelib)
+target_link_libraries(benchmarks dedelib)
 target_link_libraries(tests dedelib)
-target_link_libraries(dedekind pthread)
+target_link_libraries(production dedelib)
+target_link_libraries(indev dedelib)
+target_link_libraries(dedelib pthread)
 
