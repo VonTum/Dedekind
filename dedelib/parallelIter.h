@@ -4,7 +4,7 @@
 #include <mutex>
 #include <vector>
 
-#define NO_MULTITHREAD
+//#define NO_MULTITHREAD
 
 template<typename Func>
 void runInParallel(const Func& work) {
@@ -182,7 +182,7 @@ ThreadTotal iterCollectionPartitionedWithSeparateTotals(Collection& col, const T
 // localTotal = initialTotal
 // bufProducer = Buffer()
 template<typename Iter, typename IterEnd, typename ThreadTotal, typename Func, typename ThreadTotalMergeFunc, typename BufProducer>
-ThreadTotal finishIterPartitionedWithSeparateTotalsWithBuffers(Iter iter, IterEnd iterEnd, const ThreadTotal& initialPerThreadTotal, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc, const BufProducer& bufProducer) {
+ThreadTotal finishIterPartitionedWithSeparateTotalsWithBuffers(Iter iter, IterEnd iterEnd, const ThreadTotal& initialPerThreadTotal, const BufProducer& bufProducer, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc) {
 #ifndef NO_MULTITHREAD
 	unsigned int processorCount = std::thread::hardware_concurrency();
 	if(processorCount > 1) {
@@ -216,11 +216,11 @@ ThreadTotal finishIterPartitionedWithSeparateTotalsWithBuffers(Iter iter, IterEn
 }
 
 template<typename Collection, typename ThreadTotal, typename Func, typename ThreadTotalMergeFunc, typename BufProducer>
-ThreadTotal iterCollectionPartitionedWithSeparateTotalsWithBuffers(const Collection& col, const ThreadTotal& initialPerThreadTotal, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc, const BufProducer& bufProducer) {
-	return finishIterPartitionedWithSeparateTotalsWithBuffers(col.begin(), col.end(), initialPerThreadTotal, funcToRun, totalMergeFunc, bufProducer);
+ThreadTotal iterCollectionPartitionedWithSeparateTotalsWithBuffers(const Collection& col, const ThreadTotal& initialPerThreadTotal, const BufProducer& bufProducer, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc) {
+	return finishIterPartitionedWithSeparateTotalsWithBuffers(col.begin(), col.end(), initialPerThreadTotal, bufProducer, funcToRun, totalMergeFunc);
 }
 template<typename Collection, typename ThreadTotal, typename Func, typename ThreadTotalMergeFunc, typename BufProducer>
-ThreadTotal iterCollectionPartitionedWithSeparateTotalsWithBuffers(Collection& col, const ThreadTotal& initialPerThreadTotal, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc, const BufProducer& bufProducer) {
-	return finishIterPartitionedWithSeparateTotalsWithBuffers(col.begin(), col.end(), initialPerThreadTotal, funcToRun, totalMergeFunc, bufProducer);
+ThreadTotal iterCollectionPartitionedWithSeparateTotalsWithBuffers(Collection& col, const ThreadTotal& initialPerThreadTotal, const BufProducer& bufProducer, const Func& funcToRun, const ThreadTotalMergeFunc& totalMergeFunc) {
+	return finishIterPartitionedWithSeparateTotalsWithBuffers(col.begin(), col.end(), initialPerThreadTotal, bufProducer, funcToRun, totalMergeFunc);
 }
 

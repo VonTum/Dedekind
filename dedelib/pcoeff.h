@@ -18,6 +18,9 @@ static size_t totalPCoeffs(0);
 
 static uint64_t preconnectHistogram[50];
 
+// counts how often if(bot <= top)
+static uint64_t successfulBots = 0;
+static uint64_t failedBots = 0;
 
 static void printHistogramAndPCoeffs(unsigned int Variables) {
 	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
@@ -41,6 +44,10 @@ static void printHistogramAndPCoeffs(unsigned int Variables) {
 		std::cout << i << ": " << singletonCountHistogram[i] << "\n";
 		singletonCountHistogram[i] = 0;
 	}
+
+	std::cout << "Bottoms: " << successfulBots << "/" << (successfulBots + failedBots) << " bots were (bot <= top) " << (100.0 * successfulBots / (successfulBots + failedBots)) << "%" << std::endl;
+	successfulBots = 0;
+	failedBots = 0;
 }
 
 template<unsigned int Variables>
@@ -109,6 +116,9 @@ uint64_t computePermutationPCoeffSum(const SmallVector<Monotonic<Variables>, get
 	botClass.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
 		if(permutedBot <= top) {
 			totalPCoeff += computePCoefficient(splitTop, permutedBot);
+			successfulBots++;
+		} else {
+			failedBots++;
 		}
 	});
 	return totalPCoeff;
@@ -132,6 +142,9 @@ uint64_t sumPermutedPCoeffsOver(const Monotonic<Variables>& top, const Monotonic
 		if(permutedBot <= top) {
 			BooleanFunction<Variables> graph = andnot(top.bf, permutedBot.bf);
 			totalPCoeff += computePCoeff(graph);
+			successfulBots++;
+		} else {
+			failedBots++;
 		}
 	});
 	return totalPCoeff;
@@ -280,11 +293,14 @@ std::array<u128, TOPS_PER_BLOCK> getBotToSubTotals(
 	botKV.key.forEachPermutation([&](const Monotonic<Variables>& bot) {
 		for(size_t i = 0; i < size; i++) {
 			if(bot <= topMBFs[i]) {
+				successfulBots++;
 				uint64_t pcoeff = computePCoefficient(splitTops[i], bot);
 
 				//std::cout << bot << ": " << pcoeff << ", ";
 
 				pcoeffSums[i] += pcoeff;
+			} else {
+				failedBots++;
 			}
 		}
 	});
@@ -434,7 +450,10 @@ u192 noCanonizationPCoeffMethod() {
 }
 
 template<unsigned int Variables>
-u192 computePCoeffSum(size_t topLayerI, const KeyValue<Monotonic<Variables>, ExtraData>& topKV, const AllMBFMap<Variables, ExtraData>& allIntervalSizesAndDownLinks) {
+u192 computePCoeffSum(size_t topLayerI, size_t topIndex, const AllMBFMap<Variables, ExtraData>& allIntervalSizesAndDownLinks, SwapperLayers<Variables, bool>& swapper) {
+	const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
+	const KeyValue<Monotonic<Variables>, ExtraData>& topKV = topLayer[topIndex];
+
 	uint64_t withItself = topKV.value.intervalSizeToBottom;
 	uint64_t withBot = 2;
 	
@@ -443,15 +462,41 @@ u192 computePCoeffSum(size_t topLayerI, const KeyValue<Monotonic<Variables>, Ext
 	AntiChain<Variables> topAC = topKV.key.asAntiChain();
 	SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> splitTopAC = splitAC(topAC);
 
+	swapper.clearSource();
+	swapper.clearDestination();
+
+	DownConnection* initialDownConnectionsStart = topKV.value.downConnections;
+	DownConnection* initialDownConnectionsEnd = topLayer[topIndex + 1].value.downConnections;
+
+	for(DownConnection* cur = initialDownConnectionsStart; cur != initialDownConnectionsEnd; ++cur) {
+		assert(cur->id < getLayerSize<Variables>(topLayerI-1));
+		swapper.set(cur->id);
+	}
+
+	swapper.pushNext();
+
 	for(int belowLayerI = topLayerI - 1; belowLayerI > 0; belowLayerI--) {
 		const BakedMap<Monotonic<Variables>, ExtraData>& belowLayer = allIntervalSizesAndDownLinks.layers[belowLayerI];
 
-		// simplest first, just iter the whole layer
-		for(const KeyValue<Monotonic<Variables>, ExtraData>& botKV : belowLayer) {
+		swapper.forEachSourceElement([&](size_t index, bool wasContained) {
+			assert(wasContained);
+			assert(index < getLayerSize<Variables>(belowLayerI));
+
+			const KeyValue<Monotonic<Variables>, ExtraData>& botKV = belowLayer[index];
+
+			DownConnection* downConnectionsStart = botKV.value.downConnections;
+			DownConnection* downConnectionsEnd = belowLayer[index+1].value.downConnections;
+
+			for(DownConnection* cur = downConnectionsStart; cur != downConnectionsEnd; ++cur) {
+				assert(cur->id < getLayerSize<Variables>(belowLayerI-1));
+				swapper.set(cur->id);
+			}
+
 			uint64_t totalPCoeff = computePermutationPCoeffSumFast(splitTopAC, topKV.key, botKV.key);
 			uint64_t duplication = factorial(Variables) / botKV.value.symmetries;
 			subTotal += umul128(totalPCoeff / duplication, botKV.value.intervalSizeToBottom);
-		}
+		});
+		swapper.pushNext();
 	}
 
 	const ExtraData& topKVDual = allIntervalSizesAndDownLinks.get(topKV.key.dual().canonize());
@@ -473,8 +518,8 @@ u192 pcoeffMethodV2() {
 		std::cout << "Layer " << topLayerI << "  ";
 		auto start = std::chrono::high_resolution_clock::now();
 		std::mutex totalMutex;
-		total += iterCollectionPartitionedWithSeparateTotals(topLayer, u192(0), [&](const KeyValue<Monotonic<Variables>, ExtraData>& topKV, u192& subTotal) {
-			subTotal += computePCoeffSum(topLayerI, topKV, allIntervalSizesAndDownLinks);
+		total += iterCollectionPartitionedWithSeparateTotalsWithBuffers(IntRange<size_t>{size_t(0), topLayer.size()}, u192(0), [&]() {return SwapperLayers<Variables, bool>(); }, [&](size_t topIdx, u192& subTotal, SwapperLayers<Variables, bool>& swapper) {
+			subTotal += computePCoeffSum(topLayerI, topIdx, allIntervalSizesAndDownLinks, swapper);
 		}, [](u192& a, u192 b) {a += b; });
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
 		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayerI) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayerI)) << "us per mbf" << std::endl;
@@ -506,14 +551,12 @@ void pcoeffTimeEstimate() {
 		auto start = std::chrono::high_resolution_clock::now();
 
 		mtx.lock();
-		//std::uniform_int_distribution<size_t> distribution(0, topLayerI);
-		//size_t selectedIndex = distribution(generator);
-		//const KeyValue<Monotonic<Variables>, ExtraData>& topKV = topLayer[selectedIndex];
-		const KeyValue<Monotonic<Variables>, ExtraData>& topKV = *topLayer.begin();
+		std::uniform_int_distribution<size_t> distribution(0, getLayerSize<Variables>(topLayerI));
+		size_t selectedIndex = distribution(generator);
 		mtx.unlock();
-		assert(topKV.key.bf.isMonotonic());
 
-		u192 subTotal = computePCoeffSum(topLayerI, topKV, allIntervalSizesAndDownLinks);
+		SwapperLayers<Variables, bool> swapper;
+		u192 subTotal = computePCoeffSum(topLayerI, selectedIndex, allIntervalSizesAndDownLinks, swapper);
 		
 		mtx.lock();
 		std::cout << "Layer " << topLayerI << "  " << subTotal << "\n";
