@@ -24,30 +24,36 @@ static uint64_t failedBots = 0;
 
 static void printHistogramAndPCoeffs(unsigned int Variables) {
 	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
+	//totalPCoeffs = 0;
 
 	std::cout << "Connections: \n";
 	for(size_t i = 0; i <= getMaxLayerWidth(Variables); i++) {
 		std::cout << i << ": " << connectedHistogram[i] << "\n";
-		connectedHistogram[i] = 0;
+		//connectedHistogram[i] = 0;
 	}
 
-	totalPCoeffs = 0;
 
 	std::cout << "Preconnections: \n";
 	for(size_t i = 0; i <= getMaxLayerWidth(Variables); i++) {
 		std::cout << i << ": " << preconnectHistogram[i] << "\n";
-		preconnectHistogram[i] = 0;
+		//preconnectHistogram[i] = 0;
 	}
 
 	std::cout << "Singleton counts: \n";
 	for(size_t i = 0; i <= getMaxLayerWidth(Variables); i++) {
 		std::cout << i << ": " << singletonCountHistogram[i] << "\n";
-		singletonCountHistogram[i] = 0;
+		//singletonCountHistogram[i] = 0;
+	}
+
+	std::cout << "Cycles taken: \n";
+	for(size_t i = 0; i < 100; i++) {
+		std::cout << i << ": " << cyclesHistogram[i] << "\n";
+		//cyclesHistogram[i] = 0;
 	}
 
 	std::cout << "Bottoms: " << successfulBots << "/" << (successfulBots + failedBots) << " bots were (bot <= top) " << (100.0 * successfulBots / (successfulBots + failedBots)) << "%" << std::endl;
-	successfulBots = 0;
-	failedBots = 0;
+	//successfulBots = 0;
+	//failedBots = 0;
 }
 
 template<unsigned int Variables>
@@ -568,6 +574,39 @@ void pcoeffTimeEstimate() {
 		totalSeconds += estTotalSeconds;
 		mtx.unlock();
 	});
+
+	printHistogramAndPCoeffs(Variables);
+	std::cout << "Estimated total seconds: " << totalSeconds << std::endl;
+}
+
+template<unsigned int Variables>
+void pcoeffLayerElementStats(size_t topLayerI) {
+	AllMBFMap<Variables, ExtraData> allIntervalSizesAndDownLinks = readAllMBFsMapExtraDownLinks<Variables>();
+
+	// size to top is D(Variables), one instance, size to bot is 1. pcoeff = 1
+	//total += allIntervalSizesAndDownLinks.layers.back()[0].value.intervalSizeToBottom;
+
+	std::default_random_engine generator;
+
+	double totalSeconds = 0.0;
+
+	const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
+
+	auto start = std::chrono::high_resolution_clock::now();
+
+	std::uniform_int_distribution<size_t> distribution(0, getLayerSize<Variables>(topLayerI));
+	size_t selectedIndex = distribution(generator);
+
+	SwapperLayers<Variables, bool> swapper;
+	u192 subTotal = computePCoeffSum(topLayerI, selectedIndex, allIntervalSizesAndDownLinks, swapper);
+
+	std::cout << "Layer " << topLayerI << "  " << subTotal << "\n";
+
+	auto timeTaken = std::chrono::high_resolution_clock::now() - start;
+	double secondsTaken = timeTaken.count() / 1000000000.0;
+	double estTotalSeconds = secondsTaken * getLayerSize<Variables>(topLayerI);
+	std::cout << "time taken: " << secondsTaken << "s for 1 mbf, " << getLayerSize<Variables>(topLayerI) << " mbfs totalling " << estTotalSeconds << " core seconds in total" << std::endl;
+	totalSeconds += estTotalSeconds;
 
 	printHistogramAndPCoeffs(Variables);
 	std::cout << "Estimated total seconds: " << totalSeconds << std::endl;

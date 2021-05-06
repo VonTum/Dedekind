@@ -201,6 +201,8 @@ uint64_t eliminateSingletons(BooleanFunction<Variables>& graph) {
 	return singletonCount;
 }
 
+static uint64_t cyclesHistogram[100];
+
 // assumes that no subgraph contains an element which is dominated by an element of another subgraph
 template<unsigned int Variables>
 uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph, const BooleanFunction<Variables>& initialGuess) {
@@ -212,8 +214,11 @@ uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph, const BooleanF
 
 	BooleanFunction<Variables> expandedDown = initialGuess;
 
+	int totalCycles = 0;
+
 	while(true) {
 		do {
+			totalCycles++;
 			BooleanFunction<Variables> expandedUp = expandedDown.monotonizeUp() & graph;
 			if(expandedUp == expandedDown) break;
 			expandedDown = expandedUp.monotonizeDown() & graph;
@@ -229,6 +234,8 @@ uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph, const BooleanF
 
 		expandedDown = expandedDown.monotonizeDown() & graph; // will always be an expansion, since singletons have been filtered out first
 	}
+
+	cyclesHistogram[totalCycles]++;
 
 	return totalConnectedComponents;
 }

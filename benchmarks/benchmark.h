@@ -8,5 +8,5 @@ public:
 	virtual ~Benchmark() {}
 	virtual void init() {}
 	virtual void run() = 0;
-	virtual void printResults(double timeTaken) {}
+	virtual void printResults(double deltaTimeMS) {}
 };

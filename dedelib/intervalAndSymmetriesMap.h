@@ -8,19 +8,25 @@ struct DownConnection {
 	uint32_t id;
 };
 
-struct ExtraData {
+struct IntervalSymmetry {
 	uint64_t symmetries : 16;
 	uint64_t intervalSizeToBottom : 48;
+};
+
+struct ExtraData : public IntervalSymmetry {
+	ExtraData() = default;
+	ExtraData(const IntervalSymmetry& is) : IntervalSymmetry(is) {}
+	ExtraData& operator=(const IntervalSymmetry& is) { symmetries = is.symmetries; intervalSizeToBottom = is.intervalSizeToBottom; return *this; }
 	DownConnection* downConnections;
 };
 
-void serializeExtraData(const ExtraData& item, std::ofstream& os) {
+void serializeExtraData(const IntervalSymmetry& item, std::ofstream& os) {
 	serializeU16(static_cast<uint16_t>(item.symmetries), os);
 	serializeU48(item.intervalSizeToBottom, os);
 }
 
-ExtraData deserializeExtraData(std::ifstream& is) {
-	ExtraData result;
+IntervalSymmetry deserializeExtraData(std::ifstream& is) {
+	IntervalSymmetry result;
 	result.symmetries = deserializeU16(is);
 	result.intervalSizeToBottom = deserializeU48(is);
 	return result;
@@ -103,7 +109,7 @@ AllMBFMap<Variables, ExtraData> readAllMBFsMapExtraDownLinks() {
 
 template<unsigned int Variables>
 void computeDPlus1() {
-	std::ifstream intervals(FileName::allIntervals(Variables), std::ios::binary);
+	std::ifstream intervalSymmetries(FileName::allIntervalSymmetries(Variables), std::ios::binary);
 
 	u128 totalWork = 0;
 	u128 dedekindNumber = 0;
@@ -111,21 +117,23 @@ void computeDPlus1() {
 		std::cout << "Layer " << layer << ": ";
 		auto start = std::chrono::high_resolution_clock::now();
 
-		KeyValue<Monotonic<Variables>, uint64_t>* foundLayer = readBufFromFile<Variables, uint64_t>(intervals, layer, [](std::ifstream& is) {return deserializeU64(is); });
+		KeyValue<Monotonic<Variables>, IntervalSymmetry>* foundLayer = readBufFromFile<Variables, IntervalSymmetry>(intervalSymmetries, layer, deserializeExtraData);
 		size_t size = getLayerSize<Variables>(layer);
 
 		for(size_t i = 0; i < size; i++) {
-			totalWork += u128(foundLayer[i].value);
+			totalWork += u128(foundLayer[i].value.intervalSizeToBottom);
 		}
 
-		u128 fullTotalForThisLayer = finishIterPartitionedWithSeparateTotals(foundLayer, foundLayer + size, u128(0), [&](const KeyValue<Monotonic<Variables>, uint64_t>& kv, u128& localTotal) {
-			localTotal += umul128(kv.value, kv.key.bf.countNonDuplicatePermutations());
+		u128 fullTotalForThisLayer = finishIterPartitionedWithSeparateTotals(foundLayer, foundLayer + size, u128(0), [&](const KeyValue<Monotonic<Variables>, IntervalSymmetry>& kv, u128& localTotal) {
+			localTotal += umul128(kv.value.intervalSizeToBottom, kv.value.symmetries);
 		}, [](u128& a, const u128& b) {a += b; });
 
 		dedekindNumber += fullTotalForThisLayer;
 
 		double deltaMicros = (std::chrono::high_resolution_clock::now() - start).count() / 1000.0;
 		std::cout << " Time taken: " << deltaMicros / 1000000.0 << "s for " << size << " mbfs at " << deltaMicros / size << "us per mbf" << std::endl;
+
+		delete[] foundLayer;
 	}
 
 	std::cout << "Amount of work: " << totalWork << std::endl;

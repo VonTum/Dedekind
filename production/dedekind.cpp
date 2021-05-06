@@ -526,6 +526,21 @@ void doRevolution() {
 	revolutionParallel<DedekindOrder - 3>();
 }
 
+
+template<unsigned int DedekindOrder>
+void benchPCoeffLayerElementStats(size_t topLayer) {
+	std::atomic<bool> shouldStop(false);
+	std::thread diagThread([&]() {
+		while(!shouldStop) {
+			printHistogramAndPCoeffs(DedekindOrder);
+			std::this_thread::sleep_for(std::chrono::seconds(10));
+		}
+	});
+	pcoeffLayerElementStats<DedekindOrder>(topLayer);
+	shouldStop = true;
+	diagThread.join();
+}
+
 inline void runCommands(const ParsedArgs& args) {
 	std::map<std::string, void(*)()> commands{
 		{"ramTest", []() {doRAMTest(); }},
@@ -670,6 +685,14 @@ inline void runCommands(const ParsedArgs& args) {
 		{"checkIntervalLayers7", [](const std::string& size) {checkIntervalLayers<7>(std::stoi(size)); }},
 		//{"checkIntervalLayers8", [](const std::string& size) {checkIntervalLayers<8>(std::stoi(size)); }},
 		//{"checkIntervalLayers9", [](const std::string& size) {checkIntervalLayers<9>(std::stoi(size)); }}
+
+		{"pcoeffLayerElementStats1", [](const std::string& size) {benchPCoeffLayerElementStats<1>(std::stoi(size)); }},
+		{"pcoeffLayerElementStats2", [](const std::string& size) {benchPCoeffLayerElementStats<2>(std::stoi(size)); }},
+		{"pcoeffLayerElementStats3", [](const std::string& size) {benchPCoeffLayerElementStats<3>(std::stoi(size)); }},
+		{"pcoeffLayerElementStats4", [](const std::string& size) {benchPCoeffLayerElementStats<4>(std::stoi(size)); }},
+		{"pcoeffLayerElementStats5", [](const std::string& size) {benchPCoeffLayerElementStats<5>(std::stoi(size)); }},
+		{"pcoeffLayerElementStats6", [](const std::string& size) {benchPCoeffLayerElementStats<6>(std::stoi(size)); }},
+		{"pcoeffLayerElementStats7", [](const std::string& size) {benchPCoeffLayerElementStats<7>(std::stoi(size)); }},
 	};
 
 	for(size_t i = 0; i < args.argCount(); i++) {
