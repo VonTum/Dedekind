@@ -12,6 +12,89 @@
 #include <chrono>
 
 
+
+
+template<unsigned int Variables>
+void computeIntervalSizesNaive() {
+	using MBF = Monotonic<Variables>;
+
+	std::ifstream mbfFile(FileName::allMBFSSorted(Variables), std::ios::binary);
+	if(!mbfFile.is_open()) throw "Error not found!";
+
+	AllMBFMap<Variables, uint64_t> allMBFs = AllMBFMap<Variables, uint64_t>::readKeysFile(mbfFile);
+
+	assert(allMBFs.layers[0][0].key.isEmpty());
+	allMBFs.layers[0][0].value = 1;
+
+	for(int layer = 1; layer < (1 << Variables) + 1; layer++) {
+		std::cout << "Layer " << layer << ": " << std::flush;
+		BakedMap<MBF, uint64_t>& prevLayer = allMBFs.layers[layer - 1];
+		auto start = std::chrono::high_resolution_clock::now();
+		iterCollectionInParallel(allMBFs.layers[layer], [&](KeyValue<MBF, uint64_t>& cur) {
+			uint64_t total = 0;
+
+			forEachMonotonicFunctionUpTo<Variables>(cur.key, [&total](const Monotonic<Variables>& bf) {
+				total++;
+			});
+
+			cur.value = total;
+		});
+		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;
+
+		uint64_t deoptimizeTotal = 0;
+		for(auto& item : allMBFs.layers[layer]) {
+			deoptimizeTotal ^= item.value;
+		}
+		std::cout << deoptimizeTotal << std::endl;
+	}
+	if(allMBFs.layers.back()[0].value != dedekindNumbers[Variables]) {
+		std::cout << "Not correct!" << std::endl;
+	}
+}
+template<unsigned int Variables>
+void computeIntervalSizesFast() {
+	using MBF = Monotonic<Variables>;
+
+	std::ifstream mbfFile(FileName::allMBFSSorted(Variables), std::ios::binary);
+	if(!mbfFile.is_open()) throw "Error not found!";
+
+	AllMBFMap<Variables, uint64_t> allMBFs = AllMBFMap<Variables, uint64_t>::readKeysFile(mbfFile);
+
+	assert(allMBFs.layers[0][0].key.isEmpty());
+	allMBFs.layers[0][0].value = 1;
+
+	for(int layer = 1; layer < (1 << Variables) + 1; layer++) {
+		std::cout << "Layer " << layer << ": " << std::flush;
+		BakedMap<MBF, uint64_t>& prevLayer = allMBFs.layers[layer - 1];
+		auto start = std::chrono::high_resolution_clock::now();
+		iterCollectionInParallel(allMBFs.layers[layer], [&](KeyValue<MBF, uint64_t>& cur) {
+			cur.value = intervalSizeFast(MBF::getBot(), cur.key);
+		});
+		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;
+
+		uint64_t deoptimizeTotal = 0;
+		for(auto& item : allMBFs.layers[layer]) {
+			deoptimizeTotal ^= item.value;
+		}
+		std::cout << deoptimizeTotal << std::endl;
+	}
+	if(allMBFs.layers.back()[0].value != dedekindNumbers[Variables]) {
+		std::cout << "Not correct!" << std::endl;
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
 template<unsigned int Variables>
 uint64_t computeExtendedIntervalOf(const BakedMap<Monotonic<Variables>, uint64_t>& prevLayer, const Monotonic<Variables>& cur) {
 	//std::cout << "  " << cur;

@@ -49,7 +49,7 @@ struct Interval {
 			}
 		});*/
 
-		forEachMonotonicFunctionBetween<Variables>(this->bot, this->top, [this, &total](const Monotonic<Variables>& bf) {
+		forEachMonotonicFunctionBetween<Variables>(this->bot, this->top, [&total](const Monotonic<Variables>& bf) {
 			total++;
 		});
 

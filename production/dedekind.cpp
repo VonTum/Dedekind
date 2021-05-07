@@ -517,28 +517,74 @@ void preComputeFiles() {
 	addSymmetriesToIntervalFile<Variables>();
 }
 
-template<unsigned int DedekindOrder>
+template<unsigned int Variables>
 void doRevolution() {
-	std::cout << "Computing D(" << DedekindOrder << ")...\n";
+	std::cout << "Computing D(" << Variables << ")...\n";
 
 	TimeTracker timer;
 
-	revolutionParallel<DedekindOrder - 3>();
+	revolutionParallel<Variables - 3>();
 }
 
 
-template<unsigned int DedekindOrder>
+template<unsigned int Variables>
 void benchPCoeffLayerElementStats(size_t topLayer) {
 	std::atomic<bool> shouldStop(false);
 	std::thread diagThread([&]() {
 		while(!shouldStop) {
-			printHistogramAndPCoeffs(DedekindOrder);
+			printHistogramAndPCoeffs(Variables);
 			std::this_thread::sleep_for(std::chrono::seconds(10));
 		}
 	});
-	pcoeffLayerElementStats<DedekindOrder>(topLayer);
+	pcoeffLayerElementStats<Variables>(topLayer);
 	shouldStop = true;
 	diagThread.join();
+}
+
+template<unsigned int Variables>
+void permuteRandom(Monotonic<Variables>& mbf) {
+	for(int i = 0; i < Variables * 3; i++) {
+		int a = rand() % Variables;
+		int b = rand() % Variables;
+		if(a != b) {
+			mbf.bf.swap(a, b);
+		}
+	}
+}
+
+template<unsigned int Variables>
+void benchmarkSample() {
+	std::ifstream symFile(FileName::allIntervalSymmetries(Variables), std::ios::binary);
+	if(!symFile.is_open()) throw "File not opened!";
+
+	std::vector<std::pair<Monotonic<Variables>, IntervalSymmetry>> benchSet;
+	benchSet.reserve(mbfCounts[Variables] / 60);
+
+	while(symFile.good()) {
+		Monotonic<Variables> mbf = deserializeMBF<Variables>(symFile);
+		IntervalSymmetry is = deserializeExtraData(symFile);
+
+		if(rand() % 100 == 0) {
+			// keep
+			permuteRandom(mbf);
+
+			benchSet.push_back(std::make_pair(mbf, is));
+		}
+	}
+	symFile.close();
+
+	std::default_random_engine generator;
+	std::shuffle(benchSet.begin(), benchSet.end(), generator);
+
+	std::ofstream benchmarkSetFile(FileName::benchmarkSet(Variables), std::ios::binary);
+	if(!benchmarkSetFile.is_open()) throw "File not opened!";
+
+	for(const auto& item : benchSet) {
+		serializeMBF(item.first, benchmarkSetFile);
+		serializeExtraData(item.second, benchmarkSetFile);
+	}
+
+	benchmarkSetFile.close();
 }
 
 inline void runCommands(const ParsedArgs& args) {
@@ -673,6 +719,30 @@ inline void runCommands(const ParsedArgs& args) {
 		{"pcoeffTimeEstimate5", []() {pcoeffTimeEstimate<5>(); }},
 		{"pcoeffTimeEstimate6", []() {pcoeffTimeEstimate<6>(); }},
 		{"pcoeffTimeEstimate7", []() {pcoeffTimeEstimate<7>(); }},
+
+		{"benchmarkSample1", []() {benchmarkSample<1>(); }},
+		{"benchmarkSample2", []() {benchmarkSample<2>(); }},
+		{"benchmarkSample3", []() {benchmarkSample<3>(); }},
+		{"benchmarkSample4", []() {benchmarkSample<4>(); }},
+		{"benchmarkSample5", []() {benchmarkSample<5>(); }},
+		{"benchmarkSample6", []() {benchmarkSample<6>(); }},
+		{"benchmarkSample7", []() {benchmarkSample<7>(); }},
+
+		{"computeIntervalSizesNaive1", []() {computeIntervalSizesNaive<1>(); }},
+		{"computeIntervalSizesNaive2", []() {computeIntervalSizesNaive<2>(); }},
+		{"computeIntervalSizesNaive3", []() {computeIntervalSizesNaive<3>(); }},
+		{"computeIntervalSizesNaive4", []() {computeIntervalSizesNaive<4>(); }},
+		{"computeIntervalSizesNaive5", []() {computeIntervalSizesNaive<5>(); }},
+		{"computeIntervalSizesNaive6", []() {computeIntervalSizesNaive<6>(); }},
+		{"computeIntervalSizesNaive7", []() {computeIntervalSizesNaive<7>(); }},
+
+		{"computeIntervalSizesFast1", []() {computeIntervalSizesFast<1>(); }},
+		{"computeIntervalSizesFast2", []() {computeIntervalSizesFast<2>(); }},
+		{"computeIntervalSizesFast3", []() {computeIntervalSizesFast<3>(); }},
+		{"computeIntervalSizesFast4", []() {computeIntervalSizesFast<4>(); }},
+		{"computeIntervalSizesFast5", []() {computeIntervalSizesFast<5>(); }},
+		{"computeIntervalSizesFast6", []() {computeIntervalSizesFast<6>(); }},
+		{"computeIntervalSizesFast7", []() {computeIntervalSizesFast<7>(); }},
 	};
 
 	std::map<std::string, void(*)(const std::string&)> commandsWithArg{

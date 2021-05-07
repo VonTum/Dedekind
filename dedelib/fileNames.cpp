@@ -72,4 +72,11 @@ std::string allIntervalSymmetries(unsigned int Variables) {
 	name.append(".intervalSymmetries");
 	return name;
 }
+
+std::string benchmarkSet(unsigned int Variables) {
+	std::string name = dataPath + "benchmarkSet";
+	name.append(std::to_string(Variables));
+	name.append(".intervalSymmetries");
+	return name;
+}
 };

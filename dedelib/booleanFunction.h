@@ -753,7 +753,7 @@ public:
 
 		// all groups should be deterministic now
 		
-		Group* recheckUpTo = groups;
+		/*Group* recheckUpTo = groups;
 		Group* g = groups;
 		do {
 			// can't split group of size 1
@@ -835,7 +835,7 @@ public:
 
 		std::stable_sort(groups, groupsEnd, [](const Group& a, const Group& b) {
 			return a.groupSize < b.groupSize;
-		});
+		});*/
 		
 		unsigned int newVariableOrder[Variables];
 		unsigned int* newVariableOrderEnd = newVariableOrder;

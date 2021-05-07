@@ -20,12 +20,12 @@ struct ExtraData : public IntervalSymmetry {
 	DownConnection* downConnections;
 };
 
-void serializeExtraData(const IntervalSymmetry& item, std::ofstream& os) {
+inline void serializeExtraData(const IntervalSymmetry& item, std::ofstream& os) {
 	serializeU16(static_cast<uint16_t>(item.symmetries), os);
 	serializeU48(item.intervalSizeToBottom, os);
 }
 
-IntervalSymmetry deserializeExtraData(std::ifstream& is) {
+inline IntervalSymmetry deserializeExtraData(std::ifstream& is) {
 	IntervalSymmetry result;
 	result.symmetries = deserializeU16(is);
 	result.intervalSizeToBottom = deserializeU48(is);
