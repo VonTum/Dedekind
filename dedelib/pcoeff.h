@@ -455,27 +455,19 @@ u192 noCanonizationPCoeffMethod() {
 	return total;
 }
 
-template<unsigned int Variables>
-u192 computePCoeffSum(size_t topLayerI, size_t topIndex, const AllMBFMap<Variables, ExtraData>& allIntervalSizesAndDownLinks, SwapperLayers<Variables, bool>& swapper) {
+// expects a function of the form void(KeyValue<Monotonic<Variables>, ExtraData> botKV)
+template<unsigned int Variables, typename Func>
+void forEachBelowUsingSwapper(size_t topLayerI, size_t topIndex, const AllMBFMap<Variables, ExtraData>& allIntervalSizesAndDownLinks, SwapperLayers<Variables, bool>& swapper, const Func& funcToRun) {
 	const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
-	const KeyValue<Monotonic<Variables>, ExtraData>& topKV = topLayer[topIndex];
-
-	uint64_t withItself = topKV.value.intervalSizeToBottom;
-	uint64_t withBot = 2;
-	
-	u128 subTotal(withItself + withBot);
-	
-	AntiChain<Variables> topAC = topKV.key.asAntiChain();
-	SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> splitTopAC = splitAC(topAC);
 
 	swapper.clearSource();
 	swapper.clearDestination();
 
-	DownConnection* initialDownConnectionsStart = topKV.value.downConnections;
+	DownConnection* initialDownConnectionsStart = topLayer[topIndex].value.downConnections;
 	DownConnection* initialDownConnectionsEnd = topLayer[topIndex + 1].value.downConnections;
 
 	for(DownConnection* cur = initialDownConnectionsStart; cur != initialDownConnectionsEnd; ++cur) {
-		assert(cur->id < getLayerSize<Variables>(topLayerI-1));
+		assert(cur->id < getLayerSize<Variables>(topLayerI - 1));
 		swapper.set(cur->id);
 	}
 
@@ -491,19 +483,37 @@ u192 computePCoeffSum(size_t topLayerI, size_t topIndex, const AllMBFMap<Variabl
 			const KeyValue<Monotonic<Variables>, ExtraData>& botKV = belowLayer[index];
 
 			DownConnection* downConnectionsStart = botKV.value.downConnections;
-			DownConnection* downConnectionsEnd = belowLayer[index+1].value.downConnections;
+			DownConnection* downConnectionsEnd = belowLayer[index + 1].value.downConnections;
 
 			for(DownConnection* cur = downConnectionsStart; cur != downConnectionsEnd; ++cur) {
-				assert(cur->id < getLayerSize<Variables>(belowLayerI-1));
+				assert(cur->id < getLayerSize<Variables>(belowLayerI - 1));
 				swapper.set(cur->id);
 			}
 
-			uint64_t totalPCoeff = computePermutationPCoeffSumFast(splitTopAC, topKV.key, botKV.key);
-			uint64_t duplication = factorial(Variables) / botKV.value.symmetries;
-			subTotal += umul128(totalPCoeff / duplication, botKV.value.intervalSizeToBottom);
+			funcToRun(botKV);
 		});
 		swapper.pushNext();
 	}
+}
+
+template<unsigned int Variables>
+u192 computePCoeffSum(size_t topLayerI, size_t topIndex, const AllMBFMap<Variables, ExtraData>& allIntervalSizesAndDownLinks, SwapperLayers<Variables, bool>& swapper) {
+	const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
+	const KeyValue<Monotonic<Variables>, ExtraData>& topKV = topLayer[topIndex];
+
+	uint64_t withItself = topKV.value.intervalSizeToBottom;
+	uint64_t withBot = 2;
+	
+	u128 subTotal(withItself + withBot);
+	
+	AntiChain<Variables> topAC = topKV.key.asAntiChain();
+	SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> splitTopAC = splitAC(topAC);
+
+	forEachBelowUsingSwapper(topLayerI, topIndex, allIntervalSizesAndDownLinks, swapper, [&](const KeyValue<Monotonic<Variables>, ExtraData>& botKV) {
+		uint64_t totalPCoeff = computePermutationPCoeffSumFast(splitTopAC, topKV.key, botKV.key);
+		uint64_t duplication = factorial(Variables) / botKV.value.symmetries;
+		subTotal += umul128(totalPCoeff / duplication, botKV.value.intervalSizeToBottom);
+	});
 
 	const ExtraData& topKVDual = allIntervalSizesAndDownLinks.get(topKV.key.dual().canonize());
 	return umul192(subTotal, topKV.value.symmetries * topKVDual.intervalSizeToBottom);

@@ -4,6 +4,7 @@
 #include <random>
 #include <map>
 #include <string>
+#include <chrono>
 #include "../dedelib/dedekindDecomposition.h"
 #include "../dedelib/valuedDecomposition.h"
 #include "../dedelib/toString.h"
@@ -587,9 +588,70 @@ void benchmarkSample() {
 	benchmarkSetFile.close();
 }
 
+template<unsigned int Variables>
+void benchmarkSampleTopBots(int topFraction = 1, int botFraction = 1) {
+	AllMBFMap<Variables, ExtraData> allIntervalSizesAndDownLinks = readAllMBFsMapExtraDownLinks<Variables>();
+
+	std::cout << "Read map\n";
+
+	std::vector<TopBots<Variables>> benchSet;
+	std::mutex benchSetMutex;
+	
+	std::atomic<int> randSeed(std::chrono::steady_clock::now().time_since_epoch().count());
+
+	for(int topLayerI = 1; topLayerI < (1 << Variables) + 1; topLayerI++) {
+		const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
+
+		iterCollectionInParallelWithPerThreadBuffer(IntRange<size_t>{size_t(0), topLayer.size()}, 
+													[&]() {return std::make_pair(SwapperLayers<Variables, bool>(), std::default_random_engine(randSeed.fetch_add(1))); }, 
+													[&](size_t topIdx, std::pair<SwapperLayers<Variables, bool>, std::default_random_engine>& swapperRand) {
+			if(std::uniform_int_distribution(0, topFraction)(swapperRand.second) != 0) return;
+
+			const KeyValue<Monotonic<Variables>, ExtraData>& topKV = topLayer[topIdx];
+			
+			std::vector<Monotonic<Variables>> selectedBots;
+
+			forEachBelowUsingSwapper(topLayerI, topIdx, allIntervalSizesAndDownLinks, swapperRand.first, [&](const KeyValue<Monotonic<Variables>, ExtraData>& botKV) {
+				if(std::uniform_int_distribution(0, botFraction)(swapperRand.second) != 0) return;
+
+				selectedBots.push_back(botKV.key);
+			});
+
+			if(!selectedBots.empty()) {
+				benchSetMutex.lock();
+				TopBots<Variables> newElem;
+				newElem.top = topKV.key;
+				newElem.bots = std::move(selectedBots);
+				benchSet.push_back(std::move(newElem));
+				benchSetMutex.unlock();
+			}
+		});
+	}
+
+	std::default_random_engine generator;
+	std::shuffle(benchSet.begin(), benchSet.end(), generator);
+
+	std::ofstream benchmarkSetFile(FileName::benchmarkSetTopBots(Variables), std::ios::binary);
+	if(!benchmarkSetFile.is_open()) throw "File not opened!";
+
+	serializeVector(benchSet, benchmarkSetFile, serializeTopBots<Variables>);
+
+	benchmarkSetFile.close();
+}
+
 inline void runCommands(const ParsedArgs& args) {
 	std::map<std::string, void(*)()> commands{
 		{"ramTest", []() {doRAMTest(); }},
+
+		{"graphVis1", []() {genGraphVisCode(1); }},
+		{"graphVis2", []() {genGraphVisCode(2); }},
+		{"graphVis3", []() {genGraphVisCode(3); }},
+		{"graphVis4", []() {genGraphVisCode(4); }},
+		{"graphVis5", []() {genGraphVisCode(5); }},
+		{"graphVis6", []() {genGraphVisCode(6); }},
+		{"graphVis7", []() {genGraphVisCode(7); }},
+		{"graphVis8", []() {genGraphVisCode(8); }},
+		{"graphVis9", []() {genGraphVisCode(9); }},
 
 		{"revolution4", []() {doRevolution<4>(); }},
 		{"revolution5", []() {doRevolution<5>(); }},
@@ -727,6 +789,14 @@ inline void runCommands(const ParsedArgs& args) {
 		{"benchmarkSample5", []() {benchmarkSample<5>(); }},
 		{"benchmarkSample6", []() {benchmarkSample<6>(); }},
 		{"benchmarkSample7", []() {benchmarkSample<7>(); }},
+
+		{"benchmarkSampleTopBots1", []() {benchmarkSampleTopBots<1>(1,1); }},
+		{"benchmarkSampleTopBots2", []() {benchmarkSampleTopBots<2>(1,1); }},
+		{"benchmarkSampleTopBots3", []() {benchmarkSampleTopBots<3>(1,1); }},
+		{"benchmarkSampleTopBots4", []() {benchmarkSampleTopBots<4>(1,1); }},
+		{"benchmarkSampleTopBots5", []() {benchmarkSampleTopBots<5>(1,1); }},
+		{"benchmarkSampleTopBots6", []() {benchmarkSampleTopBots<6>(100, 100); }},
+		{"benchmarkSampleTopBots7", []() {benchmarkSampleTopBots<7>(10000, 10000); }},
 
 		{"computeIntervalSizesNaive1", []() {computeIntervalSizesNaive<1>(); }},
 		{"computeIntervalSizesNaive2", []() {computeIntervalSizesNaive<2>(); }},

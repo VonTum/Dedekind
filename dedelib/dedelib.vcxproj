@@ -592,6 +592,7 @@
     <ClInclude Include="terminalColor.h" />
     <ClInclude Include="timeTracker.h" />
     <ClInclude Include="tjomn.h" />
+    <ClInclude Include="topBots.h" />
     <ClInclude Include="toString.h" />
     <ClInclude Include="u192.h" />
     <ClInclude Include="valuedDecomposition.h" />

@@ -3,9 +3,11 @@
 
 #include "booleanFunction.h"
 #include "funcTypes.h"
+#include "topBots.h"
 
 #include <iostream>
 #include <cstdint>
+#include <vector>
 
 inline void serializeU8(uint8_t value, uint8_t* outputBuf) {
 	*outputBuf = value;
@@ -148,6 +150,9 @@ AntiChain<Variables> deserializeAC(const uint8_t* inputBuf) {
 	return AntiChain<Variables>(deserializeBooleanFunction<Variables>(inputBuf));
 }
 
+
+
+
 #define MAKE_SERIALIZER(TYPE, SERIALIZE, DESERIALIZE, SIZE) \
 inline void SERIALIZE(TYPE val, std::ostream& os) { uint8_t buf[SIZE]; SERIALIZE(val, buf); os.write(reinterpret_cast<const char*>(buf), SIZE);}\
 inline TYPE DESERIALIZE(std::istream& is) { uint8_t buf[SIZE]; is.read(reinterpret_cast<char*>(buf), SIZE); return DESERIALIZE(buf);}
@@ -166,4 +171,36 @@ MAKE_VARIABLE_SERIALIZER(BooleanFunction<Variables>, serializeBooleanFunction, d
 MAKE_VARIABLE_SERIALIZER(Monotonic<Variables>, serializeMBF, deserializeMBF, getMBFSizeInBytes<Variables>());
 MAKE_VARIABLE_SERIALIZER(AntiChain<Variables>, serializeAC, deserializeAC, getMBFSizeInBytes<Variables>());
 
+
+
+template<unsigned int Variables>
+void serializeTopBots(const TopBots<Variables>& tb, std::ostream& ostream) {
+	serializeMBF(tb.top, ostream);
+	serializeVector(tb.bots, ostream, [](const Monotonic<Variables>& bot, std::ostream& os) {serializeMBF(bot, os); });
+}
+
+template<unsigned int Variables>
+TopBots<Variables> deserializeTopBots(std::istream& istream) {
+	TopBots<Variables> result;
+	result.top = deserializeMBF<Variables>(istream);
+	result.bots = deserializeVector(istream, [](std::istream& is) {return deserializeMBF(is); });
+	return result;
+}
+
+template<typename T, typename SerializeT>
+void serializeVector(const std::vector<T>& vec, std::ostream& ostream, const SerializeT& serializeFunc) {
+	serializeU64(vec.size(), ostream);
+	for(const T& item : vec) {
+		serializeFunc(item, ostream);
+	}
+}
+template<typename DeserializeT>
+auto deserializeVector(std::istream& istream, const DeserializeT& deserializeFunc) -> std::vector<decltype(deserializeFunc(istream))> {
+	size_t size = deserializeU64(istream);
+	std::vector<decltype(deserializeFunc(istream))> result;
+	result.reserve(size);
+	for(size_t i = 0; i < size; i++) {
+		result.push_back(deserializeFunc(istream));
+	}
+}
 
