@@ -183,7 +183,7 @@ template<unsigned int Variables>
 TopBots<Variables> deserializeTopBots(std::istream& istream) {
 	TopBots<Variables> result;
 	result.top = deserializeMBF<Variables>(istream);
-	result.bots = deserializeVector(istream, [](std::istream& is) {return deserializeMBF(is); });
+	result.bots = deserializeVector(istream, [](std::istream& is) {return deserializeMBF<Variables>(is); });
 	return result;
 }
 
@@ -202,5 +202,6 @@ auto deserializeVector(std::istream& istream, const DeserializeT& deserializeFun
 	for(size_t i = 0; i < size; i++) {
 		result.push_back(deserializeFunc(istream));
 	}
+	return result;
 }
 

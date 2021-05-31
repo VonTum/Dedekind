@@ -439,11 +439,11 @@ public:
 
 			__m128i forced = _mm_setzero_si128();
 
-			__m128i v0Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(0xaaaaaaaaaaaaaaaa)), 1);
+			__m128i v0Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b10101010)), 1);
 			forced = _mm_or_si128(forced, v0Removed);
-			__m128i v1Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(0xcccccccccccccccc)), 2);
+			__m128i v1Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b11001100)), 2);
 			forced = _mm_or_si128(forced, v1Removed);
-			__m128i v2Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(0xF0F0F0F0F0F0F0F0)), 4);
+			__m128i v2Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b11110000)), 4);
 			forced = _mm_or_si128(forced, v2Removed);
 			__m128i v3Removed = _mm_srli_epi16(bs, 8);
 			forced = _mm_or_si128(forced, v3Removed);
@@ -475,11 +475,11 @@ public:
 
 			__m128i forced = _mm_cmpeq_epi16(_mm_setzero_si128(), _mm_setzero_si128()); // all 1s
 
-			__m128i v0Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(0xaaaaaaaaaaaaaaaa), bs), 1);
+			__m128i v0Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b10101010), bs), 1);
 			forced = _mm_andnot_si128(v0Added, forced);
-			__m128i v1Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(0xcccccccccccccccc), bs), 2);
+			__m128i v1Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b11001100), bs), 2);
 			forced = _mm_andnot_si128(v1Added, forced);
-			__m128i v2Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(0xF0F0F0F0F0F0F0F0), bs), 4);
+			__m128i v2Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b11110000), bs), 4);
 			forced = _mm_andnot_si128(v2Added, forced);
 			__m128i v3Added = _mm_slli_epi16(bs, 8);
 			forced = _mm_andnot_si128(v3Added, forced);
@@ -537,11 +537,11 @@ public:
 		if constexpr(Variables == 7) {
 			__m128i bs = this->bitset.data;
 
-			__m128i v0Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(0xaaaaaaaaaaaaaaaa)), 1);
+			__m128i v0Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b10101010)), 1);
 			bs = _mm_or_si128(bs, v0Removed);
-			__m128i v1Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(0xcccccccccccccccc)), 2);
+			__m128i v1Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b11001100)), 2);
 			bs = _mm_or_si128(bs, v1Removed);
-			__m128i v2Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(0xF0F0F0F0F0F0F0F0)), 4);
+			__m128i v2Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b11110000)), 4);
 			bs = _mm_or_si128(bs, v2Removed);
 			__m128i v3Removed = _mm_srli_epi16(bs, 8);
 			bs = _mm_or_si128(bs, v3Removed);
@@ -577,11 +577,11 @@ public:
 		if constexpr(Variables == 7) {
 			__m128i bs = this->bitset.data;
 
-			__m128i v0Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(0xaaaaaaaaaaaaaaaa), bs), 1);
+			__m128i v0Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b10101010), bs), 1);
 			bs = _mm_or_si128(bs, v0Added);
-			__m128i v1Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(0xcccccccccccccccc), bs), 2);
+			__m128i v1Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b11001100), bs), 2);
 			bs = _mm_or_si128(bs, v1Added);
-			__m128i v2Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(0xF0F0F0F0F0F0F0F0), bs), 4);
+			__m128i v2Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b11110000), bs), 4);
 			bs = _mm_or_si128(bs, v2Added);
 			__m128i v3Added = _mm_slli_epi16(bs, 8);
 			bs = _mm_or_si128(bs, v3Added);

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ufwb version="1.17">
+    <grammar name="TopBots" start="id:2" author="Lennart" fileextension="topBots">
+        <structure name="&lt;File&gt;" id="2" encoding="ISO_8859-1:1987" endian="little" signed="no">
+            <number name="topCount" id="3" strokecolor="FFAA00" fillcolor="FFAA00" type="integer" length="8" endian="big"/>
+            <structure name="Top" id="4" repeat="id:3" repeatmin="0" repeatmax="-1">
+                <binary name="topMBF" id="10" fillcolor="00FFFF" length="16"/>
+                <number name="botCount" id="6" fillcolor="55FF00" type="integer" length="8" endian="big"/>
+                <structure name="Bot" id="11" repeat="id:6" repeatmin="0" repeatmax="-1">
+                    <binary name="botMBF" id="13" fillcolor="FF0000" length="16"/>
+                </structure>
+            </structure>
+        </structure>
+    </grammar>
+</ufwb>

@@ -159,22 +159,92 @@ BooleanFunction<Variables> getGroupingMask(const BooleanFunction<Variables>& gra
 
 
 template<unsigned int Variables>
-void eliminateLeaves(BooleanFunction<Variables>& graph) {
+void eliminateLeavesDown(BooleanFunction<Variables>& graph) {
 	// all elements with exactly one connection upward can be removed, they are leaves that do not affect the group count
-	BooleanFunction<Variables> shiftedDown0 = (BooleanFunction<Variables>::varMask(0) & graph.bitset) >> 1;
+	BooleanFunction<Variables> shiftedDown0 = (graph.bitset, BooleanFunction<Variables>::varMask(0)) >> 1;
 	BooleanFunction<Variables> occuredAtLeastOnce = shiftedDown0;
 	BooleanFunction<Variables> blockedElements = BooleanFunction<Variables>::empty();
 
 	for(unsigned int v = 1; v < Variables; v++) {
-		BooleanFunction<Variables> shiftedFromAbove((BooleanFunction<Variables>::varMask(v) & graph.bitset) >> (size_t(1) << v));
+		BooleanFunction<Variables> shiftedFromAbove((graph.bitset, BooleanFunction<Variables>::varMask(v)) >> (size_t(1) << v));
 		blockedElements |= occuredAtLeastOnce & shiftedFromAbove;
 		occuredAtLeastOnce |= shiftedFromAbove;
 	}
 
 	// need to also block from below
 	for(unsigned int v = 0; v < Variables; v++) {
-		BooleanFunction<Variables> shiftedFromAbove(andnot(graph.bitset, BooleanFunction<Variables>::varMask(v)) << (size_t(1) << v));
+		BooleanFunction<Variables> shiftedFromBelow(andnot(graph.bitset, BooleanFunction<Variables>::varMask(v)) << (size_t(1) << v));
+		blockedElements |= shiftedFromBelow;
+	}
+
+	BooleanFunction<Variables> elementsToCull = andnot(occuredAtLeastOnce, blockedElements);
+
+	graph = andnot(graph, elementsToCull);
+}
+template<unsigned int Variables>
+void eliminateLeavesUp(BooleanFunction<Variables>& graph) {
+	if constexpr(Variables == 7) {
+		__m128i data = graph.bitset.data;
+		__m128i mask0 = _mm_set1_epi8(0b10101010);
+		__m128i shiftedFromBelow0 = _mm_slli_epi16(_mm_andnot_si128(mask0, data), 1);
+		__m128i shiftedFromAbove0 = _mm_srli_epi16(_mm_and_si128(mask0, data), 1);
+		__m128i occuredAtLeastOnce = shiftedFromBelow0;
+		__m128i blockedElements = shiftedFromAbove0;
+
+		{// 1
+			__m128i mask = _mm_set1_epi8(0b11001100);
+			__m128i shiftedFromBelow = _mm_slli_epi16(_mm_andnot_si128(mask, data), 2);
+			__m128i shiftedFromAbove = _mm_srli_epi16(_mm_and_si128(mask, data), 2);
+			blockedElements = _mm_or_si128(blockedElements, _mm_or_si128(shiftedFromAbove, _mm_and_si128(occuredAtLeastOnce, shiftedFromBelow)));
+			occuredAtLeastOnce = _mm_or_si128(occuredAtLeastOnce, shiftedFromBelow);
+		}
+		{// 2
+			__m128i mask = _mm_set1_epi8(0b11110000);
+			__m128i shiftedFromBelow = _mm_slli_epi16(_mm_andnot_si128(mask, data), 4);
+			__m128i shiftedFromAbove = _mm_srli_epi16(_mm_and_si128(mask, data), 4);
+			blockedElements = _mm_or_si128(blockedElements, _mm_or_si128(shiftedFromAbove, _mm_and_si128(occuredAtLeastOnce, shiftedFromBelow)));
+			occuredAtLeastOnce = _mm_or_si128(occuredAtLeastOnce, shiftedFromBelow);
+		}
+		{// 3
+			__m128i shiftedFromBelow = _mm_slli_epi16(data, 8);
+			__m128i shiftedFromAbove = _mm_srli_epi16(data, 8);
+			blockedElements = _mm_or_si128(blockedElements, _mm_or_si128(shiftedFromAbove, _mm_and_si128(occuredAtLeastOnce, shiftedFromBelow)));
+			occuredAtLeastOnce = _mm_or_si128(occuredAtLeastOnce, shiftedFromBelow);
+		}
+		{// 4
+			__m128i shiftedFromBelow = _mm_slli_epi32(data, 16);
+			__m128i shiftedFromAbove = _mm_srli_epi32(data, 16);
+			blockedElements = _mm_or_si128(blockedElements, _mm_or_si128(shiftedFromAbove, _mm_and_si128(occuredAtLeastOnce, shiftedFromBelow)));
+			occuredAtLeastOnce = _mm_or_si128(occuredAtLeastOnce, shiftedFromBelow);
+		}
+		{// 5
+			__m128i shiftedFromBelow = _mm_slli_epi64(data, 32);
+			__m128i shiftedFromAbove = _mm_srli_epi64(data, 32);
+			blockedElements = _mm_or_si128(blockedElements, _mm_or_si128(shiftedFromAbove, _mm_and_si128(occuredAtLeastOnce, shiftedFromBelow)));
+			occuredAtLeastOnce = _mm_or_si128(occuredAtLeastOnce, shiftedFromBelow);
+		}
+		{// 6
+			__m128i shiftedFromBelow = _mm_slli_si128(data, 8);
+			__m128i shiftedFromAbove = _mm_srli_si128(data, 8);
+			blockedElements = _mm_or_si128(blockedElements, _mm_or_si128(shiftedFromAbove, _mm_and_si128(occuredAtLeastOnce, shiftedFromBelow)));
+			occuredAtLeastOnce = _mm_or_si128(occuredAtLeastOnce, shiftedFromBelow);
+		}
+		__m128i elementsToCull = _mm_andnot_si128(blockedElements, occuredAtLeastOnce);
+		graph.bitset.data = _mm_andnot_si128(elementsToCull, data);
+		return;
+	}
+	// all elements with exactly one connection downward can be removed, they are leaves that do not affect the group count
+	BooleanFunction<Variables> shiftedFromBelow0 = andnot(graph.bitset, BooleanFunction<Variables>::varMask(0)) << 1;
+	BooleanFunction<Variables> shiftedFromAbove0 = (graph.bitset & BooleanFunction<Variables>::varMask(0)) >> 1;
+	BooleanFunction<Variables> occuredAtLeastOnce = shiftedFromBelow0;
+	BooleanFunction<Variables> blockedElements = shiftedFromAbove0;
+
+	for(unsigned int v = 1; v < Variables; v++) {
+		BooleanFunction<Variables> shiftedFromBelow(andnot(graph.bitset, BooleanFunction<Variables>::varMask(v)) << (size_t(1) << v));
+		BooleanFunction<Variables> shiftedFromAbove((graph.bitset & BooleanFunction<Variables>::varMask(v)) >> (size_t(1) << v));
 		blockedElements |= shiftedFromAbove;
+		blockedElements |= occuredAtLeastOnce & shiftedFromBelow;
+		occuredAtLeastOnce |= shiftedFromBelow;
 	}
 
 	BooleanFunction<Variables> elementsToCull = andnot(occuredAtLeastOnce, blockedElements);
@@ -184,11 +254,11 @@ void eliminateLeaves(BooleanFunction<Variables>& graph) {
 
 
 static uint64_t singletonCountHistogram[50];
+static uint64_t connectedHistogram[50];
+
 
 template<unsigned int Variables>
 uint64_t eliminateSingletons(BooleanFunction<Variables>& graph) {
-	eliminateLeaves(graph);
-
 	BooleanFunction<Variables> groupingMask = getGroupingMask(graph);
 
 	BooleanFunction<Variables> singletons = andnot(graph, groupingMask);
@@ -251,6 +321,46 @@ uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph) {
 
 	return countConnectedVeryFast<Variables>(graph, initialGuess);
 }
+
+
+// assumes that no subgraph contains an element which is dominated by an element of another subgraph
+template<unsigned int Variables>
+uint64_t countConnectedFloodFill(BooleanFunction<Variables> graph) {
+	uint64_t totalConnectedComponents = 0;
+
+	int totalCycles = 0;
+
+	while(!graph.isEmpty()) {
+		totalConnectedComponents++;
+		BooleanFunction<Variables> expandedDown = BooleanFunction<Variables>::empty();
+		expandedDown.add(graph.getLast()); // picks the largest component, first expand downward
+		expandedDown = expandedDown.monotonizeDown() & graph; // will always be an expansion, since singletons have been filtered out first
+
+		do {
+			totalCycles++;
+			BooleanFunction<Variables> expandedUp = expandedDown.monotonizeUp() & graph;
+			if(expandedUp == expandedDown) break;
+			expandedDown = expandedUp.monotonizeDown() & graph;
+			if(expandedUp == expandedDown) break;
+		} while(true); // can't just test expandedUp here for some stupid reason, not in scope
+		graph = andnot(graph, expandedDown);
+	}
+
+	cyclesHistogram[totalCycles]++;
+
+	return totalConnectedComponents;
+}
+
+// assumes that no subgraph contains an element which is dominated by an element of another subgraph
+template<unsigned int Variables>
+uint64_t countConnectedSingletonElimination(BooleanFunction<Variables> graph) {
+	uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
+	connectCount += countConnectedFloodFill(graph);
+	++connectedHistogram[connectCount];
+	return connectCount;
+}
+
+
 
 // assumes that no subgraph contains an element which is dominated by an element of another subgraph
 template<unsigned int Variables>
