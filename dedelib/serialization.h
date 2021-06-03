@@ -205,3 +205,17 @@ auto deserializeVector(std::istream& istream, const DeserializeT& deserializeFun
 	return result;
 }
 
+
+
+template<unsigned int Variables>
+std::vector<TopBots<Variables>> readTopBots() {
+	std::cout << "Reading bots" << std::endl;
+	std::ifstream benchFile(FileName::benchmarkSetTopBots(Variables), std::ios::binary);
+	if(!benchFile.is_open()) throw "File not opened!";
+
+	return deserializeVector(benchFile, deserializeTopBots<Variables>);
+}
+
+
+
+

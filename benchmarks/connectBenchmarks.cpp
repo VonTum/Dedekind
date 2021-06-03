@@ -10,14 +10,8 @@
 
 #define BENCH_VARIABLES 7
 
-template<unsigned int Variables>
-std::vector<TopBots<Variables>> readTopBots() {
-	std::cout << "Reading bots" << std::endl;
-	std::ifstream benchFile(FileName::benchmarkSetTopBots(Variables), std::ios::binary);
-	if(!benchFile.is_open()) throw "File not opened!";
+std::vector<std::pair<Monotonic<BENCH_VARIABLES>, Monotonic<BENCH_VARIABLES>>> benchSet;
 
-	return deserializeVector(benchFile, deserializeTopBots<Variables>);
-}
 
 template<unsigned int Variables>
 std::vector<std::pair<Monotonic<Variables>, Monotonic<Variables>>> makeTopBotPairs(int botFraction = 500, int permutFraction = 5) {
@@ -49,8 +43,6 @@ std::vector<std::pair<Monotonic<Variables>, Monotonic<Variables>>> makeTopBotPai
 	std::shuffle(result.begin(), result.end(), generator);
 	return result;
 }
-
-std::vector<std::pair<Monotonic<BENCH_VARIABLES>, Monotonic<BENCH_VARIABLES>>> benchSet;
 
 class ConnectBench : public Benchmark {
 public:

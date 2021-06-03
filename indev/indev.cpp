@@ -51,6 +51,37 @@ void countAverageACSize() {
 	}
 }
 
+template<unsigned int Variables>
+void computeValidPCoeffFraction(int botFraction = 100) {
+	std::vector<TopBots<Variables>> topBots = readTopBots<Variables>();
+	std::cout << topBots.size() << " topBots found!" << std::endl;
+
+	uint64_t validCount = 0;
+	uint64_t invalidCount = 0;
+
+	std::default_random_engine generator;
+	std::uniform_int_distribution choiceChance(0, botFraction);
+	int i = 0;
+	for(const TopBots<Variables>& tb : topBots) {
+		i++;
+		if(i % 1000 == 0) {
+			std::cout << i << "/" << topBots.size() << std::endl;
+		}
+		for(const Monotonic<Variables>& bot : tb.bots) {
+			if(choiceChance(generator) != 0) continue;
+
+			bot.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
+				if(permutedBot <= tb.top) {
+					validCount++;
+				} else {
+					invalidCount++;
+				}
+			});
+		}
+	}
+
+	std::cout << "validCount: " << validCount << ", invalidCount: " << invalidCount << " fraction: " << (100.0 * validCount) / (validCount + invalidCount) << "%" << std::endl;
+}
 int main(int argc, const char** argv) {
 	std::cout << "Detected " << std::thread::hardware_concurrency() << " threads" << std::endl;
 
@@ -63,5 +94,6 @@ int main(int argc, const char** argv) {
 
 	//sjomnumbertablesymmetric<2>([]() {});
 	//printAllMBFs<4>();
-	countAverageACSize<7>();
+	//countAverageACSize<7>();
+	computeValidPCoeffFraction<7>(100);
 }
