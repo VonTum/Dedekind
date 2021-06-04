@@ -4,10 +4,12 @@
 #include "booleanFunction.h"
 #include "funcTypes.h"
 #include "topBots.h"
+#include "fileNames.h"
 
 #include <iostream>
 #include <cstdint>
 #include <vector>
+#include <fstream>
 
 inline void serializeU8(uint8_t value, uint8_t* outputBuf) {
 	*outputBuf = value;
