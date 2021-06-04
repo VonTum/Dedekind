@@ -22,7 +22,7 @@ static uint64_t failedBots = 0;
 
 static double computeMean(uint64_t* data, size_t size) {
 	double sum = 0;
-	int count = 0;
+	uint64_t count = 0;
 
 	for(size_t i = 0; i < size; i++) {
 		sum += i * data[i];
@@ -217,7 +217,7 @@ uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMa
 	}
 
 	return sumPermutedPCoeffsOver(top, botClass, [&](BooleanFunction<Variables> graph) {
-		eliminateLeavesDown(graph);
+		eliminateLeavesUp(graph);
 		uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
 
 		if(!graph.isEmpty()) {
