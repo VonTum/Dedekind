@@ -731,16 +731,6 @@ inline void runCommands(const ParsedArgs& args) {
 		//{"verifyIntervalsCorrect8", []() {verifyIntervalsCorrect<8>(); }},
 		//{"verifyIntervalsCorrect9", []() {verifyIntervalsCorrect<9>(); }},
 
-		{"computeDedekindFromIntervals1", []() {computeDPlus1<1>(); }},
-		{"computeDedekindFromIntervals2", []() {computeDPlus1<2>(); }},
-		{"computeDedekindFromIntervals3", []() {computeDPlus1<3>(); }},
-		{"computeDedekindFromIntervals4", []() {computeDPlus1<4>(); }},
-		{"computeDedekindFromIntervals5", []() {computeDPlus1<5>(); }},
-		{"computeDedekindFromIntervals6", []() {computeDPlus1<6>(); }},
-		{"computeDedekindFromIntervals7", []() {computeDPlus1<7>(); }},
-		//{"computeDedekindFromIntervals8", []() {computeDPlus1<8>(); }},
-		//{"computeDedekindFromIntervals9", []() {computeDPlus1<9>(); }},
-
 		{"addSymmetriesToIntervalFile1", []() {addSymmetriesToIntervalFile<1>(); }},
 		{"addSymmetriesToIntervalFile2", []() {addSymmetriesToIntervalFile<2>(); }},
 		{"addSymmetriesToIntervalFile3", []() {addSymmetriesToIntervalFile<3>(); }},
@@ -750,6 +740,16 @@ inline void runCommands(const ParsedArgs& args) {
 		{"addSymmetriesToIntervalFile7", []() {addSymmetriesToIntervalFile<7>(); }},
 		//{"addSymmetriesToIntervalFile8", []() {addSymmetriesToIntervalFile<8>(); }},
 		//{"addSymmetriesToIntervalFile9", []() {addSymmetriesToIntervalFile<9>(); }},
+
+		{"computeDPlusOne1", []() {computeDPlus1<1>(); }},
+		{"computeDPlusOne2", []() {computeDPlus1<2>(); }},
+		{"computeDPlusOne3", []() {computeDPlus1<3>(); }},
+		{"computeDPlusOne4", []() {computeDPlus1<4>(); }},
+		{"computeDPlusOne5", []() {computeDPlus1<5>(); }},
+		{"computeDPlusOne6", []() {computeDPlus1<6>(); }},
+		{"computeDPlusOne7", []() {computeDPlus1<7>(); }},
+		//{"computeDedekindFromIntervals8", []() {computeDPlus1<8>(); }},
+		//{"computeDedekindFromIntervals9", []() {computeDPlus1<9>(); }},
 
 		{"preCompute1", []() {preComputeFiles<1>(); }},
 		{"preCompute2", []() {preComputeFiles<2>(); }},

@@ -10,8 +10,6 @@
 #include "blockIterator.h"
 #include <atomic>
 
-static uint64_t connectedHistogram[50];
-
 constexpr size_t TOPS_PER_BLOCK = 4;
 constexpr double swapperCutoff = 0.5;
 static size_t totalPCoeffs(0);
@@ -22,38 +20,37 @@ static uint64_t preconnectHistogram[50];
 static uint64_t successfulBots = 0;
 static uint64_t failedBots = 0;
 
-static void printHistogramAndPCoeffs(unsigned int Variables) {
+static double computeMean(uint64_t* data, size_t size) {
+	double sum = 0;
+	uint64_t count = 0;
+
+	for(size_t i = 0; i < size; i++) {
+		sum += i * data[i];
+		count += data[i];
+	}
+	return sum / count;
+}
+
+static void printList(const char* listName, uint64_t* data, size_t size, unsigned int Variables, bool verbose = false, bool reset = true) {
+	std::cout << listName << ": AVG=" << computeMean(data, size) << "\n";
+	for(size_t i = 0; i <= getMaxLayerWidth(Variables); i++) {
+		if(verbose) std::cout << i << ": " << data[i] << "\n";
+		if(reset) data[i] = 0;
+	}
+}
+
+static void printHistogramAndPCoeffs(unsigned int Variables, bool verbose = false, bool reset = true) {
 	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
-	//totalPCoeffs = 0;
+	if(reset) totalPCoeffs = 0;
 
-	std::cout << "Connections: \n";
-	for(size_t i = 0; i <= getMaxLayerWidth(Variables); i++) {
-		std::cout << i << ": " << connectedHistogram[i] << "\n";
-		//connectedHistogram[i] = 0;
-	}
-
-
-	std::cout << "Preconnections: \n";
-	for(size_t i = 0; i <= getMaxLayerWidth(Variables); i++) {
-		std::cout << i << ": " << preconnectHistogram[i] << "\n";
-		//preconnectHistogram[i] = 0;
-	}
-
-	std::cout << "Singleton counts: \n";
-	for(size_t i = 0; i <= getMaxLayerWidth(Variables); i++) {
-		std::cout << i << ": " << singletonCountHistogram[i] << "\n";
-		//singletonCountHistogram[i] = 0;
-	}
-
-	std::cout << "Cycles taken: \n";
-	for(size_t i = 0; i < 100; i++) {
-		std::cout << i << ": " << cyclesHistogram[i] << "\n";
-		//cyclesHistogram[i] = 0;
-	}
+	printList("Connections", connectedHistogram, getMaxLayerWidth(Variables), Variables, verbose, reset);
+	//printList("Preconnections", preconnectHistogram, getMaxLayerWidth(Variables), Variables, verbose, reset);
+	printList("Singleton counts", singletonCountHistogram, getMaxLayerWidth(Variables), Variables, verbose, reset);
+	printList("Cycles taken", cyclesHistogram, getMaxLayerWidth(Variables), Variables, verbose, reset);
 
 	std::cout << "Bottoms: " << successfulBots << "/" << (successfulBots + failedBots) << " bots were (bot <= top) " << (100.0 * successfulBots / (successfulBots + failedBots)) << "%" << std::endl;
-	//successfulBots = 0;
-	//failedBots = 0;
+	if(reset) successfulBots = 0;
+	if(reset) failedBots = 0;
 }
 
 template<unsigned int Variables>
@@ -213,18 +210,14 @@ uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMa
 
 	if(atLeastOneIsLarger(biggestGuessSizes, botLayerSizes) && biggestGuess.asAntiChain().size() >= 2) { // there is one layer which will always be larger than bot, so it's guaranteed to be included
 		return sumPermutedPCoeffsOver(top, botClass, [&](BooleanFunction<Variables> graph) {
-			uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
-
-			BooleanFunction<Variables> initialGuess = biggestGuess.bf & graph;
-			assert(!initialGuess.isEmpty());
-			connectCount += countConnectedVeryFast(graph, initialGuess);
 			++totalPCoeffs;
-			++connectedHistogram[connectCount];
-			return uint64_t(1) << connectCount;
+
+			return uint64_t(1) << countConnectedSingletonElimination(graph);
 		});
 	}
 
 	return sumPermutedPCoeffsOver(top, botClass, [&](BooleanFunction<Variables> graph) {
+		eliminateLeavesUp(graph);
 		uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
 
 		if(!graph.isEmpty()) {
