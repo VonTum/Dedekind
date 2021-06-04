@@ -592,7 +592,7 @@ template<unsigned int Variables>
 void benchmarkSampleTopBots(int topFraction = 1, int botFraction = 1) {
 	AllMBFMap<Variables, ExtraData> allIntervalSizesAndDownLinks = readAllMBFsMapExtraDownLinks<Variables>();
 
-	std::cout << "Read map\n";
+	std::cout << "Read map" << std::endl;
 
 	std::vector<TopBots<Variables>> benchSet;
 	std::mutex benchSetMutex;
@@ -600,6 +600,7 @@ void benchmarkSampleTopBots(int topFraction = 1, int botFraction = 1) {
 	std::atomic<int> randSeed(std::chrono::steady_clock::now().time_since_epoch().count());
 
 	for(int topLayerI = 1; topLayerI < (1 << Variables) + 1; topLayerI++) {
+		std::cout << "Layer " << topLayerI << std::endl;
 		const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
 
 		iterCollectionInParallelWithPerThreadBuffer(IntRange<size_t>{size_t(0), topLayer.size()}, 
