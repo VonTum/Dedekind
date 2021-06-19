@@ -137,20 +137,18 @@ bool atLeastOneIsLarger(const std::array<int, Size>& a, const std::array<int, Si
 	return false;
 }
 
-// expects a function of the form uint64_t(BooleanFunction<Variables> graph)
-template<unsigned int Variables, typename Func>
-uint64_t sumPermutedPCoeffsOver(const Monotonic<Variables>& top, const Monotonic<Variables>& botClass, const Func& computePCoeff) {
-	uint64_t totalPCoeff = 0;
-	botClass.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
+template<unsigned int Variables>
+SmallVector<BooleanFunction<Variables>, factorial(Variables)> listPermutationsBelow(const Monotonic<Variables>& top, const Monotonic<Variables>& botToPermute) {
+	SmallVector<BooleanFunction<Variables>, factorial(Variables)> result;
+	botToPermute.forEachPermutation([&result, &top](const Monotonic<Variables>& permutedBot) {
 		if(permutedBot <= top) {
-			BooleanFunction<Variables> graph = andnot(top.bf, permutedBot.bf);
-			totalPCoeff += computePCoeff(graph);
-			successfulBots++;
-		} else {
-			failedBots++;
+			BooleanFunction<Variables> difference = andnot(top.bf, permutedBot.bf);
+			result.push_back(difference);
 		}
 	});
-	return totalPCoeff;
+	successfulBots += result.size();
+	failedBots += factorial(Variables) - result.size();
+	return result;
 }
 
 template<unsigned int Variables>
@@ -208,29 +206,35 @@ uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMa
 	}*/
 	std::array<int, Variables + 1> biggestGuessSizes = getLayerSizes(biggestGuess);
 
+	SmallVector<BooleanFunction<Variables>, factorial(Variables)> acceptedGraphs = listPermutationsBelow(top, botClass);
+
+	uint64_t totalSum = 0;
+
 	if(atLeastOneIsLarger(biggestGuessSizes, botLayerSizes) && biggestGuess.asAntiChain().size() >= 2) { // there is one layer which will always be larger than bot, so it's guaranteed to be included
-		return sumPermutedPCoeffsOver(top, botClass, [&](BooleanFunction<Variables> graph) {
+		for(const BooleanFunction<Variables>& graph : acceptedGraphs) {
 			++totalPCoeffs;
 
-			return uint64_t(1) << countConnectedSingletonElimination(graph);
-		});
+			totalSum += uint64_t(1) << countConnectedSingletonElimination(graph);
+		}
+	} else {
+		for(BooleanFunction<Variables> graph : acceptedGraphs) {
+			eliminateLeavesUp(graph);
+			uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
+
+			if(!graph.isEmpty()) {
+				size_t initialGuessIndex = graph.getLast();
+				BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
+				initialGuess.add(initialGuessIndex);
+				initialGuess = initialGuess.monotonizeDown() & graph;
+				connectCount += countConnectedVeryFast(graph, initialGuess);
+			}
+			++totalPCoeffs;
+			++connectedHistogram[connectCount];
+			totalSum += uint64_t(1) << connectCount;
+		}
 	}
 
-	return sumPermutedPCoeffsOver(top, botClass, [&](BooleanFunction<Variables> graph) {
-		eliminateLeavesUp(graph);
-		uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
-
-		if(!graph.isEmpty()) {
-			size_t initialGuessIndex = graph.getLast();
-			BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
-			initialGuess.add(initialGuessIndex);
-			initialGuess = initialGuess.monotonizeDown() & graph;
-			connectCount += countConnectedVeryFast(graph, initialGuess);
-		}
-		++totalPCoeffs;
-		++connectedHistogram[connectCount];
-		return uint64_t(1) << connectCount;
-	});
+	return totalSum;
 }
 
 template<unsigned int Variables>
