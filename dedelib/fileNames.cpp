@@ -86,4 +86,12 @@ std::string benchmarkSetTopBots(unsigned int Variables) {
 	name.append(".topBots");
 	return name;
 }
+
+std::string pipelineTestSet(unsigned int Variables) {
+	std::string name = dataPath + "pipelineTestSet";
+	name.append(std::to_string(Variables));
+	name.append(".mem");
+	return name;
+}
+
 };

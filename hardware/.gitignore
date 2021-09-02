@@ -1,0 +1,10 @@
+dedekind.cache/
+dedekind.gen/
+dedekind.hw/
+dedekind.ip_user_files/
+dedekind.runs/
+dedekind.sim/
+**/ip/
+dedekind.xpr
+*.wcfg
+*.mem

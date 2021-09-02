@@ -322,7 +322,6 @@ uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph) {
 	return countConnectedVeryFast<Variables>(graph, initialGuess);
 }
 
-
 // assumes that no subgraph contains an element which is dominated by an element of another subgraph
 template<unsigned int Variables>
 uint64_t countConnectedFloodFill(BooleanFunction<Variables> graph) {

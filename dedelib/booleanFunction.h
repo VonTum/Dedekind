@@ -345,6 +345,17 @@ public:
 		}
 	}
 
+	BooleanFunction moved(unsigned int original, unsigned int destination) const {
+		BooleanFunction copy = *this;
+		copy.move(original, destination);
+		return copy;
+	}
+	BooleanFunction swapped(unsigned int var1, unsigned int var2) const {
+		BooleanFunction copy = *this;
+		copy.swap(var1, var2);
+		return copy;
+	}
+
 	template<typename Func>
 	void forEachPermutation(const Func& func) const {
 		forEachPermutationImpl<Variables, 0, Func>(*this, func);

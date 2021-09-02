@@ -105,6 +105,13 @@ struct AntiChain {
 		return AntiChain(this->bf.canonize());
 	}
 
+	void swap(unsigned int var1, unsigned int var2) {
+		this->bf.swap(var1, var2);
+	}
+	AntiChain swapped(unsigned int var1, unsigned int var2) const {
+		return AntiChain(this->bf.swapped(var1, var2));
+	}
+
 	size_t size() const {
 		return this->bf.size();
 	}
@@ -220,6 +227,13 @@ struct Monotonic {
 
 	uint64_t hash() const {
 		return this->bf.hash();
+	}
+
+	void swap(unsigned int var1, unsigned int var2) {
+		this->bf.swap(var1, var2);
+	}
+	Monotonic swapped(unsigned int var1, unsigned int var2) const {
+		return Monotonic(this->bf.swapped(var1, var2));
 	}
 
 	static constexpr Monotonic getTop() {
@@ -439,6 +453,13 @@ struct Layer {
 
 	unsigned int getUniverse() const {
 		return bf.getUniverse();
+	}
+
+	void swap(unsigned int var1, unsigned int var2) {
+		this->bf.swap(var1, var2);
+	}
+	Layer swapped(unsigned int var1, unsigned int var2) const {
+		return Layer(this->bf.swapped(var1, var2));
 	}
 
 	Layer canonize() const {

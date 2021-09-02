@@ -63,6 +63,18 @@ uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Va
 }
 
 template<unsigned int Variables>
+uint64_t computePCoefficientAllowBadBots(const Monotonic<Variables>& top, const Monotonic<Variables>& bot) {
+	if(!(bot <= top)) {
+		return 0;
+	}
+	size_t connectCount = countConnectedVeryFast<Variables>(top.bf & ~bot.bf);
+	++totalPCoeffs;
+	++connectedHistogram[connectCount];
+	uint64_t pcoeff = uint64_t(1) << connectCount;
+	return pcoeff;
+}
+
+template<unsigned int Variables>
 uint64_t computePCoefficient(const SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>& top, const Monotonic<Variables>& bot) {
 	SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)> resultingTop;
 	for(const Monotonic<Variables>& mbf : top) {

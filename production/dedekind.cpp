@@ -542,13 +542,14 @@ void benchPCoeffLayerElementStats(size_t topLayer) {
 	diagThread.join();
 }
 
-template<unsigned int Variables>
-void permuteRandom(Monotonic<Variables>& mbf) {
-	for(int i = 0; i < Variables * 3; i++) {
-		int a = rand() % Variables;
-		int b = rand() % Variables;
+template<unsigned int Variables, typename RandomEngine>
+void permuteRandom(Monotonic<Variables>& mbf, RandomEngine& generator) {
+	std::uniform_int_distribution<unsigned int> selector(0, Variables - 1);
+	for(unsigned int i = 0; i < Variables * 3; i++) {
+		unsigned int a = selector(generator);
+		unsigned int b = selector(generator);
 		if(a != b) {
-			mbf.bf.swap(a, b);
+			mbf.swap(a, b);
 		}
 	}
 }
@@ -561,20 +562,21 @@ void benchmarkSample() {
 	std::vector<std::pair<Monotonic<Variables>, IntervalSymmetry>> benchSet;
 	benchSet.reserve(mbfCounts[Variables] / 60);
 
+	std::default_random_engine generator;
+
 	while(symFile.good()) {
 		Monotonic<Variables> mbf = deserializeMBF<Variables>(symFile);
 		IntervalSymmetry is = deserializeExtraData(symFile);
 
 		if(rand() % 100 == 0) {
 			// keep
-			permuteRandom(mbf);
+			permuteRandom(mbf, generator);
 
 			benchSet.push_back(std::make_pair(mbf, is));
 		}
 	}
 	symFile.close();
 
-	std::default_random_engine generator;
 	std::shuffle(benchSet.begin(), benchSet.end(), generator);
 
 	std::ofstream benchmarkSetFile(FileName::benchmarkSet(Variables), std::ios::binary);
@@ -638,6 +640,41 @@ void benchmarkSampleTopBots(int topFraction = 1, int botFraction = 1) {
 	serializeVector(benchSet, benchmarkSetFile, serializeTopBots<Variables>);
 
 	benchmarkSetFile.close();
+}
+
+template<unsigned int Variables>
+void pipelineTestSet(size_t count) {
+	std::vector<TopBots<Variables>> topBots = readTopBots<Variables>(5000);
+
+	std::default_random_engine generator(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+
+	std::ofstream testSet(FileName::pipelineTestSet(Variables)); // plain text file
+
+	const TopBots<Variables>& selectedTop = topBots[std::uniform_int_distribution<size_t>(0, topBots.size() - 1)(generator)];
+	std::uniform_int_distribution<size_t> botSelector(0, selectedTop.bots.size() - 1);
+
+	Monotonic<Variables> top = selectedTop.top;
+
+	std::cout << "Starting generation" << std::endl;
+	for(size_t i = 0; i < count; i++) {
+		testSet << top.bf.bitset << '_';
+		Monotonic<Variables> botA = selectedTop.bots[botSelector(generator)];
+		Monotonic<Variables> botC = selectedTop.bots[botSelector(generator)];
+		permuteRandom(botA, generator);
+		permuteRandom(botC, generator);
+		testSet << botA.bf.bitset << '_' << botC.bf.bitset << '_';
+		uint64_t resultingBotSum = 
+			computePCoefficientAllowBadBots<Variables>(top, botA) + 
+			computePCoefficientAllowBadBots<Variables>(top, botC) + 
+			computePCoefficientAllowBadBots<Variables>(top, botA.swapped(5,6)) + 
+			computePCoefficientAllowBadBots<Variables>(top, botC.swapped(5,6));
+
+		BitSet<64> asBitset;
+		asBitset.data = resultingBotSum;
+		testSet << asBitset << std::endl;
+	}
+
+	testSet.close();
 }
 
 inline void runCommands(const ParsedArgs& args) {
@@ -834,6 +871,14 @@ inline void runCommands(const ParsedArgs& args) {
 		{"pcoeffLayerElementStats5", [](const std::string& size) {benchPCoeffLayerElementStats<5>(std::stoi(size)); }},
 		{"pcoeffLayerElementStats6", [](const std::string& size) {benchPCoeffLayerElementStats<6>(std::stoi(size)); }},
 		{"pcoeffLayerElementStats7", [](const std::string& size) {benchPCoeffLayerElementStats<7>(std::stoi(size)); }},
+
+		{"pipelineTestSet1", [](const std::string& size) {pipelineTestSet<1>(std::stoi(size)); }},
+		{"pipelineTestSet2", [](const std::string& size) {pipelineTestSet<2>(std::stoi(size)); }},
+		{"pipelineTestSet3", [](const std::string& size) {pipelineTestSet<3>(std::stoi(size)); }},
+		{"pipelineTestSet4", [](const std::string& size) {pipelineTestSet<4>(std::stoi(size)); }},
+		{"pipelineTestSet5", [](const std::string& size) {pipelineTestSet<5>(std::stoi(size)); }},
+		{"pipelineTestSet6", [](const std::string& size) {pipelineTestSet<6>(std::stoi(size)); }},
+		{"pipelineTestSet7", [](const std::string& size) {pipelineTestSet<7>(std::stoi(size)); }},
 	};
 
 	for(size_t i = 0; i < args.argCount(); i++) {
