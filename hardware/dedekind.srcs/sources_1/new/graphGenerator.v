@@ -34,7 +34,7 @@ assign isValid = ~(|(bot & ~top)); // no bot elements above top
 endmodule
 
 
-module graphGenerator(
+/*module graphGenerator(
     input[127:0] top,
     input[127:0] bot,
     input dataAvailable,
@@ -68,4 +68,4 @@ end
 
 
 
-endmodule
+endmodule*/

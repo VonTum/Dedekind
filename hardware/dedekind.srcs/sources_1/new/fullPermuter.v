@@ -20,7 +20,7 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-function automatic integer factorial;
+/*function automatic integer factorial;
     input integer val;
     
     integer i;
@@ -41,4 +41,4 @@ module fullPermuter #(parameter PERMUTE_UP_TO = 7) (
 
 
 
-endmodule
+endmodule*/

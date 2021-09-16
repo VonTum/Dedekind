@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`include "leafElimination.vh"
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
 // Engineer: 
@@ -20,8 +21,22 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
+module leafEliminationElement #(parameter COUNT = 3) (
+    input mainWire,
+    input [COUNT - 1:0] oneWires,
+    input [6 - COUNT:0] orWires,
+    output nonLeafOut
+);
 
-module leafEliminationDown (
+wire hasExactlyOneWire;
+exactlyOne #(COUNT) hasExactlyOne(oneWires, hasExactlyOneWire);
+wire isLeaf = hasExactlyOneWire & !(|orWires);
+assign nonLeafOut = mainWire & !isLeaf;
+
+endmodule
+
+
+module leafElimination #(parameter DIRECTION = `DOWN) (
     input [127:0] graphIn,
     output [127:0] graphOut
 );
@@ -62,46 +77,37 @@ function integer getNthBit;
 
 endfunction
 
-wire[127:0] isLeaf;
-
-assign graphOut = graphIn & ~isLeaf; // removes nodes with exactly one neighbor
-
 generate
-    assign isLeaf[0] = 0;
-    for(genvar outI = 1; outI < 128; outI = outI + 1) begin
-        wire[popcntStatic(outI, 7)-1:0] inputWires;
+    assign graphOut[0] = graphIn[0];
+    assign graphOut[127] = graphIn[127];
+    for(genvar outI = 1; outI < 127; outI = outI + 1) begin
+        wire[popcntStatic(outI, 7)-1:0] wiresBelow;
+        wire[6-popcntStatic(outI, 7):0] wiresAbove;
         
         for(genvar wireI = 0; wireI < popcntStatic(outI, 7); wireI = wireI + 1) begin
-            assign inputWires[wireI] = graphIn[outI & ~(1 << getNthBit(outI, wireI, 1))];
+            assign wiresBelow[wireI] = graphIn[outI & ~(1 << getNthBit(outI, wireI, 1))];
         end
-        
-        exactlyOne #(popcntStatic(outI, 7)) hasExactlyOne(inputWires, isLeaf[outI]);
-    end
-endgenerate
-
-
-
-endmodule
-
-/*module leafEliminationUp (
-    input [127:0] graphIn,
-    output [127:0] graphOut
-);
-
-wire[127:0] isLeaf;
-
-assign graphOut = graphIn & ~isLeaf; // removes nodes with exactly one neighbor
-
-generate
-    for(genvar outI = 0; outI < 128; outI = outI + 1) begin
-        wire[6-popcntStatic(outI, 7):0] inputWires;
         
         for(genvar wireI = 0; wireI < 7-popcntStatic(outI, 7); wireI = wireI + 1) begin
-            assign inputWires[wireI] = graphIn[outI | (1 << getNthBit(outI, wireI, 0))];
+            assign wiresAbove[wireI] = graphIn[outI | (1 << getNthBit(outI, wireI, 0))];
         end
         
-        exactlyOne #(7-popcntStatic(outI, 7)) hasExactlyOne(inputWires, isLeaf[outI]);
+        if(DIRECTION == `DOWN) begin
+            leafEliminationElement #(popcntStatic(outI, 7)) elem(
+                .mainWire(graphIn[outI]), 
+                .oneWires(wiresBelow), 
+                .orWires(wiresAbove), 
+                .nonLeafOut(graphOut[outI])
+            );
+        end else begin
+            leafEliminationElement #(7-popcntStatic(outI, 7)) elem(
+                .mainWire(graphIn[outI]), 
+                .oneWires(wiresAbove), 
+                .orWires(wiresBelow), 
+                .nonLeafOut(graphOut[outI])
+            );
+        end
     end
 endgenerate
 
-endmodule*/
+endmodule

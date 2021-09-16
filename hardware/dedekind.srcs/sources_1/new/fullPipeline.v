@@ -1,5 +1,6 @@
 `timescale 1ns / 1ps
 `include "bramProperties.vh"
+`include "leafElimination.vh"
 
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
@@ -34,13 +35,21 @@ module computeModule(
     output reg[11:0] resultBatchId
 );
 
+always @ (posedge clk) begin
+    if(started) begin
+        resultBatchId = batchId;
+    end
+end
+
 wire[127:0] leafEliminatedGraph;
 wire[127:0] singletonEliminatedGraph;
 
 wire[5:0] connectCountIn;
 
-leafEliminationDown le(graphIn, leafEliminatedGraph);
+leafElimination #(.DIRECTION(`DOWN)) le1(graphIn, leafEliminatedGraph);
+
 singletonElimination se(leafEliminatedGraph, singletonEliminatedGraph, connectCountIn);
+
 countConnectedCore core(
     .clk(clk), 
     .graphIn(singletonEliminatedGraph), 
@@ -51,12 +60,6 @@ countConnectedCore core(
     .started(started),
     .done(done)
 );
-
-always @ (posedge clk) begin
-    if(started) begin
-        resultBatchId = batchId;
-    end
-end
 
 endmodule
 
