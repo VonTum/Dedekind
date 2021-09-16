@@ -542,6 +542,63 @@ void benchPCoeffLayerElementStats(size_t topLayer) {
 	diagThread.join();
 }
 
+
+template<unsigned int Variables>
+void findLongestMiddleLayerChainRecurseUp(BooleanFunction<Variables> curChain, size_t newestElement, BooleanFunction<Variables>& longestChain, size_t& longestChainLength) {
+	Layer<Variables> newPossibleElements = Layer<Variables>{newestElement}.pred();
+	BooleanFunction<Variables> blockedElements = curChain.monotonizeDown();
+	BooleanFunction<Variables> chooseableElements = newPossibleElements.bf & ~blockedElements;
+	curChain.add(newestElement);
+
+	size_t curChainSize = curChain.size();
+	if(curChainSize > longestChainLength) {
+		longestChainLength = curChainSize;
+		longestChain = curChain;
+		std::cout << "Better chain found: (Length " << longestChainLength << ") " << longestChain << std::endl;
+	}
+
+	chooseableElements.forEachOne([curChain, &longestChain, &longestChainLength](size_t newElement){
+		findLongestMiddleLayerChainRecurseDown(curChain, newElement, longestChain, longestChainLength);
+	});
+}
+template<unsigned int Variables>
+void findLongestMiddleLayerChainRecurseDown(BooleanFunction<Variables> curChain, size_t newestElement, BooleanFunction<Variables>& longestChain, size_t& longestChainLength) {
+	Layer<Variables> newPossibleElements = Layer<Variables>{newestElement}.succ();
+	BooleanFunction<Variables> blockedElements = curChain.monotonizeUp();
+	BooleanFunction<Variables> chooseableElements = newPossibleElements.bf & ~blockedElements;
+	curChain.add(newestElement);
+
+	size_t curChainSize = curChain.size();
+	if(curChainSize > longestChainLength) {
+		longestChainLength = curChainSize;
+		longestChain = curChain;
+		std::cout << "Better chain found: (Length " << longestChainLength << ") " << longestChain << std::endl;
+	}
+
+	chooseableElements.forEachOne([curChain, &longestChain, &longestChainLength](size_t newElement){
+		findLongestMiddleLayerChainRecurseUp(curChain, newElement, longestChain, longestChainLength);
+	});
+}
+
+template<unsigned int Variables>
+BooleanFunction<Variables> findLongestMiddleLayerChain() {
+	Layer<Variables> middleLayerA(BooleanFunction<Variables>::layerMask(Variables / 2));
+	Layer<Variables> middleLayerB(BooleanFunction<Variables>::layerMask(Variables / 2 + 1));
+
+	BooleanFunction<Variables> curChain = BooleanFunction<Variables>::empty();
+	curChain.add(middleLayerA.getFirst());
+	size_t newestIndex = (curChain.monotonizeUp() & middleLayerB).getFirst();
+	
+	BooleanFunction<Variables> longestChain = curChain;
+	size_t longestChainLength = longestChain.size();
+	std::cout << "Starting best chain: (Length " << longestChainLength << ") " << longestChain << std::endl;
+	findLongestMiddleLayerChainRecurseUp(curChain, newestIndex, longestChain, longestChainLength);
+
+	std::cout << "Longest chain found: (Length " << longestChainLength << ") " << longestChain << std::endl;
+
+	return longestChain;
+}
+
 template<unsigned int Variables, typename RandomEngine>
 void permuteRandom(Monotonic<Variables>& mbf, RandomEngine& generator) {
 	std::uniform_int_distribution<unsigned int> selector(0, Variables - 1);
@@ -608,14 +665,14 @@ void benchmarkSampleTopBots(int topFraction = 1, int botFraction = 1) {
 		iterCollectionInParallelWithPerThreadBuffer(IntRange<size_t>{size_t(0), topLayer.size()}, 
 													[&]() {return std::make_pair(SwapperLayers<Variables, bool>(), std::default_random_engine(randSeed.fetch_add(1))); }, 
 													[&](size_t topIdx, std::pair<SwapperLayers<Variables, bool>, std::default_random_engine>& swapperRand) {
-			if(std::uniform_int_distribution(0, topFraction)(swapperRand.second) != 0) return;
+			if(std::uniform_int_distribution<int>(0, topFraction)(swapperRand.second) != 0) return;
 
 			const KeyValue<Monotonic<Variables>, ExtraData>& topKV = topLayer[topIdx];
 			
 			std::vector<Monotonic<Variables>> selectedBots;
 
 			forEachBelowUsingSwapper(topLayerI, topIdx, allIntervalSizesAndDownLinks, swapperRand.first, [&](const KeyValue<Monotonic<Variables>, ExtraData>& botKV) {
-				if(std::uniform_int_distribution(0, botFraction)(swapperRand.second) != 0) return;
+				if(std::uniform_int_distribution<int>(0, botFraction)(swapperRand.second) != 0) return;
 
 				selectedBots.push_back(botKV.key);
 			});
@@ -677,210 +734,220 @@ void pipelineTestSet(size_t count) {
 	testSet.close();
 }
 
+std::map<std::string, void(*)()> commands{
+	{"ramTest", []() {doRAMTest(); }},
+
+	{"graphVis1", []() {genGraphVisCode(1); }},
+	{"graphVis2", []() {genGraphVisCode(2); }},
+	{"graphVis3", []() {genGraphVisCode(3); }},
+	{"graphVis4", []() {genGraphVisCode(4); }},
+	{"graphVis5", []() {genGraphVisCode(5); }},
+	{"graphVis6", []() {genGraphVisCode(6); }},
+	{"graphVis7", []() {genGraphVisCode(7); }},
+	{"graphVis8", []() {genGraphVisCode(8); }},
+	{"graphVis9", []() {genGraphVisCode(9); }},
+
+	{"revolution4", []() {doRevolution<4>(); }},
+	{"revolution5", []() {doRevolution<5>(); }},
+	{"revolution6", []() {doRevolution<6>(); }},
+	{"revolution7", []() {doRevolution<7>(); }},
+	{"revolution8", []() {doRevolution<8>(); }},
+	{"revolution9", []() {doRevolution<9>(); }},
+
+	{"genAllMBF1", []() {runGenAllMBFs<1>(); }},
+	{"genAllMBF2", []() {runGenAllMBFs<2>(); }},
+	{"genAllMBF3", []() {runGenAllMBFs<3>(); }},
+	{"genAllMBF4", []() {runGenAllMBFs<4>(); }},
+	{"genAllMBF5", []() {runGenAllMBFs<5>(); }},
+	{"genAllMBF6", []() {runGenAllMBFs<6>(); }},
+	{"genAllMBF7", []() {runGenAllMBFs<7>(); }},
+	{"genAllMBF8", []() {runGenAllMBFs<8>(); }},
+	{"genAllMBF9", []() {runGenAllMBFs<9>(); }},
+
+	{"sortAndComputeLinks1", []() {runSortAndComputeLinks<1>(); }},
+	{"sortAndComputeLinks2", []() {runSortAndComputeLinks<2>(); }},
+	{"sortAndComputeLinks3", []() {runSortAndComputeLinks<3>(); }},
+	{"sortAndComputeLinks4", []() {runSortAndComputeLinks<4>(); }},
+	{"sortAndComputeLinks5", []() {runSortAndComputeLinks<5>(); }},
+	{"sortAndComputeLinks6", []() {runSortAndComputeLinks<6>(); }},
+	{"sortAndComputeLinks7", []() {runSortAndComputeLinks<7>(); }},
+	//{"sortAndComputeLinks8", []() {runSortAndComputeLinks<8>(); }},
+	//{"sortAndComputeLinks9", []() {runSortAndComputeLinks<9>(); }},
+
+	//{"saveIntervalSizes1", []() {saveIntervalSizes<1>(); }},
+	//{"saveIntervalSizes2", []() {saveIntervalSizes<2>(); }},
+	//{"saveIntervalSizes3", []() {saveIntervalSizes<3>(); }},
+	//{"saveIntervalSizes4", []() {saveIntervalSizes<4>(); }},
+	//{"saveIntervalSizes5", []() {saveIntervalSizes<5>(); }},
+	//{"saveIntervalSizes6", []() {saveIntervalSizes<6>(); }},
+	//{"saveIntervalSizes7", []() {saveIntervalSizes<7>(); }},
+	//{"saveIntervalSizes8", []() {saveIntervalSizes<8>(); }},
+	//{"saveIntervalSizes9", []() {saveIntervalSizes<9>(); }},
+
+	{"linkCount1", []() {doLinkCount<1>(); }},
+	{"linkCount2", []() {doLinkCount<2>(); }},
+	{"linkCount3", []() {doLinkCount<3>(); }},
+	{"linkCount4", []() {doLinkCount<4>(); }},
+	{"linkCount5", []() {doLinkCount<5>(); }},
+	{"linkCount6", []() {doLinkCount<6>(); }},
+	{"linkCount7", []() {doLinkCount<7>(); }},
+	//{"linkCount8", []() {doLinkCount<8>(); }},
+	//{"linkCount9", []() {doLinkCount<9>(); }},
+
+	{"findLongestMiddleLayerChain1", []() {findLongestMiddleLayerChain<1>(); }},
+	{"findLongestMiddleLayerChain2", []() {findLongestMiddleLayerChain<2>(); }},
+	{"findLongestMiddleLayerChain3", []() {findLongestMiddleLayerChain<3>(); }},
+	{"findLongestMiddleLayerChain4", []() {findLongestMiddleLayerChain<4>(); }},
+	{"findLongestMiddleLayerChain5", []() {findLongestMiddleLayerChain<5>(); }},
+	{"findLongestMiddleLayerChain6", []() {findLongestMiddleLayerChain<6>(); }},
+	{"findLongestMiddleLayerChain7", []() {findLongestMiddleLayerChain<7>(); }},
+	{"findLongestMiddleLayerChain8", []() {findLongestMiddleLayerChain<8>(); }},
+	{"findLongestMiddleLayerChain9", []() {findLongestMiddleLayerChain<9>(); }},
+
+	//{"sampleIntervalSizes1", []() {sampleIntervalSizes<1>(); }},
+	//{"sampleIntervalSizes2", []() {sampleIntervalSizes<2>(); }},
+	//{"sampleIntervalSizes3", []() {sampleIntervalSizes<3>(); }},
+	//{"sampleIntervalSizes4", []() {sampleIntervalSizes<4>(); }},
+	//{"sampleIntervalSizes5", []() {sampleIntervalSizes<5>(); }},
+	//{"sampleIntervalSizes6", []() {sampleIntervalSizes<6>(); }},
+	//{"sampleIntervalSizes7", []() {sampleIntervalSizes<7>(); }},
+	//{"sampleIntervalSizes8", []() {sampleIntervalSizes<8>(); }},
+	//{"sampleIntervalSizes9", []() {sampleIntervalSizes<9>(); }},
+
+	{"computeIntervalsParallel1", []() {computeIntervalsParallel<1>(); }},
+	{"computeIntervalsParallel2", []() {computeIntervalsParallel<2>(); }},
+	{"computeIntervalsParallel3", []() {computeIntervalsParallel<3>(); }},
+	{"computeIntervalsParallel4", []() {computeIntervalsParallel<4>(); }},
+	{"computeIntervalsParallel5", []() {computeIntervalsParallel<5>(); }},
+	{"computeIntervalsParallel6", []() {computeIntervalsParallel<6>(); }},
+	{"computeIntervalsParallel7", []() {computeIntervalsParallel<7>(); }},
+	//{"computeIntervalsParallel8", []() {computeIntervalsParallel<8>(); }},
+	//{"computeIntervalsParallel9", []() {computeIntervalsParallel<9>(); }},
+
+	{"verifyIntervalsCorrect1", []() {verifyIntervalsCorrect<1>(); }},
+	{"verifyIntervalsCorrect2", []() {verifyIntervalsCorrect<2>(); }},
+	{"verifyIntervalsCorrect3", []() {verifyIntervalsCorrect<3>(); }},
+	{"verifyIntervalsCorrect4", []() {verifyIntervalsCorrect<4>(); }},
+	{"verifyIntervalsCorrect5", []() {verifyIntervalsCorrect<5>(); }},
+	{"verifyIntervalsCorrect6", []() {verifyIntervalsCorrect<6>(); }},
+	{"verifyIntervalsCorrect7", []() {verifyIntervalsCorrect<7>(); }},
+	//{"verifyIntervalsCorrect8", []() {verifyIntervalsCorrect<8>(); }},
+	//{"verifyIntervalsCorrect9", []() {verifyIntervalsCorrect<9>(); }},
+
+	{"addSymmetriesToIntervalFile1", []() {addSymmetriesToIntervalFile<1>(); }},
+	{"addSymmetriesToIntervalFile2", []() {addSymmetriesToIntervalFile<2>(); }},
+	{"addSymmetriesToIntervalFile3", []() {addSymmetriesToIntervalFile<3>(); }},
+	{"addSymmetriesToIntervalFile4", []() {addSymmetriesToIntervalFile<4>(); }},
+	{"addSymmetriesToIntervalFile5", []() {addSymmetriesToIntervalFile<5>(); }},
+	{"addSymmetriesToIntervalFile6", []() {addSymmetriesToIntervalFile<6>(); }},
+	{"addSymmetriesToIntervalFile7", []() {addSymmetriesToIntervalFile<7>(); }},
+	//{"addSymmetriesToIntervalFile8", []() {addSymmetriesToIntervalFile<8>(); }},
+	//{"addSymmetriesToIntervalFile9", []() {addSymmetriesToIntervalFile<9>(); }},
+
+	{"computeDPlusOne1", []() {computeDPlus1<1>(); }},
+	{"computeDPlusOne2", []() {computeDPlus1<2>(); }},
+	{"computeDPlusOne3", []() {computeDPlus1<3>(); }},
+	{"computeDPlusOne4", []() {computeDPlus1<4>(); }},
+	{"computeDPlusOne5", []() {computeDPlus1<5>(); }},
+	{"computeDPlusOne6", []() {computeDPlus1<6>(); }},
+	{"computeDPlusOne7", []() {computeDPlus1<7>(); }},
+	//{"computeDedekindFromIntervals8", []() {computeDPlus1<8>(); }},
+	//{"computeDedekindFromIntervals9", []() {computeDPlus1<9>(); }},
+
+	{"preCompute1", []() {preComputeFiles<1>(); }},
+	{"preCompute2", []() {preComputeFiles<2>(); }},
+	{"preCompute3", []() {preComputeFiles<3>(); }},
+	{"preCompute4", []() {preComputeFiles<4>(); }},
+	{"preCompute5", []() {preComputeFiles<5>(); }},
+	{"preCompute6", []() {preComputeFiles<6>(); }},
+	{"preCompute7", []() {preComputeFiles<7>(); }},
+
+	{"noCanonizationPCoeffMethod1", []() {noCanonizationPCoeffMethod<1>(); }},
+	{"noCanonizationPCoeffMethod2", []() {noCanonizationPCoeffMethod<2>(); }},
+	{"noCanonizationPCoeffMethod3", []() {noCanonizationPCoeffMethod<3>(); }},
+	{"noCanonizationPCoeffMethod4", []() {noCanonizationPCoeffMethod<4>(); }},
+	{"noCanonizationPCoeffMethod5", []() {noCanonizationPCoeffMethod<5>(); }},
+	{"noCanonizationPCoeffMethod6", []() {noCanonizationPCoeffMethod<6>(); }},
+	{"noCanonizationPCoeffMethod7", []() {noCanonizationPCoeffMethod<7>(); }},
+
+	{"newPCoeff1", []() {pcoeffMethodV2<1>(); }},
+	{"newPCoeff2", []() {pcoeffMethodV2<2>(); }},
+	{"newPCoeff3", []() {pcoeffMethodV2<3>(); }},
+	{"newPCoeff4", []() {pcoeffMethodV2<4>(); }},
+	{"newPCoeff5", []() {pcoeffMethodV2<5>(); }},
+	{"newPCoeff6", []() {pcoeffMethodV2<6>(); }},
+	{"newPCoeff7", []() {pcoeffMethodV2<7>(); }}, 
+
+	{"pcoeffTimeEstimate1", []() {pcoeffTimeEstimate<1>(); }},
+	{"pcoeffTimeEstimate2", []() {pcoeffTimeEstimate<2>(); }},
+	{"pcoeffTimeEstimate3", []() {pcoeffTimeEstimate<3>(); }},
+	{"pcoeffTimeEstimate4", []() {pcoeffTimeEstimate<4>(); }},
+	{"pcoeffTimeEstimate5", []() {pcoeffTimeEstimate<5>(); }},
+	{"pcoeffTimeEstimate6", []() {pcoeffTimeEstimate<6>(); }},
+	{"pcoeffTimeEstimate7", []() {pcoeffTimeEstimate<7>(); }},
+
+	{"benchmarkSample1", []() {benchmarkSample<1>(); }},
+	{"benchmarkSample2", []() {benchmarkSample<2>(); }},
+	{"benchmarkSample3", []() {benchmarkSample<3>(); }},
+	{"benchmarkSample4", []() {benchmarkSample<4>(); }},
+	{"benchmarkSample5", []() {benchmarkSample<5>(); }},
+	{"benchmarkSample6", []() {benchmarkSample<6>(); }},
+	{"benchmarkSample7", []() {benchmarkSample<7>(); }},
+
+	{"benchmarkSampleTopBots1", []() {benchmarkSampleTopBots<1>(1,1); }},
+	{"benchmarkSampleTopBots2", []() {benchmarkSampleTopBots<2>(1,1); }},
+	{"benchmarkSampleTopBots3", []() {benchmarkSampleTopBots<3>(1,1); }},
+	{"benchmarkSampleTopBots4", []() {benchmarkSampleTopBots<4>(1,1); }},
+	{"benchmarkSampleTopBots5", []() {benchmarkSampleTopBots<5>(1,1); }},
+	{"benchmarkSampleTopBots6", []() {benchmarkSampleTopBots<6>(100, 100); }},
+	{"benchmarkSampleTopBots7", []() {benchmarkSampleTopBots<7>(10000, 10000); }},
+
+	{"computeIntervalSizesNaive1", []() {computeIntervalSizesNaive<1>(); }},
+	{"computeIntervalSizesNaive2", []() {computeIntervalSizesNaive<2>(); }},
+	{"computeIntervalSizesNaive3", []() {computeIntervalSizesNaive<3>(); }},
+	{"computeIntervalSizesNaive4", []() {computeIntervalSizesNaive<4>(); }},
+	{"computeIntervalSizesNaive5", []() {computeIntervalSizesNaive<5>(); }},
+	{"computeIntervalSizesNaive6", []() {computeIntervalSizesNaive<6>(); }},
+	{"computeIntervalSizesNaive7", []() {computeIntervalSizesNaive<7>(); }},
+
+	{"computeIntervalSizesFast1", []() {computeIntervalSizesFast<1>(); }},
+	{"computeIntervalSizesFast2", []() {computeIntervalSizesFast<2>(); }},
+	{"computeIntervalSizesFast3", []() {computeIntervalSizesFast<3>(); }},
+	{"computeIntervalSizesFast4", []() {computeIntervalSizesFast<4>(); }},
+	{"computeIntervalSizesFast5", []() {computeIntervalSizesFast<5>(); }},
+	{"computeIntervalSizesFast6", []() {computeIntervalSizesFast<6>(); }},
+	{"computeIntervalSizesFast7", []() {computeIntervalSizesFast<7>(); }},
+};
+
+std::map<std::string, void(*)(const std::string&)> commandsWithArg{
+	{"checkIntervalLayers1", [](const std::string& size) {checkIntervalLayers<1>(std::stoi(size)); }},
+	{"checkIntervalLayers2", [](const std::string& size) {checkIntervalLayers<2>(std::stoi(size)); }},
+	{"checkIntervalLayers3", [](const std::string& size) {checkIntervalLayers<3>(std::stoi(size)); }},
+	{"checkIntervalLayers4", [](const std::string& size) {checkIntervalLayers<4>(std::stoi(size)); }},
+	{"checkIntervalLayers5", [](const std::string& size) {checkIntervalLayers<5>(std::stoi(size)); }},
+	{"checkIntervalLayers6", [](const std::string& size) {checkIntervalLayers<6>(std::stoi(size)); }},
+	{"checkIntervalLayers7", [](const std::string& size) {checkIntervalLayers<7>(std::stoi(size)); }},
+	//{"checkIntervalLayers8", [](const std::string& size) {checkIntervalLayers<8>(std::stoi(size)); }},
+	//{"checkIntervalLayers9", [](const std::string& size) {checkIntervalLayers<9>(std::stoi(size)); }}
+
+	{"pcoeffLayerElementStats1", [](const std::string& size) {benchPCoeffLayerElementStats<1>(std::stoi(size)); }},
+	{"pcoeffLayerElementStats2", [](const std::string& size) {benchPCoeffLayerElementStats<2>(std::stoi(size)); }},
+	{"pcoeffLayerElementStats3", [](const std::string& size) {benchPCoeffLayerElementStats<3>(std::stoi(size)); }},
+	{"pcoeffLayerElementStats4", [](const std::string& size) {benchPCoeffLayerElementStats<4>(std::stoi(size)); }},
+	{"pcoeffLayerElementStats5", [](const std::string& size) {benchPCoeffLayerElementStats<5>(std::stoi(size)); }},
+	{"pcoeffLayerElementStats6", [](const std::string& size) {benchPCoeffLayerElementStats<6>(std::stoi(size)); }},
+	{"pcoeffLayerElementStats7", [](const std::string& size) {benchPCoeffLayerElementStats<7>(std::stoi(size)); }},
+
+	{"pipelineTestSet1", [](const std::string& size) {pipelineTestSet<1>(std::stoi(size)); }},
+	{"pipelineTestSet2", [](const std::string& size) {pipelineTestSet<2>(std::stoi(size)); }},
+	{"pipelineTestSet3", [](const std::string& size) {pipelineTestSet<3>(std::stoi(size)); }},
+	{"pipelineTestSet4", [](const std::string& size) {pipelineTestSet<4>(std::stoi(size)); }},
+	{"pipelineTestSet5", [](const std::string& size) {pipelineTestSet<5>(std::stoi(size)); }},
+	{"pipelineTestSet6", [](const std::string& size) {pipelineTestSet<6>(std::stoi(size)); }},
+	{"pipelineTestSet7", [](const std::string& size) {pipelineTestSet<7>(std::stoi(size)); }},
+};
+
 inline void runCommands(const ParsedArgs& args) {
-	std::map<std::string, void(*)()> commands{
-		{"ramTest", []() {doRAMTest(); }},
-
-		{"graphVis1", []() {genGraphVisCode(1); }},
-		{"graphVis2", []() {genGraphVisCode(2); }},
-		{"graphVis3", []() {genGraphVisCode(3); }},
-		{"graphVis4", []() {genGraphVisCode(4); }},
-		{"graphVis5", []() {genGraphVisCode(5); }},
-		{"graphVis6", []() {genGraphVisCode(6); }},
-		{"graphVis7", []() {genGraphVisCode(7); }},
-		{"graphVis8", []() {genGraphVisCode(8); }},
-		{"graphVis9", []() {genGraphVisCode(9); }},
-
-		{"revolution4", []() {doRevolution<4>(); }},
-		{"revolution5", []() {doRevolution<5>(); }},
-		{"revolution6", []() {doRevolution<6>(); }},
-		{"revolution7", []() {doRevolution<7>(); }},
-		{"revolution8", []() {doRevolution<8>(); }},
-		{"revolution9", []() {doRevolution<9>(); }},
-
-		{"genAllMBF1", []() {runGenAllMBFs<1>(); }},
-		{"genAllMBF2", []() {runGenAllMBFs<2>(); }},
-		{"genAllMBF3", []() {runGenAllMBFs<3>(); }},
-		{"genAllMBF4", []() {runGenAllMBFs<4>(); }},
-		{"genAllMBF5", []() {runGenAllMBFs<5>(); }},
-		{"genAllMBF6", []() {runGenAllMBFs<6>(); }},
-		{"genAllMBF7", []() {runGenAllMBFs<7>(); }},
-		{"genAllMBF8", []() {runGenAllMBFs<8>(); }},
-		{"genAllMBF9", []() {runGenAllMBFs<9>(); }},
-
-		{"sortAndComputeLinks1", []() {runSortAndComputeLinks<1>(); }},
-		{"sortAndComputeLinks2", []() {runSortAndComputeLinks<2>(); }},
-		{"sortAndComputeLinks3", []() {runSortAndComputeLinks<3>(); }},
-		{"sortAndComputeLinks4", []() {runSortAndComputeLinks<4>(); }},
-		{"sortAndComputeLinks5", []() {runSortAndComputeLinks<5>(); }},
-		{"sortAndComputeLinks6", []() {runSortAndComputeLinks<6>(); }},
-		{"sortAndComputeLinks7", []() {runSortAndComputeLinks<7>(); }},
-		//{"sortAndComputeLinks8", []() {runSortAndComputeLinks<8>(); }},
-		//{"sortAndComputeLinks9", []() {runSortAndComputeLinks<9>(); }},
-
-		//{"saveIntervalSizes1", []() {saveIntervalSizes<1>(); }},
-		//{"saveIntervalSizes2", []() {saveIntervalSizes<2>(); }},
-		//{"saveIntervalSizes3", []() {saveIntervalSizes<3>(); }},
-		//{"saveIntervalSizes4", []() {saveIntervalSizes<4>(); }},
-		//{"saveIntervalSizes5", []() {saveIntervalSizes<5>(); }},
-		//{"saveIntervalSizes6", []() {saveIntervalSizes<6>(); }},
-		//{"saveIntervalSizes7", []() {saveIntervalSizes<7>(); }},
-		//{"saveIntervalSizes8", []() {saveIntervalSizes<8>(); }},
-		//{"saveIntervalSizes9", []() {saveIntervalSizes<9>(); }},
-
-		{"linkCount1", []() {doLinkCount<1>(); }},
-		{"linkCount2", []() {doLinkCount<2>(); }},
-		{"linkCount3", []() {doLinkCount<3>(); }},
-		{"linkCount4", []() {doLinkCount<4>(); }},
-		{"linkCount5", []() {doLinkCount<5>(); }},
-		{"linkCount6", []() {doLinkCount<6>(); }},
-		{"linkCount7", []() {doLinkCount<7>(); }},
-		//{"linkCount8", []() {doLinkCount<8>(); }},
-		//{"linkCount9", []() {doLinkCount<9>(); }},
-
-		//{"sampleIntervalSizes1", []() {sampleIntervalSizes<1>(); }},
-		//{"sampleIntervalSizes2", []() {sampleIntervalSizes<2>(); }},
-		//{"sampleIntervalSizes3", []() {sampleIntervalSizes<3>(); }},
-		//{"sampleIntervalSizes4", []() {sampleIntervalSizes<4>(); }},
-		//{"sampleIntervalSizes5", []() {sampleIntervalSizes<5>(); }},
-		//{"sampleIntervalSizes6", []() {sampleIntervalSizes<6>(); }},
-		//{"sampleIntervalSizes7", []() {sampleIntervalSizes<7>(); }},
-		//{"sampleIntervalSizes8", []() {sampleIntervalSizes<8>(); }},
-		//{"sampleIntervalSizes9", []() {sampleIntervalSizes<9>(); }},
-
-		{"computeIntervalsParallel1", []() {computeIntervalsParallel<1>(); }},
-		{"computeIntervalsParallel2", []() {computeIntervalsParallel<2>(); }},
-		{"computeIntervalsParallel3", []() {computeIntervalsParallel<3>(); }},
-		{"computeIntervalsParallel4", []() {computeIntervalsParallel<4>(); }},
-		{"computeIntervalsParallel5", []() {computeIntervalsParallel<5>(); }},
-		{"computeIntervalsParallel6", []() {computeIntervalsParallel<6>(); }},
-		{"computeIntervalsParallel7", []() {computeIntervalsParallel<7>(); }},
-		//{"computeIntervalsParallel8", []() {computeIntervalsParallel<8>(); }},
-		//{"computeIntervalsParallel9", []() {computeIntervalsParallel<9>(); }},
-
-		{"verifyIntervalsCorrect1", []() {verifyIntervalsCorrect<1>(); }},
-		{"verifyIntervalsCorrect2", []() {verifyIntervalsCorrect<2>(); }},
-		{"verifyIntervalsCorrect3", []() {verifyIntervalsCorrect<3>(); }},
-		{"verifyIntervalsCorrect4", []() {verifyIntervalsCorrect<4>(); }},
-		{"verifyIntervalsCorrect5", []() {verifyIntervalsCorrect<5>(); }},
-		{"verifyIntervalsCorrect6", []() {verifyIntervalsCorrect<6>(); }},
-		{"verifyIntervalsCorrect7", []() {verifyIntervalsCorrect<7>(); }},
-		//{"verifyIntervalsCorrect8", []() {verifyIntervalsCorrect<8>(); }},
-		//{"verifyIntervalsCorrect9", []() {verifyIntervalsCorrect<9>(); }},
-
-		{"addSymmetriesToIntervalFile1", []() {addSymmetriesToIntervalFile<1>(); }},
-		{"addSymmetriesToIntervalFile2", []() {addSymmetriesToIntervalFile<2>(); }},
-		{"addSymmetriesToIntervalFile3", []() {addSymmetriesToIntervalFile<3>(); }},
-		{"addSymmetriesToIntervalFile4", []() {addSymmetriesToIntervalFile<4>(); }},
-		{"addSymmetriesToIntervalFile5", []() {addSymmetriesToIntervalFile<5>(); }},
-		{"addSymmetriesToIntervalFile6", []() {addSymmetriesToIntervalFile<6>(); }},
-		{"addSymmetriesToIntervalFile7", []() {addSymmetriesToIntervalFile<7>(); }},
-		//{"addSymmetriesToIntervalFile8", []() {addSymmetriesToIntervalFile<8>(); }},
-		//{"addSymmetriesToIntervalFile9", []() {addSymmetriesToIntervalFile<9>(); }},
-
-		{"computeDPlusOne1", []() {computeDPlus1<1>(); }},
-		{"computeDPlusOne2", []() {computeDPlus1<2>(); }},
-		{"computeDPlusOne3", []() {computeDPlus1<3>(); }},
-		{"computeDPlusOne4", []() {computeDPlus1<4>(); }},
-		{"computeDPlusOne5", []() {computeDPlus1<5>(); }},
-		{"computeDPlusOne6", []() {computeDPlus1<6>(); }},
-		{"computeDPlusOne7", []() {computeDPlus1<7>(); }},
-		//{"computeDedekindFromIntervals8", []() {computeDPlus1<8>(); }},
-		//{"computeDedekindFromIntervals9", []() {computeDPlus1<9>(); }},
-
-		{"preCompute1", []() {preComputeFiles<1>(); }},
-		{"preCompute2", []() {preComputeFiles<2>(); }},
-		{"preCompute3", []() {preComputeFiles<3>(); }},
-		{"preCompute4", []() {preComputeFiles<4>(); }},
-		{"preCompute5", []() {preComputeFiles<5>(); }},
-		{"preCompute6", []() {preComputeFiles<6>(); }},
-		{"preCompute7", []() {preComputeFiles<7>(); }},
-
-		{"noCanonizationPCoeffMethod1", []() {noCanonizationPCoeffMethod<1>(); }},
-		{"noCanonizationPCoeffMethod2", []() {noCanonizationPCoeffMethod<2>(); }},
-		{"noCanonizationPCoeffMethod3", []() {noCanonizationPCoeffMethod<3>(); }},
-		{"noCanonizationPCoeffMethod4", []() {noCanonizationPCoeffMethod<4>(); }},
-		{"noCanonizationPCoeffMethod5", []() {noCanonizationPCoeffMethod<5>(); }},
-		{"noCanonizationPCoeffMethod6", []() {noCanonizationPCoeffMethod<6>(); }},
-		{"noCanonizationPCoeffMethod7", []() {noCanonizationPCoeffMethod<7>(); }},
-
-		{"newPCoeff1", []() {pcoeffMethodV2<1>(); }},
-		{"newPCoeff2", []() {pcoeffMethodV2<2>(); }},
-		{"newPCoeff3", []() {pcoeffMethodV2<3>(); }},
-		{"newPCoeff4", []() {pcoeffMethodV2<4>(); }},
-		{"newPCoeff5", []() {pcoeffMethodV2<5>(); }},
-		{"newPCoeff6", []() {pcoeffMethodV2<6>(); }},
-		{"newPCoeff7", []() {pcoeffMethodV2<7>(); }}, 
-
-		{"pcoeffTimeEstimate1", []() {pcoeffTimeEstimate<1>(); }},
-		{"pcoeffTimeEstimate2", []() {pcoeffTimeEstimate<2>(); }},
-		{"pcoeffTimeEstimate3", []() {pcoeffTimeEstimate<3>(); }},
-		{"pcoeffTimeEstimate4", []() {pcoeffTimeEstimate<4>(); }},
-		{"pcoeffTimeEstimate5", []() {pcoeffTimeEstimate<5>(); }},
-		{"pcoeffTimeEstimate6", []() {pcoeffTimeEstimate<6>(); }},
-		{"pcoeffTimeEstimate7", []() {pcoeffTimeEstimate<7>(); }},
-
-		{"benchmarkSample1", []() {benchmarkSample<1>(); }},
-		{"benchmarkSample2", []() {benchmarkSample<2>(); }},
-		{"benchmarkSample3", []() {benchmarkSample<3>(); }},
-		{"benchmarkSample4", []() {benchmarkSample<4>(); }},
-		{"benchmarkSample5", []() {benchmarkSample<5>(); }},
-		{"benchmarkSample6", []() {benchmarkSample<6>(); }},
-		{"benchmarkSample7", []() {benchmarkSample<7>(); }},
-
-		{"benchmarkSampleTopBots1", []() {benchmarkSampleTopBots<1>(1,1); }},
-		{"benchmarkSampleTopBots2", []() {benchmarkSampleTopBots<2>(1,1); }},
-		{"benchmarkSampleTopBots3", []() {benchmarkSampleTopBots<3>(1,1); }},
-		{"benchmarkSampleTopBots4", []() {benchmarkSampleTopBots<4>(1,1); }},
-		{"benchmarkSampleTopBots5", []() {benchmarkSampleTopBots<5>(1,1); }},
-		{"benchmarkSampleTopBots6", []() {benchmarkSampleTopBots<6>(100, 100); }},
-		{"benchmarkSampleTopBots7", []() {benchmarkSampleTopBots<7>(10000, 10000); }},
-
-		{"computeIntervalSizesNaive1", []() {computeIntervalSizesNaive<1>(); }},
-		{"computeIntervalSizesNaive2", []() {computeIntervalSizesNaive<2>(); }},
-		{"computeIntervalSizesNaive3", []() {computeIntervalSizesNaive<3>(); }},
-		{"computeIntervalSizesNaive4", []() {computeIntervalSizesNaive<4>(); }},
-		{"computeIntervalSizesNaive5", []() {computeIntervalSizesNaive<5>(); }},
-		{"computeIntervalSizesNaive6", []() {computeIntervalSizesNaive<6>(); }},
-		{"computeIntervalSizesNaive7", []() {computeIntervalSizesNaive<7>(); }},
-
-		{"computeIntervalSizesFast1", []() {computeIntervalSizesFast<1>(); }},
-		{"computeIntervalSizesFast2", []() {computeIntervalSizesFast<2>(); }},
-		{"computeIntervalSizesFast3", []() {computeIntervalSizesFast<3>(); }},
-		{"computeIntervalSizesFast4", []() {computeIntervalSizesFast<4>(); }},
-		{"computeIntervalSizesFast5", []() {computeIntervalSizesFast<5>(); }},
-		{"computeIntervalSizesFast6", []() {computeIntervalSizesFast<6>(); }},
-		{"computeIntervalSizesFast7", []() {computeIntervalSizesFast<7>(); }},
-	};
-
-	std::map<std::string, void(*)(const std::string&)> commandsWithArg{
-		{"checkIntervalLayers1", [](const std::string& size) {checkIntervalLayers<1>(std::stoi(size)); }},
-		{"checkIntervalLayers2", [](const std::string& size) {checkIntervalLayers<2>(std::stoi(size)); }},
-		{"checkIntervalLayers3", [](const std::string& size) {checkIntervalLayers<3>(std::stoi(size)); }},
-		{"checkIntervalLayers4", [](const std::string& size) {checkIntervalLayers<4>(std::stoi(size)); }},
-		{"checkIntervalLayers5", [](const std::string& size) {checkIntervalLayers<5>(std::stoi(size)); }},
-		{"checkIntervalLayers6", [](const std::string& size) {checkIntervalLayers<6>(std::stoi(size)); }},
-		{"checkIntervalLayers7", [](const std::string& size) {checkIntervalLayers<7>(std::stoi(size)); }},
-		//{"checkIntervalLayers8", [](const std::string& size) {checkIntervalLayers<8>(std::stoi(size)); }},
-		//{"checkIntervalLayers9", [](const std::string& size) {checkIntervalLayers<9>(std::stoi(size)); }}
-
-		{"pcoeffLayerElementStats1", [](const std::string& size) {benchPCoeffLayerElementStats<1>(std::stoi(size)); }},
-		{"pcoeffLayerElementStats2", [](const std::string& size) {benchPCoeffLayerElementStats<2>(std::stoi(size)); }},
-		{"pcoeffLayerElementStats3", [](const std::string& size) {benchPCoeffLayerElementStats<3>(std::stoi(size)); }},
-		{"pcoeffLayerElementStats4", [](const std::string& size) {benchPCoeffLayerElementStats<4>(std::stoi(size)); }},
-		{"pcoeffLayerElementStats5", [](const std::string& size) {benchPCoeffLayerElementStats<5>(std::stoi(size)); }},
-		{"pcoeffLayerElementStats6", [](const std::string& size) {benchPCoeffLayerElementStats<6>(std::stoi(size)); }},
-		{"pcoeffLayerElementStats7", [](const std::string& size) {benchPCoeffLayerElementStats<7>(std::stoi(size)); }},
-
-		{"pipelineTestSet1", [](const std::string& size) {pipelineTestSet<1>(std::stoi(size)); }},
-		{"pipelineTestSet2", [](const std::string& size) {pipelineTestSet<2>(std::stoi(size)); }},
-		{"pipelineTestSet3", [](const std::string& size) {pipelineTestSet<3>(std::stoi(size)); }},
-		{"pipelineTestSet4", [](const std::string& size) {pipelineTestSet<4>(std::stoi(size)); }},
-		{"pipelineTestSet5", [](const std::string& size) {pipelineTestSet<5>(std::stoi(size)); }},
-		{"pipelineTestSet6", [](const std::string& size) {pipelineTestSet<6>(std::stoi(size)); }},
-		{"pipelineTestSet7", [](const std::string& size) {pipelineTestSet<7>(std::stoi(size)); }},
-	};
-
 	for(size_t i = 0; i < args.argCount(); i++) {
 		const std::string& cmd = args[i];
 
@@ -915,6 +982,19 @@ int main(int argc, const char** argv) {
 
 	if(parsed.argCount() > 0) {
 		runCommands(parsed);
+	} else {
+		std::string givenCommand;
+		std::cout << "Enter command> ";
+		std::cin >> givenCommand;
+
+		auto found = commands.find(givenCommand);
+		if(found != commands.end()) {
+			std::cout << "running " << givenCommand.c_str() << std::endl;
+			TimeTracker timer;
+			(*found).second();
+		} else {
+			std::cout << "Command not found!";
+		}
 	}
 	return 0;
 }

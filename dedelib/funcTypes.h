@@ -426,11 +426,11 @@ struct Layer {
 	// returns the minimally required supporting layer below this layer for it to be monotonic
 	// returns the layer below this layer of all elements connected to '1' elements in this layer
 	Layer pred() const {
-		return Layer(bf.pred());
+		return Layer(bf.orDown());
 	}
 	// returns the layer above this layer of all elements connected to '1' elements in this layer
 	Layer succ() const {
-		return Layer(bf.succ());
+		return Layer(bf.orUp());
 	}
 
 	size_t getFirst() const {
