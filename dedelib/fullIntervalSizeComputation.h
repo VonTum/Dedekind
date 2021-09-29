@@ -28,7 +28,6 @@ void computeIntervalSizesNaive() {
 
 	for(int layer = 1; layer < (1 << Variables) + 1; layer++) {
 		std::cout << "Layer " << layer << ": " << std::flush;
-		BakedMap<MBF, uint64_t>& prevLayer = allMBFs.layers[layer - 1];
 		auto start = std::chrono::high_resolution_clock::now();
 		iterCollectionInParallel(allMBFs.layers[layer], [&](KeyValue<MBF, uint64_t>& cur) {
 			uint64_t total = 0;
@@ -66,7 +65,6 @@ void computeIntervalSizesFast() {
 
 	for(int layer = 1; layer < (1 << Variables) + 1; layer++) {
 		std::cout << "Layer " << layer << ": " << std::flush;
-		BakedMap<MBF, uint64_t>& prevLayer = allMBFs.layers[layer - 1];
 		auto start = std::chrono::high_resolution_clock::now();
 		iterCollectionInParallel(allMBFs.layers[layer], [&](KeyValue<MBF, uint64_t>& cur) {
 			cur.value = intervalSizeFast(MBF::getBot(), cur.key);

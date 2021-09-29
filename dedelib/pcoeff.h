@@ -571,8 +571,6 @@ void pcoeffTimeEstimate() {
 	double totalSeconds = 0.0;
 
 	iterCollectionInParallel(IntRange<int>{1, 1 << Variables}, [&](size_t topLayerI) {
-		const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
-		
 		auto start = std::chrono::high_resolution_clock::now();
 
 		mtx.lock();
@@ -608,8 +606,6 @@ void pcoeffLayerElementStats(size_t topLayerI) {
 	std::default_random_engine generator;
 
 	double totalSeconds = 0.0;
-
-	const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
 
 	auto start = std::chrono::high_resolution_clock::now();
 

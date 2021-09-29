@@ -601,13 +601,10 @@ BooleanFunction<Variables> findLongestMiddleLayerChain() {
 
 template<unsigned int Variables, typename RandomEngine>
 void permuteRandom(Monotonic<Variables>& mbf, RandomEngine& generator) {
-	std::uniform_int_distribution<unsigned int> selector(0, Variables - 1);
-	for(unsigned int i = 0; i < Variables * 3; i++) {
-		unsigned int a = selector(generator);
-		unsigned int b = selector(generator);
-		if(a != b) {
-			mbf.swap(a, b);
-		}
+	for(unsigned int i = 0; i < Variables; i++) {
+		unsigned int selectedIndex = std::uniform_int_distribution<unsigned int>(i, Variables - 1)(generator);
+		if(selectedIndex == i) continue; // leave i where it is
+		mbf.swap(i, selectedIndex); // put selectedIndex in position i
 	}
 }
 

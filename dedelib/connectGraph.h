@@ -161,12 +161,12 @@ BooleanFunction<Variables> getGroupingMask(const BooleanFunction<Variables>& gra
 template<unsigned int Variables>
 void eliminateLeavesDown(BooleanFunction<Variables>& graph) {
 	// all elements with exactly one connection upward can be removed, they are leaves that do not affect the group count
-	BooleanFunction<Variables> shiftedDown0 = (graph.bitset, BooleanFunction<Variables>::varMask(0)) >> 1;
+	BooleanFunction<Variables> shiftedDown0 = (graph.bitset & BooleanFunction<Variables>::varMask(0)) >> 1;
 	BooleanFunction<Variables> occuredAtLeastOnce = shiftedDown0;
 	BooleanFunction<Variables> blockedElements = BooleanFunction<Variables>::empty();
 
 	for(unsigned int v = 1; v < Variables; v++) {
-		BooleanFunction<Variables> shiftedFromAbove((graph.bitset, BooleanFunction<Variables>::varMask(v)) >> (size_t(1) << v));
+		BooleanFunction<Variables> shiftedFromAbove((graph.bitset & BooleanFunction<Variables>::varMask(v)) >> (size_t(1) << v));
 		blockedElements |= occuredAtLeastOnce & shiftedFromAbove;
 		occuredAtLeastOnce |= shiftedFromAbove;
 	}
