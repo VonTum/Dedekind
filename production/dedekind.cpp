@@ -25,6 +25,10 @@
 #include "../dedelib/fileNames.h"
 #include "../dedelib/cmdParser.h"
 
+#include "../dedelib/allMBFsMap.h"
+#include "../dedelib/flatMBFStructure.h"
+#include "../dedelib/flatPCoeff.h"
+
 /*
 Correct numbers
 	0: 2
@@ -731,6 +735,54 @@ void pipelineTestSet(size_t count) {
 	testSet.close();
 }
 
+template<unsigned int Variables>
+void convertMBFMapToFlatMBFStructure(const AllMBFMap<Variables, ExtraData>& sourceMap, FlatMBFStructure<Variables>& destinationStructure) {
+	size_t currentLinkInLayer = 0;
+	NodeIndex curNodeIndex = 0;
+	for(size_t layer = 0; layer <= (1 << Variables); layer++) {
+		std::cout << "Layer " << layer << std::endl;
+		assert(curNodeIndex == destinationStructure.cachedOffsets.nodeLayerOffsets[layer]);
+
+		NodeIndex firstNodeInLayer = destinationStructure.cachedOffsets.nodeLayerOffsets[layer];
+		NodeIndex firstNodeInDualLayer = destinationStructure.cachedOffsets.nodeLayerOffsets[(1 << Variables) - layer];
+		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = sourceMap.layers[layer];
+		const BakedMap<Monotonic<Variables>, ExtraData>& dualLayer = sourceMap.layers[(1 << Variables) - layer];
+		for(size_t i = 0; i < getLayerSize<Variables>(layer); i++) {
+			const KeyValue<Monotonic<Variables>, ExtraData>& elem = curLayer[i];
+			destinationStructure.mbfs[curNodeIndex] = elem.key;
+			destinationStructure.allClassInfos[curNodeIndex].intervalSizeDown = elem.value.intervalSizeToBottom;
+			destinationStructure.allClassInfos[curNodeIndex].classSize = elem.value.symmetries;
+
+			Monotonic<Variables> keyDual = elem.key.dual();
+			destinationStructure.allNodes[curNodeIndex].dual = firstNodeInDualLayer + dualLayer.indexOf(keyDual.canonize());
+			if(layer > 0) { // no downconnections for layer 0
+				DownConnection* curDownConnection = elem.value.downConnections;
+				DownConnection* downConnectionsEnd = curLayer[i+1].value.downConnections;
+				destinationStructure.allNodes[curNodeIndex].downLinks = currentLinkInLayer;
+				while(curDownConnection != downConnectionsEnd) {
+					int downConnectionNodeIndex = static_cast<int>(curDownConnection->id);
+					destinationStructure.allLinks[currentLinkInLayer] = downConnectionNodeIndex;
+					curDownConnection++;
+					currentLinkInLayer++;
+				}
+			}
+			curNodeIndex++;
+		}
+	}
+	assert(currentLinkInLayer == getTotalLinkCount<Variables>());
+}
+
+template<unsigned int Variables>
+void convertMBFMapToFlatMBFStructure() {
+	AllMBFMap<Variables, ExtraData> sourceMap = readAllMBFsMapExtraDownLinks<Variables>();
+
+	FlatMBFStructure<Variables> destinationStructure;
+
+	convertMBFMapToFlatMBFStructure<Variables>(sourceMap, destinationStructure);
+
+	writeFlatMBFStructure(destinationStructure);
+}
+
 std::map<std::string, void(*)()> commands{
 	{"ramTest", []() {doRAMTest(); }},
 
@@ -914,6 +966,22 @@ std::map<std::string, void(*)()> commands{
 	{"computeIntervalSizesFast5", []() {computeIntervalSizesFast<5>(); }},
 	{"computeIntervalSizesFast6", []() {computeIntervalSizesFast<6>(); }},
 	{"computeIntervalSizesFast7", []() {computeIntervalSizesFast<7>(); }},
+	
+	{"convertMBFMapToFlatMBFStructure1", []() {convertMBFMapToFlatMBFStructure<1>(); }},
+	{"convertMBFMapToFlatMBFStructure2", []() {convertMBFMapToFlatMBFStructure<2>(); }},
+	{"convertMBFMapToFlatMBFStructure3", []() {convertMBFMapToFlatMBFStructure<3>(); }},
+	{"convertMBFMapToFlatMBFStructure4", []() {convertMBFMapToFlatMBFStructure<4>(); }},
+	{"convertMBFMapToFlatMBFStructure5", []() {convertMBFMapToFlatMBFStructure<5>(); }},
+	{"convertMBFMapToFlatMBFStructure6", []() {convertMBFMapToFlatMBFStructure<6>(); }},
+	{"convertMBFMapToFlatMBFStructure7", []() {convertMBFMapToFlatMBFStructure<7>(); }},
+
+	{"flatDPlusOne1", []() {flatDPlus1<1>(); }},
+	{"flatDPlusOne2", []() {flatDPlus1<2>(); }},
+	{"flatDPlusOne3", []() {flatDPlus1<3>(); }},
+	{"flatDPlusOne4", []() {flatDPlus1<4>(); }},
+	{"flatDPlusOne5", []() {flatDPlus1<5>(); }},
+	{"flatDPlusOne6", []() {flatDPlus1<6>(); }},
+	{"flatDPlusOne7", []() {flatDPlus1<7>(); }},
 };
 
 std::map<std::string, void(*)(const std::string&)> commandsWithArg{

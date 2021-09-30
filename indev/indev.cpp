@@ -95,5 +95,6 @@ int main(int argc, const char** argv) {
 	//sjomnumbertablesymmetric<2>([]() {});
 	//printAllMBFs<4>();
 	//countAverageACSize<7>();
-	computeValidPCoeffFraction<7>(100);
+	//computeValidPCoeffFraction<7>(100);
+	std::cout << getTotalLinkCount<7>();
 }

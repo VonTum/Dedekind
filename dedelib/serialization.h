@@ -237,6 +237,3 @@ std::vector<TopBots<Variables>> readTopBots(size_t limitSize) {
 
 	return deserializeVector(benchFile, limitSize, deserializeTopBots<Variables>);
 }
-
-
-

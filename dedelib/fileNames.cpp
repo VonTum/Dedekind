@@ -17,81 +17,68 @@ void setDataPath(std::string newPath) {
 	}
 }
 
-std::string allMBFSInfo(unsigned int Variables) {
-	std::string name = dataPath + "allUniqueMBF";
+static std::string makeBasicName(unsigned int Variables, const char* id, const char* suffix) {
+	std::string name = dataPath + id;
 	name.append(std::to_string(Variables));
-	name.append("info.txt");
+	name.append(suffix);
 	return name;
+}
+
+std::string allMBFSInfo(unsigned int Variables) {
+	return makeBasicName(Variables, "allUniqueMBF", "info.txt");
 }
 
 std::string allMBFS(unsigned int Variables) {
-	std::string name = dataPath + "allUniqueMBF";
-	name.append(std::to_string(Variables));
-	name.append(".mbf");
-	return name;
+	return makeBasicName(Variables, "allUniqueMBF", ".mbf");
 }
 
 std::string mbfLinks(unsigned int Variables) {
-	std::string name = dataPath + "mbfLinks";
-	name.append(std::to_string(Variables));
-	name.append(".mbfLinks");
-	return name;
+	return makeBasicName(Variables, "mbfLinks", ".mbfLinks");
 }
 
 std::string linkStats(unsigned int Variables) {
-	std::string name = dataPath + "linkStats";
-	name.append(std::to_string(Variables));
-	name.append(".txt");
-	return name;
+	return makeBasicName(Variables, "linkStats", ".txt");
 }
 
 std::string intervalStats(unsigned int Variables) {
-	std::string name = dataPath + "intervalStats";
-	name.append(std::to_string(Variables));
-	name.append(".txt");
-	return name;
+	return makeBasicName(Variables, "intervalStats", ".txt");
 }
 
 std::string allMBFSSorted(unsigned int Variables) {
-	std::string name = dataPath + "allUniqueMBFSorted";
-	name.append(std::to_string(Variables));
-	name.append(".mbf");
-	return name;
+	return makeBasicName(Variables, "allUniqueMBFSorted", ".mbf");
 }
 
 std::string allIntervals(unsigned int Variables) {
-	std::string name = dataPath + "allIntervals";
-	name.append(std::to_string(Variables));
-	name.append(".intervals");
-	return name;
+	return makeBasicName(Variables, "allIntervals", ".intervals");
 }
 
 std::string allIntervalSymmetries(unsigned int Variables) {
-	std::string name = dataPath + "allIntervalSymmetries";
-	name.append(std::to_string(Variables));
-	name.append(".intervalSymmetries");
-	return name;
+	return makeBasicName(Variables, "allIntervalSymmetries", ".intervalSymmetries");
 }
 
 std::string benchmarkSet(unsigned int Variables) {
-	std::string name = dataPath + "benchmarkSet";
-	name.append(std::to_string(Variables));
-	name.append(".intervalSymmetries");
-	return name;
+	return makeBasicName(Variables, "benchmarkSet", ".intervalSymmetries");
 }
 
 std::string benchmarkSetTopBots(unsigned int Variables) {
-	std::string name = dataPath + "benchmarkSet";
-	name.append(std::to_string(Variables));
-	name.append(".topBots");
-	return name;
+	return makeBasicName(Variables, "benchmarkSet", ".topBots");
 }
 
 std::string pipelineTestSet(unsigned int Variables) {
-	std::string name = dataPath + "pipelineTestSet";
-	name.append(std::to_string(Variables));
-	name.append(".mem");
-	return name;
+	return makeBasicName(Variables, "pipelineTestSet", ".mem");
 }
 
+// File names for the flat MBF structure
+std::string flatMBFs(unsigned int Variables) {
+	return makeBasicName(Variables, "flatMBFs", ".mbf");
+}
+std::string flatClassInfo(unsigned int Variables) {
+	return makeBasicName(Variables, "flatClassInfo", ".classInfo");
+}
+std::string flatNodes(unsigned int Variables) {
+	return makeBasicName(Variables, "flatNodes", ".flatNodes");
+}
+std::string flatLinks(unsigned int Variables) {
+	return makeBasicName(Variables, "flatLinks", ".flatLinks");
+}
 };
