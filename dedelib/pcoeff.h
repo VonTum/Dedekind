@@ -12,6 +12,9 @@
 
 constexpr size_t TOPS_PER_BLOCK = 4;
 constexpr double swapperCutoff = 0.5;
+
+//#define COMPUTE_STATS
+#ifdef COMPUTE_STATS
 static size_t totalPCoeffs(0);
 
 static uint64_t preconnectHistogram[50];
@@ -19,6 +22,10 @@ static uint64_t preconnectHistogram[50];
 // counts how often if(bot <= top)
 static uint64_t successfulBots = 0;
 static uint64_t failedBots = 0;
+#define STATS(op) op;
+#else
+#define STATS(op);
+#endif
 
 static double computeMean(uint64_t* data, size_t size) {
 	double sum = 0;
@@ -40,6 +47,7 @@ static void printList(const char* listName, uint64_t* data, size_t size, unsigne
 }
 
 static void printHistogramAndPCoeffs(unsigned int Variables, bool verbose = false, bool reset = true) {
+#ifdef COMPUTE_STATS
 	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
 	if(reset) totalPCoeffs = 0;
 
@@ -51,13 +59,16 @@ static void printHistogramAndPCoeffs(unsigned int Variables, bool verbose = fals
 	std::cout << "Bottoms: " << successfulBots << "/" << (successfulBots + failedBots) << " bots were (bot <= top) " << (100.0 * successfulBots / (successfulBots + failedBots)) << "%" << std::endl;
 	if(reset) successfulBots = 0;
 	if(reset) failedBots = 0;
+#else
+	std::cout << "Statistics not enabled!" << std::endl;
+#endif
 }
 
 template<unsigned int Variables>
 uint64_t computePCoefficient(const AntiChain<Variables>& top, const Monotonic<Variables>& bot) {
 	size_t connectCount = countConnected(top - bot, bot);
-	++totalPCoeffs;
-	++connectedHistogram[connectCount];
+	STATS(++totalPCoeffs);
+	STATS(++connectedHistogram[connectCount]);
 	uint64_t pcoeff = uint64_t(1) << connectCount;
 	return pcoeff;
 }
@@ -68,8 +79,8 @@ uint64_t computePCoefficientAllowBadBots(const Monotonic<Variables>& top, const 
 		return 0;
 	}
 	size_t connectCount = countConnectedVeryFast<Variables>(top.bf & ~bot.bf);
-	++totalPCoeffs;
-	++connectedHistogram[connectCount];
+	STATS(++totalPCoeffs);
+	STATS(++connectedHistogram[connectCount]);
 	uint64_t pcoeff = uint64_t(1) << connectCount;
 	return pcoeff;
 }
@@ -83,8 +94,8 @@ uint64_t computePCoefficient(const SmallVector<Monotonic<Variables>, getMaxLayer
 		}
 	}
 	size_t connectCount = countConnected(resultingTop, bot);
-	++totalPCoeffs;
-	++connectedHistogram[connectCount];
+	STATS(++totalPCoeffs);
+	STATS(++connectedHistogram[connectCount]);
 	uint64_t pcoeff = uint64_t(1) << connectCount;
 	return pcoeff;
 }
@@ -92,16 +103,16 @@ uint64_t computePCoefficient(const SmallVector<Monotonic<Variables>, getMaxLayer
 template<unsigned int Variables>
 uint64_t computePCoefficientFast(const BooleanFunction<Variables>& graph, const BooleanFunction<Variables>& initialGuess) {
 	size_t connectCount = countConnectedVeryFast(graph, initialGuess);
-	++totalPCoeffs;
-	++connectedHistogram[connectCount];
+	STATS(++totalPCoeffs);
+	STATS(++connectedHistogram[connectCount]);
 	uint64_t pcoeff = uint64_t(1) << connectCount;
 	return pcoeff;
 }
 template<unsigned int Variables>
 uint64_t computePCoefficientFast(const BooleanFunction<Variables>& graph) {
 	size_t connectCount = countConnectedVeryFast(graph);
-	++totalPCoeffs;
-	++connectedHistogram[connectCount];
+	STATS(++totalPCoeffs);
+	STATS(++connectedHistogram[connectCount]);
 	uint64_t pcoeff = uint64_t(1) << connectCount;
 	return pcoeff;
 }
@@ -131,9 +142,9 @@ uint64_t computePermutationPCoeffSum(const SmallVector<Monotonic<Variables>, get
 	botClass.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
 		if(permutedBot <= top) {
 			totalPCoeff += computePCoefficient(splitTop, permutedBot);
-			successfulBots++;
+			STATS(successfulBots++);
 		} else {
-			failedBots++;
+			STATS(failedBots++);
 		}
 	});
 	return totalPCoeff;
@@ -158,8 +169,8 @@ SmallVector<BooleanFunction<Variables>, factorial(Variables)> listPermutationsBe
 			result.push_back(difference);
 		}
 	});
-	successfulBots += result.size();
-	failedBots += factorial(Variables) - result.size();
+	STATS(successfulBots += result.size());
+	STATS(failedBots += factorial(Variables) - result.size());
 	return result;
 }
 
@@ -170,7 +181,7 @@ uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMa
 	std::array<int, Variables + 1> botLayerSizes = getLayerSizes(botClass);
 
 	preCombineConnected(splitTop, botLayerSizes);
-	preconnectHistogram[splitTop.size()]++;
+	STATS(preconnectHistogram[splitTop.size()]++);
 	Monotonic<Variables> biggestGuess = splitTop[0];
 	size_t biggestGuessSize = biggestGuess.size();
 	for(size_t i = 1; i < splitTop.size(); i++) {
@@ -184,8 +195,8 @@ uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMa
 	/*switch(splitTop.size()) {
 	case 1:
 		return sumPermutedPCoeffsOver(top, botClass, [&](const BooleanFunction<Variables>& graph) {
-			++totalPCoeffs;
-			++connectedHistogram[1];
+			STATS(++totalPCoeffs);
+			STATS(++connectedHistogram[1]);
 			return 2;
 		});
 	case 2:
@@ -224,7 +235,7 @@ uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMa
 
 	if(atLeastOneIsLarger(biggestGuessSizes, botLayerSizes) && biggestGuess.asAntiChain().size() >= 2) { // there is one layer which will always be larger than bot, so it's guaranteed to be included
 		for(const BooleanFunction<Variables>& graph : acceptedGraphs) {
-			++totalPCoeffs;
+			STATS(++totalPCoeffs);
 
 			totalSum += uint64_t(1) << countConnectedSingletonElimination(graph);
 		}
@@ -240,8 +251,8 @@ uint64_t computePermutationPCoeffSumFast(SmallVector<Monotonic<Variables>, getMa
 				initialGuess = initialGuess.monotonizeDown() & graph;
 				connectCount += countConnectedVeryFast(graph, initialGuess);
 			}
-			++totalPCoeffs;
-			++connectedHistogram[connectCount];
+			STATS(++totalPCoeffs);
+			STATS(++connectedHistogram[connectCount]);
 			totalSum += uint64_t(1) << connectCount;
 		}
 	}
@@ -290,7 +301,7 @@ u192 basicSymmetriesPCoeffMethod() {
 		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayerI) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayerI)) << "us per mbf" << std::endl;
 	}
 
-	std::cout << "Used " << totalPCoeffs << " p-coefficients!\n";
+	STATS(std::cout << "Used " << totalPCoeffs << " p-coefficients!\n");
 
 	return total;
 }
@@ -308,14 +319,14 @@ std::array<u128, TOPS_PER_BLOCK> getBotToSubTotals(
 	botKV.key.forEachPermutation([&](const Monotonic<Variables>& bot) {
 		for(size_t i = 0; i < size; i++) {
 			if(bot <= topMBFs[i]) {
-				successfulBots++;
+				STATS(successfulBots++);
 				uint64_t pcoeff = computePCoefficient(splitTops[i], bot);
 
 				//std::cout << bot << ": " << pcoeff << ", ";
 
 				pcoeffSums[i] += pcoeff;
 			} else {
-				failedBots++;
+				STATS(failedBots++);
 			}
 		}
 	});
@@ -346,9 +357,9 @@ u192 noCanonizationPCoeffMethod() {
 		auto start = std::chrono::high_resolution_clock::now();
 		iterCollectionInParallelWithPerThreadBuffer(iterInBlocks<TOPS_PER_BLOCK>(topLayer), []() {return SwapperLayers<Variables, BitSet<TOPS_PER_BLOCK>>(BitSet<TOPS_PER_BLOCK>::empty()); }, 
 													[&](const SmallVector<const KeyValue<Monotonic<Variables>, ExtraData>*, TOPS_PER_BLOCK>& topKVs, SwapperLayers<Variables, BitSet<TOPS_PER_BLOCK>>& touchedEqClasses) {
-			touchedEqClasses.clearSource();
-			touchedEqClasses.clearDestination();
-
+			
+			touchedEqClasses.resetDownward(topLayerI);
+			
 			std::array<u128, TOPS_PER_BLOCK> subTotals;
 			std::array<SmallVector<Monotonic<Variables>, getMaxLayerWidth(Variables)>, TOPS_PER_BLOCK> splitTops;
 			for(size_t i = 0; i < topKVs.size(); i++) {
@@ -374,9 +385,9 @@ u192 noCanonizationPCoeffMethod() {
 				const BakedMap<Monotonic<Variables>, ExtraData>& belowLayer = allIntervalSizesAndDownLinks.layers[belowLayerI];
 
 				// simplest first, just iter the whole layer
-				for(size_t index : touchedEqClasses) {
+				for(size_t index = 0; index < touchedEqClasses.getSourceLayerSize(); index++) {
 					assert(index < getLayerSize<Variables>(belowLayerI));
-					BitSet<TOPS_PER_BLOCK> touchedPerMBF = touchedEqClasses[index];
+					BitSet<TOPS_PER_BLOCK> touchedPerMBF = touchedEqClasses.source(index);
 
 					const KeyValue<Monotonic<Variables>, ExtraData>& botKV = belowLayer[index];
 
@@ -403,15 +414,16 @@ u192 noCanonizationPCoeffMethod() {
 					
 					for(; from != to; from++) {
 						assert(from->id < getLayerSize<Variables>(belowLayerI - 1));
-						touchedEqClasses.dest(from->id) |= touchedEqClasses[index];
+						touchedEqClasses.dest(from->id) |= touchedEqClasses.source(index);
 					}
 				}
 
 				touchedEqClasses.pushNext();
-				if(touchedEqClasses.dirtyDestinationList.size() >= swapperCutoff * getLayerSize<Variables>(belowLayerI)) {
+				// idk what this is for
+				/*if(touchedEqClasses.dirtyDestinationList.size() >= swapperCutoff * getLayerSize<Variables>(belowLayerI)) {
 					belowLayerI--;
 					break;
-				}
+				}*/
 			}
 
 			std::array<Monotonic<Variables>, TOPS_PER_BLOCK> topMBFs;
@@ -469,15 +481,16 @@ template<unsigned int Variables, typename Func>
 void forEachBelowUsingSwapper(size_t topLayerI, size_t topIndex, const AllMBFMap<Variables, ExtraData>& allIntervalSizesAndDownLinks, SwapperLayers<Variables, bool>& swapper, const Func& funcToRun) {
 	const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
 
-	swapper.clearSource();
-	swapper.clearDestination();
+	swapper.resetDownward(topLayerI);
+	assert(swapper.getSourceLayerSize() == getLayerSize<Variables>(topLayerI));
+	assert(swapper.getDestinationLayerSize() == getLayerSize<Variables>(topLayerI - 1));
 
 	DownConnection* initialDownConnectionsStart = topLayer[topIndex].value.downConnections;
 	DownConnection* initialDownConnectionsEnd = topLayer[topIndex + 1].value.downConnections;
 
 	for(DownConnection* cur = initialDownConnectionsStart; cur != initialDownConnectionsEnd; ++cur) {
 		assert(cur->id < getLayerSize<Variables>(topLayerI - 1));
-		swapper.set(cur->id);
+		swapper.dest(cur->id) = true;
 	}
 
 	swapper.pushNext();
@@ -485,8 +498,8 @@ void forEachBelowUsingSwapper(size_t topLayerI, size_t topIndex, const AllMBFMap
 	for(int belowLayerI = topLayerI - 1; belowLayerI > 0; belowLayerI--) {
 		const BakedMap<Monotonic<Variables>, ExtraData>& belowLayer = allIntervalSizesAndDownLinks.layers[belowLayerI];
 
-		swapper.forEachSourceElement([&](size_t index, bool wasContained) {
-			assert(wasContained);
+		for(size_t index = 0; index < swapper.getSourceLayerSize(); index++) {
+			if(swapper.source(index) == false) continue;
 			assert(index < getLayerSize<Variables>(belowLayerI));
 
 			const KeyValue<Monotonic<Variables>, ExtraData>& botKV = belowLayer[index];
@@ -496,11 +509,11 @@ void forEachBelowUsingSwapper(size_t topLayerI, size_t topIndex, const AllMBFMap
 
 			for(DownConnection* cur = downConnectionsStart; cur != downConnectionsEnd; ++cur) {
 				assert(cur->id < getLayerSize<Variables>(belowLayerI - 1));
-				swapper.set(cur->id);
+				swapper.dest(cur->id) = true;
 			}
 
 			funcToRun(botKV);
-		});
+		}
 		swapper.pushNext();
 	}
 }

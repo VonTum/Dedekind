@@ -1,93 +1,120 @@
 #pragma once
 
 #include "knownData.h"
-#include <vector>
 
 template<unsigned int Variables, typename T>
-struct SwapperLayers {
+class SwapperLayers {
 	static constexpr size_t MAX_SIZE = getMaxLayerSize<Variables>();
 
-	using IndexType = uint32_t;
-
 	T defaultValue;
+	int currentLayer;
 
-	std::vector<T> sourceList;
-	std::vector<T> destinationList;
+	T* sourceList;
+	T* destinationList;
 
-	std::vector<IndexType> dirtySourceList;
-	std::vector<IndexType> dirtyDestinationList;
-
-	SwapperLayers(T defaultValue = 0) :
+	SwapperLayers(T defaultValue, T* sourceList, T* destinationList, int currentLayer) :
 		defaultValue(defaultValue),
-		sourceList(MAX_SIZE),
-		destinationList(MAX_SIZE),
-		dirtySourceList(0),
-		dirtyDestinationList(0) {
+		sourceList(sourceList),
+		destinationList(destinationList),
+		currentLayer(currentLayer) {}
+public:
+	size_t getSourceLayerSize() const {
+		return getLayerSize<Variables>(currentLayer);
+	}
+	size_t getDestinationLayerSize() const {
+		return getLayerSize<Variables>(currentLayer + 1);
+	}
+private:
+	void clearSource() {
+		for(size_t i = 0; i < getSourceLayerSize(); i++) {
+			sourceList[i] = defaultValue;
+		}
+	}
+	void clearDestination() {
+		for(size_t i = 0; i < getDestinationLayerSize(); i++) {
+			destinationList[i] = defaultValue;
+		}
+	}
+public:
+	void resetUpward(int startingLayer = 0) {
+		this->currentLayer = startingLayer;
+		clearSource();
+		clearDestination();
+	}
 
+	void resetDownward(int startingLayer = 0) {
+		this->currentLayer = (1 << Variables) - startingLayer;
+		clearSource();
+		clearDestination();
+	}
+
+	SwapperLayers(T defaultValue = T()) :
+		defaultValue(defaultValue),
+		sourceList(new T[MAX_SIZE]),
+		destinationList(new T[MAX_SIZE]),
+		currentLayer(-1) {
+	
 		for(size_t i = 0; i < MAX_SIZE; i++) {
 			sourceList[i] = defaultValue;
 			destinationList[i] = defaultValue;
 		}
 	}
-
-	void clearSource() {
-		for(IndexType indexToClear : dirtySourceList) {
-			sourceList[indexToClear] = defaultValue;
-		}
-
-		dirtySourceList.clear();
+	
+	~SwapperLayers() {
+		delete[] sourceList;
+		delete[] destinationList;
 	}
-	void clearDestination() {
-		for(IndexType indexToClear : dirtyDestinationList) {
-			destinationList[indexToClear] = defaultValue;
-		}
 
-		dirtyDestinationList.clear();
+	SwapperLayers(const SwapperLayers& other) : SwapperLayers(other.defaultValue) {
+		for(size_t i = 0; i < MAX_SIZE; i++) {
+			this->sourceList[i] = other.sourceList[i];
+			this->destinationList[i] = other.destinationList[i];
+		}
+		this->currentLayer = other.currentLayer;
+	}
+	SwapperLayers& operator=(const SwapperLayers& other) {
+		for(size_t i = 0; i < MAX_SIZE; i++) {
+			this->sourceList[i] = other.sourceList[i];
+			this->destinationList[i] = other.destinationList[i];
+		}
+		this->currentLayer = other.currentLayer;
+		this->defaultValue = other.defaultValue;
+		return *this;
+	}
+	SwapperLayers(SwapperLayers&& other) noexcept : SwapperLayers(other.defaultValue, other.sourceList, other.destinationList, other.currentLayer) {
+		other.sourceList = nullptr;
+		other.destinationList = nullptr;
+	}
+	SwapperLayers& operator=(SwapperLayers&& other) noexcept {
+		std::swap(this->sourceList, other.sourceList);
+		std::swap(this->destinationList, other.destinationList);
+		std::swap(this->defaultValue, other.defaultValue);
+		std::swap(this->currentLayer, other.currentLayer);
+		return *this;
+	}
+
+	int getCurrentLayerUpward() const {
+		return currentLayer;
+	}
+	int getCurrentLayerDownward() const {
+		return (1 << Variables) - currentLayer;
+	}
+
+	bool canPushNext() const {
+		return currentLayer < (1 << Variables);
 	}
 
 	void pushNext() {
+		assert(canPushNext()); // trying to pushNext when already at the end
+		currentLayer++;
 		std::swap(sourceList, destinationList);
-		std::swap(dirtySourceList, dirtyDestinationList);
 
-		for(IndexType indexToClear : dirtyDestinationList) {
-			destinationList[indexToClear] = defaultValue;
-		}
-
-		dirtyDestinationList.clear();
+		clearDestination();
 	}
 
-	// expects a function of the form void(IndexType index, const T& item)
-	// the destination may be altered while this is running
-	template<typename Func>
-	void forEachSourceElement(const Func& func) {
-		for(const IndexType& dirtyIndex : dirtySourceList) {
-			func(dirtyIndex, sourceList[dirtyIndex]);
-		}
-	}
+	T& source(size_t index) { assert(index < getSourceLayerSize()); return sourceList[index]; }
+	const T& source(size_t index) const { assert(index < getSourceLayerSize()); return sourceList[index]; }
 
-	auto begin() { return this->dirtySourceList.begin(); }
-	const auto begin() const { return this->dirtySourceList.begin(); }
-	auto end() { return this->dirtySourceList.end(); }
-	const auto end() const { return this->dirtySourceList.end(); }
-
-	T& operator[](IndexType index) { assert(index < MAX_SIZE); return sourceList[index]; }
-	const T& operator[](IndexType index) const { assert(index < MAX_SIZE); return sourceList[index]; }
-
-	T& dest(IndexType index) {
-		assert(index < MAX_SIZE);
-		if(destinationList[index] == defaultValue) {
-			dirtyDestinationList.push_back(index);
-		}
-
-		return destinationList[index];
-	}
-
-	void set(IndexType to) {
-		assert(to < MAX_SIZE);
-		if(destinationList[to] == defaultValue) {
-			dirtyDestinationList.push_back(to);
-		}
-
-		destinationList[to] = true;
-	}
+	T& dest(size_t index) { assert(index < getDestinationLayerSize()); return destinationList[index]; }
+	const T& dest(size_t index) const { assert(index < getDestinationLayerSize()); return destinationList[index]; }
 };
