@@ -7,6 +7,9 @@
 #include "../dedelib/allMBFsMap.h"
 #include "../dedelib/pcoeff.h"
 
+#include "../dedelib/flatMBFStructure.h"
+#include "../dedelib/flatPCoeff.h"
+
 
 template<unsigned int Variables>
 void printAllMBFs() {
@@ -82,19 +85,36 @@ void computeValidPCoeffFraction(int botFraction = 100) {
 
 	std::cout << "validCount: " << validCount << ", invalidCount: " << invalidCount << " fraction: " << (100.0 * validCount) / (validCount + invalidCount) << "%" << std::endl;
 }
+
+
+
+
+
 int main(int argc, const char** argv) {
 	std::cout << "Detected " << std::thread::hardware_concurrency() << " threads" << std::endl;
+	{
+		ParsedArgs parsed(argc, argv);
 
-	ParsedArgs parsed(argc, argv);
-
-	std::string dataDir = parsed.getOptional("dataDir");
-	if(!dataDir.empty()) {
-		FileName::setDataPath(dataDir);
+		std::string dataDir = parsed.getOptional("dataDir");
+		if(!dataDir.empty()) {
+			FileName::setDataPath(dataDir);
+		}
 	}
-
 	//sjomnumbertablesymmetric<2>([]() {});
 	//printAllMBFs<4>();
 	//countAverageACSize<7>();
 	//computeValidPCoeffFraction<7>(100);
-	std::cout << getTotalLinkCount<7>();
+	//std::cout << getTotalLinkCount<7>();
+	
+	/*constexpr int Variables = 6;
+
+	FlatMBFStructure<Variables> s = readFlatMBFStructure<Variables>();
+	SwapperLayers<Variables, BitSet<32>> swapper;
+	JobBatch<Variables, 32> jobBatch;
+
+	NodeIndex tops[32]{5,9,7,351,6874,1684,3351,1354,3584,3524,3515,2235,8964,5486,2154,2121,2123,8476,4896,1768, 11000, 11500, 10869, 1472, 351, 2252, 5525, 4414, 6636, 6696, 5585, 4474};
+
+	computeBuffers(s, jobBatch, swapper, tops, 32);*/
+
+	computeFlatDPlus2<5, 32>();
 }

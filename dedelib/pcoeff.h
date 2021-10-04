@@ -27,6 +27,7 @@ static uint64_t failedBots = 0;
 #define STATS(op);
 #endif
 
+#ifdef COMPUTE_STATS
 static double computeMean(uint64_t* data, size_t size) {
 	double sum = 0;
 	uint64_t count = 0;
@@ -45,6 +46,7 @@ static void printList(const char* listName, uint64_t* data, size_t size, unsigne
 		if(reset) data[i] = 0;
 	}
 }
+#endif
 
 static void printHistogramAndPCoeffs(unsigned int Variables, bool verbose = false, bool reset = true) {
 #ifdef COMPUTE_STATS

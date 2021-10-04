@@ -6,23 +6,23 @@ template<unsigned int Variables, typename T>
 class SwapperLayers {
 	static constexpr size_t MAX_SIZE = getMaxLayerSize<Variables>();
 
-	T defaultValue;
-	int currentLayer;
-
 	T* sourceList;
 	T* destinationList;
 
+	T defaultValue;
+	int currentLayer;
+
 	SwapperLayers(T defaultValue, T* sourceList, T* destinationList, int currentLayer) :
-		defaultValue(defaultValue),
 		sourceList(sourceList),
 		destinationList(destinationList),
+		defaultValue(defaultValue),
 		currentLayer(currentLayer) {}
 public:
 	size_t getSourceLayerSize() const {
 		return getLayerSize<Variables>(currentLayer);
 	}
 	size_t getDestinationLayerSize() const {
-		return getLayerSize<Variables>(currentLayer + 1);
+		return getLayerSize<Variables>(currentLayer - 1);
 	}
 private:
 	void clearSource() {
@@ -37,23 +37,18 @@ private:
 	}
 public:
 	void resetUpward(int startingLayer = 0) {
-		this->currentLayer = startingLayer;
+		currentLayer = (1 << Variables) - startingLayer;
 		clearSource();
 		clearDestination();
 	}
 
 	void resetDownward(int startingLayer = 0) {
-		this->currentLayer = (1 << Variables) - startingLayer;
+		currentLayer = startingLayer;
 		clearSource();
 		clearDestination();
 	}
 
-	SwapperLayers(T defaultValue = T()) :
-		defaultValue(defaultValue),
-		sourceList(new T[MAX_SIZE]),
-		destinationList(new T[MAX_SIZE]),
-		currentLayer(-1) {
-	
+	SwapperLayers(T defaultValue = T()) : SwapperLayers(defaultValue, new T[MAX_SIZE], new T[MAX_SIZE], -1) {
 		for(size_t i = 0; i < MAX_SIZE; i++) {
 			sourceList[i] = defaultValue;
 			destinationList[i] = defaultValue;
@@ -94,19 +89,19 @@ public:
 	}
 
 	int getCurrentLayerUpward() const {
-		return currentLayer;
+		return (1 << Variables) - currentLayer;
 	}
 	int getCurrentLayerDownward() const {
-		return (1 << Variables) - currentLayer;
+		return currentLayer;
 	}
 
 	bool canPushNext() const {
-		return currentLayer < (1 << Variables);
+		return currentLayer > 0;
 	}
 
 	void pushNext() {
 		assert(canPushNext()); // trying to pushNext when already at the end
-		currentLayer++;
+		currentLayer--;
 		std::swap(sourceList, destinationList);
 
 		clearDestination();
@@ -115,6 +110,6 @@ public:
 	T& source(size_t index) { assert(index < getSourceLayerSize()); return sourceList[index]; }
 	const T& source(size_t index) const { assert(index < getSourceLayerSize()); return sourceList[index]; }
 
-	T& dest(size_t index) { assert(index < getDestinationLayerSize()); return destinationList[index]; }
-	const T& dest(size_t index) const { assert(index < getDestinationLayerSize()); return destinationList[index]; }
+	T& dest(size_t index) { assert(canPushNext()); assert(index < getDestinationLayerSize()); return destinationList[index]; }
+	const T& dest(size_t index) const { assert(canPushNext()); assert(index < getDestinationLayerSize()); return destinationList[index]; }
 };
