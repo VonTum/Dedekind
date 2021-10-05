@@ -982,6 +982,15 @@ std::map<std::string, void(*)()> commands{
 	{"flatDPlusOne5", []() {flatDPlus1<5>(); }},
 	{"flatDPlusOne6", []() {flatDPlus1<6>(); }},
 	{"flatDPlusOne7", []() {flatDPlus1<7>(); }},
+
+	{"computeFlatDPlusTwo1", []() {computeFlatDPlus2<1, 32>(); }},
+	{"computeFlatDPlusTwo2", []() {computeFlatDPlus2<2, 32>(); }},
+	{"computeFlatDPlusTwo3", []() {computeFlatDPlus2<3, 32>(); }},
+	{"computeFlatDPlusTwo4", []() {computeFlatDPlus2<4, 32>(); }},
+	{"computeFlatDPlusTwo5", []() {computeFlatDPlus2<5, 32>(); }},
+	{"computeFlatDPlusTwo6", []() {computeFlatDPlus2<6, 32>(); }},
+	{"computeFlatDPlusTwo7", []() {computeFlatDPlus2<7, 32>(); }},
+	
 };
 
 std::map<std::string, void(*)(const std::string&)> commandsWithArg{

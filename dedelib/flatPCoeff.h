@@ -6,6 +6,7 @@
 #include "bitSet.h"
 #include "u192.h"
 #include "connectGraph.h"
+#include "threadPool.h"
 
 template<unsigned int Variables>
 void flatDPlus1() {
@@ -198,7 +199,6 @@ uint64_t computePCoeffSum(const BooleanFunction<Variables>* graphsBuf, const Boo
 	return totalSum;
 }
 
-// return value points to the end of
 template<unsigned int Variables>
 void processBetasCPU_SingleThread(const FlatMBFStructure<Variables>& downLinkStructure, 
 NodeIndex topIdx, const NodeIndex* idxBuf, const NodeIndex* bufEnd, ProcessedPCoeffSum* countConnectedSumBuf) {
@@ -210,10 +210,35 @@ NodeIndex topIdx, const NodeIndex* idxBuf, const NodeIndex* bufEnd, ProcessedPCo
 		Monotonic<Variables> bot = downLinkStructure.mbfs[*idxBuf];
 
 		BooleanFunction<Variables>* graphsBufEnd = listPermutationsBelow(top, bot, graphsBuf);
-		countConnectedSumBuf->pcoeffCount = graphsBufEnd - graphsBuf;
-		countConnectedSumBuf->pcoeffSum = computePCoeffSum(graphsBuf, graphsBufEnd);
+		ProcessedPCoeffSum newElem;
+		newElem.pcoeffCount = graphsBufEnd - graphsBuf;
+		newElem.pcoeffSum = computePCoeffSum(graphsBuf, graphsBufEnd);
+		*countConnectedSumBuf = newElem;
 		countConnectedSumBuf++;
 	}
+}
+
+template<unsigned int Variables>
+void processBetasCPU_MultiThread(const FlatMBFStructure<Variables>& downLinkStructure, 
+NodeIndex topIdx, const NodeIndex* idxBuf, const NodeIndex* bufEnd, ProcessedPCoeffSum* countConnectedSumBuf, ThreadPool& threadPool) {
+	Monotonic<Variables> top = downLinkStructure.mbfs[topIdx];
+
+	size_t idxBufSize = bufEnd - idxBuf;
+	std::atomic<size_t> i = 0;
+	threadPool.doInParallel([&](){
+		BooleanFunction<Variables> graphsBuf[factorial(Variables)];
+		while(true) {
+			size_t claimedI = i.fetch_add(1);
+			if(claimedI >= idxBufSize) break;
+
+			Monotonic<Variables> bot = downLinkStructure.mbfs[idxBuf[claimedI]];
+			BooleanFunction<Variables>* graphsBufEnd = listPermutationsBelow(top, bot, graphsBuf);
+			ProcessedPCoeffSum newElem;
+			newElem.pcoeffCount = graphsBufEnd - graphsBuf;
+			newElem.pcoeffSum = computePCoeffSum(graphsBuf, graphsBufEnd);
+			countConnectedSumBuf[claimedI] = newElem;
+		}
+	});
 }
 
 struct BetaSum {
@@ -242,6 +267,8 @@ const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* coun
 
 #define VALIDATE(topIdx, condition) if(!(condition)) throw "INVALID";
 
+#define PCOEFF_MULTITHREAD
+
 template<unsigned int Variables, size_t BatchSize>
 u192 computeFlatDPlus2() {
 	FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
@@ -253,14 +280,24 @@ u192 computeFlatDPlus2() {
 
 	ProcessedPCoeffSum* pcoeffSumBuf = new ProcessedPCoeffSum[mbfCounts[Variables]];
 
+#ifdef PCOEFF_MULTITHREAD
+	ThreadPool threadPool;
+#endif
+
 	while(curIndex < mbfCounts[Variables]) {
+		std::cout << '.' << std::flush;
+
 		NodeOffset numberToProcess = static_cast<NodeOffset>(std::min(mbfCounts[Variables] - curIndex, BatchSize));
 
 		computeBuffersFromTop(allMBFData, jobBatch, swapper, curIndex, numberToProcess);
 
 		for(NodeOffset i = 0; i < numberToProcess; i++) {
 			const JobInfo<Variables>& curJob = jobBatch.jobs[i];
+			#ifdef PCOEFF_MULTITHREAD
+			processBetasCPU_MultiThread(allMBFData, curJob.top, curJob.indexBuffer.bufStart, curJob.indexBuffer.bufEnd, pcoeffSumBuf, threadPool);
+			#else
 			processBetasCPU_SingleThread(allMBFData, curJob.top, curJob.indexBuffer.bufStart, curJob.indexBuffer.bufEnd, pcoeffSumBuf);
+			#endif
 			BetaSum jobSum = sumOverBetas(allMBFData, curJob.indexBuffer.bufStart, curJob.indexBuffer.bufEnd, pcoeffSumBuf);
 
 			ClassInfo topInfo = allMBFData.allClassInfos[curJob.top];

@@ -116,5 +116,5 @@ int main(int argc, const char** argv) {
 
 	computeBuffers(s, jobBatch, swapper, tops, 32);*/
 
-	computeFlatDPlus2<5, 32>();
+	computeFlatDPlus2<6, 32>();
 }
