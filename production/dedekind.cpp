@@ -783,6 +783,29 @@ void convertMBFMapToFlatMBFStructure() {
 	writeFlatMBFStructure(destinationStructure);
 }
 
+template<unsigned int Variables>
+void isEvenPlus2() {
+	FlatMBFStructure<Variables> allMBFs = readFlatMBFStructure<Variables>(false, true, true, false);
+
+	bool isEven = true; // 0 is even
+	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
+		uint64_t classSize = allMBFs.allClassInfos[i].classSize;
+
+		if(classSize % 2 == 0) continue;
+
+		uint64_t intervalSizeDown = allMBFs.allClassInfos[i].intervalSizeDown;
+		if(intervalSizeDown % 2 == 0) continue;
+
+		NodeIndex dualI = allMBFs.allNodes[i].dual;
+		uint64_t intervalSizeUp = allMBFs.allClassInfos[dualI].intervalSizeDown;
+		if(intervalSizeUp % 2 == 0) continue;
+
+		isEven = !isEven;
+	}
+
+	std::cout << "D(" << (Variables + 2) << ") is " << (isEven ? "even" : "odd") << std::endl;
+}
+
 std::map<std::string, void(*)()> commands{
 	{"ramTest", []() {doRAMTest(); }},
 
@@ -991,6 +1014,13 @@ std::map<std::string, void(*)()> commands{
 	{"computeFlatDPlusTwo6", []() {computeFlatDPlus2<6, 32>(); }},
 	{"computeFlatDPlusTwo7", []() {computeFlatDPlus2<7, 32>(); }},
 	
+	{"isEvenPlusTwo1", []() {isEvenPlus2<1>(); }},
+	{"isEvenPlusTwo2", []() {isEvenPlus2<2>(); }},
+	{"isEvenPlusTwo3", []() {isEvenPlus2<3>(); }},
+	{"isEvenPlusTwo4", []() {isEvenPlus2<4>(); }},
+	{"isEvenPlusTwo5", []() {isEvenPlus2<5>(); }},
+	{"isEvenPlusTwo6", []() {isEvenPlus2<6>(); }},
+	{"isEvenPlusTwo7", []() {isEvenPlus2<7>(); }},
 };
 
 std::map<std::string, void(*)(const std::string&)> commandsWithArg{
