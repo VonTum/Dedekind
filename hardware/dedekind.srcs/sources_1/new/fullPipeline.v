@@ -23,21 +23,21 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module computeModule(
+module computeModule #(parameter EXTRA_DATA_SIZE = 14) (
     input clk,
     input start,
     input[127:0] graphIn,
-    input[11:0] batchId,
+    input[EXTRA_DATA_SIZE-1:0] extraDataIn,
     output ready,
     output started,
     output done,
     output[5:0] resultCount,
-    output reg[11:0] resultBatchId
+    output reg[EXTRA_DATA_SIZE-1:0] extraDataOut
 );
 
 always @ (posedge clk) begin
     if(started) begin
-        resultBatchId = batchId;
+        extraDataOut = extraDataIn;
     end
 end
 
@@ -75,12 +75,18 @@ module fullPipeline(
     input isBotValid,
     output full,
     output almostFull,
-    output[`DATA_WIDTH-1:0] summedDataOut
+    output[`DATA_WIDTH-1:0] summedDataOut,
+    output[2:0] pcoeffCountOut
 );
 
-wire coreStart, coreReady, coreStarted, coreDone;
+wire inputGraphAvailable;
+wire collectorQueueFull;
+
+wire coreStart = inputGraphAvailable;
+wire coreReady, coreStarted, coreDone;
 wire[127:0] graphIn;
-wire[11:0] addrIn;
+wire[`ADDR_WIDTH-1:0] addrIn;
+wire[1:0] subAddrIn;
 
 inputModule inputHandler(
     // input side
@@ -96,24 +102,26 @@ inputModule inputHandler(
     // output side, to countConnectedCore
     .outputClk(coreClk),
     .readEnable(coreStarted),
-    .graphAvailable(coreStart),
+    .graphAvailable(inputGraphAvailable),
     .graphOut(graphIn),
-    .graphIndex(addrIn)
+    .graphIndex(addrIn),
+    .graphSubIndex(subAddrIn)
 );
 
-wire[11:0] addrOut;
+wire[`ADDR_WIDTH-1:0] addrOut;
+wire[1:0] subAddrOut;
 wire[5:0] countOut;
 
-computeModule computeCore(
+computeModule #(.EXTRA_DATA_SIZE(`ADDR_WIDTH + 2)) computeCore(
     .clk(coreClk),
     .start(coreStart),
     .graphIn(graphIn),
-    .batchId(addrIn),
+    .extraDataIn({addrIn, subAddrIn}),
     .ready(coreReady),
     .started(coreStarted),
     .done(coreDone),
     .resultCount(countOut),
-    .resultBatchId(addrOut)
+    .extraDataOut({addrOut, subAddrOut})
 );
 
 collectionModule collector(
@@ -121,13 +129,15 @@ collectionModule collector(
     .dataInClk(coreClk),
     .write(coreDone),
     .dataInAddr(addrOut),
+    .dataInSubAddr(subAddrOut),
     .addBit(countOut),
     
     // output side
     .dataOutClk(busClk),
     .sumAddrValid(isBotValid),
     .sumAddr(botIndex),
-    .summedDataOut(summedDataOut)
+    .summedDataOut(summedDataOut),
+    .pcoeffCount(pcoeffCountOut)
 );
 
 endmodule

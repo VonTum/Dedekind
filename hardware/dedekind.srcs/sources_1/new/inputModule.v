@@ -37,7 +37,8 @@ module inputModule (
     input readEnable,
     output graphAvailable,
     output[127:0] graphOut,
-    output reg[11:0] graphIndex
+    output[11:0] graphIndex,
+    output[1:0] graphSubIndex
 );
 
 wire fullAB, almostFullAB;
@@ -90,6 +91,7 @@ wire[127:0] schedulerBotOut;
 wire[11:0] schedulerBotIndexOut;
 wire unswappedBotBelowOut;
 wire swappedBotBelowOut;
+wire chosenFifo;
 fifoScheduler #(.FIFO_WIDTH(`FIFO_WIDTH)) scheduler(
     .clk(outputClk),
     
@@ -105,9 +107,11 @@ fifoScheduler #(.FIFO_WIDTH(`FIFO_WIDTH)) scheduler(
     
     .pop(schedulerReadEnable),
     .dataAvailable(schedulerDataAvailable),
+    .chosenFifo(chosenFifo),
     .dataOut({schedulerBotOut, schedulerBotIndexOut, unswappedBotBelowOut, swappedBotBelowOut})
 );
 
+wire isSwappedVariant;
 swapGraphMaker graphMaker(
     .clk(outputClk),
     
@@ -120,11 +124,20 @@ swapGraphMaker graphMaker(
     
     .graph(graphOut),
     .readEnable(readEnable),
+    .isSwappedVariant(isSwappedVariant),
     .dataAvailable(graphAvailable)
 );
+
+reg[11:0] graphIndexReg;
+reg schedulerChoiceReg;
 always @(posedge outputClk) begin
-    if(schedulerReadEnable) graphIndex <= schedulerBotIndexOut;
+    if(schedulerReadEnable) begin
+        graphIndexReg <= schedulerBotIndexOut;
+        schedulerChoiceReg <= chosenFifo;
+    end
 end
+assign graphIndex = graphIndexReg;
+assign graphSubIndex = {schedulerChoiceReg, isSwappedVariant};
 
 endmodule
 
@@ -140,6 +153,7 @@ module swapGraphMaker (
     
     output [127:0] graph,
     input readEnable,
+    output isSwappedVariant,
     output reg dataAvailable
 );
 
@@ -157,6 +171,7 @@ assign resultingBot[63:32] = doSwapped ? curBot[95:64] : curBot[63:32];
 assign resultingBot[95:64] = doSwapped ? curBot[63:32] : curBot[95:64];
 
 assign graph = top & ~resultingBot;
+assign isSwappedVariant = doSwapped;
 
 initial dataAvailable = 0;
 
@@ -190,11 +205,11 @@ module fifoScheduler #(parameter FIFO_WIDTH = 8) (
     output popFifoB,
     // output side
     input pop,
-    output [FIFO_WIDTH-1:0] dataOut,
+    output[FIFO_WIDTH-1:0] dataOut,
+    output chosenFifo, // 1 for B, 0 for A
     output dataAvailable
 );
 
-wire chosenFifo; // 1 for B, 0 for A
 wire isGrabbingFromFifo = pop & dataAvailable;
 assign popFifoA = isGrabbingFromFifo & !chosenFifo; // chosenFifo == A
 assign popFifoB = isGrabbingFromFifo & chosenFifo; // chosenFifo == B
