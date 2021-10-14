@@ -65,8 +65,7 @@ endmodule
 
 
 module fullPipeline(
-    input busClk,
-    input coreClk,
+    input clk,
     
     input[127:0] top,
     input[127:0] botA, // botB = varSwap(5,6)(A)
@@ -89,8 +88,9 @@ wire[`ADDR_WIDTH-1:0] addrIn;
 wire[1:0] subAddrIn;
 
 inputModule inputHandler(
+    .clk(clk),
+    
     // input side
-    .inputClk(busClk),
     .top(top),
     .botA(botA), // botB = varSwap(5,6)(A)
     .botC(botC), // botD = varSwap(5,6)(C)
@@ -100,7 +100,6 @@ inputModule inputHandler(
     .almostFull(almostFull),
     
     // output side, to countConnectedCore
-    .outputClk(coreClk),
     .readEnable(coreStarted),
     .graphAvailable(inputGraphAvailable),
     .graphOut(graphIn),
@@ -113,7 +112,7 @@ wire[1:0] subAddrOut;
 wire[5:0] countOut;
 
 computeModule #(.EXTRA_DATA_SIZE(`ADDR_WIDTH + 2)) computeCore(
-    .clk(coreClk),
+    .clk(clk),
     .start(coreStart),
     .graphIn(graphIn),
     .extraDataIn({addrIn, subAddrIn}),
@@ -125,15 +124,15 @@ computeModule #(.EXTRA_DATA_SIZE(`ADDR_WIDTH + 2)) computeCore(
 );
 
 collectionModule collector(
+    .clk(clk),
+    
     // input side
-    .dataInClk(coreClk),
     .write(coreDone),
     .dataInAddr(addrOut),
     .dataInSubAddr(subAddrOut),
     .addBit(countOut),
     
     // output side
-    .dataOutClk(busClk),
     .sumAddrValid(isBotValid),
     .sumAddr(botIndex),
     .summedDataOut(summedDataOut),

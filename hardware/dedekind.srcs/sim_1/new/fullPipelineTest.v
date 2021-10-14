@@ -35,9 +35,7 @@ wire full, almostFull;
 wire[39:0] summedDataOut;
 
 fullPipeline elementUnderTest (
-    .busClk(clk),
-    .coreClk(clk),
-    
+    .clk(clk),
     .top(top),
     .botA(botA), // botB = varSwap(5,6)(A)
     .botC(botC), // botD = varSwap(5,6)(C)

@@ -22,8 +22,9 @@
 
 
 module collectorBlock(
+    input clk,
+    
     // input side
-    input inClk,
     input writeEnable,
     input[8:0] writeAddr,
     input[1:0] writeSubAddr,
@@ -33,7 +34,6 @@ module collectorBlock(
     input[8:0] rstAddr,
     
     // output side
-    input outClk,
     input readEnable,
     input[8:0] readAddr,
     output[27:0] readData
@@ -54,12 +54,12 @@ assign readData[20:14] = memOut[26:20];
 assign readData[27:21] = memOut[36:30];
 
 simpleDualPortM20K memBlock(
-    .writeClk(inClk),
     .writeAddr(rst ? rstAddr : writeAddr),
     .writeMask(rst? 4'b1111 : writeEnable ? (4'b0001 << writeSubAddr) : 4'b0000),
+    .writeClk(clk),
     .writeData({wideWriteData,wideWriteData,wideWriteData,wideWriteData}),
     
-    .readClk(outClk),
+    .readClk(clk),
     .readEnable(readEnable),
     .readAddr(readAddr),
     .readData(memOut)
@@ -68,15 +68,15 @@ simpleDualPortM20K memBlock(
 endmodule
 
 module collectionModule(
+    input clk,
+    
     // input side
-    input dataInClk,
     input write,
     input[`ADDR_WIDTH-1:0] dataInAddr,
     input[1:0] dataInSubAddr, 
     input[5:0] addBit,
     
     // output side
-    input dataOutClk,
     input sumAddrValid,
     input[`ADDR_WIDTH-1:0] sumAddr,
     output[`DATA_WIDTH-1:0] summedDataOut,
@@ -94,7 +94,8 @@ reg[8:0] rstAddr = 0; always @(posedge dataInClk) rstAddr = rstAdr+1;
 generate
 for(genvar i = 0; i < 8; i=i+1) begin
     collectorBlock thisBlock(
-        .inClk(dataInClk),
+        .clk(clk),
+        
         .writeEnable(write & (upperWriteAddr == i)),
         .writeAddr(lowerWriteAddr),
         .writeSubAddr(dataInSubAddr),
@@ -103,7 +104,6 @@ for(genvar i = 0; i < 8; i=i+1) begin
         .rstOnOutClk(),
         .rstAddr(),
         // output side
-        .outClk(),
         .readEnable(),
         .readAddr(),
         .readData()
@@ -116,31 +116,34 @@ wire[5:0] addBitPostLatency;
 wire[`ADDR_WIDTH-1:0] addrPostLatency;
 wire[`DATA_WIDTH-1:0] readDataPostLatency;
 
-registerPipe #(.WIDTH(1), .DEPTH(`READ_LATENCY)) enablePipeline(.clk(dataInClk), 
+registerPipe #(.WIDTH(1), .DEPTH(`READ_LATENCY)) enablePipeline(
+    .clk(clk), 
     .dataIn(write), 
     .dataOut(dataInEnablePostLatency)
 );
 
-registerPipe #(.WIDTH(6), .DEPTH(`READ_LATENCY)) addBitPipeline(.clk(dataInClk), 
+registerPipe #(.WIDTH(6), .DEPTH(`READ_LATENCY)) addBitPipeline(
+    .clk(clk), 
     .dataIn(addBit), 
     .dataOut(addBitPostLatency)
 );
 
-registerPipe #(.WIDTH(`ADDR_WIDTH), .DEPTH(`READ_LATENCY)) addrPipeline(.clk(dataInClk), 
+registerPipe #(.WIDTH(`ADDR_WIDTH), .DEPTH(`READ_LATENCY)) addrPipeline(
+    .clk(clk), 
     .dataIn(dataInAddr), 
     .dataOut(addrPostLatency)
 );
 
 
-quadPortBRAM #(.DATA_WIDTH(`DATA_WIDTH), .ADDR_WIDTH(`ADDR_WIDTH), .READ_LATENCY(`READ_LATENCY)) memBlock(
-    .clkA(dataInClk),
+quadPortBRAM #(.DATA_WIDTH(`DATA_WIDTH + 3), .ADDR_WIDTH(`ADDR_WIDTH), .READ_LATENCY(`READ_LATENCY)) memBlock(
+    .clk(clk),
+    
     .rAddrA(dataInAddr),
     .rDataA(readDataPostLatency),
     .wAddrA(addrPostLatency),
     .wDataA(readDataPostLatency + (35'b1 << addBitPostLatency)), // addBit can only go up to 35
     .wEnableA(dataInEnablePostLatency),
     
-    .clkB(dataOutClk),
     .rAddrB(sumAddr),
     .rDataB(summedDataOut),
     .wAddrB(sumAddr),

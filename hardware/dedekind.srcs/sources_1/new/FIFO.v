@@ -25,12 +25,14 @@ module FIFO #(
     parameter ALMOST_FULL_MARGIN = 2,
     parameter ALMOST_EMPTY_MARGIN = 2) (
     
+    // input side
     input wClk,
     input writeEnable,
     input[WIDTH-1:0] dataIn,
     output full,
     output almostFull,
     
+    // output side
     input rClk,
     input readEnable,
     output[WIDTH-1:0] dataOut,

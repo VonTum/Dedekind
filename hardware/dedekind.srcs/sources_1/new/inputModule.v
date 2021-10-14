@@ -22,8 +22,9 @@
 
 
 module inputModule (
+    input clk,
+    
     // input side
-    input inputClk,
     input[127:0] top,
     input[127:0] botA, // botB = varSwap(5,6)(A)
     input[127:0] botC, // botD = varSwap(5,6)(C)
@@ -33,7 +34,6 @@ module inputModule (
     output almostFull,
     
     // output side, to countConnectedCore
-    input outputClk,
     input readEnable,
     output graphAvailable,
     output[127:0] graphOut,
@@ -46,7 +46,8 @@ wire emptyAB, almostEmptyAB;
 wire popABFifo;
 wire[`FIFO_WIDTH-1:0] fifoABData;
 fifoSwapInputModule botABFifo(
-    .inputClk(inputClk),
+    .clk(clk),
+    
     .top(top),
     .botA(botA),
     .botIndex(botIndex),
@@ -54,7 +55,6 @@ fifoSwapInputModule botABFifo(
     .full(fullAB),
     .almostFull(almostFullAB),
     
-    .outputClk(outputClk),
     .readEnable(popABFifo),
     .dataOut(fifoABData),
     .empty(emptyAB),
@@ -66,7 +66,8 @@ wire emptyCD, almostEmptyCD;
 wire popCDFifo;
 wire[`FIFO_WIDTH-1:0] fifoCDData;
 fifoSwapInputModule botCDFifo(
-    .inputClk(inputClk),
+    .clk(clk),
+    
     .top(top),
     .botA(botC),
     .botIndex(botIndex),
@@ -74,7 +75,6 @@ fifoSwapInputModule botCDFifo(
     .full(fullCD),
     .almostFull(almostFullCD),
     
-    .outputClk(outputClk),
     .readEnable(popCDFifo),
     .dataOut(fifoCDData),
     .empty(emptyCD),
@@ -93,7 +93,7 @@ wire unswappedBotBelowOut;
 wire swappedBotBelowOut;
 wire chosenFifo;
 fifoScheduler #(.FIFO_WIDTH(`FIFO_WIDTH)) scheduler(
-    .clk(outputClk),
+    .clk(clk),
     
     .emptyA(emptyAB),
     .almostEmptyA(almostEmptyAB),
@@ -113,7 +113,7 @@ fifoScheduler #(.FIFO_WIDTH(`FIFO_WIDTH)) scheduler(
 
 wire isSwappedVariant;
 swapGraphMaker graphMaker(
-    .clk(outputClk),
+    .clk(clk),
     
     .top(top),
     .bot(schedulerBotOut),
@@ -130,7 +130,7 @@ swapGraphMaker graphMaker(
 
 reg[11:0] graphIndexReg;
 reg schedulerChoiceReg;
-always @(posedge outputClk) begin
+always @(posedge clk) begin
     if(schedulerReadEnable) begin
         graphIndexReg <= schedulerBotIndexOut;
         schedulerChoiceReg <= chosenFifo;
@@ -266,8 +266,9 @@ endmodule
 
 
 module fifoSwapInputModule (
+    input clk,
+    
     // input side
-    input inputClk,
     input[127:0] top,
     input[127:0] botA, // botB = varSwap(5,6)(botA)
     input[11:0] botIndex,
@@ -276,7 +277,6 @@ module fifoSwapInputModule (
     output almostFull,
     
     // output side
-    input outputClk,
     input readEnable,
     output[`FIFO_WIDTH-1:0] dataOut,
     output empty, 
@@ -287,12 +287,12 @@ wire botIsBelowAIn, botIsBelowBIn;
 checkIsBelowWithSwap botCheckerAB(top, botA, botIsBelowAIn, botIsBelowBIn);
 
 FIFO #(.WIDTH(`FIFO_WIDTH)) fifo (
-    .wClk(inputClk),
+    .wClk(clk),
     .writeEnable((botIsBelowAIn | botIsBelowBIn) & isBotValid),
     .dataIn({botA,botIndex,botIsBelowAIn,botIsBelowBIn}),
     .full(full), .almostFull(almostFull),
     
-    .rClk(outputClk),
+    .rClk(clk),
     .readEnable(readEnable),
     .dataOut(dataOut),
     .empty(empty), .almostEmpty(almostEmpty)

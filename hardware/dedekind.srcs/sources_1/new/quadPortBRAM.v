@@ -21,14 +21,14 @@
 
 
 module quadPortBRAM #(parameter DATA_WIDTH = 40, parameter ADDR_WIDTH = 12, parameter READ_LATENCY = 2) (
-    input clkA,
+    input clk,
+    
     input wEnableA,
     input[ADDR_WIDTH-1:0] wAddrA,
     input[ADDR_WIDTH-1:0] rAddrA,
     input[DATA_WIDTH-1:0] wDataA,
     output[DATA_WIDTH-1:0] rDataA,
     
-    input clkB,
     input wEnableB,
     input[ADDR_WIDTH-1:0] wAddrB,
     input[ADDR_WIDTH-1:0] rAddrB,
@@ -38,10 +38,10 @@ module quadPortBRAM #(parameter DATA_WIDTH = 40, parameter ADDR_WIDTH = 12, para
 
 reg[DATA_WIDTH-1:0] memory[(1 << ADDR_WIDTH)-1:0];
 
-registerPipe #(.WIDTH(DATA_WIDTH), .DEPTH(READ_LATENCY)) pipelineA(.clk(clkA), .dataIn(memory[rAddrA]), .dataOut(rDataA));
-registerPipe #(.WIDTH(DATA_WIDTH), .DEPTH(READ_LATENCY)) pipelineB(.clk(clkB), .dataIn(memory[rAddrB]), .dataOut(rDataB));
+registerPipe #(.WIDTH(DATA_WIDTH), .DEPTH(READ_LATENCY)) pipelineA(.clk(clk), .dataIn(memory[rAddrA]), .dataOut(rDataA));
+registerPipe #(.WIDTH(DATA_WIDTH), .DEPTH(READ_LATENCY)) pipelineB(.clk(clk), .dataIn(memory[rAddrB]), .dataOut(rDataB));
 
-always @(posedge clkA) if(wEnableA) memory[wAddrA] <= wDataA;
-always @(posedge clkB) if(wEnableB) memory[wAddrB] <= wDataB;
+always @(posedge clk) if(wEnableA) memory[wAddrA] <= wDataA;
+always @(posedge clk) if(wEnableB) memory[wAddrB] <= wDataB;
 
 endmodule
