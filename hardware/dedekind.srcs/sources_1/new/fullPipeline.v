@@ -133,8 +133,8 @@ collectionModule collector(
     .addBit(countOut),
     
     // output side
-    .sumAddrValid(isBotValid),
-    .sumAddr(botIndex),
+    .readAddrValid(isBotValid),
+    .readAddr(botIndex),
     .summedDataOut(summedDataOut),
     .pcoeffCount(pcoeffCountOut)
 );

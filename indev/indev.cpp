@@ -116,5 +116,14 @@ int main(int argc, const char** argv) {
 
 	computeBuffers(s, jobBatch, swapper, tops, 32);*/
 
-	computeFlatDPlus2<6, 32>();
+	Monotonic<7> bot;
+
+	uint64_t resultingBotCount = 0;
+
+	bot.forEachPermutation(3,7, [&](const Monotonic<7>& permBot) {
+		resultingBotCount++;
+	});
+	std::cout << "Permuts: " << resultingBotCount << std::endl;
+
+	//computeFlatDPlus2<6, 32>();
 }

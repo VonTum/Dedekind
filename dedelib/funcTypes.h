@@ -201,6 +201,12 @@ struct Monotonic {
 		this->bf.forEachPermutation([&func](const BooleanFunction<Variables>& bf) {func(Monotonic(bf)); });
 	}
 
+	template<typename Func>
+	void forEachPermutation(unsigned int fromVar, unsigned int toVar, const Func& func) const {
+		BooleanFunction<Variables> copy = this->bf;
+		copy.forEachPermutation(fromVar, toVar, [&func](const BooleanFunction<Variables>& bf) {func(Monotonic(bf)); });
+	}
+
 	bool isEmpty() const {
 		return this->bf.isEmpty();
 	}

@@ -75,6 +75,15 @@ inline std::ostream& operator<<(std::ostream& os, FunctionInput f) {
 	return os;
 }
 
+template<typename IntType>
+inline std::ostream& printBits(std::ostream& os, IntType bits, size_t upTo = sizeof(IntType) * 8) {
+	for(size_t i = 0; i < upTo; i++) {
+		char bit = ((bits >> (upTo - i - 1)) & 1) == 1 ? '1' : '0';
+		os << bit;
+	}
+	return os;
+}
+
 template<size_t Size>
 inline std::ostream& operator<<(std::ostream& os, const BitSet<Size>& bitset) {
 	for(size_t i = 0; i < Size; i++) {

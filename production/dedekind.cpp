@@ -727,9 +727,47 @@ void pipelineTestSet(size_t count) {
 			computePCoefficientAllowBadBots<Variables>(top, botA.swapped(5,6)) + 
 			computePCoefficientAllowBadBots<Variables>(top, botC.swapped(5,6));
 
-		BitSet<64> asBitset;
-		asBitset.data = resultingBotSum;
-		testSet << asBitset << std::endl;
+		printBits(testSet, resultingBotSum, 64);
+		testSet << std::endl;
+	}
+
+	testSet.close();
+}
+
+template<unsigned int Variables>
+void pipeline24PackTestSet(size_t count) {
+	std::vector<TopBots<Variables>> topBots = readTopBots<Variables>(5000);
+
+	std::default_random_engine generator(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+
+	std::ofstream testSet(FileName::pipeline24PackTestSet(Variables)); // plain text file
+
+	const TopBots<Variables>& selectedTop = topBots[std::uniform_int_distribution<size_t>(0, topBots.size() - 1)(generator)];
+	std::uniform_int_distribution<size_t> botSelector(0, selectedTop.bots.size() - 1);
+
+	Monotonic<Variables> top = selectedTop.top;
+	permuteRandom(top, generator);
+
+	std::cout << "Starting generation" << std::endl;
+	for(size_t i = 0; i < count; i++) {
+		testSet << top.bf.bitset << '_';
+		Monotonic<Variables> bot = selectedTop.bots[botSelector(generator)];
+		permuteRandom(bot, generator);
+		testSet << bot.bf.bitset << '_';
+		uint64_t resultingBotSum = 0;
+		uint16_t resultingBotCount = 0;
+
+		bot.forEachPermutation(3,7, [&](const Monotonic<Variables>& permBot) {
+			if(permBot <= top) {
+				resultingBotSum += computePCoefficientAllowBadBots(top, permBot);
+				resultingBotCount++;
+			}
+		});
+
+		printBits(testSet, resultingBotSum, 64);
+		testSet << '_';
+		printBits(testSet, resultingBotCount, 8);
+		testSet << std::endl;
 	}
 
 	testSet.close();
@@ -1049,11 +1087,21 @@ std::map<std::string, void(*)(const std::string&)> commandsWithArg{
 	{"pipelineTestSet5", [](const std::string& size) {pipelineTestSet<5>(std::stoi(size)); }},
 	{"pipelineTestSet6", [](const std::string& size) {pipelineTestSet<6>(std::stoi(size)); }},
 	{"pipelineTestSet7", [](const std::string& size) {pipelineTestSet<7>(std::stoi(size)); }},
+
+	{"pipeline24PackTestSet1", [](const std::string& size) {pipeline24PackTestSet<1>(std::stoi(size)); }},
+	{"pipeline24PackTestSet2", [](const std::string& size) {pipeline24PackTestSet<2>(std::stoi(size)); }},
+	{"pipeline24PackTestSet3", [](const std::string& size) {pipeline24PackTestSet<3>(std::stoi(size)); }},
+	{"pipeline24PackTestSet4", [](const std::string& size) {pipeline24PackTestSet<4>(std::stoi(size)); }},
+	{"pipeline24PackTestSet5", [](const std::string& size) {pipeline24PackTestSet<5>(std::stoi(size)); }},
+	{"pipeline24PackTestSet6", [](const std::string& size) {pipeline24PackTestSet<6>(std::stoi(size)); }},
+	{"pipeline24PackTestSet7", [](const std::string& size) {pipeline24PackTestSet<7>(std::stoi(size)); }},
 };
 
-inline void runCommands(const ParsedArgs& args) {
-	for(size_t i = 0; i < args.argCount(); i++) {
-		const std::string& cmd = args[i];
+inline void runCommand(const std::string& cmdWithArg) {
+	size_t argSepFound = cmdWithArg.find(':');
+
+	if(argSepFound == std::string::npos) { // no arg
+		const std::string& cmd = cmdWithArg;
 
 		auto found = commands.find(cmd);
 		if(found != commands.end()) {
@@ -1061,16 +1109,27 @@ inline void runCommands(const ParsedArgs& args) {
 			TimeTracker timer;
 			(*found).second();
 		} else {
-			auto foundWithArg = commandsWithArg.find(cmd);
-			if(foundWithArg != commandsWithArg.end()) {
-				i++;
-				const std::string& arg = args[i];
-
-				std::cout << "running " << cmd.c_str() << "(" << arg.c_str() << ")" << std::endl;
-				TimeTracker timer;
-				(*foundWithArg).second(arg);
-			}
+			std::cout << "Command not found!" << std::endl;
 		}
+	} else { // arg
+		std::string cmd = cmdWithArg.substr(0, argSepFound);
+		std::string arg = cmdWithArg.substr(argSepFound+1);
+		
+		auto foundWithArg = commandsWithArg.find(cmd);
+		if(foundWithArg != commandsWithArg.end()) {
+			std::cout << "running " << cmd.c_str() << "(" << arg.c_str() << ")" << std::endl;
+			TimeTracker timer;
+			(*foundWithArg).second(arg);
+		} else {
+			std::cout << "Command not found!" << std::endl;
+		}
+	}
+}
+inline void runCommands(const ParsedArgs& args) {
+	for(size_t i = 0; i < args.argCount(); i++) {
+		const std::string& cmd = args[i];
+
+		runCommand(cmd);
 	}
 }
 
@@ -1091,14 +1150,7 @@ int main(int argc, const char** argv) {
 		std::cout << "Enter command> ";
 		std::cin >> givenCommand;
 
-		auto found = commands.find(givenCommand);
-		if(found != commands.end()) {
-			std::cout << "running " << givenCommand.c_str() << std::endl;
-			TimeTracker timer;
-			(*found).second();
-		} else {
-			std::cout << "Command not found!";
-		}
+		runCommand(givenCommand);
 	}
 	return 0;
 }

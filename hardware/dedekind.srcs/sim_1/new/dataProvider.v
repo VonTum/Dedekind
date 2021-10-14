@@ -20,41 +20,59 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module dataProvider(
+module indexProvider #(parameter ADDR_DEPTH = 4096, parameter MIN_OUTPUT_DELAY = 0) (
     input clk,
-    input canProvideData,
-    output dataAvailble,
-    output reg dataValid,
-    output[11:0] caseIndex,
-    output[127:0] top,
-    output[127:0] botA, // botB = varSwap(5,6,botA)
-    output[127:0] botC  // botD = varSwap(5,6,botC)
+    output reg[$clog2(ADDR_DEPTH)-1:0] index,
+    output dataAvailable,
+    input requestData
 );
 
-reg[128*3+64-1:0] dataTable[4095:0];
+initial index = 0;
 
-initial $readmemb("testData.mem", dataTable);
-initial dataValid = 0;
-
-reg[8:0] pushLoop = 0;
-//always @(posedge clk) pushLoop <= pushLoop + 1;
-
-reg[11:0] curAddr = -1;
+reg hasStarted = 0;
 reg isDone = 0;
 
-wire provideData = canProvideData & (pushLoop == 0);
-
-assign dataAvailble = !isDone;
-assign caseIndex = curAddr;
-wire[63:0] botSum;
-assign {top, botA, botC, botSum} = dataTable[curAddr];
+generate
+    if(MIN_OUTPUT_DELAY == 0) 
+        assign dataAvailable = !isDone;
+    else begin
+        integer delayTillNext = MIN_OUTPUT_DELAY;
+        assign dataAvailable = !isDone & (delayTillNext == 0);
+        always @(posedge clk) begin
+            if(dataAvailable & requestData)
+                delayTillNext <= MIN_OUTPUT_DELAY;
+            else begin
+                if(delayTillNext > 0)
+                    delayTillNext <= delayTillNext - 1;
+            end
+        end
+    end
+endgenerate
 
 always @(posedge clk) begin
-    if(curAddr == -1) isDone <= 1;
-    dataValid <= provideData;
-    if(provideData) begin
-        curAddr <= curAddr + 1;
+    if(hasStarted & (index == ADDR_DEPTH - 1)) isDone <= 1;
+    
+    if(dataAvailable & requestData) begin
+        index <= index + 1;
+        hasStarted <= 1;
     end
 end
+
+endmodule
+
+
+module dataProvider #(parameter FILE_NAME = "testData.mem", parameter DATA_WIDTH = 256, parameter ADDR_DEPTH = 4096, parameter MIN_OUTPUT_DELAY = 0) (
+    input clk,
+    output [$clog2(ADDR_DEPTH)-1:0] index,
+    output dataAvailable,
+    input requestData,
+    output[DATA_WIDTH-1:0] data
+);
+
+indexProvider #(ADDR_DEPTH, MIN_OUTPUT_DELAY) ip(clk, index, dataAvailable, requestData);
+
+reg[DATA_WIDTH-1:0] dataTable[ADDR_DEPTH-1:0];
+initial $readmemb(FILE_NAME, dataTable);
+assign data = dataTable[index];
 
 endmodule

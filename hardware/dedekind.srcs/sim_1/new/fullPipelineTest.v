@@ -46,15 +46,13 @@ fullPipeline elementUnderTest (
     .summedDataOut(summedDataOut)
 );
 
-dataProvider dataProvider (
+wire[63:0] botSum;
+dataProvider #("pipelineTestSet7.mem", 128*3+64, 4096) dataProvider (
     .clk(clk),
-    .canProvideData(!almostFull),
-    .dataAvailble(),
-    .dataValid(isBotValid),
-    .caseIndex(botIndex),
-    .top(top),
-    .botA(botA), // botB = varSwap(5,6,botA)
-    .botC(botC)  // botD = varSwap(5,6,botC)
+    .index(botIndex),
+    .dataAvailable(isBotValid),
+    .requestData(!almostFull),
+    .data({top, botA, botC, botSum})
 );
 
 endmodule

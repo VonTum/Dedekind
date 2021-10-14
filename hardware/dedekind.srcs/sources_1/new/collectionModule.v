@@ -29,22 +29,16 @@ module collectorBlock(
     input[8:0] writeAddr,
     input[1:0] writeSubAddr,
     input[5:0] writeData,
-    // reset
-    input rstOnOutClk,
-    input[8:0] rstAddr,
     
     // output side
-    input readEnable,
+    input readEnable, // this reads from the memory and also wipes the read entry. 
     input[8:0] readAddr,
     output[27:0] readData
 );
 
-wire rst;
-synchronizer sync(outClk, inClk, rstOnOutClk, rst);
-
 wire[9:0] wideWriteData;
 assign wideWriteData[9:7] = 3'b000;
-assign wideWriteData[6] = !rst;
+assign wideWriteData[6] = !readEnable; // entries marked with '1' are valid, entries with '0' are empty
 assign wideWriteData[5:0] = writeData;
 
 wire[39:0] memOut;
@@ -54,9 +48,9 @@ assign readData[20:14] = memOut[26:20];
 assign readData[27:21] = memOut[36:30];
 
 simpleDualPortM20K memBlock(
-    .writeAddr(rst ? rstAddr : writeAddr),
-    .writeMask(rst? 4'b1111 : writeEnable ? (4'b0001 << writeSubAddr) : 4'b0000),
     .writeClk(clk),
+    .writeAddr(readEnable ? readAddr : writeAddr),
+    .writeMask(readEnable ? 4'b1111 : writeEnable ? (4'b0001 << writeSubAddr) : 4'b0000),
     .writeData({wideWriteData,wideWriteData,wideWriteData,wideWriteData}),
     
     .readClk(clk),
@@ -77,19 +71,17 @@ module collectionModule(
     input[5:0] addBit,
     
     // output side
-    input sumAddrValid,
-    input[`ADDR_WIDTH-1:0] sumAddr,
-    output[`DATA_WIDTH-1:0] summedDataOut,
+    input readAddrValid,
+    input[`ADDR_WIDTH-1:0] readAddr,
+    output[`DATA_WIDTH:0] summedDataOut,
     output[2:0] pcoeffCount
 );
 
-/*
-wire[2:0] upperWriteAddr = dataInAddr[11:9];
-wire[8:0] lowerWriteAddr = dataInAddr[8:0];
-wire[2:0] upperReadAddr = sumAddr[11:9];
-wire[8:0] lowerReadAddr = sumAddr[8:0];
 
-reg[8:0] rstAddr = 0; always @(posedge dataInClk) rstAddr = rstAdr+1;
+/*wire[2:0] upperWriteAddr = dataInAddr[11:9];
+wire[8:0] lowerWriteAddr = dataInAddr[8:0];
+wire[2:0] upperReadAddr = readAddr[11:9];
+wire[8:0] lowerReadAddr = readAddr[8:0];
 
 generate
 for(genvar i = 0; i < 8; i=i+1) begin
@@ -101,20 +93,22 @@ for(genvar i = 0; i < 8; i=i+1) begin
         .writeSubAddr(dataInSubAddr),
         .writeData(addBit),
         
-        .rstOnOutClk(),
-        .rstAddr(),
         // output side
-        .readEnable(),
-        .readAddr(),
+        .readEnable(readAddrValid & (upperReadAddr == (i+1) % 8)), // 
+        .readAddr(lowerReadAddr),
         .readData()
     );
 end
 endgenerate*/
 
+
 wire dataInEnablePostLatency;
 wire[5:0] addBitPostLatency;
 wire[`ADDR_WIDTH-1:0] addrPostLatency;
-wire[`DATA_WIDTH-1:0] readDataPostLatency;
+wire[`DATA_WIDTH-1:0] readSumPostLatency;
+wire[2:0] readCountPostLatency;
+wire[`DATA_WIDTH-1:0] updatedSum = readSumPostLatency + (36'b1 << addBitPostLatency);
+wire[2:0] updatedCount = readCountPostLatency + 1;
 
 registerPipe #(.WIDTH(1), .DEPTH(`READ_LATENCY)) enablePipeline(
     .clk(clk), 
@@ -139,16 +133,17 @@ quadPortBRAM #(.DATA_WIDTH(`DATA_WIDTH + 3), .ADDR_WIDTH(`ADDR_WIDTH), .READ_LAT
     .clk(clk),
     
     .rAddrA(dataInAddr),
-    .rDataA(readDataPostLatency),
+    .rDataA({readSumPostLatency, readCountPostLatency}),
     .wAddrA(addrPostLatency),
-    .wDataA(readDataPostLatency + (35'b1 << addBitPostLatency)), // addBit can only go up to 35
+    .wDataA({updatedSum, updatedCount}), // addBit can only go up to 35
     .wEnableA(dataInEnablePostLatency),
     
-    .rAddrB(sumAddr),
-    .rDataB(summedDataOut),
-    .wAddrB(sumAddr),
-    .wDataB(0),
-    .wEnableB(sumAddrValid)
+    .rAddrB(readAddr),
+    .rDataB({summedDataOut, pcoeffCount}),
+    .wAddrB(readAddr),
+    .wDataB(43'b0),
+    .wEnableB(readAddrValid)
 );
+
 
 endmodule
