@@ -6,10 +6,13 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <errno.h>
+#include <string.h>
 #endif
 
 bool BUFMANAGEMENT_MMAP = false;
 bool BUFMANAGEMENT_MMAP_POPULATE = false;
+bool BUFMANAGEMENT_MMAP_HUGETLB = false;
 BufmanagementPageSize BUFMANAGEMENT_MMAP_PAGE_SIZE = BufmanagementPageSize::HUGETLB_4KB;
 
 void writeFlatVoidBuffer(const void* data, const std::string& fileName, size_t size) {
@@ -27,7 +30,7 @@ const void* readFlatVoidBuffer(const std::string& fileName, size_t size) {
 		}
 		int mmapFlags = MAP_PRIVATE;
 		if(BUFMANAGEMENT_MMAP_POPULATE) mmapFlags |= MAP_POPULATE;
-		if(BUFMANAGEMENT_MMAP_PAGE_SIZE != BufmanagementPageSize::HUGETLB_4KB) {
+		if(BUFMANAGEMENT_MMAP_HUGETLB) {
 			mmapFlags |= MAP_HUGETLB;
 			if(BUFMANAGEMENT_MMAP_PAGE_SIZE == BufmanagementPageSize::HUGETLB_2MB) {
 				mmapFlags |= (21 << MAP_HUGE_SHIFT);
@@ -36,6 +39,12 @@ const void* readFlatVoidBuffer(const std::string& fileName, size_t size) {
 			}
 		}
 		void* result = mmap(NULL, size, PROT_READ, mmapFlags, fd, 0);
+		if(result == MAP_FAILED) {
+			int err = errno;
+			perror("mmap");
+			if(err == EINVAL && BUFMANAGEMENT_MMAP_HUGETLB) std::cout << "This filesystem probably doesn't support HugeTLB Pages" << std::endl;
+			exit(1);
+		}
 		close(fd);
 		return result;
 		#else

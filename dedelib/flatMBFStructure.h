@@ -10,6 +10,7 @@
 
 typedef uint32_t NodeIndex;
 typedef uint32_t NodeOffset;
+typedef uint64_t LinkIndex;
 
 struct ClassInfo {
 	uint64_t intervalSizeDown : 48; // log2(2414682040998) == 41.1349703699
@@ -17,8 +18,9 @@ struct ClassInfo {
 };
 
 struct FlatNode {
-	uint64_t dual : 30; // log2(490013148) == 28.8682452191
-	uint64_t downLinks : 34; // log2(7329014832) == 32.770972138
+	// dual could be NodeOffset instead of NodeIndex, Requiring only log2(16440466) == 23.9707478566
+	/*NodeIndex*/ uint64_t dual : 30; // log2(490013148) == 28.8682452191
+	/*LinkIndex*/ uint64_t downLinks : 34; // log2(7329014832) == 32.770972138
 	// this second downLinks index marks a list going from this->downLinks to (this+1)->downLinks
 };
 

@@ -6,6 +6,7 @@
 
 extern bool BUFMANAGEMENT_MMAP;
 extern bool BUFMANAGEMENT_MMAP_POPULATE;
+extern bool BUFMANAGEMENT_MMAP_HUGETLB;
 enum class BufmanagementPageSize {
 	HUGETLB_4KB,
 	HUGETLB_2MB,

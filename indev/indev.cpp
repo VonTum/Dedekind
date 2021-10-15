@@ -10,6 +10,7 @@
 #include "../dedelib/flatMBFStructure.h"
 #include "../dedelib/flatPCoeff.h"
 
+#include "../dedelib/configure.h"
 
 template<unsigned int Variables>
 void printAllMBFs() {
@@ -95,10 +96,7 @@ int main(int argc, const char** argv) {
 	{
 		ParsedArgs parsed(argc, argv);
 
-		std::string dataDir = parsed.getOptional("dataDir");
-		if(!dataDir.empty()) {
-			FileName::setDataPath(dataDir);
-		}
+		configure(parsed);
 	}
 	//sjomnumbertablesymmetric<2>([]() {});
 	//printAllMBFs<4>();

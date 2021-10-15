@@ -31,6 +31,8 @@
 
 #include "../dedelib/flatBufferManagement.h"
 
+#include "../dedelib/configure.h"
+
 /*
 Correct numbers
 	0: 2
@@ -44,48 +46,6 @@ Correct numbers
 	8: 56130437228687557907788
 	9: ??????????????????????????????????????????
 */
-
-
-
-
-
-
-
-static bool genBool() {
-	return rand() % 2 == 1;
-}
-
-template<size_t Size>
-static BitSet<Size> generateBitSet() {
-	BitSet<Size> bs;
-
-	for(size_t i = 0; i < Size; i++) {
-		if(genBool()) {
-			bs.set(i);
-		}
-	}
-
-	return bs;
-}
-
-template<unsigned int Variables>
-static BooleanFunction<Variables> generateBF() {
-	return BooleanFunction<Variables>(generateBitSet<(1 << Variables)>());
-}
-
-std::string getFileName(const char* title, unsigned int Variables, const char* extention) {
-	std::string name(title);
-	name.append(std::to_string(Variables));
-	name.append(extention);
-	return name;
-}
-
-std::string getFileName(std::string title, unsigned int Variables, const char* extention) {
-	std::string name(title);
-	name.append(std::to_string(Variables));
-	name.append(extention);
-	return name;
-}
 
 template<unsigned int Variables>
 void runGenAllMBFs() {
@@ -458,64 +418,6 @@ std::pair<uint64_t, uint64_t> getIntervalSizeFor(const MBFDecomposition<Variable
 }
 
 template<unsigned int Variables>
-void saveIntervalSizes() {
-	MBFDecomposition<Variables> dec = readFullMBFDecomposition<Variables>();
-
-	std::ofstream intervalSizeFile(getFileName("intervalSizesToTop", Variables, ".mbfU64"), std::ios::binary);
-	std::ofstream classCountFile(getFileName("uniqueClassCountsToTop", Variables, ".mbfU64"), std::ios::binary);
-
-	for(int layer = 0; layer < (1 << Variables) + 1; layer++) {
-		for(int curItemInLayer = 0; curItemInLayer < getLayerSize<Variables>(layer); curItemInLayer++) {
-			std::pair<uint64_t, uint64_t> intervalSize = getIntervalSizeFor(dec, layer, curItemInLayer);
-			std::cout << "for " << layer << ", " << curItemInLayer << ": intervalSize: " << intervalSize.first << " uniqueClassesSize: " << intervalSize.second << "\n";
-
-			uint8_t buf[8];
-			serializeU64(intervalSize.first, buf);
-			intervalSizeFile.write(reinterpret_cast<const char*>(buf), 8);
-			serializeU64(intervalSize.second, buf);
-			classCountFile.write(reinterpret_cast<const char*>(buf), 8);
-		}
-	}
-
-	intervalSizeFile.close();
-	classCountFile.close();
-}
-/*
-template<unsigned int Variables>
-void computeDualForFile(size_t elementSize, std::ifstream& originalFile, std::ofstream& dualFile) {
-	std::ifstream mbfFile(getFileName("allUniqueMBFSorted", Variables, ".mbf"), std::ios::binary);
-	MBFHashSet<Variables> fullMBFSet(mbfFile);
-	mbfFile.close();
-
-	constexpr size_t size = mbfCounts[Variables];
-
-	char* originalBuf = new char[size * elementSize];
-	originalFile.read(originalBuf, size * elementSize);
-
-	for(size_t layer = 0; layer < (1 << Variables) + 1; layer++) {
-		size_t dualLayer = (1 << Variables) - layer;
-		for(const BooleanFunction<Variables>& destFibs : fullMBFSet.bufSets[layer]) {
-			BooleanFunction<Variables>* dualIndex = fullMBFSet.bufSets[dualLayer].find(destFibs.dual());
-
-			size_t index = dualIndex - fullMBFSet.mbfs;
-
-			dualFile.write(originalBuf + index * elementSize, elementSize);
-		}
-	}
-
-	delete[] originalBuf;
-}
-
-template<unsigned int Variables>
-void produceDualU64File(const char* inputName, const char* dualName) {
-	std::ifstream inputFile(getFileName(inputName, Variables, ".mbfU64"), std::ios::binary);
-	std::ofstream outputFile(getFileName(dualName, Variables, ".mbfU64"), std::ios::binary);
-
-	computeDualForFile<Variables>(8, inputFile, outputFile);
-}
-*/
-
-template<unsigned int Variables>
 void preComputeFiles() {
 	runGenAllMBFs<Variables>();
 	runSortAndComputeLinks<Variables>();
@@ -795,7 +697,6 @@ FlatMBFStructure<Variables> convertMBFMapToFlatMBFStructure(const AllMBFMap<Vari
 		std::cout << "Layer " << layer << std::endl;
 		assert(curNodeIndex == FlatMBFStructure<Variables>::cachedOffsets.nodeLayerOffsets[layer]);
 
-		NodeIndex firstNodeInLayer = FlatMBFStructure<Variables>::cachedOffsets.nodeLayerOffsets[layer];
 		NodeIndex firstNodeInDualLayer = FlatMBFStructure<Variables>::cachedOffsets.nodeLayerOffsets[(1 << Variables) - layer];
 		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = sourceMap.layers[layer];
 		const BakedMap<Monotonic<Variables>, ExtraData>& dualLayer = sourceMap.layers[(1 << Variables) - layer];
@@ -905,16 +806,6 @@ std::map<std::string, void(*)()> commands{
 	{"sortAndComputeLinks7", []() {runSortAndComputeLinks<7>(); }},
 	//{"sortAndComputeLinks8", []() {runSortAndComputeLinks<8>(); }},
 	//{"sortAndComputeLinks9", []() {runSortAndComputeLinks<9>(); }},
-
-	//{"saveIntervalSizes1", []() {saveIntervalSizes<1>(); }},
-	//{"saveIntervalSizes2", []() {saveIntervalSizes<2>(); }},
-	//{"saveIntervalSizes3", []() {saveIntervalSizes<3>(); }},
-	//{"saveIntervalSizes4", []() {saveIntervalSizes<4>(); }},
-	//{"saveIntervalSizes5", []() {saveIntervalSizes<5>(); }},
-	//{"saveIntervalSizes6", []() {saveIntervalSizes<6>(); }},
-	//{"saveIntervalSizes7", []() {saveIntervalSizes<7>(); }},
-	//{"saveIntervalSizes8", []() {saveIntervalSizes<8>(); }},
-	//{"saveIntervalSizes9", []() {saveIntervalSizes<9>(); }},
 
 	{"linkCount1", []() {doLinkCount<1>(); }},
 	{"linkCount2", []() {doLinkCount<2>(); }},
@@ -1154,27 +1045,7 @@ int main(int argc, const char** argv) {
 
 	ParsedArgs parsed(argc, argv);
 
-	std::string dataDir = parsed.getOptional("dataDir");
-	if(!dataDir.empty()) {
-		FileName::setDataPath(dataDir);
-	}
-
-	if(parsed.hasFlag("mmap")) {
-		BUFMANAGEMENT_MMAP = true;
-	}
-	if(parsed.hasFlag("mmap_populate")) {
-		BUFMANAGEMENT_MMAP = true;
-		BUFMANAGEMENT_MMAP_POPULATE = true;
-	}
-	if(parsed.hasFlag("mmap_2MB")) {
-		BUFMANAGEMENT_MMAP = true;
-		BUFMANAGEMENT_MMAP_PAGE_SIZE = BufmanagementPageSize::HUGETLB_2MB;
-	}
-	if(parsed.hasFlag("mmap_1GB")) {
-		BUFMANAGEMENT_MMAP = true;
-		BUFMANAGEMENT_MMAP_PAGE_SIZE = BufmanagementPageSize::HUGETLB_1GB;
-	}
-
+	configure(parsed);
 
 	if(parsed.argCount() > 0) {
 		runCommands(parsed);
