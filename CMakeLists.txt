@@ -31,6 +31,7 @@ add_library(dedelib
   dedelib/layerDecomposition.cpp
   dedelib/valuedDecomposition.cpp
   dedelib/fileNames.cpp
+  dedelib/flatBufferManagement.cpp
   dedelib/terminalColor.cpp
 
   dedelib/bigint/uint128_t.cpp

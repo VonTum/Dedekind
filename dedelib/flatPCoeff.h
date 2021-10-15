@@ -23,15 +23,15 @@ void flatDPlus1() {
 template<unsigned int Variables, size_t BatchSize>
 void followNextLayerLinks(const FlatMBFStructure<Variables>& downLinkStructure, SwapperLayers<Variables, BitSet<BatchSize>>& swapper) {
 	int curLayer = swapper.getCurrentLayerDownward();
-	FlatNode* firstNode = downLinkStructure.allNodes + FlatMBFStructure<Variables>::cachedOffsets[curLayer];
+	const FlatNode* firstNode = downLinkStructure.allNodes + FlatMBFStructure<Variables>::cachedOffsets[curLayer];
 	for(size_t i = 0; i < swapper.getSourceLayerSize(); i++) {
 		BitSet<BatchSize> sourceElem = swapper.source(i);
 		if(sourceElem.isEmpty()) continue; // skip nonreached nodes
 
-		NodeOffset* sourceNodeDownLinksStart = downLinkStructure.allLinks + firstNode[i].downLinks;
-		NodeOffset* sourceNodeDownLinksEnd = downLinkStructure.allLinks + firstNode[i+1].downLinks;
+		const NodeOffset* sourceNodeDownLinksStart = downLinkStructure.allLinks + firstNode[i].downLinks;
+		const NodeOffset* sourceNodeDownLinksEnd = downLinkStructure.allLinks + firstNode[i+1].downLinks;
 
-		for(NodeOffset* curDownlink = sourceNodeDownLinksStart; curDownlink != sourceNodeDownLinksEnd; curDownlink++) {
+		for(const NodeOffset* curDownlink = sourceNodeDownLinksStart; curDownlink != sourceNodeDownLinksEnd; curDownlink++) {
 			swapper.dest(*curDownlink) |= sourceElem;
 		}
 	}
@@ -138,6 +138,9 @@ int getHighestLayer(NodeIndex* tops, size_t topCount) {
 		}
 	}
 	assert(false);
+	#ifdef __GNUC__
+	__builtin_unreachable();
+	#endif
 }
 
 template<unsigned int Variables, size_t BatchSize>
@@ -270,7 +273,7 @@ const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* coun
 #define PCOEFF_MULTITHREAD
 
 template<unsigned int Variables, size_t BatchSize>
-u192 computeFlatDPlus2() {
+u192 flatDPlus2() {
 	FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
 	SwapperLayers<Variables, BitSet<BatchSize>> swapper;
 	JobBatch<Variables, BatchSize> jobBatch;

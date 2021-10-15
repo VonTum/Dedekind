@@ -1,11 +1,12 @@
 #pragma once
 
 #include <stddef.h>
-#include <memory.h>
 #include <thread>
 
 #include "funcTypes.h"
 #include "knownData.h"
+
+#include "flatBufferManagement.h"
 
 typedef uint32_t NodeIndex;
 typedef uint32_t NodeOffset;
@@ -32,13 +33,13 @@ public:
 	constexpr static size_t MBF_COUNT = mbfCounts[Variables];
 	constexpr static size_t LINK_COUNT = getTotalLinkCount<Variables>();
 	
-	// sized MBF_COUNT == mbfCounts[Variables]
-	Monotonic<Variables>* mbfs;
-	ClassInfo* allClassInfos;
-	FlatNode* allNodes;
+	
+	const Monotonic<Variables>* mbfs; // sized MBF_COUNT == mbfCounts[Variables]
+	const ClassInfo* allClassInfos; // sized MBF_COUNT == mbfCounts[Variables]
+	const FlatNode* allNodes; // sized MBF_COUNT+1 == mbfCounts[Variables]+1
+	const NodeOffset* allLinks; // sized LINK_COUNT == getTotalLinkCount<Variables>()
 
-	// sized LINK_COUNT == getTotalLinkCount<Variables>()
-	NodeOffset* allLinks;
+	bool useFlatBufferManagement = false;
 
 	struct CachedOffsets {
 		// these help us to find the nodes of each layer
@@ -55,35 +56,21 @@ public:
 	};
 	constexpr static CachedOffsets cachedOffsets = CachedOffsets();
 
-	
-	FlatMBFStructure(bool enableMBFs = true, bool enableAllClassInfos = true, bool enableAllNodes = true, bool enableAllLinks = true):
-		mbfs(nullptr),
-		allClassInfos(nullptr),
-		allNodes(nullptr),
-		allLinks(nullptr) {
-		/*
-		these allocations are very large and happen upon initialization
-		if we split the total work over several thousand jobs then this 
-		means a lot of allocations, meaning a lot of overhead. malloc is
-		faster than new. These buffers will be read in by a raw file read
-		anyway. 
-		*/
-		if(enableMBFs) mbfs = (Monotonic<Variables>*) malloc(sizeof(Monotonic<Variables>) * MBF_COUNT);
-		if(enableAllClassInfos) allClassInfos = (ClassInfo*) malloc(sizeof(ClassInfo) * (MBF_COUNT));
-		if(enableAllLinks) allLinks = (NodeOffset*) malloc(sizeof(NodeOffset) * LINK_COUNT);
+	// these are written by either the generation code, or from a file read / memory map
+	FlatMBFStructure() : mbfs(nullptr), allClassInfos(nullptr), allNodes(nullptr), allLinks(nullptr) {}
 
-		if(enableAllNodes) {
-			allNodes = (FlatNode*) malloc(sizeof(FlatNode) * (MBF_COUNT + 1));
-			// add tails of the buffers, since we use the differences between the current and next elements to mark lists
-			//allNodes[mbfCounts[Variables]].dual = 0xFFFFFFFFFFFFFFFF; // invalid
-			allNodes[mbfCounts[Variables]].downLinks = LINK_COUNT; // end of the allLinks buffer
-		}
-	}
 	~FlatMBFStructure() {
-		if(mbfs) free(mbfs);
-		if(allClassInfos) free(allClassInfos);
-		if(allNodes) free(allNodes);
-		if(allLinks) free(allLinks);
+		if(useFlatBufferManagement) {
+			if(mbfs) freeFlatBuffer(mbfs, MBF_COUNT);
+			if(allClassInfos) freeFlatBuffer(allClassInfos, MBF_COUNT);
+			if(allNodes) freeFlatBuffer(allNodes, MBF_COUNT + 1);
+			if(allLinks) freeFlatBuffer(allLinks, LINK_COUNT);
+		} else {
+			if(mbfs) free_const(mbfs);
+			if(allClassInfos) free_const(allClassInfos);
+			if(allNodes) free_const(allNodes);
+			if(allLinks) free_const(allLinks);
+		}
 	}
 	FlatMBFStructure(const FlatMBFStructure&) = delete;
 	FlatMBFStructure& operator=(const FlatMBFStructure&) = delete;
@@ -92,46 +79,35 @@ public:
 		mbfs(other.mbfs), 
 		allClassInfos(other.allClassInfos), 
 		allNodes(other.allNodes), 
-		allLinks(other.allLinks) {
+		allLinks(other.allLinks),
+		useFlatBufferManagement(other.useFlatBufferManagement) {
 
 		other.mbfs = nullptr;
 		other.allClassInfos = nullptr;
 		other.allNodes = nullptr;
 		other.allLinks = nullptr;
+		other.useFlatBufferManagement = false;
 	}
 	FlatMBFStructure& operator=(FlatMBFStructure&& other) noexcept {
-		this->mbfs = other.mbfs;
-		this->allClassInfos = other.allClassInfos;
-		this->allNodes = other.allNodes;
-		this->allLinks = other.allLinks;
-
-		other.mbfs = nullptr;
-		other.allClassInfos = nullptr;
-		other.allNodes = nullptr;
-		other.allLinks = nullptr;
+		std::swap(this->mbfs, other.mbfs);
+		std::swap(this->allClassInfos, other.allClassInfos);
+		std::swap(this->allNodes, other.allNodes);
+		std::swap(this->allLinks, other.allLinks);
+		std::swap(this->useFlatBufferManagement, other.useFlatBufferManagement);
 	}
 };
 
-
 template<unsigned int Variables>
 void writeFlatMBFStructure(const FlatMBFStructure<Variables>& structure) {
-	std::ofstream mbfsFile(FileName::flatMBFs(Variables), std::ios::binary);
-	mbfsFile.write(reinterpret_cast<const char*>(structure.mbfs), sizeof(Monotonic<Variables>) * FlatMBFStructure<Variables>::MBF_COUNT);
-	mbfsFile.close();
-	std::ofstream allClassInfos(FileName::flatClassInfo(Variables), std::ios::binary);
-	allClassInfos.write(reinterpret_cast<const char*>(structure.allClassInfos), sizeof(ClassInfo) * FlatMBFStructure<Variables>::MBF_COUNT);
-	allClassInfos.close();
-	std::ofstream allNodesFile(FileName::flatNodes(Variables), std::ios::binary);
-	allNodesFile.write(reinterpret_cast<const char*>(structure.allNodes), sizeof(FlatNode) * FlatMBFStructure<Variables>::MBF_COUNT);
-	allNodesFile.close();
-	std::ofstream allLinksFile(FileName::flatLinks(Variables), std::ios::binary);
-	allLinksFile.write(reinterpret_cast<const char*>(structure.allLinks), sizeof(NodeOffset) * FlatMBFStructure<Variables>::LINK_COUNT);
-	allLinksFile.close();
+	writeFlatBuffer(structure.mbfs, FileName::flatMBFs(Variables), FlatMBFStructure<Variables>::MBF_COUNT);
+	writeFlatBuffer(structure.allClassInfos, FileName::flatClassInfo(Variables), FlatMBFStructure<Variables>::MBF_COUNT);
+	writeFlatBuffer(structure.allNodes, FileName::flatNodes(Variables), FlatMBFStructure<Variables>::MBF_COUNT + 1);
+	writeFlatBuffer(structure.allLinks, FileName::flatLinks(Variables), FlatMBFStructure<Variables>::LINK_COUNT);
 }
 
 template<unsigned int Variables>
 FlatMBFStructure<Variables> readFlatMBFStructure(bool enableMBFs = true, bool enableAllClassInfos = true, bool enableAllNodes = true, bool enableAllLinks = true) {
-	FlatMBFStructure<Variables> structure(enableMBFs, enableAllClassInfos, enableAllNodes, enableAllLinks);
+	FlatMBFStructure<Variables> structure;
 
 	// read files in parallel
 	std::thread mbfsThread;
@@ -139,25 +115,16 @@ FlatMBFStructure<Variables> readFlatMBFStructure(bool enableMBFs = true, bool en
 	std::thread allNodesThread;
 
 	if(enableMBFs) mbfsThread = std::thread([&structure](){
-		std::ifstream mbfsFile(FileName::flatMBFs(Variables), std::ios::binary);
-		mbfsFile.read(reinterpret_cast<char*>(structure.mbfs), sizeof(Monotonic<Variables>) * FlatMBFStructure<Variables>::MBF_COUNT);
-		mbfsFile.close();
-	});
+		structure.mbfs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), FlatMBFStructure<Variables>::MBF_COUNT);});
 	if(enableAllClassInfos) allClassInfosThread = std::thread([&structure](){
-		std::ifstream allClassInfos(FileName::flatClassInfo(Variables), std::ios::binary);
-		allClassInfos.read(reinterpret_cast<char*>(structure.allClassInfos), sizeof(ClassInfo) * FlatMBFStructure<Variables>::MBF_COUNT);
-		allClassInfos.close();
-	});
+		structure.allClassInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), FlatMBFStructure<Variables>::MBF_COUNT);});
 	if(enableAllNodes) allNodesThread = std::thread([&structure](){
-		std::ifstream allNodesFile(FileName::flatNodes(Variables), std::ios::binary);
-		allNodesFile.read(reinterpret_cast<char*>(structure.allNodes), sizeof(FlatNode) * FlatMBFStructure<Variables>::MBF_COUNT);
-		allNodesFile.close();
-	});
-	if(enableAllLinks) {
-		std::ifstream allLinksFile(FileName::flatLinks(Variables), std::ios::binary);
-		allLinksFile.read(reinterpret_cast<char*>(structure.allLinks), sizeof(NodeOffset) * FlatMBFStructure<Variables>::LINK_COUNT);
-		allLinksFile.close();
-	}
+		structure.allNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), FlatMBFStructure<Variables>::MBF_COUNT + 1);});
+	if(enableAllLinks) 
+		structure.allLinks = readFlatBuffer<NodeOffset>(FileName::flatLinks(Variables), FlatMBFStructure<Variables>::LINK_COUNT);
+
+	structure.useFlatBufferManagement = true;
+
 	if(enableMBFs) mbfsThread.join();
 	if(enableAllClassInfos) allClassInfosThread.join();
 	if(enableAllNodes) allNodesThread.join();

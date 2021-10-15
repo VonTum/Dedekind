@@ -29,6 +29,8 @@
 #include "../dedelib/flatMBFStructure.h"
 #include "../dedelib/flatPCoeff.h"
 
+#include "../dedelib/flatBufferManagement.h"
+
 /*
 Correct numbers
 	0: 2
@@ -734,8 +736,8 @@ void pipelineTestSet(size_t count) {
 	testSet.close();
 }
 
-template<unsigned int Variables>
 void pipeline24PackTestSet(size_t count) {
+	constexpr unsigned int Variables = 7;
 	std::vector<TopBots<Variables>> topBots = readTopBots<Variables>(5000);
 
 	std::default_random_engine generator(std::chrono::high_resolution_clock::now().time_since_epoch().count());
@@ -774,32 +776,44 @@ void pipeline24PackTestSet(size_t count) {
 }
 
 template<unsigned int Variables>
-void convertMBFMapToFlatMBFStructure(const AllMBFMap<Variables, ExtraData>& sourceMap, FlatMBFStructure<Variables>& destinationStructure) {
+FlatMBFStructure<Variables> convertMBFMapToFlatMBFStructure(const AllMBFMap<Variables, ExtraData>& sourceMap) {
+	/*
+	these allocations are very large and happen upon initialization
+	if we split the total work over several thousand jobs then this 
+	means a lot of allocations, meaning a lot of overhead. malloc is
+	faster than new. These buffers will be read in by a raw file read
+	anyway. 
+	*/
+	Monotonic<Variables>* mbfs = (Monotonic<Variables>*) malloc(sizeof(Monotonic<Variables>) * FlatMBFStructure<Variables>::MBF_COUNT);
+	ClassInfo* allClassInfos = (ClassInfo*) malloc(sizeof(ClassInfo) * FlatMBFStructure<Variables>::MBF_COUNT);
+	FlatNode* allNodes = (FlatNode*) malloc(sizeof(FlatNode) * (FlatMBFStructure<Variables>::MBF_COUNT + 1));
+	NodeOffset* allLinks = (NodeOffset*) malloc(sizeof(NodeOffset) * FlatMBFStructure<Variables>::LINK_COUNT);
+	
 	size_t currentLinkInLayer = 0;
 	NodeIndex curNodeIndex = 0;
 	for(size_t layer = 0; layer <= (1 << Variables); layer++) {
 		std::cout << "Layer " << layer << std::endl;
-		assert(curNodeIndex == destinationStructure.cachedOffsets.nodeLayerOffsets[layer]);
+		assert(curNodeIndex == FlatMBFStructure<Variables>::cachedOffsets.nodeLayerOffsets[layer]);
 
-		NodeIndex firstNodeInLayer = destinationStructure.cachedOffsets.nodeLayerOffsets[layer];
-		NodeIndex firstNodeInDualLayer = destinationStructure.cachedOffsets.nodeLayerOffsets[(1 << Variables) - layer];
+		NodeIndex firstNodeInLayer = FlatMBFStructure<Variables>::cachedOffsets.nodeLayerOffsets[layer];
+		NodeIndex firstNodeInDualLayer = FlatMBFStructure<Variables>::cachedOffsets.nodeLayerOffsets[(1 << Variables) - layer];
 		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = sourceMap.layers[layer];
 		const BakedMap<Monotonic<Variables>, ExtraData>& dualLayer = sourceMap.layers[(1 << Variables) - layer];
 		for(size_t i = 0; i < getLayerSize<Variables>(layer); i++) {
 			const KeyValue<Monotonic<Variables>, ExtraData>& elem = curLayer[i];
-			destinationStructure.mbfs[curNodeIndex] = elem.key;
-			destinationStructure.allClassInfos[curNodeIndex].intervalSizeDown = elem.value.intervalSizeToBottom;
-			destinationStructure.allClassInfos[curNodeIndex].classSize = elem.value.symmetries;
+			mbfs[curNodeIndex] = elem.key;
+			allClassInfos[curNodeIndex].intervalSizeDown = elem.value.intervalSizeToBottom;
+			allClassInfos[curNodeIndex].classSize = elem.value.symmetries;
 
 			Monotonic<Variables> keyDual = elem.key.dual();
-			destinationStructure.allNodes[curNodeIndex].dual = firstNodeInDualLayer + dualLayer.indexOf(keyDual.canonize());
+			allNodes[curNodeIndex].dual = firstNodeInDualLayer + dualLayer.indexOf(keyDual.canonize());
 			if(layer > 0) { // no downconnections for layer 0
 				DownConnection* curDownConnection = elem.value.downConnections;
 				DownConnection* downConnectionsEnd = curLayer[i+1].value.downConnections;
-				destinationStructure.allNodes[curNodeIndex].downLinks = currentLinkInLayer;
+				allNodes[curNodeIndex].downLinks = currentLinkInLayer;
 				while(curDownConnection != downConnectionsEnd) {
 					int downConnectionNodeIndex = static_cast<int>(curDownConnection->id);
-					destinationStructure.allLinks[currentLinkInLayer] = downConnectionNodeIndex;
+					allLinks[currentLinkInLayer] = downConnectionNodeIndex;
 					curDownConnection++;
 					currentLinkInLayer++;
 				}
@@ -808,15 +822,23 @@ void convertMBFMapToFlatMBFStructure(const AllMBFMap<Variables, ExtraData>& sour
 		}
 	}
 	assert(currentLinkInLayer == getTotalLinkCount<Variables>());
+	// add tails of the buffers, since we use the differences between the current and next elements to mark lists
+	//allNodes[mbfCounts[Variables]].dual = 0xFFFFFFFFFFFFFFFF; // invalid
+	allNodes[mbfCounts[Variables]].downLinks = getTotalLinkCount<Variables>(); // end of the allLinks buffer
+
+	FlatMBFStructure<Variables> result;
+	result.mbfs = mbfs;
+	result.allClassInfos = allClassInfos;
+	result.allNodes = allNodes;
+	result.allLinks = allLinks;
+	return result;
 }
 
 template<unsigned int Variables>
 void convertMBFMapToFlatMBFStructure() {
 	AllMBFMap<Variables, ExtraData> sourceMap = readAllMBFsMapExtraDownLinks<Variables>();
 
-	FlatMBFStructure<Variables> destinationStructure;
-
-	convertMBFMapToFlatMBFStructure<Variables>(sourceMap, destinationStructure);
+	FlatMBFStructure<Variables> destinationStructure = convertMBFMapToFlatMBFStructure<Variables>(sourceMap);
 
 	writeFlatMBFStructure(destinationStructure);
 }
@@ -1044,13 +1066,13 @@ std::map<std::string, void(*)()> commands{
 	{"flatDPlusOne6", []() {flatDPlus1<6>(); }},
 	{"flatDPlusOne7", []() {flatDPlus1<7>(); }},
 
-	{"computeFlatDPlusTwo1", []() {computeFlatDPlus2<1, 32>(); }},
-	{"computeFlatDPlusTwo2", []() {computeFlatDPlus2<2, 32>(); }},
-	{"computeFlatDPlusTwo3", []() {computeFlatDPlus2<3, 32>(); }},
-	{"computeFlatDPlusTwo4", []() {computeFlatDPlus2<4, 32>(); }},
-	{"computeFlatDPlusTwo5", []() {computeFlatDPlus2<5, 32>(); }},
-	{"computeFlatDPlusTwo6", []() {computeFlatDPlus2<6, 32>(); }},
-	{"computeFlatDPlusTwo7", []() {computeFlatDPlus2<7, 32>(); }},
+	{"flatDPlusTwo1", []() {flatDPlus2<1, 32>(); }},
+	{"flatDPlusTwo2", []() {flatDPlus2<2, 32>(); }},
+	{"flatDPlusTwo3", []() {flatDPlus2<3, 32>(); }},
+	{"flatDPlusTwo4", []() {flatDPlus2<4, 32>(); }},
+	{"flatDPlusTwo5", []() {flatDPlus2<5, 32>(); }},
+	{"flatDPlusTwo6", []() {flatDPlus2<6, 32>(); }},
+	{"flatDPlusTwo7", []() {flatDPlus2<7, 32>(); }},
 	
 	{"isEvenPlusTwo1", []() {isEvenPlus2<1>(); }},
 	{"isEvenPlusTwo2", []() {isEvenPlus2<2>(); }},
@@ -1088,13 +1110,7 @@ std::map<std::string, void(*)(const std::string&)> commandsWithArg{
 	{"pipelineTestSet6", [](const std::string& size) {pipelineTestSet<6>(std::stoi(size)); }},
 	{"pipelineTestSet7", [](const std::string& size) {pipelineTestSet<7>(std::stoi(size)); }},
 
-	{"pipeline24PackTestSet1", [](const std::string& size) {pipeline24PackTestSet<1>(std::stoi(size)); }},
-	{"pipeline24PackTestSet2", [](const std::string& size) {pipeline24PackTestSet<2>(std::stoi(size)); }},
-	{"pipeline24PackTestSet3", [](const std::string& size) {pipeline24PackTestSet<3>(std::stoi(size)); }},
-	{"pipeline24PackTestSet4", [](const std::string& size) {pipeline24PackTestSet<4>(std::stoi(size)); }},
-	{"pipeline24PackTestSet5", [](const std::string& size) {pipeline24PackTestSet<5>(std::stoi(size)); }},
-	{"pipeline24PackTestSet6", [](const std::string& size) {pipeline24PackTestSet<6>(std::stoi(size)); }},
-	{"pipeline24PackTestSet7", [](const std::string& size) {pipeline24PackTestSet<7>(std::stoi(size)); }},
+	{"pipeline24PackTestSet", [](const std::string& size) {pipeline24PackTestSet(std::stoi(size)); }},
 };
 
 inline void runCommand(const std::string& cmdWithArg) {
@@ -1142,6 +1158,23 @@ int main(int argc, const char** argv) {
 	if(!dataDir.empty()) {
 		FileName::setDataPath(dataDir);
 	}
+
+	if(parsed.hasFlag("mmap")) {
+		BUFMANAGEMENT_MMAP = true;
+	}
+	if(parsed.hasFlag("mmap_populate")) {
+		BUFMANAGEMENT_MMAP = true;
+		BUFMANAGEMENT_MMAP_POPULATE = true;
+	}
+	if(parsed.hasFlag("mmap_2MB")) {
+		BUFMANAGEMENT_MMAP = true;
+		BUFMANAGEMENT_MMAP_PAGE_SIZE = BufmanagementPageSize::HUGETLB_2MB;
+	}
+	if(parsed.hasFlag("mmap_1GB")) {
+		BUFMANAGEMENT_MMAP = true;
+		BUFMANAGEMENT_MMAP_PAGE_SIZE = BufmanagementPageSize::HUGETLB_1GB;
+	}
+
 
 	if(parsed.argCount() > 0) {
 		runCommands(parsed);
