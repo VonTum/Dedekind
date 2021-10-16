@@ -99,6 +99,16 @@ inline std::ostream& operator<<(std::ostream& os, const BooleanFunction<Variable
 	return os;
 }
 
+template<unsigned int Variables>
+void printSet(const BooleanFunction<Variables>& bf) {
+	std::cout << "{";
+	bf.forEachOne([](size_t index) {
+		std::cout << FunctionInput{static_cast<unsigned int>(index)} << ", ";
+	});
+	std::cout << "}\n";
+}
+
+
 template<size_t Size>
 inline std::ostream& printHex(std::ostream& os, const BitSet<Size>& bitset) {
 	char hexDigits[16]{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};

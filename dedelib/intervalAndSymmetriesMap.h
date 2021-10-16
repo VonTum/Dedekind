@@ -3,6 +3,7 @@
 #include "allMBFsMap.h"
 #include "funcTypes.h"
 #include "parallelIter.h"
+#include "u192.h"
 
 struct DownConnection {
 	uint32_t id;

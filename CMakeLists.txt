@@ -40,7 +40,10 @@ add_library(dedelib
 )
 
 add_executable(production
-  production/dedekind.cpp
+  production/main.cpp
+  production/miscCommands.cpp
+  production/flatCommands.cpp
+  production/dataGenerationCommands.cpp
 )
 add_executable(indev
   indev/indev.cpp

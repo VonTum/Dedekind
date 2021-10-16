@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <algorithm>
+#include <cassert>
 
 #include "keyValue.h"
 

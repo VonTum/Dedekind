@@ -5,15 +5,6 @@
 #include <iostream>
 
 template<unsigned int Variables>
-void printSet(const BooleanFunction<Variables>& bf) {
-	std::cout << "{";
-	bf.forEachOne([](size_t index) {
-		std::cout << FunctionInput{static_cast<unsigned int>(index)} << ", ";
-	});
-	std::cout << "}\n";
-}
-
-template<unsigned int Variables>
 uint64_t getNumChoicesRecursiveDown(const BooleanFunction<Variables>& chooseableMask) {
 	using BF = BooleanFunction<Variables>;
 	

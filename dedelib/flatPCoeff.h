@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include "knownData.h"
 #include "flatMBFStructure.h"
 #include "swapperLayers.h"

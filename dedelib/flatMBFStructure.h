@@ -8,6 +8,8 @@
 
 #include "flatBufferManagement.h"
 
+#include "fileNames.h"
+
 typedef uint32_t NodeIndex;
 typedef uint32_t NodeOffset;
 typedef uint64_t LinkIndex;

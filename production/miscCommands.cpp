@@ -1,3 +1,4 @@
+#include "commands.h"
 
 #include <iostream>
 #include <fstream>
@@ -10,7 +11,6 @@
 #include "../dedelib/toString.h"
 #include "../dedelib/serialization.h"
 
-#include "../dedelib/timeTracker.h"
 #include "../dedelib/codeGen.h"
 
 #include "../dedelib/MBFDecomposition.h"
@@ -26,107 +26,8 @@
 #include "../dedelib/cmdParser.h"
 
 #include "../dedelib/allMBFsMap.h"
-#include "../dedelib/flatMBFStructure.h"
-#include "../dedelib/flatPCoeff.h"
 
-#include "../dedelib/flatBufferManagement.h"
-
-#include "../dedelib/configure.h"
-
-/*
-Correct numbers
-	0: 2
-	1: 3
-	2: 6
-	3: 20
-	4: 168
-	5: 7581
-	6: 7828354
-	7: 2414682040998
-	8: 56130437228687557907788
-	9: ??????????????????????????????????????????
-*/
-
-template<unsigned int Variables>
-void runGenAllMBFs() {
-	std::pair<BufferedSet<Monotonic<Variables>>, size_t> resultPair;
-	{
-		TimeTracker timer;
-		resultPair = generateAllMBFsFast<Variables>();
-	}
-	BufferedSet<Monotonic<Variables>>& result = resultPair.first;
-	size_t numberOfLinks = resultPair.second;
-	{
-		std::cout << "Sorting\n";
-		TimeTracker timer;
-		std::sort(result.begin(), result.end(), [](Monotonic<Variables>& a, Monotonic<Variables>& b) -> bool {return a.size() < b.size(); });
-	}
-
-
-	uint64_t sizeCounts[(1 << Variables) + 1];
-	for(size_t i = 0; i < (1 << Variables) + 1; i++) {
-		sizeCounts[i] = 0;
-	}
-	for(const Monotonic<Variables>& item : result) {
-		sizeCounts[item.size()]++;
-	}
-
-	std::cout << "R(" << Variables << ") == " << result.size() << "\n";
-
-	{
-		std::ofstream file(FileName::allMBFS(Variables), std::ios::binary);
-
-		for(const Monotonic<Variables>& item : result) {
-			serializeMBF(item, file);
-		}
-		file.close();
-	}
-
-	{
-		std::ofstream file(FileName::allMBFSInfo(Variables));
-
-
-		file << "R(" << Variables << ") == " << result.size() << "\n";
-
-		std::cout << "numberOfLinks: " << numberOfLinks << "\n";
-		file << "numberOfLinks: " << numberOfLinks << "\n";
-
-		//std::cout << "classesPerSize: " << sizeCounts[0];
-		file << "classesPerSize: " << sizeCounts[0];
-		for(size_t i = 1; i < (1 << Variables) + 1; i++) {
-			//std::cout << ", " << sizeCounts[i] << "\n";
-			file << ", " << sizeCounts[i];
-		}
-		file << "\n";
-		file.close();
-	}
-}
-
-void runGenLayerDecomposition() {
-	std::cout << "Detected " << std::thread::hardware_concurrency() << " available threads!\n";
-	TimeTracker timer;
-	int dedekindOrder = 7;
-	DedekindDecomposition<ValueCounted> fullDecomposition(dedekindOrder);
-
-	//std::cout << "Decomposition:\n" << fullDecomposition << "\n";
-
-	std::cout << "Dedekind " << dedekindOrder << " = " << fullDecomposition.getDedekind() << std::endl;
-}
-
-template<unsigned int Variables>
-void runSortAndComputeLinks() {
-	TimeTracker timer;
-
-	std::ifstream inputFile(FileName::allMBFS(Variables), std::ios::binary);
-	std::ofstream sortedFile(FileName::allMBFSSorted(Variables), std::ios::binary);
-	std::ofstream linkFile(FileName::mbfLinks(Variables), std::ios::binary);
-
-	sortAndComputeLinks<Variables>(inputFile, sortedFile, linkFile);
-
-	inputFile.close();
-	sortedFile.close();
-	linkFile.close();
-}
+#include "../dedelib/timeTracker.h"
 
 void RAMTestBenchFunc(size_t numHops, size_t numCurs, uint32_t* curs, uint32_t* jumpTable) {
 	for(size_t i = 0; i < numHops; i++) {
@@ -418,15 +319,6 @@ std::pair<uint64_t, uint64_t> getIntervalSizeFor(const MBFDecomposition<Variable
 }
 
 template<unsigned int Variables>
-void preComputeFiles() {
-	runGenAllMBFs<Variables>();
-	runSortAndComputeLinks<Variables>();
-	computeIntervalsParallel<Variables>();
-	computeDPlus1<Variables>();
-	addSymmetriesToIntervalFile<Variables>();
-}
-
-template<unsigned int Variables>
 void doRevolution() {
 	std::cout << "Computing D(" << Variables << ")...\n";
 
@@ -677,97 +569,7 @@ void pipeline24PackTestSet(size_t count) {
 	testSet.close();
 }
 
-template<unsigned int Variables>
-FlatMBFStructure<Variables> convertMBFMapToFlatMBFStructure(const AllMBFMap<Variables, ExtraData>& sourceMap) {
-	/*
-	these allocations are very large and happen upon initialization
-	if we split the total work over several thousand jobs then this 
-	means a lot of allocations, meaning a lot of overhead. malloc is
-	faster than new. These buffers will be read in by a raw file read
-	anyway. 
-	*/
-	Monotonic<Variables>* mbfs = (Monotonic<Variables>*) malloc(sizeof(Monotonic<Variables>) * FlatMBFStructure<Variables>::MBF_COUNT);
-	ClassInfo* allClassInfos = (ClassInfo*) malloc(sizeof(ClassInfo) * FlatMBFStructure<Variables>::MBF_COUNT);
-	FlatNode* allNodes = (FlatNode*) malloc(sizeof(FlatNode) * (FlatMBFStructure<Variables>::MBF_COUNT + 1));
-	NodeOffset* allLinks = (NodeOffset*) malloc(sizeof(NodeOffset) * FlatMBFStructure<Variables>::LINK_COUNT);
-	
-	size_t currentLinkInLayer = 0;
-	NodeIndex curNodeIndex = 0;
-	for(size_t layer = 0; layer <= (1 << Variables); layer++) {
-		std::cout << "Layer " << layer << std::endl;
-		assert(curNodeIndex == FlatMBFStructure<Variables>::cachedOffsets.nodeLayerOffsets[layer]);
-
-		NodeIndex firstNodeInDualLayer = FlatMBFStructure<Variables>::cachedOffsets.nodeLayerOffsets[(1 << Variables) - layer];
-		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = sourceMap.layers[layer];
-		const BakedMap<Monotonic<Variables>, ExtraData>& dualLayer = sourceMap.layers[(1 << Variables) - layer];
-		for(size_t i = 0; i < getLayerSize<Variables>(layer); i++) {
-			const KeyValue<Monotonic<Variables>, ExtraData>& elem = curLayer[i];
-			mbfs[curNodeIndex] = elem.key;
-			allClassInfos[curNodeIndex].intervalSizeDown = elem.value.intervalSizeToBottom;
-			allClassInfos[curNodeIndex].classSize = elem.value.symmetries;
-
-			Monotonic<Variables> keyDual = elem.key.dual();
-			allNodes[curNodeIndex].dual = firstNodeInDualLayer + dualLayer.indexOf(keyDual.canonize());
-			if(layer > 0) { // no downconnections for layer 0
-				DownConnection* curDownConnection = elem.value.downConnections;
-				DownConnection* downConnectionsEnd = curLayer[i+1].value.downConnections;
-				allNodes[curNodeIndex].downLinks = currentLinkInLayer;
-				while(curDownConnection != downConnectionsEnd) {
-					int downConnectionNodeIndex = static_cast<int>(curDownConnection->id);
-					allLinks[currentLinkInLayer] = downConnectionNodeIndex;
-					curDownConnection++;
-					currentLinkInLayer++;
-				}
-			}
-			curNodeIndex++;
-		}
-	}
-	assert(currentLinkInLayer == getTotalLinkCount<Variables>());
-	// add tails of the buffers, since we use the differences between the current and next elements to mark lists
-	//allNodes[mbfCounts[Variables]].dual = 0xFFFFFFFFFFFFFFFF; // invalid
-	allNodes[mbfCounts[Variables]].downLinks = getTotalLinkCount<Variables>(); // end of the allLinks buffer
-
-	FlatMBFStructure<Variables> result;
-	result.mbfs = mbfs;
-	result.allClassInfos = allClassInfos;
-	result.allNodes = allNodes;
-	result.allLinks = allLinks;
-	return result;
-}
-
-template<unsigned int Variables>
-void convertMBFMapToFlatMBFStructure() {
-	AllMBFMap<Variables, ExtraData> sourceMap = readAllMBFsMapExtraDownLinks<Variables>();
-
-	FlatMBFStructure<Variables> destinationStructure = convertMBFMapToFlatMBFStructure<Variables>(sourceMap);
-
-	writeFlatMBFStructure(destinationStructure);
-}
-
-template<unsigned int Variables>
-void isEvenPlus2() {
-	FlatMBFStructure<Variables> allMBFs = readFlatMBFStructure<Variables>(false, true, true, false);
-
-	bool isEven = true; // 0 is even
-	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
-		uint64_t classSize = allMBFs.allClassInfos[i].classSize;
-
-		if(classSize % 2 == 0) continue;
-
-		uint64_t intervalSizeDown = allMBFs.allClassInfos[i].intervalSizeDown;
-		if(intervalSizeDown % 2 == 0) continue;
-
-		NodeIndex dualI = allMBFs.allNodes[i].dual;
-		uint64_t intervalSizeUp = allMBFs.allClassInfos[dualI].intervalSizeDown;
-		if(intervalSizeUp % 2 == 0) continue;
-
-		isEven = !isEven;
-	}
-
-	std::cout << "D(" << (Variables + 2) << ") is " << (isEven ? "even" : "odd") << std::endl;
-}
-
-std::map<std::string, void(*)()> commands{
+CommandSet miscCommands{"Misc", {
 	{"ramTest", []() {doRAMTest(); }},
 
 	{"graphVis1", []() {genGraphVisCode(1); }},
@@ -786,26 +588,6 @@ std::map<std::string, void(*)()> commands{
 	{"revolution7", []() {doRevolution<7>(); }},
 	{"revolution8", []() {doRevolution<8>(); }},
 	{"revolution9", []() {doRevolution<9>(); }},
-
-	{"genAllMBF1", []() {runGenAllMBFs<1>(); }},
-	{"genAllMBF2", []() {runGenAllMBFs<2>(); }},
-	{"genAllMBF3", []() {runGenAllMBFs<3>(); }},
-	{"genAllMBF4", []() {runGenAllMBFs<4>(); }},
-	{"genAllMBF5", []() {runGenAllMBFs<5>(); }},
-	{"genAllMBF6", []() {runGenAllMBFs<6>(); }},
-	{"genAllMBF7", []() {runGenAllMBFs<7>(); }},
-	{"genAllMBF8", []() {runGenAllMBFs<8>(); }},
-	{"genAllMBF9", []() {runGenAllMBFs<9>(); }},
-
-	{"sortAndComputeLinks1", []() {runSortAndComputeLinks<1>(); }},
-	{"sortAndComputeLinks2", []() {runSortAndComputeLinks<2>(); }},
-	{"sortAndComputeLinks3", []() {runSortAndComputeLinks<3>(); }},
-	{"sortAndComputeLinks4", []() {runSortAndComputeLinks<4>(); }},
-	{"sortAndComputeLinks5", []() {runSortAndComputeLinks<5>(); }},
-	{"sortAndComputeLinks6", []() {runSortAndComputeLinks<6>(); }},
-	{"sortAndComputeLinks7", []() {runSortAndComputeLinks<7>(); }},
-	//{"sortAndComputeLinks8", []() {runSortAndComputeLinks<8>(); }},
-	//{"sortAndComputeLinks9", []() {runSortAndComputeLinks<9>(); }},
 
 	{"linkCount1", []() {doLinkCount<1>(); }},
 	{"linkCount2", []() {doLinkCount<2>(); }},
@@ -837,16 +619,6 @@ std::map<std::string, void(*)()> commands{
 	//{"sampleIntervalSizes8", []() {sampleIntervalSizes<8>(); }},
 	//{"sampleIntervalSizes9", []() {sampleIntervalSizes<9>(); }},
 
-	{"computeIntervalsParallel1", []() {computeIntervalsParallel<1>(); }},
-	{"computeIntervalsParallel2", []() {computeIntervalsParallel<2>(); }},
-	{"computeIntervalsParallel3", []() {computeIntervalsParallel<3>(); }},
-	{"computeIntervalsParallel4", []() {computeIntervalsParallel<4>(); }},
-	{"computeIntervalsParallel5", []() {computeIntervalsParallel<5>(); }},
-	{"computeIntervalsParallel6", []() {computeIntervalsParallel<6>(); }},
-	{"computeIntervalsParallel7", []() {computeIntervalsParallel<7>(); }},
-	//{"computeIntervalsParallel8", []() {computeIntervalsParallel<8>(); }},
-	//{"computeIntervalsParallel9", []() {computeIntervalsParallel<9>(); }},
-
 	{"verifyIntervalsCorrect1", []() {verifyIntervalsCorrect<1>(); }},
 	{"verifyIntervalsCorrect2", []() {verifyIntervalsCorrect<2>(); }},
 	{"verifyIntervalsCorrect3", []() {verifyIntervalsCorrect<3>(); }},
@@ -857,16 +629,6 @@ std::map<std::string, void(*)()> commands{
 	//{"verifyIntervalsCorrect8", []() {verifyIntervalsCorrect<8>(); }},
 	//{"verifyIntervalsCorrect9", []() {verifyIntervalsCorrect<9>(); }},
 
-	{"addSymmetriesToIntervalFile1", []() {addSymmetriesToIntervalFile<1>(); }},
-	{"addSymmetriesToIntervalFile2", []() {addSymmetriesToIntervalFile<2>(); }},
-	{"addSymmetriesToIntervalFile3", []() {addSymmetriesToIntervalFile<3>(); }},
-	{"addSymmetriesToIntervalFile4", []() {addSymmetriesToIntervalFile<4>(); }},
-	{"addSymmetriesToIntervalFile5", []() {addSymmetriesToIntervalFile<5>(); }},
-	{"addSymmetriesToIntervalFile6", []() {addSymmetriesToIntervalFile<6>(); }},
-	{"addSymmetriesToIntervalFile7", []() {addSymmetriesToIntervalFile<7>(); }},
-	//{"addSymmetriesToIntervalFile8", []() {addSymmetriesToIntervalFile<8>(); }},
-	//{"addSymmetriesToIntervalFile9", []() {addSymmetriesToIntervalFile<9>(); }},
-
 	{"computeDPlusOne1", []() {computeDPlus1<1>(); }},
 	{"computeDPlusOne2", []() {computeDPlus1<2>(); }},
 	{"computeDPlusOne3", []() {computeDPlus1<3>(); }},
@@ -876,14 +638,6 @@ std::map<std::string, void(*)()> commands{
 	{"computeDPlusOne7", []() {computeDPlus1<7>(); }},
 	//{"computeDedekindFromIntervals8", []() {computeDPlus1<8>(); }},
 	//{"computeDedekindFromIntervals9", []() {computeDPlus1<9>(); }},
-
-	{"preCompute1", []() {preComputeFiles<1>(); }},
-	{"preCompute2", []() {preComputeFiles<2>(); }},
-	{"preCompute3", []() {preComputeFiles<3>(); }},
-	{"preCompute4", []() {preComputeFiles<4>(); }},
-	{"preCompute5", []() {preComputeFiles<5>(); }},
-	{"preCompute6", []() {preComputeFiles<6>(); }},
-	{"preCompute7", []() {preComputeFiles<7>(); }},
 
 	{"noCanonizationPCoeffMethod1", []() {noCanonizationPCoeffMethod<1>(); }},
 	{"noCanonizationPCoeffMethod2", []() {noCanonizationPCoeffMethod<2>(); }},
@@ -940,41 +694,7 @@ std::map<std::string, void(*)()> commands{
 	{"computeIntervalSizesFast5", []() {computeIntervalSizesFast<5>(); }},
 	{"computeIntervalSizesFast6", []() {computeIntervalSizesFast<6>(); }},
 	{"computeIntervalSizesFast7", []() {computeIntervalSizesFast<7>(); }},
-	
-	{"convertMBFMapToFlatMBFStructure1", []() {convertMBFMapToFlatMBFStructure<1>(); }},
-	{"convertMBFMapToFlatMBFStructure2", []() {convertMBFMapToFlatMBFStructure<2>(); }},
-	{"convertMBFMapToFlatMBFStructure3", []() {convertMBFMapToFlatMBFStructure<3>(); }},
-	{"convertMBFMapToFlatMBFStructure4", []() {convertMBFMapToFlatMBFStructure<4>(); }},
-	{"convertMBFMapToFlatMBFStructure5", []() {convertMBFMapToFlatMBFStructure<5>(); }},
-	{"convertMBFMapToFlatMBFStructure6", []() {convertMBFMapToFlatMBFStructure<6>(); }},
-	{"convertMBFMapToFlatMBFStructure7", []() {convertMBFMapToFlatMBFStructure<7>(); }},
-
-	{"flatDPlusOne1", []() {flatDPlus1<1>(); }},
-	{"flatDPlusOne2", []() {flatDPlus1<2>(); }},
-	{"flatDPlusOne3", []() {flatDPlus1<3>(); }},
-	{"flatDPlusOne4", []() {flatDPlus1<4>(); }},
-	{"flatDPlusOne5", []() {flatDPlus1<5>(); }},
-	{"flatDPlusOne6", []() {flatDPlus1<6>(); }},
-	{"flatDPlusOne7", []() {flatDPlus1<7>(); }},
-
-	{"flatDPlusTwo1", []() {flatDPlus2<1, 32>(); }},
-	{"flatDPlusTwo2", []() {flatDPlus2<2, 32>(); }},
-	{"flatDPlusTwo3", []() {flatDPlus2<3, 32>(); }},
-	{"flatDPlusTwo4", []() {flatDPlus2<4, 32>(); }},
-	{"flatDPlusTwo5", []() {flatDPlus2<5, 32>(); }},
-	{"flatDPlusTwo6", []() {flatDPlus2<6, 32>(); }},
-	{"flatDPlusTwo7", []() {flatDPlus2<7, 32>(); }},
-	
-	{"isEvenPlusTwo1", []() {isEvenPlus2<1>(); }},
-	{"isEvenPlusTwo2", []() {isEvenPlus2<2>(); }},
-	{"isEvenPlusTwo3", []() {isEvenPlus2<3>(); }},
-	{"isEvenPlusTwo4", []() {isEvenPlus2<4>(); }},
-	{"isEvenPlusTwo5", []() {isEvenPlus2<5>(); }},
-	{"isEvenPlusTwo6", []() {isEvenPlus2<6>(); }},
-	{"isEvenPlusTwo7", []() {isEvenPlus2<7>(); }},
-};
-
-std::map<std::string, void(*)(const std::string&)> commandsWithArg{
+}, {
 	{"checkIntervalLayers1", [](const std::string& size) {checkIntervalLayers<1>(std::stoi(size)); }},
 	{"checkIntervalLayers2", [](const std::string& size) {checkIntervalLayers<2>(std::stoi(size)); }},
 	{"checkIntervalLayers3", [](const std::string& size) {checkIntervalLayers<3>(std::stoi(size)); }},
@@ -1002,59 +722,4 @@ std::map<std::string, void(*)(const std::string&)> commandsWithArg{
 	{"pipelineTestSet7", [](const std::string& size) {pipelineTestSet<7>(std::stoi(size)); }},
 
 	{"pipeline24PackTestSet", [](const std::string& size) {pipeline24PackTestSet(std::stoi(size)); }},
-};
-
-inline void runCommand(const std::string& cmdWithArg) {
-	size_t argSepFound = cmdWithArg.find(':');
-
-	if(argSepFound == std::string::npos) { // no arg
-		const std::string& cmd = cmdWithArg;
-
-		auto found = commands.find(cmd);
-		if(found != commands.end()) {
-			std::cout << "running " << cmd.c_str() << std::endl;
-			TimeTracker timer;
-			(*found).second();
-		} else {
-			std::cout << "Command not found!" << std::endl;
-		}
-	} else { // arg
-		std::string cmd = cmdWithArg.substr(0, argSepFound);
-		std::string arg = cmdWithArg.substr(argSepFound+1);
-		
-		auto foundWithArg = commandsWithArg.find(cmd);
-		if(foundWithArg != commandsWithArg.end()) {
-			std::cout << "running " << cmd.c_str() << "(" << arg.c_str() << ")" << std::endl;
-			TimeTracker timer;
-			(*foundWithArg).second(arg);
-		} else {
-			std::cout << "Command not found!" << std::endl;
-		}
-	}
-}
-inline void runCommands(const ParsedArgs& args) {
-	for(size_t i = 0; i < args.argCount(); i++) {
-		const std::string& cmd = args[i];
-
-		runCommand(cmd);
-	}
-}
-
-int main(int argc, const char** argv) {
-	std::cout << "Detected " << std::thread::hardware_concurrency() << " threads" << std::endl;
-
-	ParsedArgs parsed(argc, argv);
-
-	configure(parsed);
-
-	if(parsed.argCount() > 0) {
-		runCommands(parsed);
-	} else {
-		std::string givenCommand;
-		std::cout << "Enter command> ";
-		std::cin >> givenCommand;
-
-		runCommand(givenCommand);
-	}
-	return 0;
-}
+}};
