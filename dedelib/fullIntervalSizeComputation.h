@@ -109,7 +109,7 @@ uint64_t computeExtendedIntervalOf(const BakedMap<Monotonic<Variables>, uint64_t
 	uint64_t smallerMBFIntervalSize = prevLayer.get(smallerMBF.canonize());
 
 	uint64_t thisIntervalSize = computeIntervalSizeExtention(smallerMBF, smallerMBFIntervalSize, removedElement);
-	assert(thisIntervalSize == intervalSizeFast(Monotonic<Variables>::getBot(), cur));
+	//assert(thisIntervalSize == intervalSizeFast(Monotonic<Variables>::getBot(), cur));
 
 	//std::cout << ": " << thisIntervalSize << "\n";
 	return thisIntervalSize;

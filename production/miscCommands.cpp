@@ -23,7 +23,6 @@
 #include "../dedelib/pcoeff.h"
 
 #include "../dedelib/fileNames.h"
-#include "../dedelib/cmdParser.h"
 
 #include "../dedelib/allMBFsMap.h"
 

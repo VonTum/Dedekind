@@ -60,6 +60,20 @@ public:
 	};
 	constexpr static CachedOffsets cachedOffsets = CachedOffsets();
 
+	static int getLayer(NodeIndex nodeIndex) {
+		assert(nodeIndex < mbfCounts[Variables]);
+		for(int layer = 0; layer <= 1 << Variables; layer++) {
+			if(cachedOffsets[layer+1] > nodeIndex) {
+				return layer;
+			}
+		}
+		assert(false);
+		// unreachable
+		#ifdef __GNUC__
+		__builtin_unreachable();
+		#endif
+	}
+
 	// these are written by either the generation code, or from a file read / memory map
 	FlatMBFStructure() : mbfs(nullptr), allClassInfos(nullptr), allNodes(nullptr), allLinks(nullptr) {}
 
