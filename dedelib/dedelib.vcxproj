@@ -531,7 +531,9 @@
     <ClCompile Include="bigint\uint128_t.cpp" />
     <ClCompile Include="bigint\uint256_t.cpp" />
     <ClCompile Include="codeGen.cpp" />
+    <ClCompile Include="configure.cpp" />
     <ClCompile Include="fileNames.cpp" />
+    <ClCompile Include="flatBufferManagement.cpp" />
     <ClCompile Include="intervalDecomposition.cpp" />
     <ClCompile Include="terminalColor.cpp" />
     <ClCompile Include="valuedDecomposition.cpp" />
@@ -549,9 +551,13 @@
     <ClInclude Include="blockIterator.h" />
     <ClInclude Include="bufferedMap.h" />
     <ClInclude Include="cmdParser.h" />
+    <ClInclude Include="configure.h" />
     <ClInclude Include="connectGraph.h" />
     <ClInclude Include="crossPlatformIntrinsics.h" />
     <ClInclude Include="fileNames.h" />
+    <ClInclude Include="flatBufferManagement.h" />
+    <ClInclude Include="flatMBFStructure.h" />
+    <ClInclude Include="flatPCoeff.h" />
     <ClInclude Include="fullIntervalSizeComputation.h" />
     <ClInclude Include="funcTypes.h" />
     <ClInclude Include="generators.h" />
@@ -590,6 +596,7 @@
     <ClInclude Include="smallVector.h" />
     <ClInclude Include="swapperLayers.h" />
     <ClInclude Include="terminalColor.h" />
+    <ClInclude Include="threadPool.h" />
     <ClInclude Include="timeTracker.h" />
     <ClInclude Include="tjomn.h" />
     <ClInclude Include="topBots.h" />

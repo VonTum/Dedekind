@@ -271,7 +271,7 @@ uint64_t computePCoeffSum(const BooleanFunction<Variables>* graphsBuf, const Boo
 
 template<unsigned int Variables>
 ProcessedPCoeffSum processPCoeffSum(Monotonic<Variables> top, Monotonic<Variables> bot, BooleanFunction<Variables> graphsBuf[factorial(Variables)]) {
-	BooleanFunction<Variables>* graphsBufEnd = listPermutationsBelow(top, bot, graphsBuf);
+	BooleanFunction<Variables>* graphsBufEnd = listPermutationsBelow<Variables>(top, bot, graphsBuf);
 	ProcessedPCoeffSum result;
 	result.pcoeffCount = graphsBufEnd - graphsBuf;
 	result.pcoeffSum = computePCoeffSum(graphsBuf, graphsBufEnd);
@@ -284,7 +284,7 @@ ProcessedPCoeffSum processOneBeta(const FlatMBFStructure<Variables>& downLinkStr
 	Monotonic<Variables> bot = downLinkStructure.mbfs[botIdx];
 
 	BooleanFunction<Variables> graphsBuf[factorial(Variables)];
-	return processPCoeffSum(top, bot, graphsBuf);
+	return processPCoeffSum<Variables>(top, bot, graphsBuf);
 }
 
 template<unsigned int Variables>
@@ -296,7 +296,7 @@ NodeIndex topIdx, const NodeIndex* idxBuf, const NodeIndex* bufEnd, ProcessedPCo
 
 	for(; idxBuf != bufEnd; idxBuf++) {
 		Monotonic<Variables> bot = downLinkStructure.mbfs[*idxBuf];
-		*countConnectedSumBuf++ = processPCoeffSum(top, bot, graphsBuf);
+		*countConnectedSumBuf++ = processPCoeffSum<Variables>(top, bot, graphsBuf);
 	}
 }
 
@@ -315,7 +315,7 @@ NodeIndex topIdx, const NodeIndex* idxBuf, const NodeIndex* bufEnd, ProcessedPCo
 
 			Monotonic<Variables> bot = downLinkStructure.mbfs[idxBuf[claimedI]];
 
-			countConnectedSumBuf[claimedI] = processPCoeffSum(top, bot, graphsBuf);
+			countConnectedSumBuf[claimedI] = processPCoeffSum<Variables>(top, bot, graphsBuf);
 		}
 	});
 }

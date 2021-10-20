@@ -19,7 +19,13 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="dedekind.cpp" />
+    <ClCompile Include="dataGenerationCommands.cpp" />
+    <ClCompile Include="flatCommands.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="miscCommands.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="commands.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
