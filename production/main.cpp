@@ -21,7 +21,43 @@ Correct numbers
 	9: ??????????????????????????????????????????
 */
 
-static const CommandSet* knownCommandSets[]{&miscCommands, &dataGenCommands, &flatCommands};
+void listCommands();
+void listFlags() {
+	std::cout << "--dataDir <dir>: Set data directory" << std::endl;
+
+	std::cout << "-mmap: Use Memory Mapping, Linux-only" << std::endl;
+	std::cout << "-mmap_populate: Enable Memory Map Populating, Linux-only" << std::endl;
+	std::cout << "-mmap_hugetlb: Enable Memory Map HugeTLB, Linux-only, requires hugetlb compatible filesystem" << std::endl;
+	std::cout << "-mmap_2MB: Enable Memory Map HugeTLB with page size 2MB, Linux-only, requires hugetlb compatible filesystem" << std::endl;
+	std::cout << "-mmap_1GB: Enable Memory Map HugeTLB with page size 1GB, Linux-only, requires hugetlb compatible filesystem" << std::endl;
+}
+void helpCMD() {
+	std::cout << "Commands: " << std::endl;
+	listCommands();
+	std::cout << "Flags: " << std::endl;
+	listFlags();
+}
+
+static CommandSet helpCommands{"Help", {
+	{"listCommands", listCommands},
+	{"listFlags", listFlags},
+	{"help", helpCMD}
+}, {}};
+
+static const CommandSet* knownCommandSets[]{&helpCommands, &miscCommands, &dataGenCommands, &flatCommands, &testSetCommands};
+
+void listCommands() {
+	for(const CommandSet* cmdSet : knownCommandSets) {
+		std::cout << cmdSet->name << ":" << std::endl;
+		for(const std::pair<std::string, void(*)()>& cmd : cmdSet->commands) {
+			std::cout << "  " << cmd.first << std::endl;
+		}
+		for(const std::pair<std::string, void(*)(const std::string&)>& cmd : cmdSet->commandsWithArg) {
+			std::cout << "  " << cmd.first << ":<arg>" << std::endl;
+		}
+	}
+}
+
 
 inline void runCommandNoArg(const std::string& cmd) {
 	for(const CommandSet* cmdSet : knownCommandSets) {

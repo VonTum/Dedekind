@@ -13,3 +13,4 @@ struct CommandSet {
 extern CommandSet miscCommands;
 extern CommandSet flatCommands;
 extern CommandSet dataGenCommands;
+extern CommandSet testSetCommands;

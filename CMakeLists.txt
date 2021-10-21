@@ -44,6 +44,7 @@ add_executable(production
   production/miscCommands.cpp
   production/flatCommands.cpp
   production/dataGenerationCommands.cpp
+  production/testSetCommands.cpp
 )
 add_executable(indev
   indev/indev.cpp

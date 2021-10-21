@@ -150,6 +150,11 @@ AntiChain<Variables> operator*(const AntiChain<Variables>& a, const AntiChain<Va
 	return AntiChain<Variables>(result.asAntiChain());
 }
 
+template<unsigned int Variables, typename RandomEngine>
+void permuteRandom(AntiChain<Variables>& ac, RandomEngine& generator) {
+	permuteRandom<Variables, RandomEngine>(ac.bf, generator);
+}
+
 template<unsigned int Variables>
 struct Monotonic {
 	BooleanFunction<Variables> bf;
@@ -382,6 +387,11 @@ Monotonic<Variables> acProd(const Monotonic<Variables>& a, const Monotonic<Varia
 	return acProd(a, b.asAntiChain());
 }
 
+template<unsigned int Variables, typename RandomEngine>
+void permuteRandom(Monotonic<Variables>& mbf, RandomEngine& generator) {
+	permuteRandom<Variables, RandomEngine>(mbf.bf, generator);
+}
+
 template<unsigned int Variables>
 struct Layer {
 	using BF = BooleanFunction<Variables>;
@@ -588,6 +598,11 @@ Layer<Variables> getTopLayer(const Monotonic<Variables>& m) {
 template<unsigned int Variables>
 Layer<Variables> getTopLayer(const AntiChain<Variables>& ac) {
 	return getTopLayer(ac.bf);
+}
+
+template<unsigned int Variables, typename RandomEngine>
+void permuteRandom(Layer<Variables>& layer, RandomEngine& generator) {
+	permuteRandom<Variables, RandomEngine>(layer.bf, generator);
 }
 
 template<unsigned int Variables>

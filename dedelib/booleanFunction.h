@@ -1108,3 +1108,14 @@ unsigned int getModifiedLayer(const BooleanFunction<Variables>& a, const Boolean
 	}
 	throw "No difference";
 }
+
+
+template<unsigned int Variables, typename RandomEngine>
+void permuteRandom(BooleanFunction<Variables>& bf, RandomEngine& generator) {
+	for(unsigned int i = 0; i < Variables; i++) {
+		unsigned int selectedIndex = std::uniform_int_distribution<unsigned int>(i, Variables - 1)(generator);
+		if(selectedIndex == i) continue; // leave i where it is
+		bf.swap(i, selectedIndex); // put selectedIndex in position i
+	}
+}
+

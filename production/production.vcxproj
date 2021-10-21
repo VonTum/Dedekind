@@ -23,6 +23,7 @@
     <ClCompile Include="flatCommands.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="miscCommands.cpp" />
+    <ClCompile Include="testSetCommands.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="commands.h" />
