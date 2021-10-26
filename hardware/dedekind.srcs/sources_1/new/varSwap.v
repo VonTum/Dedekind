@@ -28,33 +28,8 @@ module varSwap #(
     output [127:0] dataOut
 );
 
-function automatic hasVar;
-    input integer index;
-    input integer var;
-    
-    begin
-        hasVar = (index & (1 << var)) != 0;
-    end
-endfunction
+`include "inlineVarSwap.vh"
 
-function automatic integer getInIndex;
-    input integer outIndex;
-    begin
-        if(hasVar(outIndex, FIRST_VAR) & !hasVar(outIndex, SECOND_VAR))
-            getInIndex = outIndex - (1 << FIRST_VAR) + (1 << SECOND_VAR);
-        else if(!hasVar(outIndex, FIRST_VAR) & hasVar(outIndex, SECOND_VAR)) 
-            getInIndex = outIndex + (1 << FIRST_VAR) - (1 << SECOND_VAR);
-        else
-            getInIndex = outIndex;
-    end
-endfunction
-
-generate
-    for(genvar outI = 0; outI < 128; outI = outI + 1) begin
-        //$display("outI:%d, inI:%d", outI, getInIndex(outI));
-        //$display("test");
-        assign dataOut[outI] = dataIn[getInIndex(outI)];
-    end
-endgenerate
+`VAR_SWAP_INLINE(FIRST_VAR, SECOND_VAR, dataIn, dataOut)
 
 endmodule

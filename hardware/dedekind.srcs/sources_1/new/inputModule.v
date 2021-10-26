@@ -29,7 +29,10 @@ module inputModule (
     input[127:0] botA, // botB = varSwap(5,6)(A)
     input[127:0] botC, // botD = varSwap(5,6)(C)
     input[11:0] botIndex,
-    input isBotValid,
+    input validBotA,
+    input validBotB,
+    input validBotC,
+    input validBotD,
     output full,
     output almostFull,
     
@@ -45,40 +48,35 @@ wire fullAB, almostFullAB;
 wire emptyAB, almostEmptyAB;
 wire popABFifo;
 wire[`FIFO_WIDTH-1:0] fifoABData;
-fifoSwapInputModule botABFifo(
-    .clk(clk),
+
+FIFO #(.WIDTH(`FIFO_WIDTH)) botABFifo (
+    .wClk(clk),.rClk(clk),
     
-    .top(top),
-    .botA(botA),
-    .botIndex(botIndex),
-    .isBotValid(isBotValid),
-    .full(fullAB),
-    .almostFull(almostFullAB),
+    .writeEnable(validBotA | validBotB),
+    .dataIn({botA,botIndex,validBotA,validBotB}),
+    .full(fullAB), .almostFull(almostFullAB),
     
     .readEnable(popABFifo),
     .dataOut(fifoABData),
-    .empty(emptyAB),
-    .almostEmpty(almostEmptyAB)
+    .empty(emptyAB), .almostEmpty(almostEmptyAB)
 );
+
 
 wire fullCD, almostFullCD;
 wire emptyCD, almostEmptyCD;
 wire popCDFifo;
 wire[`FIFO_WIDTH-1:0] fifoCDData;
-fifoSwapInputModule botCDFifo(
-    .clk(clk),
+
+FIFO #(.WIDTH(`FIFO_WIDTH)) botCDFifo (
+    .wClk(clk),.rClk(clk),
     
-    .top(top),
-    .botA(botC),
-    .botIndex(botIndex),
-    .isBotValid(isBotValid),
-    .full(fullCD),
-    .almostFull(almostFullCD),
+    .writeEnable(validBotC | validBotD),
+    .dataIn({botC,botIndex,validBotC,validBotD}),
+    .full(fullCD), .almostFull(almostFullCD),
     
     .readEnable(popCDFifo),
     .dataOut(fifoCDData),
-    .empty(emptyCD),
-    .almostEmpty(almostEmptyCD)
+    .empty(emptyCD), .almostEmpty(almostEmptyCD)
 );
 
 assign full = fullAB | fullCD;
@@ -261,59 +259,5 @@ always @(emptyA or emptyB or previousChoice or previousPreviousChoice or almostE
         end
     endcase
 end
-
-endmodule
-
-
-module fifoSwapInputModule (
-    input clk,
-    
-    // input side
-    input[127:0] top,
-    input[127:0] botA, // botB = varSwap(5,6)(botA)
-    input[11:0] botIndex,
-    input isBotValid,
-    output full, 
-    output almostFull,
-    
-    // output side
-    input readEnable,
-    output[`FIFO_WIDTH-1:0] dataOut,
-    output empty, 
-    output almostEmpty
-);
-
-wire botIsBelowAIn, botIsBelowBIn;
-checkIsBelowWithSwap botCheckerAB(top, botA, botIsBelowAIn, botIsBelowBIn);
-
-FIFO #(.WIDTH(`FIFO_WIDTH)) fifo (
-    .wClk(clk),
-    .writeEnable((botIsBelowAIn | botIsBelowBIn) & isBotValid),
-    .dataIn({botA,botIndex,botIsBelowAIn,botIsBelowBIn}),
-    .full(full), .almostFull(almostFull),
-    
-    .rClk(clk),
-    .readEnable(readEnable),
-    .dataOut(dataOut),
-    .empty(empty), .almostEmpty(almostEmpty)
-);
-
-endmodule
-
-// swaps variable 5 and 6
-module checkIsBelowWithSwap(
-    input[127:0] top,
-    input[127:0] bot,
-    output isBelowUnswapped,
-    output isBelowSwapped
-);
-
-// checks if bot has a bit that top doesn't, in the fields containing neither x or y, or both x and y
-wire sharedHasBadBit = |(bot[31:0] & ~top[31:0]) | |(bot[127:96] & ~top[127:96]); 
-wire unswappedHasBadBit = |(bot[63:32] & ~top[63:32]) | |(bot[95:64] & ~top[95:64]);
-wire swappedHasBadBit = |(bot[63:32] & ~top[95:64]) | |(bot[95:64] & ~top[63:32]);
-
-assign isBelowUnswapped = !(sharedHasBadBit | unswappedHasBadBit);
-assign isBelowSwapped = !(sharedHasBadBit | swappedHasBadBit);
 
 endmodule

@@ -151,8 +151,8 @@ AntiChain<Variables> operator*(const AntiChain<Variables>& a, const AntiChain<Va
 }
 
 template<unsigned int Variables, typename RandomEngine>
-void permuteRandom(AntiChain<Variables>& ac, RandomEngine& generator) {
-	permuteRandom<Variables, RandomEngine>(ac.bf, generator);
+void permuteRandom(AntiChain<Variables>& ac, RandomEngine& generator, unsigned int from = 0, unsigned int to = Variables) {
+	permuteRandom<Variables, RandomEngine>(ac.bf, generator, from, to);
 }
 
 template<unsigned int Variables>
@@ -387,9 +387,26 @@ Monotonic<Variables> acProd(const Monotonic<Variables>& a, const Monotonic<Varia
 	return acProd(a, b.asAntiChain());
 }
 
+// if yes, leaves bot in a permutation that was (bot <= top)
+template<unsigned int Variables>
+bool hasPermutationBelow(Monotonic<Variables> top, Monotonic<Variables>& bot) {
+	bool foundPermutation = false;
+	Monotonic<Variables> bestPermutation;
+	bot.forEachPermutation([&top, &foundPermutation, &bestPermutation](Monotonic<Variables> permutedBot) {
+		if(permutedBot <= top) {
+			foundPermutation = true;
+			bestPermutation = permutedBot;
+		}
+	});
+	if(foundPermutation) {
+		bot = bestPermutation;
+	}
+	return foundPermutation;
+}
+
 template<unsigned int Variables, typename RandomEngine>
-void permuteRandom(Monotonic<Variables>& mbf, RandomEngine& generator) {
-	permuteRandom<Variables, RandomEngine>(mbf.bf, generator);
+void permuteRandom(Monotonic<Variables>& mbf, RandomEngine& generator, unsigned int from = 0, unsigned int to = Variables) {
+	permuteRandom<Variables, RandomEngine>(mbf.bf, generator, from, to);
 }
 
 template<unsigned int Variables>
@@ -601,8 +618,8 @@ Layer<Variables> getTopLayer(const AntiChain<Variables>& ac) {
 }
 
 template<unsigned int Variables, typename RandomEngine>
-void permuteRandom(Layer<Variables>& layer, RandomEngine& generator) {
-	permuteRandom<Variables, RandomEngine>(layer.bf, generator);
+void permuteRandom(Layer<Variables>& layer, RandomEngine& generator, unsigned int from = 0, unsigned int to = Variables) {
+	permuteRandom<Variables, RandomEngine>(layer.bf, generator, from, to);
 }
 
 template<unsigned int Variables>

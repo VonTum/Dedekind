@@ -70,6 +70,9 @@ std::string pipelineTestSet(unsigned int Variables) {
 std::string pipeline24PackTestSet(unsigned int Variables) {
 	return makeBasicName(Variables, "pipeline24PackTestSet", ".mem");
 }
+std::string permuteCheck24TestSet(unsigned int Variables) {
+	return makeBasicName(Variables, "permuteCheck24TestSet", ".mem");
+}
 
 // File names for the flat MBF structure
 std::string flatMBFs(unsigned int Variables) {

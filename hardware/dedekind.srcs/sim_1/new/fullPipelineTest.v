@@ -34,6 +34,11 @@ wire isBotValid;
 wire full, almostFull;
 wire[39:0] summedDataOut;
 
+wire validBotA, validBotB, validBotC, validBotD;
+
+permuteCheck2 checkAB(top, botA, isBotValid, {validBotA, validBotB});
+permuteCheck2 checkCD(top, botC, isBotValid, {validBotC, validBotD});
+
 fullPipeline elementUnderTest (
     .clk(clk),
     .top(top),
@@ -41,6 +46,10 @@ fullPipeline elementUnderTest (
     .botC(botC), // botD = varSwap(5,6)(C)
     .botIndex(botIndex),
     .isBotValid(isBotValid),
+    .validBotA(validBotA),
+    .validBotB(validBotB),
+    .validBotC(validBotC),
+    .validBotD(validBotD),
     .full(full),
     .almostFull(almostFull),
     .summedDataOut(summedDataOut)

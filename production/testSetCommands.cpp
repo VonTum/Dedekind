@@ -8,6 +8,7 @@
 #include "../dedelib/pcoeff.h"
 
 #include "../dedelib/flatMBFStructure.h"
+#include "../dedelib/flatPCoeff.h"
 
 #include <random>
 
@@ -172,6 +173,39 @@ void pipeline24PackTestSet(size_t count) {
 	testSet.close();
 }
 
+void permutCheck24TestSet() {
+	constexpr unsigned int Variables = 7;
+
+	FlatMBFStructure<Variables> flatMBFs = readFlatMBFStructure<Variables>(true, false, false, false);
+
+	std::default_random_engine generator;
+
+	std::ofstream testSetFile(FileName::permuteCheck24TestSet(Variables));
+
+	for(int topLayer = 0; topLayer <= (1 << Variables); topLayer++) {
+		std::cout << "Top " << topLayer << "/" << (1 << Variables) << std::endl;
+		NodeOffset selectedTopIndex = std::uniform_int_distribution<int>(0, getLayerSize<Variables>(topLayer)-1)(generator);
+		Monotonic<Variables> selectedTop = flatMBFs.mbfs[FlatMBFStructure<Variables>::cachedOffsets[topLayer] + selectedTopIndex];
+		permuteRandom(selectedTop, generator);
+		testSetFile << selectedTop.bf.bitset << "_" << selectedTop.bf.bitset << std::endl;
+		// small offset to reduce generation time, by improving the odds that an element below will be picked
+		for(int botLayer = 0; botLayer < topLayer - 2; botLayer++) {
+			while(true) {
+				NodeOffset selectedBotIndex = std::uniform_int_distribution<int>(0, getLayerSize<Variables>(botLayer)-1)(generator);
+				Monotonic<Variables> selectedBot = flatMBFs.mbfs[FlatMBFStructure<Variables>::cachedOffsets[botLayer] + selectedBotIndex];
+
+				if(hasPermutationBelow(selectedTop, selectedBot)) {
+					permuteRandom(selectedBot, generator, 3);
+					testSetFile << selectedTop.bf.bitset << "_" << selectedBot.bf.bitset << std::endl;
+					break;
+				}
+				// otherwise keep searching
+			}
+		}
+	}
+	testSetFile.close();
+}
+
 CommandSet testSetCommands{"Test Set Generation", {
 	{"benchmarkSample1", []() {benchmarkSample<1>(); }},
 	{"benchmarkSample2", []() {benchmarkSample<2>(); }},
@@ -188,6 +222,8 @@ CommandSet testSetCommands{"Test Set Generation", {
 	{"benchmarkSampleTopBots5", []() {benchmarkSampleTopBots<5>(1,1); }},
 	{"benchmarkSampleTopBots6", []() {benchmarkSampleTopBots<6>(100, 100); }},
 	{"benchmarkSampleTopBots7", []() {benchmarkSampleTopBots<7>(10000, 10000); }},
+
+	{"permutCheck24TestSet", []() {permutCheck24TestSet(); }},
 },{
 
 	{"pipelineTestSet1", [](const std::string& size) {pipelineTestSet<1>(std::stoi(size)); }},

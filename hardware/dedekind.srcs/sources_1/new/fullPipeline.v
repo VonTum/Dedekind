@@ -72,6 +72,10 @@ module fullPipeline(
     input[127:0] botC, // botD = varSwap(5,6)(C)
     input[11:0] botIndex,
     input isBotValid,
+    input validBotA,
+    input validBotB,
+    input validBotC,
+    input validBotD,
     output full,
     output almostFull,
     output[`DATA_WIDTH-1:0] summedDataOut,
@@ -95,7 +99,10 @@ inputModule inputHandler(
     .botA(botA), // botB = varSwap(5,6)(A)
     .botC(botC), // botD = varSwap(5,6)(C)
     .botIndex(botIndex),
-    .isBotValid(isBotValid),
+    .validBotA(validBotA),
+    .validBotB(validBotB),
+    .validBotC(validBotC),
+    .validBotD(validBotD),
     .full(full),
     .almostFull(almostFull),
     
