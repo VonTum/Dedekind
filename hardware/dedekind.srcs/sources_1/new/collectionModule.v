@@ -1,25 +1,9 @@
 `timescale 1ns / 1ps
 `include "bramProperties.vh"
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 08/25/2021 01:20:22 AM
-// Design Name: 
-// Module Name: shiftSumTable
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
 
+`ifdef ALTERA_RESERVED_QIS
+`define USE_QUADPORTRAM_IP
+`endif
 
 module collectorBlock(
     input clk,
@@ -128,7 +112,23 @@ registerPipe #(.WIDTH(`ADDR_WIDTH), .DEPTH(`READ_LATENCY)) addrPipeline(
     .dataOut(addrPostLatency)
 );
 
-
+`ifdef USE_QUADPORTRAM_IP
+pipelineResultsRAM memBlock(
+    .clock(clk),
+    
+    .read_address_a(dataInAddr),
+    .q_a({readSumPostLatency, readCountPostLatency}),
+    .write_address_a(addrPostLatency),
+    .data_a({updatedSum, updatedCount}), // addBit can only go up to 35
+    .wren_a(dataInEnablePostLatency),
+    
+    .read_address_b(readAddr),
+    .q_b({summedDataOut, pcoeffCount}),
+    .write_address_b(readAddr),
+    .data_b(43'b0),
+    .wren_b(readAddrValid)
+);
+`else
 quadPortBRAM #(.DATA_WIDTH(`DATA_WIDTH + 3), .ADDR_WIDTH(`ADDR_WIDTH), .READ_LATENCY(`READ_LATENCY)) memBlock(
     .clk(clk),
     
@@ -144,6 +144,6 @@ quadPortBRAM #(.DATA_WIDTH(`DATA_WIDTH + 3), .ADDR_WIDTH(`ADDR_WIDTH), .READ_LAT
     .wDataB(43'b0),
     .wEnableB(readAddrValid)
 );
-
+`endif
 
 endmodule

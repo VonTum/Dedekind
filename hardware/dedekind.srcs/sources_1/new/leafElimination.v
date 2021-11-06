@@ -92,7 +92,7 @@ generate
             assign wiresAbove[wireI] = graphIn[outI | (1 << getNthBit(outI, wireI, 0))];
         end
         
-        if(DIRECTION == `DOWN) begin
+        if(DIRECTION == `UP) begin
             leafEliminationElement #(popcntStatic(outI, 7)) elem(
                 .mainWire(graphIn[outI]), 
                 .oneWires(wiresBelow), 

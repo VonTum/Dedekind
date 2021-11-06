@@ -28,7 +28,7 @@ initial begin
     forever #1 clk = ~clk;
 end
 
-wire[11:0] botIndex;
+wire[14:0] botIndex;
 wire[127:0] top, botA, botC;
 wire isBotValid;
 wire full, almostFull;
@@ -55,13 +55,18 @@ fullPipeline elementUnderTest (
     .summedDataOut(summedDataOut)
 );
 
-wire[63:0] botSum;
-dataProvider #("pipelineTestSet7.mem", 128*3+64, 4096) dataProvider (
+indexProvider #(32000) indexProvider (
     .clk(clk),
     .index(botIndex),
     .dataAvailable(isBotValid),
-    .requestData(!almostFull),
-    .data({top, botA, botC, botSum})
+    .requestData(!almostFull)
 );
+
+reg[128*3+64-1:0] testSet[31999:0];
+initial $readmemb("pipelineTestSet7.mem", testSet);
+assign {top, botA, botC} = testSet[botIndex][128*3+64-1:64];
+wire[39:0] correctBotSum = testSet[botIndex-4096][39:0];
+
+wire IS_CORRECT = summedDataOut == correctBotSum;
 
 endmodule

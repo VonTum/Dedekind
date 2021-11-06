@@ -26,6 +26,7 @@
 module computeModule #(parameter EXTRA_DATA_SIZE = 14) (
     input clk,
     input start,
+    input[127:0] top,
     input[127:0] graphIn,
     input[EXTRA_DATA_SIZE-1:0] extraDataIn,
     output ready,
@@ -46,12 +47,13 @@ wire[127:0] singletonEliminatedGraph;
 
 wire[5:0] connectCountIn;
 
-leafElimination #(.DIRECTION(`DOWN)) le1(graphIn, leafEliminatedGraph);
+leafElimination #(.DIRECTION(`DOWN)) le(graphIn, leafEliminatedGraph);
 
 singletonElimination se(leafEliminatedGraph, singletonEliminatedGraph, connectCountIn);
 
 countConnectedCore core(
     .clk(clk), 
+	 .top(top),
     .graphIn(singletonEliminatedGraph), 
     .start(start), 
     .connectCountStart(connectCountIn), 
@@ -83,7 +85,6 @@ module fullPipeline(
 );
 
 wire inputGraphAvailable;
-wire collectorQueueFull;
 
 wire coreStart = inputGraphAvailable;
 wire coreReady, coreStarted, coreDone;
@@ -121,6 +122,7 @@ wire[5:0] countOut;
 computeModule #(.EXTRA_DATA_SIZE(`ADDR_WIDTH + 2)) computeCore(
     .clk(clk),
     .start(coreStart),
+	 .top(top),
     .graphIn(graphIn),
     .extraDataIn({addrIn, subAddrIn}),
     .ready(coreReady),

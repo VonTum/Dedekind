@@ -21,50 +21,41 @@
 
 module FIFO #(
     parameter WIDTH = 16,
-    parameter DEPTH_LOG2 = 5,
-    parameter ALMOST_FULL_MARGIN = 2,
-    parameter ALMOST_EMPTY_MARGIN = 2) (
+    parameter DEPTH_LOG2 = 5) (
     
+    input clk,
+	 
     // input side
-    input wClk,
     input writeEnable,
     input[WIDTH-1:0] dataIn,
     output full,
-    output almostFull,
     
     // output side
-    input rClk,
     input readEnable,
     output[WIDTH-1:0] dataOut,
     output empty,
-    output almostEmpty
+	 
+	 output[DEPTH_LOG2-1:0] usedw
 );
 
 reg[WIDTH-1:0] data [(1 << DEPTH_LOG2) - 1:0]; // one extra element to differentiate between empty fifo and full
 
-reg[DEPTH_LOG2-1:0] writeHead;
-reg[DEPTH_LOG2-1:0] readHead;
+reg[DEPTH_LOG2-1:0] writeHead = 0;
+reg[DEPTH_LOG2-1:0] readHead = 0;
 
-assign empty = writeHead == readHead;
-assign full = readHead - writeHead == 1; // uses unsigned overflow
-assign almostFull = readHead - writeHead - 1 <= ALMOST_FULL_MARGIN; // uses unsigned overflow
-assign almostEmpty = writeHead - readHead <= ALMOST_EMPTY_MARGIN; // uses unsigned overflow
+assign usedw = writeHead - readHead;
+
+assign empty = usedw == 0;
+assign full = usedw == -1; // ((1 << DEPTH_LOG2) - 1); // uses unsigned overflow
 assign dataOut = data[readHead];
 
-initial begin
-    writeHead = 0;
-    readHead = 0;
-end
-
-always @ (posedge wClk) begin
+always @ (posedge clk) begin
     if(writeEnable) begin
-        data[writeHead] = dataIn;
-        writeHead = writeHead + 1; // uses unsigned overflow
+        data[writeHead] <= dataIn;
+        writeHead <= writeHead + 1; // uses unsigned overflow
     end
-end
-always @ (posedge rClk) begin
     if(readEnable) begin
-        readHead = readHead + 1; // uses unsigned overflow
+        readHead <= readHead + 1; // uses unsigned overflow
     end
 end
 

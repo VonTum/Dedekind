@@ -1,5 +1,12 @@
 `timescale 1ns / 1ps
 `define FIFO_WIDTH 142
+`define FIFO_DEPTH_LOG2 5
+`define FIFO_ALMOSTFULL 28
+
+`ifdef ALTERA_RESERVED_QIS
+`define USE_FIFO_IP
+`endif
+
 //////////////////////////////////////////////////////////////////////////////////
 // Company: 
 // Engineer: 
@@ -44,43 +51,76 @@ module inputModule (
     output[1:0] graphSubIndex
 );
 
-wire fullAB, almostFullAB;
-wire emptyAB, almostEmptyAB;
-wire popABFifo;
-wire[`FIFO_WIDTH-1:0] fifoABData;
+wire fullAB, fullCD;
+wire emptyAB, emptyCD;
+wire popABFifo, popCDFifo;
+wire[`FIFO_WIDTH-1:0] fifoABData, fifoCDData;
+wire[`FIFO_DEPTH_LOG2-1:0] usedwAB, usedwCD;
 
-FIFO #(.WIDTH(`FIFO_WIDTH)) botABFifo (
-    .wClk(clk),.rClk(clk),
+`ifdef USE_FIFO_IP
+pipelineFifo botABFifo (
+    .clock(clk),
+    
+    .wrreq(validBotA | validBotB),
+    .data({botA,botIndex,validBotA,validBotB}),
+    .full(fullAB),
+    
+    .rdreq(popABFifo),
+    .q(fifoABData),
+    .empty(emptyAB),
+	 
+	 .usedw(usedwAB)
+);
+pipelineFifo botCDFifo (
+    .clock(clk),
+    
+    .wrreq(validBotC | validBotD),
+    .data({botC,botIndex,validBotC,validBotD}),
+    .full(fullCD),
+    
+    .rdreq(popCDFifo),
+    .q(fifoCDData),
+    .empty(emptyCD),
+	 
+	 .usedw(usedwCD)
+);
+`else
+FIFO #(.WIDTH(`FIFO_WIDTH), .DEPTH_LOG2(`FIFO_DEPTH_LOG2)) botABFifo (
+    .clk(clk),
     
     .writeEnable(validBotA | validBotB),
     .dataIn({botA,botIndex,validBotA,validBotB}),
-    .full(fullAB), .almostFull(almostFullAB),
+    .full(fullAB),
     
     .readEnable(popABFifo),
     .dataOut(fifoABData),
-    .empty(emptyAB), .almostEmpty(almostEmptyAB)
+    .empty(emptyAB),
+	 
+	 .usedw(usedwAB)
 );
 
-
-wire fullCD, almostFullCD;
-wire emptyCD, almostEmptyCD;
-wire popCDFifo;
-wire[`FIFO_WIDTH-1:0] fifoCDData;
-
-FIFO #(.WIDTH(`FIFO_WIDTH)) botCDFifo (
-    .wClk(clk),.rClk(clk),
+FIFO #(.WIDTH(`FIFO_WIDTH), .DEPTH_LOG2(`FIFO_DEPTH_LOG2)) botCDFifo (
+    .clk(clk),
     
     .writeEnable(validBotC | validBotD),
     .dataIn({botC,botIndex,validBotC,validBotD}),
-    .full(fullCD), .almostFull(almostFullCD),
+    .full(fullCD),
     
     .readEnable(popCDFifo),
     .dataOut(fifoCDData),
-    .empty(emptyCD), .almostEmpty(almostEmptyCD)
+    .empty(emptyCD),
+	 
+	 .usedw(usedwCD)
 );
+`endif
+
+wire almostFullAB = usedwAB >= `FIFO_ALMOSTFULL;
+wire almostFullCD = usedwCD >= `FIFO_ALMOSTFULL;
 
 assign full = fullAB | fullCD;
 assign almostFull = almostFullAB | almostFullCD;
+
+wire isFullerB = usedwCD >= usedwAB;
 
 wire schedulerReadEnable;
 wire schedulerDataAvailable;
@@ -92,14 +132,13 @@ wire swappedBotBelowOut;
 wire chosenFifo;
 fifoScheduler #(.FIFO_WIDTH(`FIFO_WIDTH)) scheduler(
     .clk(clk),
-    
+    .isFullerB(isFullerB),
+	 
     .emptyA(emptyAB),
-    .almostEmptyA(almostEmptyAB),
     .dataFromFifoA(fifoABData),
     .popFifoA(popABFifo),
     
     .emptyB(emptyCD),
-    .almostEmptyB(almostEmptyCD),
     .dataFromFifoB(fifoCDData),
     .popFifoB(popCDFifo),
     
@@ -191,14 +230,13 @@ endmodule
 
 module fifoScheduler #(parameter FIFO_WIDTH = 8) (
     input clk,
+	 input isFullerB,
     // fifo A
     input emptyA,
-    input almostEmptyA,
     input[FIFO_WIDTH-1:0] dataFromFifoA,
     output popFifoA,
     // fifo B
     input emptyB,
-    input almostEmptyB,
     input[FIFO_WIDTH-1:0] dataFromFifoB,
     output popFifoB,
     // output side
@@ -222,17 +260,14 @@ always @(posedge clk) begin
         previousChoice <= chosenFifo;
     end
 end
-fifoSchedulerDecider decider(emptyA, almostEmptyA, emptyB, almostEmptyB, previousChoice, previousPreviousChoice, dataAvailable, chosenFifo);
+fifoSchedulerDecider decider(emptyA, emptyB, isFullerB, previousChoice, previousPreviousChoice, dataAvailable, chosenFifo);
 
 endmodule
 
 module fifoSchedulerDecider (
     input emptyA,
-    input almostEmptyA,
-    
     input emptyB,
-    input almostEmptyB,
-    
+	 input isFullerB,
     input previousChoice,
     input previousPreviousChoice,
     
@@ -244,18 +279,14 @@ assign hasDataAvailable = !emptyA | !emptyB;
 
 reg chooseBCombin;
 assign chooseB = chooseBCombin;
-always @(emptyA or emptyB or previousChoice or previousPreviousChoice or almostEmptyA or almostEmptyB) begin
+always @(emptyA or emptyB or previousChoice or previousPreviousChoice or isFullerB) begin
     case ({emptyA,emptyB})
         2'b11: chooseBCombin <= 1'bX;
         2'b10: chooseBCombin <= 1;
         2'b01: chooseBCombin <= 0;
         2'b00: begin
             if(previousChoice == previousPreviousChoice) chooseBCombin <= !previousChoice;
-            else case ({almostEmptyA, almostEmptyB})
-                2'b01: chooseBCombin <= 0;
-                2'b10: chooseBCombin <= 1;
-                default: chooseBCombin <= !previousChoice;
-            endcase
+				chooseBCombin <= isFullerB;
         end
     endcase
 end

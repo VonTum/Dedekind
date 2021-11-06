@@ -1,0 +1,12 @@
+#Intel Quartus related files
+*.qpf
+*.qsf
+*.history
+*.bak
+#*.ip
+.qsys_edit/
+output_files/
+qdb/
+ip/
+tmp-clearbox/
+#**/synth/

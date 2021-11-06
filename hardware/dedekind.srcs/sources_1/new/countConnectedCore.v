@@ -19,8 +19,35 @@
 // 
 //////////////////////////////////////////////////////////////////////////////////
 
+module floodFillStep(
+    input[127:0] top,
+    input[127:0] graphIn,
+    input[127:0] exploredIn,
+    output[127:0] graphOut,
+    output[127:0] exploredOut,
+    output noChange
+);
+
+wire[127:0] monotonizeUpOut;
+monotonizeUp firstStep(exploredIn, monotonizeUpOut); 
+// use top instead of graphIn as it is a false path and thus reduces timing strain. 
+// WARNING, Will produce incorrect results if Leaf Elimination Up is used, because then the top of top does not match the top of graph. 
+// Luckily only Leaf Elimination Down leaves improves performance, so this version is used. 
+wire[127:0] midPoint = monotonizeUpOut & top;
+
+wire[127:0] monotonizeDownOut;
+monotonizeDown secondStep(midPoint, monotonizeDownOut);
+assign exploredOut = graphIn & monotonizeDownOut;
+assign graphOut = graphIn & ~monotonizeDownOut;
+
+assign noChange = (midPoint == exploredOut);
+
+endmodule
+
+
 module countConnectedCore(
     input clk,
+    input[127:0] top,
     input[127:0] graphIn,
     input start,
     input[5:0] connectCountStart,
@@ -29,41 +56,6 @@ module countConnectedCore(
     output started,
     output done
 ); 
-
-// debugging
-/*reg clk;
-reg[127:0] graphIn;
-reg start;
-reg[5:0] connectCountStart;
-initial begin
-    clk = 0;
-    #1 forever #1 clk = ~clk;
-end
-initial begin
-    start = 0;
-    connectCountStart = 0;
-    graphIn = 0;
-    
-    #5
-    graphIn[127:96] = 32'b00000000_00000001_00000001_00010110; // {a,b,c,d,e}, 5 cc
-    start = 1;
-    #2 start = 0;
-    
-    
-    #15
-    graphIn[127:96] = 32'b00010011_00100010_01010000_10101000; // difficult connected component, 1 cc
-    start = 1;
-    #2 start = 0;
-    
-    
-    
-    #15
-    graphIn[127:96] = 32'b00010001_00000010_01000100_10101010; // regular test case, 3 cc
-    start = 1;
-    #2 start = 0;
-    
-    
-end//*/
 
 reg[127:0] graph;
 reg[127:0] curExtending;
@@ -75,10 +67,13 @@ assign started = ready & start;
 
 wire[127:0] floodFillIn = isNewSeed ? newSeed : curExtending;
 wire[127:0] floodFillOut;
+wire[127:0] graphOut;
 wire ffRunComplete;
-floodFillStep ffStep(graph, floodFillIn, floodFillOut, ffRunComplete);
+floodFillStep ffStep(top, graph, floodFillIn, graphOut, floodFillOut, ffRunComplete);
 
 initial graph = 0;
+initial curExtending = 0;
+initial isNewSeed = 0;
 
 always @ (posedge clk) begin
     // no test needed for curExtending, just update even when not running, requires less hardware
@@ -96,7 +91,7 @@ always @ (posedge clk) begin
     
     // new component discovered, explore!
     if(!ready & ffRunComplete) begin
-        graph <= graph & ~floodFillOut; // remove current component to start new component
+        graph <= graphOut;//graph & ~floodFillOut; // remove current component to start new component
         connectCount <= connectCount + 1;
     end
 end
