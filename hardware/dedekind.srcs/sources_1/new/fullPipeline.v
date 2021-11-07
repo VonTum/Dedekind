@@ -2,45 +2,17 @@
 `include "bramProperties.vh"
 `include "leafElimination.vh"
 
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 08/07/2021 05:54:46 PM
-// Design Name: 
-// Module Name: fullPipeline
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
-
-
-module computeModule #(parameter EXTRA_DATA_SIZE = 14) (
+module computeModule #(parameter EXTRA_DATA_WIDTH = 14) (
     input clk,
-    input start,
     input[127:0] top,
     input[127:0] graphIn,
-    input[EXTRA_DATA_SIZE-1:0] extraDataIn,
-    output ready,
-    output started,
+    input graphAvailable,
+    input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
+    output requestGraph,
     output done,
     output[5:0] resultCount,
-    output reg[EXTRA_DATA_SIZE-1:0] extraDataOut
+    output[EXTRA_DATA_WIDTH-1:0] extraDataOut
 );
-
-always @ (posedge clk) begin
-    if(started) begin
-        extraDataOut = extraDataIn;
-    end
-end
 
 wire[127:0] leafEliminatedGraph;
 wire[127:0] singletonEliminatedGraph;
@@ -51,17 +23,40 @@ leafElimination #(.DIRECTION(`DOWN)) le(graphIn, leafEliminatedGraph);
 
 singletonElimination se(leafEliminatedGraph, singletonEliminatedGraph, connectCountIn);
 
-countConnectedCore core(
+`ifdef USE_OLD_CCC
+countConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH)) core(
     .clk(clk), 
-	 .top(top),
+    .top(top),
     .graphIn(singletonEliminatedGraph), 
-    .start(start), 
-    .connectCountStart(connectCountIn), 
+    .graphInAvailable(graphAvailable), 
+    .extraDataIn(extraDataIn),
+    .extraDataOut(extraDataOut),
+    .connectCountIn(connectCountIn), 
     .connectCount(resultCount), 
-    .ready(ready), 
-    .started(started),
+    .request(requestGraph), 
     .done(done)
 );
+`else
+wire graphInIsZero = singletonEliminatedGraph == 0;
+
+pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH)) core(
+    .clk(clk), 
+    .top(top),
+    
+    // input side
+    .request(requestGraph), 
+    .graphIn(singletonEliminatedGraph), 
+    .graphInAvailable(graphAvailable), 
+    .graphInIsZero(graphInIsZero),
+    .connectCountIn(connectCountIn), 
+    .extraDataIn(extraDataIn),
+    
+    // output side
+    .done(done),
+    .connectCount(resultCount),
+    .extraDataOut(extraDataOut)
+);
+`endif
 
 endmodule
 
@@ -84,10 +79,8 @@ module fullPipeline(
     output[2:0] pcoeffCountOut
 );
 
-wire inputGraphAvailable;
-
-wire coreStart = inputGraphAvailable;
-wire coreReady, coreStarted, coreDone;
+wire graphAvailable;
+wire coreRequests, coreDone;
 wire[127:0] graphIn;
 wire[`ADDR_WIDTH-1:0] addrIn;
 wire[1:0] subAddrIn;
@@ -108,8 +101,8 @@ inputModule inputHandler(
     .almostFull(almostFull),
     
     // output side, to countConnectedCore
-    .readEnable(coreStarted),
-    .graphAvailable(inputGraphAvailable),
+    .dataRequested(coreRequests),
+    .graphAvailable(graphAvailable),
     .graphOut(graphIn),
     .graphIndex(addrIn),
     .graphSubIndex(subAddrIn)
@@ -119,14 +112,13 @@ wire[`ADDR_WIDTH-1:0] addrOut;
 wire[1:0] subAddrOut;
 wire[5:0] countOut;
 
-computeModule #(.EXTRA_DATA_SIZE(`ADDR_WIDTH + 2)) computeCore(
+computeModule #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH + 2)) computeCore(
     .clk(clk),
-    .start(coreStart),
-	 .top(top),
+    .top(top),
     .graphIn(graphIn),
+    .graphAvailable(graphAvailable),
     .extraDataIn({addrIn, subAddrIn}),
-    .ready(coreReady),
-    .started(coreStarted),
+    .requestGraph(coreRequests),
     .done(coreDone),
     .resultCount(countOut),
     .extraDataOut({addrOut, subAddrOut})

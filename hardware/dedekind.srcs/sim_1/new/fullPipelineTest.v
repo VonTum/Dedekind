@@ -44,7 +44,7 @@ fullPipeline elementUnderTest (
     .top(top),
     .botA(botA), // botB = varSwap(5,6)(A)
     .botC(botC), // botD = varSwap(5,6)(C)
-    .botIndex(botIndex),
+    .botIndex(botIndex[11:0]),
     .isBotValid(isBotValid),
     .validBotA(validBotA),
     .validBotB(validBotB),

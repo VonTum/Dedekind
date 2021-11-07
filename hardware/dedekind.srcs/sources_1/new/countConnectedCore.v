@@ -1,23 +1,4 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 06/28/2021 01:17:06 AM
-// Design Name: 
-// Module Name: countConnectedCore
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
 
 module floodFillStep(
     input[127:0] top,
@@ -45,15 +26,16 @@ assign noChange = (midPoint == exploredOut);
 endmodule
 
 
-module countConnectedCore(
+module countConnectedCore #(parameter EXTRA_DATA_WIDTH = 0) (
     input clk,
     input[127:0] top,
     input[127:0] graphIn,
-    input start,
-    input[5:0] connectCountStart,
+    input graphInAvailable,
+    input[5:0] connectCountIn,
+    input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
+    output reg[EXTRA_DATA_WIDTH-1:0] extraDataOut,
     output reg[5:0] connectCount,
-    output ready,
-    output started,
+    output request,
     output done
 ); 
 
@@ -62,8 +44,8 @@ reg[127:0] curExtending;
 reg isNewSeed;
 
 wire[127:0] newSeed;
-firstBit firstBitOfGraph(graph, newSeed, ready);
-assign started = ready & start;
+firstBit firstBitOfGraph(graph, newSeed, request);
+wire started = request & graphInAvailable;
 
 wire[127:0] floodFillIn = isNewSeed ? newSeed : curExtending;
 wire[127:0] floodFillOut;
@@ -86,21 +68,22 @@ always @ (posedge clk) begin
     // first clock, load registers
     if(started) begin
         graph <= graphIn;
-        connectCount <= connectCountStart;
+        connectCount <= connectCountIn;
+        extraDataOut <= extraDataIn;
     end
     
     // new component discovered, explore!
-    if(!ready & ffRunComplete) begin
+    if(!request & ffRunComplete) begin
         graph <= graphOut;//graph & ~floodFillOut; // remove current component to start new component
         connectCount <= connectCount + 1;
     end
 end
 
-reg prevReady = 1;
-reg prevStart = 0;
+reg prevRequest = 1;
+reg prevGraphInAvailable = 0;
 always @ (posedge clk) begin
-    prevReady <= ready;
-    prevStart <= start;
+    prevRequest <= request;
+    prevGraphInAvailable <= graphInAvailable;
 end
-assign done = ready & (!prevReady | prevStart); // outputs a 1-clock pulse for every processed graph
+assign done = request & (!prevRequest | prevGraphInAvailable); // outputs a 1-clock pulse for every processed graph
 endmodule

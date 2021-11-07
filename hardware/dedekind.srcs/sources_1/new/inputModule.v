@@ -44,12 +44,14 @@ module inputModule (
     output almostFull,
     
     // output side, to countConnectedCore
-    input readEnable,
+    input dataRequested,
     output graphAvailable,
     output[127:0] graphOut,
     output[11:0] graphIndex,
     output[1:0] graphSubIndex
 );
+
+wire readEnable = dataRequested & graphAvailable;
 
 wire fullAB, fullCD;
 wire emptyAB, emptyCD;
