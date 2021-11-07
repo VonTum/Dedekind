@@ -1,5 +1,91 @@
 `timescale 1ns / 1ps
 
+// synthesizes to 2 ALM modules
+module demuxElement (
+    input graphIn0,
+    input graphIn2,
+    
+    input lowerHalfIsFirstBit,
+    input upperHalfIsFirstBit,
+    input shouldGrabNewSeed,
+    
+    input[3:0] extendedIn,
+    output[3:0] outputBits
+);
+
+wire[3:0] newSeed;
+assign newSeed[1:0] = lowerHalfIsFirstBit ? (graphIn0 ? 2'b01 : 2'b10) : 2'b00;
+assign newSeed[3:2] = upperHalfIsFirstBit ? (graphIn2 ? 2'b01 : 2'b10) : 2'b00;
+
+assign outputBits = shouldGrabNewSeed ? newSeed : extendedIn;
+
+endmodule
+
+module newSeedProducer (
+    input[127:0] graphIn,
+    input[127:0] extendedIn,
+    input shouldGrabNewSeedIn,
+    output isZero,
+    output[127:0] newExtendingOut
+);
+
+wire[31:0] hasBit4;
+wire[7:0] hasBit16;
+wire[1:0] hasBit64;
+genvar i;
+generate
+for(i = 0; i < 32; i = i + 1) assign hasBit4[i] = (graphIn[i*4+:4] != 4'b0000);
+for(i = 0; i < 8; i = i + 1) assign hasBit16[i] = |hasBit4[i*4+:4];
+for(i = 0; i < 2; i = i + 1) assign hasBit64[i] = |hasBit16[i*4+:4];
+endgenerate
+assign isZero = !(|hasBit64);
+
+wire[7:0] hasBitUpTo16;
+assign hasBitUpTo16[0] = 0;
+assign hasBitUpTo16[1] = hasBit16[0];
+assign hasBitUpTo16[2] = hasBit16[0] | hasBit16[1];
+assign hasBitUpTo16[3] = hasBit16[0] | hasBit16[1] | hasBit16[2];
+assign hasBitUpTo16[4] = hasBit64[0];
+assign hasBitUpTo16[5] = hasBit64[0] | hasBit16[4];
+assign hasBitUpTo16[6] = hasBit64[0] | hasBit16[4] | hasBit16[5];
+assign hasBitUpTo16[7] = hasBit64[0] | hasBit16[4] | hasBit16[5] | hasBit16[6];
+
+wire[31:0] hasBitUpTo4;
+generate
+for(i = 0; i < 8; i = i + 1) begin
+    assign hasBitUpTo4[i*4+0] = hasBitUpTo16[i];
+    assign hasBitUpTo4[i*4+1] = hasBitUpTo16[i] | hasBit4[i*4];
+    assign hasBitUpTo4[i*4+2] = hasBitUpTo16[i] | hasBit4[i*4] | hasBit4[i*4+1];
+    assign hasBitUpTo4[i*4+3] = hasBitUpTo16[i] | hasBit4[i*4] | hasBit4[i*4+1] | hasBit4[i*4+2];
+end
+endgenerate
+
+wire[31:0] isFirstBit4 = hasBit4 & ~hasBitUpTo4;
+
+wire[63:0] isFirstBit2;
+generate
+for(i = 0; i < 32; i = i + 1) begin
+    assign isFirstBit2[i*2+0] = isFirstBit4[i] & (graphIn[i*4+0] | graphIn[i*4+1]);
+    assign isFirstBit2[i*2+1] = isFirstBit4[i] & !(graphIn[i*4+0] | graphIn[i*4+1]);
+end
+endgenerate
+
+generate
+for(i = 0; i < 32; i = i + 1) begin
+    demuxElement demux(
+        .graphIn0(graphIn[i*4+0]), 
+        .graphIn2(graphIn[i*4+2]),
+        .lowerHalfIsFirstBit(isFirstBit2[i*2]),
+        .upperHalfIsFirstBit(isFirstBit2[i*2+1]),
+        .shouldGrabNewSeed(shouldGrabNewSeedIn),
+        .extendedIn(extendedIn[i*4+:4]),
+        .outputBits(newExtendingOut[i*4+:4])
+    );
+end
+endgenerate
+
+endmodule
+
 module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10) (
 	 input clk,
 	 input[127:0] top, // top wire remains constant for the duration of a run, no need to factor it into pipeline
@@ -57,27 +143,36 @@ wire shouldGrabNewSeed = extentionFinished | runEnd;
 
 // PIPELINE STEP 5
 // Other Inputs become available
-wire[127:0] selectedGraph = shouldGrabNewSeed ? reducedGraph : leftoverGraph;
-wire[127:0] finalLeftoverGraph = start ? graphIn : selectedGraph; // synthesizes this and the above to 128 5-in 1-out LUTs
+wire[127:0] finalLeftoverGraph = start ? graphIn : (shouldGrabNewSeed ? reducedGraph : leftoverGraph); // synthesizes to 128 5-in 1-out LUTs
 wire[EXTRA_DATA_WIDTH-1:0] finalExtraData = runEnd ? extraDataIn : extraData;
 wire finalValid = (valid & !runEnd) | start;
 wire[5:0] selectedConnectCount = start ? connectCountIn : connectionCount;
 
 // PIPELINE STEP 6
 // Start generation of new seed, find index and test if graph is 0
+wire finalLeftoverGraphIsZero;
+wire[127:0] finalCurExtending;
+newSeedProducer newSeedProducer(
+    .graphIn(finalLeftoverGraph),
+    .isZero(finalLeftoverGraphIsZero),
+    .shouldGrabNewSeedIn(shouldGrabNewSeed),
+    .extendedIn(extended),
+    .newExtendingOut(finalCurExtending)
+);
+
+/*wire finalLeftoverGraphIsZero;
 wire[6:0] newSeedIndex;
-wire newSeedIsZero;
-bitScanForward128 firstBitIndex(finalLeftoverGraph, newSeedIndex, newSeedIsZero);
+bitScanForward128 firstBitIndex(finalLeftoverGraph, newSeedIndex, finalLeftoverGraphIsZero);
 
 // PIPELINE STEP 7
 // Produce new curExtending
 // This should synthesize to one 128-bit multiplexer, or 64+16 alm modules. Because it can use the synclr input on alm modules
 wire[127:0] newSeed = 1 << newSeedIndex;
-// The newSeedIsZero set to zero can be done here instead of modifying newSeed since the graph won't ever become zero when not inputted as zero
-wire[127:0] finalCurExtending = newSeedIsZero ? 0 : (shouldGrabNewSeed ? newSeed : extended);
+// The finalLeftoverGraphIsZero set to zero can be done here instead of modifying newSeed since the graph won't ever become zero when not inputted as zero
+wire[127:0] finalCurExtending = finalLeftoverGraphIsZero ? 0 : (shouldGrabNewSeed ? newSeed : extended);*/
 
 // Now we can finally produce the resulting connectionCount
-wire shouldIncrementConnectionCount = shouldGrabNewSeed & !newSeedIsZero;
+wire shouldIncrementConnectionCount = shouldGrabNewSeed & !finalLeftoverGraphIsZero;
 
 wire[5:0] finalConnectionCount = selectedConnectCount + shouldIncrementConnectionCount;
 
