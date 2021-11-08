@@ -94,7 +94,6 @@ module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10) (
 	 output request,
 	 input[127:0] graphIn,
 	 input graphInAvailable,
-	 input graphInIsZero,
 	 input[5:0] connectCountIn,
 	 input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
 	 
@@ -159,17 +158,6 @@ newSeedProducer newSeedProducer(
     .extendedIn(extended),
     .newExtendingOut(finalCurExtending)
 );
-
-/*wire finalLeftoverGraphIsZero;
-wire[6:0] newSeedIndex;
-bitScanForward128 firstBitIndex(finalLeftoverGraph, newSeedIndex, finalLeftoverGraphIsZero);
-
-// PIPELINE STEP 7
-// Produce new curExtending
-// This should synthesize to one 128-bit multiplexer, or 64+16 alm modules. Because it can use the synclr input on alm modules
-wire[127:0] newSeed = 1 << newSeedIndex;
-// The finalLeftoverGraphIsZero set to zero can be done here instead of modifying newSeed since the graph won't ever become zero when not inputted as zero
-wire[127:0] finalCurExtending = finalLeftoverGraphIsZero ? 0 : (shouldGrabNewSeed ? newSeed : extended);*/
 
 // Now we can finally produce the resulting connectionCount
 wire shouldIncrementConnectionCount = shouldGrabNewSeed & !finalLeftoverGraphIsZero;

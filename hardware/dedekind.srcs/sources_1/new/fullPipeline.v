@@ -37,8 +37,6 @@ countConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH)) core(
     .done(done)
 );
 `else
-wire graphInIsZero = singletonEliminatedGraph == 0;
-
 pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH)) core(
     .clk(clk), 
     .top(top),
@@ -47,7 +45,6 @@ pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH)) core(
     .request(requestGraph), 
     .graphIn(singletonEliminatedGraph), 
     .graphInAvailable(graphAvailable), 
-    .graphInIsZero(graphInIsZero),
     .connectCountIn(connectCountIn), 
     .extraDataIn(extraDataIn),
     
