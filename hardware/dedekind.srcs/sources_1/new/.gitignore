@@ -1,6 +1,7 @@
 #Intel Quartus related files
 *.qpf
 *.qsf
+*.rpt
 *.history
 *.bak
 #*.ip

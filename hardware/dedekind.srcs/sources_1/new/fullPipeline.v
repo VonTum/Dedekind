@@ -44,7 +44,7 @@ pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH)) core(
     // input side
     .request(requestGraph), 
     .graphIn(singletonEliminatedGraph), 
-    .graphInAvailable(graphAvailable), 
+    .start(graphAvailable & requestGraph), 
     .connectCountIn(connectCountIn), 
     .extraDataIn(extraDataIn),
     
