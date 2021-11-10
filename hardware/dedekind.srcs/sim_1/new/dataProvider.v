@@ -22,6 +22,7 @@
 
 module indexProvider #(parameter ADDR_DEPTH = 4096, parameter MIN_OUTPUT_DELAY = 0) (
     input clk,
+    input rst,
     output reg[$clog2(ADDR_DEPTH)-1:0] index,
     output dataAvailable,
     input requestData
@@ -34,10 +35,10 @@ reg isDone = 0;
 
 generate
     if(MIN_OUTPUT_DELAY == 0) 
-        assign dataAvailable = !isDone;
+        assign dataAvailable = !rst & !isDone;
     else begin
         integer delayTillNext = MIN_OUTPUT_DELAY;
-        assign dataAvailable = !isDone & (delayTillNext == 0);
+        assign dataAvailable = !rst & !isDone & (delayTillNext == 0);
         always @(posedge clk) begin
             if(dataAvailable & requestData)
                 delayTillNext <= MIN_OUTPUT_DELAY;
@@ -50,11 +51,17 @@ generate
 endgenerate
 
 always @(posedge clk) begin
-    if(hasStarted & (index == ADDR_DEPTH - 1)) isDone <= 1;
-    
-    if(dataAvailable & requestData) begin
-        index <= index + 1;
-        hasStarted <= 1;
+    if(rst) begin
+        index <= 0;
+        hasStarted <= 0;
+        isDone <= 0;
+    end else begin
+        if(hasStarted & (index == ADDR_DEPTH - 1)) isDone <= 1;
+        
+        if(dataAvailable & requestData) begin
+            index <= index + 1;
+            hasStarted <= 1;
+        end
     end
 end
 
@@ -63,13 +70,14 @@ endmodule
 
 module dataProvider #(parameter FILE_NAME = "testData.mem", parameter DATA_WIDTH = 256, parameter ADDR_DEPTH = 4096, parameter MIN_OUTPUT_DELAY = 0) (
     input clk,
+    input rst,
     output [$clog2(ADDR_DEPTH)-1:0] index,
     output dataAvailable,
     input requestData,
     output[DATA_WIDTH-1:0] data
 );
 
-indexProvider #(ADDR_DEPTH, MIN_OUTPUT_DELAY) ip(clk, index, dataAvailable, requestData);
+indexProvider #(ADDR_DEPTH, MIN_OUTPUT_DELAY) ip(clk, rst, index, dataAvailable, requestData);
 
 reg[DATA_WIDTH-1:0] dataTable[ADDR_DEPTH-1:0];
 initial $readmemb(FILE_NAME, dataTable);

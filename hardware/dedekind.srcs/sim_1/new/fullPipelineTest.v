@@ -27,6 +27,11 @@ initial begin
     clk = 0;
     forever #1 clk = ~clk;
 end
+reg rst;
+initial begin
+    rst = 1;
+    #20 rst = 0;
+end
 
 wire[14:0] botIndex;
 wire[127:0] top, botA, botC;
@@ -41,6 +46,7 @@ permuteCheck2 checkCD(top, botC, isBotValid, {validBotC, validBotD});
 
 fullPipeline elementUnderTest (
     .clk(clk),
+    .rst(rst),
     .top(top),
     .botA(botA), // botB = varSwap(5,6)(A)
     .botC(botC), // botD = varSwap(5,6)(C)
@@ -57,6 +63,7 @@ fullPipeline elementUnderTest (
 
 indexProvider #(32000) indexProvider (
     .clk(clk),
+    .rst(rst),
     .index(botIndex),
     .dataAvailable(isBotValid),
     .requestData(!almostFull)

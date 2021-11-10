@@ -22,6 +22,7 @@
 // sums all 24 permutations of variables 3,4,5,6.
 module pipeline24Pack(
     input clk,
+    input rst,
     
     input[127:0] top,
     input[127:0] bot,
@@ -73,12 +74,12 @@ wire[5:0] fullWires;
 wire[5:0] almostFullWires;
 
 // 6 pipelines. Each has two as unrelated as possible bot permutations
-wire[37:0] sum1; wire[2:0] count1; fullPipeline p1(clk, top, botABCD, botDCBA, botIndex, isBotValid, vABCD, vABDC, vDCBA, vDCAB, fullWires[0], almostFullWires[0], sum1, count1); // ABCD -> DCBA  or CDAB
-wire[37:0] sum2; wire[2:0] count2; fullPipeline p2(clk, top, botBACD, botCDAB, botIndex, isBotValid, vBACD, vBADC, vCDAB, vCDBA, fullWires[1], almostFullWires[1], sum2, count2); // BACD -> DCBA  or CDAB
-wire[37:0] sum3; wire[2:0] count3; fullPipeline p3(clk, top, botCBAD, botDACB, botIndex, isBotValid, vCBAD, vCBDA, vDACB, vDABC, fullWires[2], almostFullWires[2], sum3, count3); // CBAD -> ADCB* or DACB
-wire[37:0] sum4; wire[2:0] count4; fullPipeline p4(clk, top, botDBCA, botCABD, botIndex, isBotValid, vDBCA, vDBAC, vCABD, vCADB, fullWires[3], almostFullWires[3], sum4, count4); // DBCA -> ACBD* or CABD
-wire[37:0] sum5; wire[2:0] count5; fullPipeline p5(clk, top, botACBD, botBDCA, botIndex, isBotValid, vACBD, vACDB, vBDCA, vBDAC, fullWires[4], almostFullWires[4], sum5, count5); // ACBD -> DBCA* or BDCA
-wire[37:0] sum6; wire[2:0] count6; fullPipeline p6(clk, top, botADCB, botBCAD, botIndex, isBotValid, vADCB, vADBC, vBCAD, vBCDA, fullWires[5], almostFullWires[5], sum6, count6); // ADCB -> CBAD* or BCAD
+wire[37:0] sum1; wire[2:0] count1; fullPipeline p1(clk, rst, top, botABCD, botDCBA, botIndex, isBotValid, vABCD, vABDC, vDCBA, vDCAB, fullWires[0], almostFullWires[0], sum1, count1); // ABCD -> DCBA  or CDAB
+wire[37:0] sum2; wire[2:0] count2; fullPipeline p2(clk, rst, top, botBACD, botCDAB, botIndex, isBotValid, vBACD, vBADC, vCDAB, vCDBA, fullWires[1], almostFullWires[1], sum2, count2); // BACD -> DCBA  or CDAB
+wire[37:0] sum3; wire[2:0] count3; fullPipeline p3(clk, rst, top, botCBAD, botDACB, botIndex, isBotValid, vCBAD, vCBDA, vDACB, vDABC, fullWires[2], almostFullWires[2], sum3, count3); // CBAD -> ADCB* or DACB
+wire[37:0] sum4; wire[2:0] count4; fullPipeline p4(clk, rst, top, botDBCA, botCABD, botIndex, isBotValid, vDBCA, vDBAC, vCABD, vCADB, fullWires[3], almostFullWires[3], sum4, count4); // DBCA -> ACBD* or CABD
+wire[37:0] sum5; wire[2:0] count5; fullPipeline p5(clk, rst, top, botACBD, botBDCA, botIndex, isBotValid, vACBD, vACDB, vBDCA, vBDAC, fullWires[4], almostFullWires[4], sum5, count5); // ACBD -> DBCA* or BDCA
+wire[37:0] sum6; wire[2:0] count6; fullPipeline p6(clk, rst, top, botADCB, botBCAD, botIndex, isBotValid, vADCB, vADBC, vBCAD, vBCDA, fullWires[5], almostFullWires[5], sum6, count6); // ADCB -> CBAD* or BCAD
 
 // combine outputs
 wire[38:0] sum123 = sum1 + sum2 + sum3;

@@ -4,6 +4,7 @@
 
 module computeModule #(parameter EXTRA_DATA_WIDTH = 14) (
     input clk,
+    input rst,
     input[127:0] top,
     input[127:0] graphIn,
     input graphAvailable,
@@ -37,14 +38,21 @@ countConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH)) core(
     .done(done)
 );
 `else
-pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH)) core(
+
+wire coreRequestsGraph;
+reg requestGraphD;
+always @(posedge clk) requestGraphD <= coreRequestsGraph;
+assign requestGraph = requestGraphD;
+
+pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATENCY(1)) core(
     .clk(clk), 
+    .rst(rst),
     .top(top),
     
     // input side
-    .request(requestGraph), 
+    .request(coreRequestsGraph), 
     .graphIn(singletonEliminatedGraph), 
-    .start(graphAvailable & requestGraph), 
+    .start(graphAvailable & requestGraphD), 
     .connectCountIn(connectCountIn), 
     .extraDataIn(extraDataIn),
     
@@ -60,6 +68,7 @@ endmodule
 
 module fullPipeline(
     input clk,
+    input rst,
     
     input[127:0] top,
     input[127:0] botA, // botB = varSwap(5,6)(A)
@@ -111,6 +120,7 @@ wire[5:0] countOut;
 
 computeModule #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH + 2)) computeCore(
     .clk(clk),
+    .rst(rst),
     .top(top),
     .graphIn(graphIn),
     .graphAvailable(graphAvailable),
