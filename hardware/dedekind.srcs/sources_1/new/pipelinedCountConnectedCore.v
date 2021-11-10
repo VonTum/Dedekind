@@ -64,6 +64,79 @@ endgenerate
 
 endmodule
 
+`define EXPLORATION_PIPE_STAGES 0
+`define NEW_SEED_PIPE_STAGES 0
+
+module explorationPipeline(
+    input clk,
+    input[127:0] top,
+    
+    input[127:0] leftoverGraphIn,
+    input[127:0] curExtendingIn,
+    
+    output[127:0] leftoverGraphOut,
+    output[127:0] reducedGraphOut,
+    output[127:0] extendedOut,
+    output runEndOut,
+    output shouldGrabNewSeedOut
+);
+
+wire[127:0] monotonizedUp; monotonizeUp mUp(curExtendingIn, monotonizedUp);
+wire[127:0] midPoint = monotonizedUp & top;
+
+wire[127:0] monotonizedDown; monotonizeDown mDown(midPoint, monotonizedDown);
+wire[127:0] extended = leftoverGraphIn & monotonizedDown;
+wire[127:0] reducedGraph = leftoverGraphIn & ~monotonizedDown;
+
+wire runEnd = (reducedGraph == 0); // the new leftoverGraph is empty, request a new graph
+wire extentionFinished = (extended == midPoint); // no change? Then grab the next seed to extend
+
+assign leftoverGraphOut = leftoverGraphIn;
+assign reducedGraphOut = reducedGraph;
+assign extendedOut = extended;
+assign runEndOut = runEnd;
+
+// a single OR gate, to define shouldGrabNewSeed. 
+// VERY INTERESTING! This was also a horrible bug. The standard path is just shouldGrabNewSeed = extentionFinished. 
+// But if the resulting left over graph is empty, then we must have reached the end of the exploration, so we can quit early!
+// This saves a single cycle in rare cases, and it fixes the aforementioned horrible bug :P
+assign shouldGrabNewSeedOut = runEnd | extentionFinished;
+
+endmodule
+
+module newSeedProductionPipeline (
+    input clk,
+    input[127:0] graphIn,
+    input[127:0] extendedIn,
+    input[5:0] connectCountIn,
+    input shouldGrabNewSeedIn,
+    
+    output[127:0] graphOut,
+    output[127:0] newCurExtendingOut,
+    output[5:0] connectCountOut
+);
+
+wire graphInIsZero;
+wire[127:0] finalCurExtending;
+newSeedProducer newSeedProducer(
+    .graphIn(graphIn),
+    .isZero(graphInIsZero),
+    .shouldGrabNewSeedIn(shouldGrabNewSeedIn),
+    .extendedIn(extendedIn),
+    .newExtendingOut(finalCurExtending)
+);
+
+// Now we can finally produce the resulting connectionCount
+wire shouldIncrementConnectionCount = shouldGrabNewSeedIn & !graphInIsZero;
+
+wire[5:0] finalConnectionCount = connectCountIn + shouldIncrementConnectionCount;
+
+assign graphOut = graphIn;
+assign newCurExtendingOut = finalCurExtending;
+assign connectCountOut = finalConnectionCount;
+
+endmodule
+
 module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10) (
 	 input clk,
 	 input[127:0] top, // top wire remains constant for the duration of a run, no need to factor it into pipeline
@@ -83,24 +156,19 @@ module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10) (
 
 reg[127:0] leftoverGraph = 0;
 reg[127:0] curExtending = 0;
-reg[5:0] connectionCount;
-reg valid = 0;
-reg[EXTRA_DATA_WIDTH-1:0] extraData;
+wire[5:0] connectionCount;
+wire valid;
+wire[EXTRA_DATA_WIDTH-1:0] extraData;
 
+
+wire[127:0] leftoverGraphAfterExtention;
+wire[127:0] reducedGraph;
+wire[127:0] extended;
+wire runEnd;
+wire shouldGrabNewSeed;
 // PIPELINE STEP 1
-// start with floodfill of the previous curExtending
-wire[127:0] monotonizedUp; monotonizeUp mUp(curExtending, monotonizedUp);
-wire[127:0] midPoint = monotonizedUp & top;
+explorationPipeline explorationPipe(clk, top, leftoverGraph, curExtending, leftoverGraphAfterExtention, reducedGraph, extended, runEnd, shouldGrabNewSeed);
 
-// PIPELINE STEP 2
-// Floodfill monotonizeDown step
-wire[127:0] monotonizedDown; monotonizeDown mDown(midPoint, monotonizedDown);
-wire[127:0] extended = leftoverGraph & monotonizedDown;
-wire[127:0] reducedGraph = leftoverGraph & ~monotonizedDown;
-
-// PIPELINE STEP 3
-wire extentionFinished = (extended == midPoint); // no change? Then grab the next seed to extend
-wire runEnd = (reducedGraph == 0); // the new leftoverGraph is empty, request a new graph
 assign request = runEnd;
 
 // PIPELINE STEP 4
@@ -109,42 +177,30 @@ assign done = valid & runEnd;
 assign extraDataOut = extraData;
 assign connectCount = connectionCount;
 
-// a single OR gate, to define shouldGrabNewSeed. 
-// VERY INTERESTING! This was also a horrible bug. The standard path is just shouldGrabNewSeed = extentionFinished. 
-// But if the resulting left over graph is empty, then we must have reached the end of the exploration, so we can quit early!
-// This saves a single cycle in rare cases, and it fixes the aforementioned horrible bug :P
-wire shouldGrabNewSeed = extentionFinished | runEnd;
-
 // PIPELINE STEP 5
 // Inputs become available
-wire[127:0] finalLeftoverGraph = start ? graphIn : (shouldGrabNewSeed ? reducedGraph : leftoverGraph); // synthesizes to 128 5-in 1-out LUTs
+wire[127:0] selectedLeftoverGraph = start ? graphIn : (shouldGrabNewSeed ? reducedGraph : leftoverGraph); // synthesizes to 128 5-in 1-out LUTs
 wire[EXTRA_DATA_WIDTH-1:0] finalExtraData = runEnd ? extraDataIn : extraData;
 wire finalValid = (valid & !runEnd) | start;
 wire[5:0] selectedConnectCount = start ? connectCountIn : connectionCount;
 
 // PIPELINE STEP 6
-// Start generation of new seed, find index and test if graph is 0
-wire finalLeftoverGraphIsZero;
+// Generation of new seed, find index and test if graph is 0 to increment connectCount
+wire[127:0] finalLeftoverGraph;
 wire[127:0] finalCurExtending;
-newSeedProducer newSeedProducer(
-    .graphIn(finalLeftoverGraph),
-    .isZero(finalLeftoverGraphIsZero),
-    .shouldGrabNewSeedIn(shouldGrabNewSeed),
-    .extendedIn(extended),
-    .newExtendingOut(finalCurExtending)
-);
+wire[5:0] finalConnectionCount;
+newSeedProductionPipeline newSeedProductionPipe (clk, selectedLeftoverGraph, extended, selectedConnectCount, shouldGrabNewSeed, finalLeftoverGraph, finalCurExtending, finalConnectionCount);
 
-// Now we can finally produce the resulting connectionCount
-wire shouldIncrementConnectionCount = shouldGrabNewSeed & !finalLeftoverGraphIsZero;
-
-wire[5:0] finalConnectionCount = selectedConnectCount + shouldIncrementConnectionCount;
+hyperpipe #(.CYCLES(1) .WIDTH(6)) connectCountPipe(clk, finalConnectionCount, connectionCount);
+hyperpipe #(.CYCLES(1), .WIDTH(1)) validPipe(clk, finalValid, valid);
+hyperpipe #(.CYCLES(1), .WIDTH(EXTRA_DATA_WIDTH)) extraDataPipe(clk, finalExtraData, extraData);
 
 // PIPELINE LOOPBACK
 always @(posedge clk) begin
     leftoverGraph <= finalLeftoverGraph;
     curExtending <= finalCurExtending;
-    connectionCount <= finalConnectionCount;
-    valid <= finalValid;
-    extraData <= finalExtraData;
+    //connectionCount <= finalConnectionCount;
+    //valid <= finalValid;
+    //extraData <= finalExtraData;
 end
 endmodule
