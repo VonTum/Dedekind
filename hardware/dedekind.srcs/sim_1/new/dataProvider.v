@@ -33,14 +33,16 @@ initial index = 0;
 reg hasStarted = 0;
 reg isDone = 0;
 
+wire dataShouldBeAvailable;
+
 generate
     if(MIN_OUTPUT_DELAY == 0) 
-        assign dataAvailable = !rst & !isDone;
+        assign dataShouldBeAvailable = !isDone;
     else begin
         integer delayTillNext = MIN_OUTPUT_DELAY;
-        assign dataAvailable = !rst & !isDone & (delayTillNext == 0);
+        assign dataShouldBeAvailable = !isDone & (delayTillNext == 0);
         always @(posedge clk) begin
-            if(dataAvailable & requestData)
+            if(dataShouldBeAvailable & requestData)
                 delayTillNext <= MIN_OUTPUT_DELAY;
             else begin
                 if(delayTillNext > 0)
@@ -50,8 +52,20 @@ generate
     end
 endgenerate
 
+reg syncRst;
+always @(posedge rst) begin
+    syncRst <= 1;
+end
 always @(posedge clk) begin
-    if(rst) begin
+    if(!rst) begin
+        syncRst <= 0;
+    end
+end
+
+assign dataAvailable = dataShouldBeAvailable & !syncRst;
+
+always @(posedge clk) begin
+    if(syncRst) begin
         index <= 0;
         hasStarted <= 0;
         isDone <= 0;

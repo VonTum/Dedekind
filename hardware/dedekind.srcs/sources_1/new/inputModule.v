@@ -28,11 +28,89 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 
-module inputModule (
+module inputModule6 #(parameter EXTRA_DATA_WIDTH = 12) (
     input clk,
     
     // input side
-    input[127:0] top,
+    input[127:0] bot,
+    input anyBotPermutIsValid, // == botIsValid & |validBotPermutesIn
+    input[5:0] validBotPermutesIn, // == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
+    input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
+    output[4:0] fifoFullness,
+    
+    // output side
+    input requestBot,
+    output[127:0] botOut,
+    output botOutValid,
+    output[2:0] selectedBotPermutation,
+    output[EXTRA_DATA_WIDTH-1:0] extraDataOut
+);
+
+wire fifoEmpty;
+wire popFifo;
+wire[128+EXTRA_DATA_WIDTH+6-1:0] dataFromFifo;
+
+`ifdef USE_FIFO_IP
+pipelineFifo botQueue (
+    .clock(clk),
+    
+    .wrreq(anyBotPermutIsValid),
+    .data({bot,validBotPermutesIn,extraDataIn}),
+    .full(_unused_full),
+    
+    .rdreq(popFifo & !fifoEmpty),
+    .q(dataFromFifo),
+    .empty(fifoEmpty),
+	 
+	 .usedw(fifoFullness)
+);
+`else
+FIFO #(.WIDTH(128+6+EXTRA_DATA_WIDTH), .DEPTH_LOG2(`FIFO_DEPTH_LOG2)) botQueue (
+    .clk(clk),
+    
+    .writeEnable(anyBotPermutIsValid),
+    .dataIn({bot,validBotPermutesIn,extraDataIn}),
+    .full(_unused_full),
+    
+    .readEnable(popFifo & !fifoEmpty),
+    .dataOut(dataFromFifo),
+    .empty(fifoEmpty),
+	 
+    .usedw(fifoFullness)
+);
+`endif
+
+wire fifoDataAvailable = !fifoEmpty;
+wire[127:0] botFromFifo;
+wire[5:0] validBotPermutesFromFifo;// == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
+wire[EXTRA_DATA_WIDTH-1:0] extraDataFromFifo;
+
+assign {botFromFifo, validBotPermutesFromFifo, extraDataFromFifo} = dataFromFifo;
+
+botPermuter #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH)) permuter (
+    .clk(clk),
+    
+    // input side
+    .botIn(botFromFifo),
+    .botInIsValid(fifoDataAvailable),
+    .validBotPermutesIn(validBotPermutesFromFifo), 
+    .extraDataIn(extraDataFromFifo),
+    .requestBotFromInput(popFifo),
+    
+    // output side
+    .requestBot(requestBot),
+    .permutedBotValid(botOutValid),
+    .permutedBot(botOut),
+    .selectedPermutationOut(selectedBotPermutation),
+    .extraDataOut(extraDataOut)
+);
+
+endmodule
+
+module inputModule4 (
+    input clk,
+    
+    // input side
     input[127:0] botA, // botB = varSwap(5,6)(A)
     input[127:0] botC, // botD = varSwap(5,6)(C)
     input[11:0] botIndex,
@@ -45,13 +123,13 @@ module inputModule (
     
     // output side, to countConnectedCore
     input dataRequested,
-    output graphAvailable,
-    output[127:0] graphOut,
-    output[11:0] graphIndex,
-    output[1:0] graphSubIndex
+    output botOutAvailable,
+    output[127:0] botOut,
+    output[11:0] botOutIndex,
+    output[1:0] botOutSubIndex
 );
 
-wire readEnable = dataRequested & graphAvailable;
+wire readEnable = dataRequested & botOutAvailable;
 
 wire fullAB, fullCD;
 wire emptyAB, emptyCD;
@@ -154,43 +232,41 @@ wire isSwappedVariant;
 swapGraphMaker graphMaker(
     .clk(clk),
     
-    .top(top),
     .bot(schedulerBotOut),
     .unswappedBotValid(unswappedBotBelowOut),
     .swappedBotValid(swappedBotBelowOut),
     .dataInAvailable(schedulerDataAvailable),
     .readEnableBackend(schedulerReadEnable),
     
-    .graph(graphOut),
+    .permutedBot(botOut),
     .readEnable(readEnable),
     .isSwappedVariant(isSwappedVariant),
-    .dataAvailable(graphAvailable)
+    .dataAvailable(botOutAvailable)
 );
 
-reg[11:0] graphIndexReg;
+reg[11:0] botOutIndexReg;
 reg schedulerChoiceReg;
 always @(posedge clk) begin
     if(schedulerReadEnable) begin
-        graphIndexReg <= schedulerBotIndexOut;
+        botOutIndexReg <= schedulerBotIndexOut;
         schedulerChoiceReg <= chosenFifo;
     end
 end
-assign graphIndex = graphIndexReg;
-assign graphSubIndex = {schedulerChoiceReg, isSwappedVariant};
+assign botOutIndex = botOutIndexReg;
+assign botOutSubIndex = {schedulerChoiceReg, isSwappedVariant};
 
 endmodule
 
 module swapGraphMaker (
     input clk,
     
-    input[127:0] top,
     input[127:0] bot,
     input unswappedBotValid,
     input swappedBotValid,
     input dataInAvailable,
     output readEnableBackend,
     
-    output [127:0] graph,
+    output [127:0] permutedBot,
     input readEnable,
     output isSwappedVariant,
     output reg dataAvailable
@@ -203,13 +279,11 @@ wire twoLeft = doUnswapped & doSwapped;
 wire tryingToRead = !dataAvailable | dataAvailable & !twoLeft & readEnable;
 assign readEnableBackend = tryingToRead & dataInAvailable;
 
-wire[127:0] resultingBot;
-assign resultingBot[31:0] = curBot[31:0];
-assign resultingBot[127:96] = curBot[127:96];
-assign resultingBot[63:32] = doSwapped ? curBot[95:64] : curBot[63:32];
-assign resultingBot[95:64] = doSwapped ? curBot[63:32] : curBot[95:64];
+assign permutedBot[31:0] = curBot[31:0];
+assign permutedBot[127:96] = curBot[127:96];
+assign permutedBot[63:32] = doSwapped ? curBot[95:64] : curBot[63:32];
+assign permutedBot[95:64] = doSwapped ? curBot[63:32] : curBot[95:64];
 
-assign graph = top & ~resultingBot;
 assign isSwappedVariant = doSwapped;
 
 initial dataAvailable = 0;

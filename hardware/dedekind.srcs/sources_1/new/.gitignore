@@ -4,10 +4,12 @@
 *.rpt
 *.history
 *.bak
+*.ini
 #*.ip
 .qsys_edit/
 output_files/
 qdb/
 ip/
 tmp-clearbox/
+simulation/
 #**/synth/

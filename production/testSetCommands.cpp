@@ -134,13 +134,15 @@ void pipelineTestSet(size_t count) {
 	testSet.close();
 }
 
-void pipeline24PackTestSet(size_t count) {
+void pipelinePackTestSet(size_t count, unsigned int permuteStartVar, std::string outFile) {
 	constexpr unsigned int Variables = 7;
 	std::vector<TopBots<Variables>> topBots = readTopBots<Variables>(5000);
 
-	std::default_random_engine generator(std::chrono::high_resolution_clock::now().time_since_epoch().count());
+	auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+	std::default_random_engine generator(seed);
+	std::cout << "Seed: " << seed << std::endl;
 
-	std::ofstream testSet(FileName::pipeline24PackTestSet(Variables)); // plain text file
+	std::ofstream testSet(outFile); // plain text file
 
 	const TopBots<Variables>& selectedTop = topBots[std::uniform_int_distribution<size_t>(0, topBots.size() - 1)(generator)];
 	std::uniform_int_distribution<size_t> botSelector(0, selectedTop.bots.size() - 1);
@@ -157,7 +159,7 @@ void pipeline24PackTestSet(size_t count) {
 		uint64_t resultingBotSum = 0;
 		uint16_t resultingBotCount = 0;
 
-		bot.forEachPermutation(3,7, [&](const Monotonic<Variables>& permBot) {
+		bot.forEachPermutation(permuteStartVar, 7, [&](const Monotonic<Variables>& permBot) {
 			if(permBot <= top) {
 				resultingBotSum += computePCoefficientAllowBadBots(top, permBot);
 				resultingBotCount++;
@@ -234,5 +236,6 @@ CommandSet testSetCommands{"Test Set Generation", {
 	{"pipelineTestSet6", [](const std::string& size) {pipelineTestSet<6>(std::stoi(size)); }},
 	{"pipelineTestSet7", [](const std::string& size) {pipelineTestSet<7>(std::stoi(size)); }},
 
-	{"pipeline24PackTestSet", [](const std::string& size) {pipeline24PackTestSet(std::stoi(size)); }},
+	{"pipeline6TestSet", [](const std::string& size) {pipelinePackTestSet(std::stoi(size), 4, FileName::pipeline6PackTestSet(7)); }},
+	{"pipeline24PackTestSet", [](const std::string& size) {pipelinePackTestSet(std::stoi(size), 3, FileName::pipeline24PackTestSet(7)); }},
 }};

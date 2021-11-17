@@ -15,6 +15,7 @@ std::string allIntervalSymmetries(unsigned int Variables);
 std::string benchmarkSet(unsigned int Variables);
 std::string benchmarkSetTopBots(unsigned int Variables);
 std::string pipelineTestSet(unsigned int Variables);
+std::string pipeline6PackTestSet(unsigned int Variables);
 std::string pipeline24PackTestSet(unsigned int Variables);
 std::string permuteCheck24TestSet(unsigned int Variables);
 

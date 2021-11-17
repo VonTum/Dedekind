@@ -44,7 +44,7 @@ wire validBotA, validBotB, validBotC, validBotD;
 permuteCheck2 checkAB(top, botA, isBotValid, {validBotA, validBotB});
 permuteCheck2 checkCD(top, botC, isBotValid, {validBotC, validBotD});
 
-fullPipeline elementUnderTest (
+fullPipeline4 elementUnderTest (
     .clk(clk),
     .rst(rst),
     .top(top),
