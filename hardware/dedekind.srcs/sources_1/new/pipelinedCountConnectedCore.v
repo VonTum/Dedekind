@@ -1,5 +1,12 @@
 `timescale 1ns / 1ps
 
+`define EXPLORATION_PIPE_STAGES 6
+`define EXPLORATION_PIPE_LEFTOVER_GRAPH_DELAYS 3
+`define NEW_SEED_PIPE_STAGES 3
+`define FIRST_BIT_ANALYSIS_STAGES 2
+
+
+
 module hasFirstBitAnalysis(
     input clk,
     input[127:0] graphIn,
@@ -80,12 +87,12 @@ endmodule
 module newSeedProductionPipeline (
     input clk,
     input[127:0] graphIn,
-    input[127:0] extendedIn,
-    input[5:0] connectCountIn,
-    input shouldGrabNewSeedIn,
+    input[127:0] graphDD,
+    input[127:0] extendedDD,
+    input shouldGrabNewSeedDD,
     
-    output[127:0] newCurExtendingOut,
-    output reg[5:0] connectCountOut
+    output shouldIncrementConnectionCount, // provided after `FIRST_BIT_ANALYSIS_STAGES cycles
+    output[127:0] newCurExtendingOut
 );
 
 // PIPELINE STEP 1 and 2
@@ -100,15 +107,6 @@ hasFirstBitAnalysis firstBitAnalysis(
     hasFirstBit16
 );
 
-reg[127:0] graphD; always @(posedge clk) graphD <= graphIn;
-reg[127:0] graphDD; always @(posedge clk) graphDD <= graphD;
-reg[127:0] extendedD; always @(posedge clk) extendedD <= extendedIn;
-reg[127:0] extendedDD; always @(posedge clk) extendedDD <= extendedD;
-reg shouldGrabNewSeedD; always @(posedge clk) shouldGrabNewSeedD <= shouldGrabNewSeedIn;
-reg shouldGrabNewSeedDD; always @(posedge clk) shouldGrabNewSeedDD <= shouldGrabNewSeedD;
-reg[5:0] connectCountD; always @(posedge clk) connectCountD <= connectCountIn;
-reg[5:0] connectCountDD; always @(posedge clk) connectCountDD <= connectCountD;
-
 // PIPELINE STEP 3
 newExtendingProducer resultProducer(
     clk,
@@ -122,15 +120,9 @@ newExtendingProducer resultProducer(
 );
 
 // Now we can finally produce the resulting connectionCount
-wire shouldIncrementConnectionCount = shouldGrabNewSeedDD & (hasBit64[0] | hasBit64[1]);
-always @(posedge clk) connectCountOut <= connectCountDD + shouldIncrementConnectionCount;
+assign shouldIncrementConnectionCount = shouldGrabNewSeedDD & (hasBit64[0] | hasBit64[1]);
 
 endmodule
-
-
-`define EXPLORATION_PIPE_STAGES 6
-`define EXPLORATION_PIPE_LEFTOVER_GRAPH_DELAYS 3
-`define NEW_SEED_PIPE_STAGES 3
 
 module explorationPipeline(
     input clk,
@@ -192,8 +184,28 @@ assign shouldGrabNewSeedOut = runEnd | &extentionFinished;
 
 endmodule
 
+module graphSelector(
+    input clk,
+    input rst,
+    input start, 
+    input shouldGrabNewSeed,
+    input[127:0] graphIn,
+    input[127:0] leftoverGraph,
+    input[127:0] reducedGraph,
+    output reg[127:0] selectedGraph
+);
+
+always @(posedge clk) begin
+    if(rst) selectedGraph <= 0;
+    else if(start) selectedGraph <= graphIn; // synthesizes to 128 5-in 1-out LUTs
+    else if(shouldGrabNewSeed) selectedGraph <= reducedGraph;
+    else selectedGraph <= leftoverGraph;
+end
+
+endmodule
+
 // requires a reset signal of at least `EXPLORATION_PIPE_STAGES + `NEW_SEED_PIPE_STAGES cycles, or more!
-module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter DATA_IN_LATENCY = 4) (
+module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter DATA_IN_LATENCY = 4, parameter CONNECT_COUNT_IN_LAG = 4) (
 	 input clk,
 	 input rst,
 	 input[127:0] top, // top wire remains constant for the duration of a run, no need to factor it into pipeline
@@ -202,7 +214,7 @@ module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter 
 	 output request,
 	 input[127:0] graphIn,
 	 input start,
-	 input[5:0] connectCountIn,
+	 input[5:0] connectCountInDelayed, // Should be valid CONNECT_COUNT_IN_LAG clock cycles after start is asserted
 	 input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
 	 
 	 // output side
@@ -245,20 +257,15 @@ hyperpipe #(.CYCLES(DATA_IN_LATENCY), .WIDTH(128)) extendedDataInPipe(clk, exten
 hyperpipe #(.CYCLES(DATA_IN_LATENCY), .WIDTH(1)) runEndDataInPipe(clk, request, runEnd);
 hyperpipe #(.CYCLES(DATA_IN_LATENCY), .WIDTH(1)) shouldGrabNewSeedDataInPipe(clk, shouldGrabNewSeedPreDelay, shouldGrabNewSeed);
 hyperpipe #(.CYCLES(DATA_IN_LATENCY), .WIDTH(1)) validDataInPipe(clk, valid, validPostDelay);
-hyperpipe #(.CYCLES(DATA_IN_LATENCY), .WIDTH(6)) connectionCountDataInPipe(clk, connectionCount, connectionCountPostDelay);
+hyperpipe #(.CYCLES(DATA_IN_LATENCY + CONNECT_COUNT_IN_LAG), .WIDTH(6)) connectionCountDataInPipe(clk, connectionCount, connectionCountPostDelay);
 hyperpipe #(.CYCLES(DATA_IN_LATENCY), .WIDTH(EXTRA_DATA_WIDTH)) extraDataDataInPipe(clk, extraData, extraDataPostDelay);
 
 // PIPELINE STEP 5
 // Inputs become available
-reg[127:0] selectedLeftoverGraph;
-always @(posedge clk, posedge rst) begin
-    if(rst) selectedLeftoverGraph <= 0;
-    else if(start) selectedLeftoverGraph <= graphIn; // synthesizes to 128 5-in 1-out LUTs
-    else if(shouldGrabNewSeed) selectedLeftoverGraph <= reducedGraph;
-    else selectedLeftoverGraph <= leftoverGraphForSelection;
-end
+wire[127:0] selectedLeftoverGraph;
+graphSelector grSelector(clk, rst, start, shouldGrabNewSeed, graphIn, leftoverGraphForSelection, reducedGraph, selectedLeftoverGraph);
+
 reg[EXTRA_DATA_WIDTH-1:0] finalExtraData; always @(posedge clk) finalExtraData <= runEnd ? extraDataIn : extraDataPostDelay;
-reg[5:0] selectedConnectCount; always @(posedge clk) selectedConnectCount <= start ? connectCountIn : connectionCountPostDelay;
 reg finalValid; 
 always @(posedge clk) begin
     if(start) 
@@ -268,16 +275,30 @@ always @(posedge clk) begin
     else
         finalValid <= validPostDelay;
 end
-reg shouldGrabNewSeedDelayed; always @(posedge clk) shouldGrabNewSeedDelayed <= shouldGrabNewSeed;
-reg[127:0] extendedDelayed; always @(posedge clk) extendedDelayed <= extended;
-
 // PIPELINE STEP 6
 // Generation of new seed, find index and test if graph is 0 to increment connectCount
-wire[5:0] finalConnectionCount;
-newSeedProductionPipeline newSeedProductionPipe (clk, selectedLeftoverGraph, extendedDelayed, selectedConnectCount, shouldGrabNewSeedDelayed, curExtending, finalConnectionCount);
+wire shouldGrabNewSeedDelayed;
+wire[127:0] extendedDelayed;
+hyperpipe #(.WIDTH(1), .CYCLES(`FIRST_BIT_ANALYSIS_STAGES+1)) shouldGrabNewSeedPipe(clk, shouldGrabNewSeed, shouldGrabNewSeedDelayed);
+hyperpipe #(.WIDTH(128), .CYCLES(`FIRST_BIT_ANALYSIS_STAGES+1)) extendedPipe(clk, extended, extendedDelayed);
 
-hyperpipe #(.CYCLES(`NEW_SEED_PIPE_STAGES + `EXPLORATION_PIPE_LEFTOVER_GRAPH_DELAYS), .WIDTH(128)) leftoverGraphPipe(clk, selectedLeftoverGraph, leftoverGraph);
-hyperpipe #(.CYCLES(`EXPLORATION_PIPE_STAGES), .WIDTH(6)) connectCountPipe(clk, finalConnectionCount, connectionCount);
+wire[127:0] selectedLeftoverGraphDD;
+hyperpipe #(.WIDTH(128), .CYCLES(`FIRST_BIT_ANALYSIS_STAGES)) graphPipe(clk, selectedLeftoverGraph, selectedLeftoverGraphDD);
+
+wire shouldIncrementConnectionCount;
+newSeedProductionPipeline newSeedProductionPipe (clk, selectedLeftoverGraph, selectedLeftoverGraphDD, extendedDelayed, shouldGrabNewSeedDelayed, shouldIncrementConnectionCount, curExtending);
+
+wire startDelayed;
+hyperpipe #(.CYCLES(CONNECT_COUNT_IN_LAG), .WIDTH(1)) startPipe(clk, start, startDelayed);
+reg[5:0] selectedConnectCount; always @(posedge clk) selectedConnectCount <= startDelayed ? connectCountInDelayed : connectionCountPostDelay;
+
+wire shouldIncrementConnectionCountDelayed;
+hyperpipe #(.CYCLES(CONNECT_COUNT_IN_LAG-2), .WIDTH(1)) shouldIncrementConnectionCountPipe(clk, shouldIncrementConnectionCount, shouldIncrementConnectionCountDelayed);
+reg[5:0] finalConnectionCount;
+always @(posedge clk) finalConnectionCount <= selectedConnectCount + shouldIncrementConnectionCountDelayed;
+
+hyperpipe #(.CYCLES(-`FIRST_BIT_ANALYSIS_STAGES + `NEW_SEED_PIPE_STAGES + `EXPLORATION_PIPE_LEFTOVER_GRAPH_DELAYS), .WIDTH(128)) leftoverGraphPipe(clk, selectedLeftoverGraphDD, leftoverGraph);
+hyperpipe #(.CYCLES(-(CONNECT_COUNT_IN_LAG-2) + `EXPLORATION_PIPE_STAGES), .WIDTH(6)) connectCountPipe(clk, finalConnectionCount, connectionCount);
 hyperpipe #(.CYCLES(`EXPLORATION_PIPE_STAGES + `NEW_SEED_PIPE_STAGES), .WIDTH(1)) validPipe(clk, finalValid, valid);
 hyperpipe #(.CYCLES(`EXPLORATION_PIPE_STAGES + `NEW_SEED_PIPE_STAGES), .WIDTH(EXTRA_DATA_WIDTH)) extraDataPipe(clk, finalExtraData, extraData);
 
