@@ -32,7 +32,45 @@ always @(posedge clk) begin
     blockWriteAddr <= readEnable ? readAddr : writeAddr;
 end
 
-simpleDualPortM20K_20b1024 memBlock01 (
+`ifdef USE_QUADPORTRAM_IP
+collectorM20K memBlock01 (
+    .clock(clk),
+	 
+    .wren(blockWrite),
+    .wraddress(blockWriteAddr),
+    .byteena_a(writeMasks[1:0]),
+    .data({blockWriteData,blockWriteData}),
+	 
+    .rden(readEnable),
+    .rdaddress(readAddr),
+    .q(readData[19:00])
+);
+collectorM20K memBlock23 (
+    .clock(clk),
+	 
+    .wren(blockWrite),
+    .wraddress(blockWriteAddr),
+    .byteena_a(writeMasks[3:2]),
+    .data({blockWriteData,blockWriteData}),
+	 
+    .rden(readEnable),
+    .rdaddress(readAddr),
+    .q(readData[39:20])
+);
+collectorM20K memBlock45 (
+    .clock(clk),
+	 
+    .wren(blockWrite),
+    .wraddress(blockWriteAddr),
+    .byteena_a(writeMasks[5:4]),
+    .data({blockWriteData,blockWriteData}),
+	 
+    .rden(readEnable),
+    .rdaddress(readAddr),
+    .q(readData[59:40])
+);
+`else
+simpleDualPortM20K_20b1024Registered memBlock01 (
     .clk(clk),
     
     .writeEnable(blockWrite),
@@ -44,7 +82,7 @@ simpleDualPortM20K_20b1024 memBlock01 (
     .readAddr(readAddr),
     .readData(readData[19:00])
 );
-simpleDualPortM20K_20b1024 memBlock23 (
+simpleDualPortM20K_20b1024Registered memBlock23 (
     .clk(clk),
     
     .writeEnable(blockWrite),
@@ -56,7 +94,7 @@ simpleDualPortM20K_20b1024 memBlock23 (
     .readAddr(readAddr),
     .readData(readData[39:20])
 );
-simpleDualPortM20K_20b1024 memBlock45 (
+simpleDualPortM20K_20b1024Registered memBlock45 (
     .clk(clk),
     
     .writeEnable(blockWrite),
@@ -68,6 +106,7 @@ simpleDualPortM20K_20b1024 memBlock45 (
     .readAddr(readAddr),
     .readData(readData[59:40])
 );
+`endif
 
 
 endmodule
@@ -84,7 +123,7 @@ module collectionModule(
     // output side
     input readAddrValid,
     input[`ADDR_WIDTH-1:0] readAddr,
-    output[`DATA_WIDTH:0] summedDataOut,
+    output[37:0] summedDataOut,
     output[2:0] pcoeffCount
 );
 
@@ -137,8 +176,27 @@ for(i = 0; i < 6; i = i + 1) begin
 end
 endgenerate
 
-assign summedDataOut = (pcoeffs[0] + pcoeffs[1]) + (pcoeffs[2] + pcoeffs[3]) + (pcoeffs[4] + pcoeffs[5]);
-assign pcoeffCount = (countValids[0] + countValids[1]) + (countValids[2] + countValids[3]) + (countValids[4] + countValids[5]);
+`define SUM_CYCLES 8
+
+reg[36:0] pcoeffSums[2:0];
+reg[37:0] bigSum1;
+reg[36:0] bigSum2;
+reg[37:0] summedDataPipeStart;
+always @(posedge clk) begin
+	pcoeffSums[0] <= pcoeffs[0] + pcoeffs[1];
+	pcoeffSums[1] <= pcoeffs[2] + pcoeffs[3];
+	pcoeffSums[2] <= pcoeffs[4] + pcoeffs[5];
+	bigSum1 <= pcoeffSums[0] + pcoeffSums[1];
+	bigSum2 <= pcoeffSums[2];
+	summedDataPipeStart <= bigSum1 + bigSum2;
+end
+hyperpipe #(.CYCLES(`SUM_CYCLES - 3), .WIDTH(38)) summedDataPipe(clk, summedDataPipeStart, summedDataOut);
+
+wire[2:0] pcoeffCountPrePipe = (countValids[0] + countValids[1])
+       + (countValids[2] + countValids[3])
+       + (countValids[4] + countValids[5]);
+hyperpipe #(.CYCLES(`SUM_CYCLES), .WIDTH(3)) pcoeffCountPipe(
+    clk, pcoeffCountPrePipe, pcoeffCount);
 
 /*wire[2:0] upperWriteAddr = dataInAddr[11:9];
 wire[8:0] lowerWriteAddr = dataInAddr[8:0];

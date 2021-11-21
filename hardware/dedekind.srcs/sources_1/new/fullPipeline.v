@@ -16,7 +16,7 @@ module fullPipeline4 (
     input validBotD,
     output full,
     output almostFull,
-    output[`DATA_WIDTH-1:0] summedDataOut,
+    output[37:0] summedDataOut,
     output[2:0] pcoeffCountOut
 );
 
@@ -99,7 +99,7 @@ module fullPipeline (
     input isBotValid,
     input[5:0] validBotPermutations, // == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
     output[4:0] fifoFullness,
-    output[`DATA_WIDTH-1:0] summedDataOut,
+    output[37:0] summedDataOut,
     output[2:0] pcoeffCountOut
 );
 

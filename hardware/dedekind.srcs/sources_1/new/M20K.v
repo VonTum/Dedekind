@@ -67,8 +67,8 @@ reg[9:0] memoryB[1023:0];
 
 always @(posedge clk) begin
     if(writeEnable) begin
-    if(writeMask[0]) memoryA[writeAddr] <= writeData[9:0];
-    if(writeMask[1]) memoryB[writeAddr] <= writeData[19:10];
+        if(writeMask[0]) memoryA[writeAddr] <= writeData[9:0];
+        if(writeMask[1]) memoryB[writeAddr] <= writeData[19:10];
     end
 end
 
@@ -83,6 +83,7 @@ endmodule
 module simpleDualPortM20K_20b1024Registered (
     input clk,
     
+    input writeEnable,
     input[9:0] writeAddr,
     input[1:0] writeMask,
     input[19:0] writeData,
@@ -97,6 +98,7 @@ reg[1:0] writeMaskD;
 reg[19:0] writeDataD;
 
 reg readEnableD;
+reg writeEnableD;
 reg[9:0] readAddrD;
 
 
@@ -107,11 +109,14 @@ always @(posedge clk) begin
     writeAddrD <= writeAddr;
     writeMaskD <= writeMask;
     writeDataD <= writeData;
+    writeEnableD <= writeEnable;
     readEnableD <= readEnable;
     readAddrD <= readAddr;
-
-    if(writeMaskD[0]) memoryA[writeAddrD] <= writeDataD[9:0];
-    if(writeMaskD[1]) memoryB[writeAddrD] <= writeDataD[19:10];
+    
+    if(writeEnableD) begin
+        if(writeMaskD[0]) memoryA[writeAddrD] <= writeDataD[9:0];
+        if(writeMaskD[1]) memoryB[writeAddrD] <= writeDataD[19:10];
+    end
     
     readData[09:00] <= readEnableD ? memoryA[readAddrD] : 10'b0000000000;
     readData[19:10] <= readEnableD ? memoryB[readAddrD] : 10'b0000000000;
