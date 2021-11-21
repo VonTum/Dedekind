@@ -34,7 +34,7 @@ end
 
 // This marks the permutation that should be removed next
 wire[5:0] shouldNotRemove = {
-    0, 
+    1'b0, 
     validBotPermutes[5], 
     |validBotPermutes[5:4], 
     |validBotPermutes[5:3], 

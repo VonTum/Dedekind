@@ -10,38 +10,65 @@ module collectorBlock(
     
     // input side
     input writeEnable,
-    input[8:0] writeAddr,
-    input[1:0] writeSubAddr,
-    input[5:0] writeData,
+    input[9:0] writeAddr,
+    input[5:0] subAddrMask,
+    input[9:0] writeData,
     
     // output side
     input readEnable, // this reads from the memory and also wipes the read entry. 
-    input[8:0] readAddr,
-    output[27:0] readData
+    input[9:0] readAddr,
+    output[59:0] readData
 );
 
-wire[9:0] wideWriteData;
-assign wideWriteData[9:7] = 3'b000;
-assign wideWriteData[6] = !readEnable; // entries marked with '1' are valid, entries with '0' are empty
-assign wideWriteData[5:0] = writeData;
+// one cycle delay for writes so we don't read-and-write at the same time
+reg[9:0] blockWriteData;
+reg[5:0] writeMasks;
+reg blockWrite;
+reg[9:0] blockWriteAddr;
+always @(posedge clk) begin
+    blockWriteData <= readEnable ? 10'b0000000000 : writeData;
+    writeMasks <= readEnable ? 6'b111111 : subAddrMask;
+    blockWrite <= writeEnable | readEnable;
+    blockWriteAddr <= readEnable ? readAddr : writeAddr;
+end
 
-wire[39:0] memOut;
-assign readData[6:0] = memOut[6:0];
-assign readData[13:7] = memOut[16:10];
-assign readData[20:14] = memOut[26:20];
-assign readData[27:21] = memOut[36:30];
-
-simpleDualPortM20K memBlock(
-    .writeClk(clk),
-    .writeAddr(readEnable ? readAddr : writeAddr),
-    .writeMask(readEnable ? 4'b1111 : writeEnable ? (4'b0001 << writeSubAddr) : 4'b0000),
-    .writeData({wideWriteData,wideWriteData,wideWriteData,wideWriteData}),
+simpleDualPortM20K_20b1024 memBlock01 (
+    .clk(clk),
     
-    .readClk(clk),
+    .writeEnable(blockWrite),
+    .writeAddr(blockWriteAddr),
+    .writeMask(writeMasks[1:0]),
+    .writeData({blockWriteData,blockWriteData}),
+    
     .readEnable(readEnable),
     .readAddr(readAddr),
-    .readData(memOut)
+    .readData(readData[19:00])
 );
+simpleDualPortM20K_20b1024 memBlock23 (
+    .clk(clk),
+    
+    .writeEnable(blockWrite),
+    .writeAddr(blockWriteAddr),
+    .writeMask(writeMasks[3:2]),
+    .writeData({blockWriteData,blockWriteData}),
+    
+    .readEnable(readEnable),
+    .readAddr(readAddr),
+    .readData(readData[39:20])
+);
+simpleDualPortM20K_20b1024 memBlock45 (
+    .clk(clk),
+    
+    .writeEnable(blockWrite),
+    .writeAddr(blockWriteAddr),
+    .writeMask(writeMasks[5:4]),
+    .writeData({blockWriteData,blockWriteData}),
+    
+    .readEnable(readEnable),
+    .readAddr(readAddr),
+    .readData(readData[59:40])
+);
+
 
 endmodule
 
@@ -51,7 +78,7 @@ module collectionModule(
     // input side
     input write,
     input[`ADDR_WIDTH-1:0] dataInAddr,
-    input[1:0] dataInSubAddr, 
+    input[2:0] dataInSubAddr, 
     input[5:0] addBit,
     
     // output side
@@ -61,6 +88,57 @@ module collectionModule(
     output[2:0] pcoeffCount
 );
 
+wire[5:0] subAddrMask = write ? (6'b000001 << dataInSubAddr) : 6'b000000;
+
+localparam UPPER_ADDR_BITS = 2; // 4 sections
+
+wire[59:0] blocksReadData[(1 << UPPER_ADDR_BITS)-1:0];
+
+wire[9:0] dataWithECC;
+assign dataWithECC[3:0] = addBit[3:0];
+assign dataWithECC[5:4] = addBit[5:4]+1;
+assign dataWithECC[9:6] = 4'b0000; // TODO ECC
+
+genvar i;
+generate
+for(i = 0; i < (1 << UPPER_ADDR_BITS); i = i + 1) begin
+    collectorBlock cBlock(
+        .clk(clk),
+        
+        // input side
+        .writeEnable(write & (dataInAddr[(10+UPPER_ADDR_BITS)-1:10] == i)),
+        .writeAddr(dataInAddr[9:0]),
+        .subAddrMask(subAddrMask),
+        .writeData(dataWithECC),
+        
+        // output side
+        .readEnable(readAddr[(10+UPPER_ADDR_BITS)-1:10] == (i+(1 << UPPER_ADDR_BITS)-1) % (1 << UPPER_ADDR_BITS)), // this reads from the memory and also wipes the read entry. 
+        .readAddr(readAddr[9:0]),
+        .readData(blocksReadData[i])
+    );
+end
+endgenerate
+
+wire[59:0] totalReadData = (blocksReadData[0] | blocksReadData[1]) | (blocksReadData[2] | blocksReadData[3]);
+
+wire[5:0] counts[5:0];
+wire countValids[5:0];
+wire[3:0] eccValues[5:0];
+
+wire[35:0] pcoeffs[5:0];
+
+generate
+for(i = 0; i < 6; i = i + 1) begin
+    assign counts[i][3:0] = totalReadData[10*i+3 : 10*i];
+    assign counts[i][5:4] = totalReadData[10*i+5 : 10*i+4] - 1;
+    assign countValids[i] = totalReadData[10*i+5 : 10*i+4] != 2'b00;
+    assign eccValues[i] = totalReadData[10*i+9 : 10*i+6];
+    assign pcoeffs[i] = countValids[i] ? (35'b1 << counts[i]) : 35'b0;
+end
+endgenerate
+
+assign summedDataOut = (pcoeffs[0] + pcoeffs[1]) + (pcoeffs[2] + pcoeffs[3]) + (pcoeffs[4] + pcoeffs[5]);
+assign pcoeffCount = (countValids[0] + countValids[1]) + (countValids[2] + countValids[3]) + (countValids[4] + countValids[5]);
 
 /*wire[2:0] upperWriteAddr = dataInAddr[11:9];
 wire[8:0] lowerWriteAddr = dataInAddr[8:0];
@@ -86,7 +164,7 @@ end
 endgenerate*/
 
 
-wire dataInEnablePostLatency;
+/*wire dataInEnablePostLatency;
 wire[5:0] addBitPostLatency;
 wire[`ADDR_WIDTH-1:0] addrPostLatency;
 wire[`DATA_WIDTH-1:0] readSumPostLatency;
@@ -144,6 +222,6 @@ quadPortBRAM #(.DATA_WIDTH(`DATA_WIDTH + 3), .ADDR_WIDTH(`ADDR_WIDTH), .READ_LAT
     .wDataB(43'b0),
     .wEnableB(readAddrValid)
 );
-`endif
+`endif*/
 
 endmodule

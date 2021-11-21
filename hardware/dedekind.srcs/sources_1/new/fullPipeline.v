@@ -89,7 +89,7 @@ endmodule
 
 
 
-module fullPipeline6 (
+module fullPipeline (
     input clk,
     input rst,
     input[127:0] top,
@@ -108,9 +108,9 @@ wire botAvailableFifo;
 wire coreRequests, coreDone;
 wire[127:0] botFromFifo;
 wire[`ADDR_WIDTH-1:0] addrIn;
-wire[1:0] subAddrIn;
+wire[2:0] subAddrIn;
 
-inputModule6 #(.EXTRA_DATA_WIDTH(12)) inputHandler (
+inputModule6 #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH)) inputHandler (
     .clk(clk),
     
     // input side
@@ -129,7 +129,7 @@ inputModule6 #(.EXTRA_DATA_WIDTH(12)) inputHandler (
 );
 
 /*
-module inputModule6 #(parameter EXTRA_DATA_WIDTH = 12) (
+module inputModule6 #(parameter EXTRA_DATA_WIDTH = `ADDR_WIDTH) (
     input clk,
     
     // input side
@@ -148,10 +148,10 @@ module inputModule6 #(parameter EXTRA_DATA_WIDTH = 12) (
 */
 
 wire[`ADDR_WIDTH-1:0] addrOut;
-wire[1:0] subAddrOut;
+wire[2:0] subAddrOut;
 wire[5:0] countOut;
 
-computeModule #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH + 2)) computeCore(
+computeModule #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH + 3)) computeCore(
     .clk(clk),
     .rst(rst),
     .top(top),
