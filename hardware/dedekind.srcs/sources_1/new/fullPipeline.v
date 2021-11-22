@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "bramProperties.vh"
+`include "pipelineGlobals.vh"
 
 module fullPipeline4 (
     input clk,
@@ -8,7 +8,7 @@ module fullPipeline4 (
     input[127:0] top,
     input[127:0] botA, // botB = varSwap(5,6)(A)
     input[127:0] botC, // botD = varSwap(5,6)(C)
-    input[11:0] botIndex,
+    input[`ADDR_WIDTH-1:0] botIndex,
     input isBotValid,
     input validBotA,
     input validBotB,
@@ -26,7 +26,7 @@ wire[127:0] botFromFifo;
 wire[`ADDR_WIDTH-1:0] addrIn;
 wire[1:0] subAddrIn;
 
-inputModule4 inputHandler(
+inputModule4 #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH)) inputHandler(
     .clk(clk),
     
     // input side
@@ -95,7 +95,7 @@ module fullPipeline (
     input[127:0] top,
     
     input[127:0] bot, // Represents all final 3 var swaps
-    input[11:0] botIndex,
+    input[`ADDR_WIDTH-1:0] botIndex,
     input isBotValid,
     input[5:0] validBotPermutations, // == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
     output[4:0] fifoFullness,

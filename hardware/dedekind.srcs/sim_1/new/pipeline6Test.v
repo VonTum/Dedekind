@@ -1,5 +1,7 @@
 `timescale 1ns / 1ps
 
+`include "pipelineGlobals.vh"
+
 module pipeline6Test();
 
 reg clk;
@@ -36,7 +38,7 @@ fullPipeline elementUnderTest (
     .top(top),
     
     .bot(bot),
-    .botIndex(index[11:0]),
+    .botIndex(index[`ADDR_WIDTH-1:0]),
     .isBotValid(isBotValid),
     .validBotPermutations(validBotPermutations),
     .fifoFullness(fifoFullness),
@@ -58,7 +60,7 @@ wire[37:0] offsetSum;
 wire[2:0] offsetCount;
 assign {top, bot} = dataTable[index][128*2+64+8-1 : 64+8];
 
-localparam OUTPUT_LAG = 4096 - 1024 + 2 + 8;
+localparam OUTPUT_LAG = (1 << `ADDR_WIDTH) - `OUTPUT_INDEX_OFFSET + `OUTPUT_READ_LATENCY;
 
 assign offsetSum = dataTable[index-OUTPUT_LAG][37+8-1 : 8];
 assign offsetCount = dataTable[index-OUTPUT_LAG][2 : 0];

@@ -1,3 +1,0 @@
-`define ADDR_WIDTH 12
-`define DATA_WIDTH 40
-`define READ_LATENCY 0
