@@ -26,7 +26,7 @@ wire[127:0] botFromFifo;
 wire[`ADDR_WIDTH-1:0] addrIn;
 wire[1:0] subAddrIn;
 
-inputModule4 #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH)) inputHandler(
+inputModule4 inputHandler(
     .clk(clk),
     
     // input side
@@ -178,7 +178,6 @@ collectionModule collector(
     .addBit(countOut),
     
     // output side
-    .readAddrValid(isBotValid),
     .readAddr(botIndex),
     .summedDataOut(summedDataOut),
     .pcoeffCount(pcoeffCountOut)

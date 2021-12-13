@@ -56,14 +56,13 @@ indexProvider #(MEMSIZE) dataProvider (
 
 reg[128*2+64+8-1:0] dataTable[MEMSIZE-1:0];
 initial $readmemb("pipeline6PackTestSet7.mem", dataTable);
-wire[37:0] offsetSum;
-wire[2:0] offsetCount;
+
 assign {top, bot} = dataTable[index][128*2+64+8-1 : 64+8];
 
 localparam OUTPUT_LAG = (1 << `ADDR_WIDTH) - `OUTPUT_INDEX_OFFSET + `OUTPUT_READ_LATENCY;
 
-assign offsetSum = dataTable[index-OUTPUT_LAG][37+8-1 : 8];
-assign offsetCount = dataTable[index-OUTPUT_LAG][2 : 0];
+wire[37:0] offsetSum = dataTable[index-OUTPUT_LAG][37+8-1 : 8];
+wire[2:0] offsetCount = dataTable[index-OUTPUT_LAG][2 : 0];
 
 wire CORRECT_SUM = summedData == offsetSum;
 wire CORRECT_COUNT = pcoeffCount == offsetCount;

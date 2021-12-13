@@ -1,4 +1,6 @@
 `timescale 1ns / 1ps
+`include "pipelineGlobals.vh"
+
 
 module pipeline24PackTest();
 
@@ -18,7 +20,7 @@ parameter MEMSIZE = 16384;
 wire[$clog2(MEMSIZE)-1:0] index;
 wire[127:0] top, bot;
 wire isBotValid;
-wire full, almostFull;
+wire[4:0] packFullness;
 wire[39:0] summedData;
 wire[4:0] pcoeffCount;
 
@@ -27,10 +29,9 @@ pipeline24Pack elementUnderTest (
     .rst(rst),
     .top(top),
     .bot(bot),
-    .botIndex(index[11:0]),
+    .botIndex(index[`ADDR_WIDTH-1:0]),
     .isBotValid(isBotValid),
-    .full(full),
-    .almostFull(almostFull),
+    .maxFullness(packFullness),
     .summedData(summedData),
     .pcoeffCount(pcoeffCount)
 );
@@ -39,17 +40,21 @@ indexProvider #(MEMSIZE) dataProvider (
     .clk(clk),
     .rst(rst),
     .index(index),
-    .requestData(!almostFull),
+    .requestData(packFullness < 30),
     .dataAvailable(isBotValid)
 );
 
 reg[128*2+64+8-1:0] dataTable[MEMSIZE-1:0];
 initial $readmemb("pipeline24PackTestSet7.mem", dataTable);
-wire[39:0] offsetSum;
-wire[4:0] offsetCount;
+
 assign {top, bot} = dataTable[index][128*2+64+8-1 : 64+8];
 
-assign offsetSum = dataTable[index-4096][39+8-1 : 8];
-assign offsetCount = dataTable[index-4096][5-1 : 0];
+localparam OUTPUT_LAG = (1 << `ADDR_WIDTH) - `OUTPUT_INDEX_OFFSET + `OUTPUT_READ_LATENCY;
+
+wire[39:0] offsetSum = dataTable[index-OUTPUT_LAG][37+8-1 : 8];
+wire[4:0] offsetCount = dataTable[index-OUTPUT_LAG][2 : 0];
+
+wire CORRECT_SUM = summedData == offsetSum;
+wire CORRECT_COUNT = pcoeffCount == offsetCount;
 
 endmodule

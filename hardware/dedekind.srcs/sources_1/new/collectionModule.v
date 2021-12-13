@@ -121,7 +121,6 @@ module collectionModule(
     input[5:0] addBit,
     
     // output side
-    input readAddrValid,
     input[`ADDR_WIDTH-1:0] readAddr,
     output[37:0] summedDataOut,
     output[2:0] pcoeffCount

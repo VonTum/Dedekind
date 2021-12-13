@@ -53,7 +53,8 @@ module permutCheckProduceResults24(
         abcd, abdc, acbd, acdb, adbc, adcb, 
         bacd, badc, bcad, bcda, bdac, bdca, 
         cbad, cbda, cabd, cadb, cdba, cdab, 
-        dbca, dbac, dcba, dcab, dabc, dacb}*/
+        dbca, dbac, dcba, dcab, dabc, dacb}
+         == {permutesABCD, permutesBACD, permutesCBAD, permutesDBCA}*/
 );
 
 wire aShared;
@@ -326,7 +327,12 @@ module permuteCheck24 (
     input[127:0] top,
     input[127:0] bot,
     input isBotValid,
-    output[23:0] validBotPermutations
+    output[23:0] validBotPermutations /* {
+        abcd, abdc, acbd, acdb, adbc, adcb, 
+        bacd, badc, bcad, bcda, bdac, bdca, 
+        cbad, cbda, cabd, cadb, cdba, cdab, 
+        dbca, dbac, dcba, dcab, dabc, dacb}
+         == {permutesABCD, permutesBACD, permutesCBAD, permutesDBCA}*/
 );
 
 wire sharedAll;
