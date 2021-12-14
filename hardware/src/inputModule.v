@@ -41,8 +41,8 @@ pipelineFifo botQueue (
     .rdreq(popFifo & !fifoEmpty),
     .q(dataFromFifo),
     .empty(fifoEmpty),
-	 
-	 .usedw(fifoFullness)
+	
+	.usedw(fifoFullness)
 );
 `else
 FIFO #(.WIDTH(128+6+EXTRA_DATA_WIDTH), .DEPTH_LOG2(`FIFO_DEPTH_LOG2)) botQueue (
@@ -128,8 +128,8 @@ pipelineFifo botABFifo (
     .rdreq(popABFifo),
     .q(fifoABData),
     .empty(emptyAB),
-	 
-	 .usedw(usedwAB)
+	
+	.usedw(usedwAB)
 );
 pipelineFifo botCDFifo (
     .clock(clk),
@@ -141,8 +141,8 @@ pipelineFifo botCDFifo (
     .rdreq(popCDFifo),
     .q(fifoCDData),
     .empty(emptyCD),
-	 
-	 .usedw(usedwCD)
+	
+	.usedw(usedwCD)
 );
 `else
 FIFO #(.WIDTH(`FIFO_WIDTH), .DEPTH_LOG2(`FIFO_DEPTH_LOG2)) botABFifo (
@@ -155,8 +155,8 @@ FIFO #(.WIDTH(`FIFO_WIDTH), .DEPTH_LOG2(`FIFO_DEPTH_LOG2)) botABFifo (
     .readEnable(popABFifo),
     .dataOut(fifoABData),
     .empty(emptyAB),
-	 
-	 .usedw(usedwAB)
+	
+	.usedw(usedwAB)
 );
 
 FIFO #(.WIDTH(`FIFO_WIDTH), .DEPTH_LOG2(`FIFO_DEPTH_LOG2)) botCDFifo (
@@ -169,8 +169,8 @@ FIFO #(.WIDTH(`FIFO_WIDTH), .DEPTH_LOG2(`FIFO_DEPTH_LOG2)) botCDFifo (
     .readEnable(popCDFifo),
     .dataOut(fifoCDData),
     .empty(emptyCD),
-	 
-	 .usedw(usedwCD)
+	
+	.usedw(usedwCD)
 );
 `endif
 

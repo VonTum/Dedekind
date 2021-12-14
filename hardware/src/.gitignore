@@ -10,7 +10,9 @@
 .qsys_edit/
 output_files/
 qdb/
-ip/
 tmp-clearbox/
 simulation/
 #**/synth/
+#ip/
+ip/*/
+
