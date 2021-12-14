@@ -15,7 +15,7 @@ initial begin
     #200 rst = 0;
 end
 
-parameter MEMSIZE = 16384;
+parameter MEMSIZE = 65000;
 
 wire[$clog2(MEMSIZE)-1:0] index;
 wire[127:0] top, bot;
