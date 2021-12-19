@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-`include "leafElimination.vh"
+`include "leafElimination.vhd"
 
 module computeModule #(parameter EXTRA_DATA_WIDTH = 14) (
     input clk,

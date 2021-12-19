@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "pipelineGlobals.vh"
+`include "pipelineGlobals.vhd"
 
 module fullPipeline4 (
     input clk,

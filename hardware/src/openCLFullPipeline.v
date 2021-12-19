@@ -1,11 +1,11 @@
 `timescale 1ns / 1ps
-`include "pipelineGlobals.vh"
+`include "pipelineGlobals.vhd"
 
 module openCLFullPipeline (
     input clock,
     input resetn,
 	input ivalid, 
-	//input iready, // not hooked up, pipeline does not handle output stalls
+	input iready, // not hooked up, pipeline does not handle output stalls
 	output ovalid,
 	output oready,
     

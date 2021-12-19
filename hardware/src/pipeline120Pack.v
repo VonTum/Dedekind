@@ -15,7 +15,7 @@ module pipeline120Pack(
     output[6:0] pcoeffCount // log2(120)=6.90689059561 -> 7 bits
 );
 
-`include "inlineVarSwap.vh"
+`include "inlineVarSwap.vhd"
 
 // generate the permuted bots
 wire[127:0] botABCDE = bot;

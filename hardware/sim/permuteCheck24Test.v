@@ -1,24 +1,4 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 10/20/2021 05:05:03 PM
-// Design Name: 
-// Module Name: permuteCheck24Test
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
-
 
 module permuteCheck24Test();
 
@@ -46,7 +26,7 @@ wire[23:0] validBotPermutationsUnderTest;
 permuteCheck24 elementUnderTest(top, bot, 1, validBotPermutationsUnderTest);
 assign {vABCD, vABDC, vACBD, vACDB, vADBC, vADCB, vBACD, vBADC, vBCAD, vBCDA, vBDAC, vBDCA, vCBAD, vCBDA, vCABD, vCADB, vCDBA, vCDAB, vDBCA, vDBAC, vDCBA, vDCAB, vDABC, vDACB} = validBotPermutationsUnderTest;
 
-`include "inlineVarSwap.vh"
+`include "inlineVarSwap.vhd"
 
 // generate the permuted bots
 wire[127:0] botABCD = bot;       // vs33 (no swap)

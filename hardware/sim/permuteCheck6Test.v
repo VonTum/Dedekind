@@ -1,24 +1,4 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 10/20/2021 05:05:03 PM
-// Design Name: 
-// Module Name: permuteCheck24Test
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
-
 
 module permuteCheck6Test();
 
@@ -42,7 +22,7 @@ wire[5:0] validBotPermutationsUnderTest;
 permuteCheck6 elementUnderTest(top, bot, validBotPermutationsUnderTest);
 
 
-`include "inlineVarSwap.vh"
+`include "inlineVarSwap.vhd"
 
 // generate the permuted bots
 wire[127:0] botABC = bot;

@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "pipelineGlobals.vh"
+`include "pipelineGlobals.vhd"
 
 // sums all 24 permutations of variables 3,4,5,6.
 module pipeline24Pack(
@@ -15,7 +15,7 @@ module pipeline24Pack(
     output[4:0] pcoeffCount // log2(24)=4.5849625007 -> 5 bits
 );
 
-`include "inlineVarSwap.vh"
+`include "inlineVarSwap.vhd"
 
 // generate the permuted bots
 wire[127:0] botABCD = bot;       // vs33 (no swap)

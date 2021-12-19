@@ -1,25 +1,5 @@
 `timescale 1ns / 1ps
-`include "leafElimination.vh"
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 07/24/2021 05:22:49 PM
-// Design Name: 
-// Module Name: leafElimination
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
-
+`include "leafElimination.vhd"
 
 module leafEliminationElement #(parameter COUNT = 3) (
     input mainWire,

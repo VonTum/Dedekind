@@ -7,3 +7,21 @@ dedekind.sim/
 dedekind.xpr
 *.wcfg
 *.mem
+
+# OpenCL generated files
+*.aoclib
+*.aoco
+*.aocr
+*.aocx
+*.aocx.tmp
+*.qsf
+*.qws
+output_files/
+qdb/
+tmp-clearbox/
+dedekind.qpf
+*_report/
+
+fullPipelineKernel/
+kernelFullPipeline/
+

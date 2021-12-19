@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-`include "pipelineGlobals.vh"
+`include "pipelineGlobals.vhd"
 
 `define FIFO_WIDTH 142
 `define FIFO_DEPTH_LOG2 5
