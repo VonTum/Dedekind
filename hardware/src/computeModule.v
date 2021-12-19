@@ -34,9 +34,9 @@ singletonElimination se(clk, requestGraph, leafEliminatedGraph, singletonElimina
 
 localparam PIPE_STEPS = 1+1+2;
 
-hyperpipeEnabled #(.CYCLES(PIPE_STEPS), .WIDTH(1), .RESET_VALUE(0))
+shiftRegister #(.CYCLES(PIPE_STEPS), .WIDTH(1), .RESET_VALUE(0))
     graphAvalailbePipe (clk, requestGraph, rst, graphAvailable, graphAvailablePostDelay);
-hyperpipeEnabled #(.CYCLES(PIPE_STEPS), .WIDTH(EXTRA_DATA_WIDTH), .RESET_VALUE(1'bX))
+shiftRegister #(.CYCLES(PIPE_STEPS), .WIDTH(EXTRA_DATA_WIDTH), .RESET_VALUE(1'bX))
     extraDataPipe      (clk, requestGraph, rst, extraDataIn, extraDataPostDelay);
 
 wire coreRequestsGraph;

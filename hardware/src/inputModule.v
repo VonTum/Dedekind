@@ -1,12 +1,10 @@
 `timescale 1ns / 1ps
 
+`include "pipelineGlobals.vh"
+
 `define FIFO_WIDTH 142
 `define FIFO_DEPTH_LOG2 5
 `define FIFO_ALMOSTFULL 28
-
-`ifdef ALTERA_RESERVED_QIS
-`define USE_FIFO_IP
-`endif
 
 module inputModule6 #(parameter EXTRA_DATA_WIDTH = 12) (
     input clk,

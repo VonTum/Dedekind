@@ -17,6 +17,9 @@ std::string benchmarkSetTopBots(unsigned int Variables);
 std::string pipelineTestSet(unsigned int Variables);
 std::string pipeline6PackTestSet(unsigned int Variables);
 std::string pipeline24PackTestSet(unsigned int Variables);
+std::string pipeline6PackTestSetForOpenCL(unsigned int Variables);
+std::string pipeline24PackTestSetForOpenCL(unsigned int Variables);
+
 std::string permuteCheck24TestSet(unsigned int Variables);
 
 // File names for the flat MBF structure

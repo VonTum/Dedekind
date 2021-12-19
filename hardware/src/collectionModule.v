@@ -1,10 +1,6 @@
 `timescale 1ns / 1ps
 `include "pipelineGlobals.vh"
 
-`ifdef ALTERA_RESERVED_QIS
-`define USE_QUADPORTRAM_IP
-`endif
-
 module collectorBlock(
     input clk,
     
@@ -32,7 +28,7 @@ always @(posedge clk) begin
     blockWriteAddr <= readEnable ? readAddr : writeAddr;
 end
 
-`ifdef USE_QUADPORTRAM_IP
+`ifdef USE_COLLECTOR_RAM_IP
 collectorM20K memBlock01 (
     .clock(clk),
 	 

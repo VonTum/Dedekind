@@ -11,6 +11,7 @@
 #include "../dedelib/flatPCoeff.h"
 
 #include <random>
+#include <sstream>
 
 
 template<unsigned int Variables, typename RandomEngine>
@@ -203,6 +204,58 @@ void pipelinePackTestSet(size_t count, unsigned int permuteStartVar, std::string
 	testSet.close();
 }
 
+
+void pipelinePackTestSetForOpenCL(std::vector<size_t> counts, unsigned int permuteStartVar, std::string outFile) {
+	constexpr unsigned int Variables = 7;
+	std::vector<TopBots<Variables>> topBots = readTopBots<Variables>(5000);
+
+	auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+	std::default_random_engine generator(seed);
+	std::cout << "Seed: " << seed << std::endl;
+
+	std::ofstream testSet(outFile); // plain text file
+
+	for(size_t topI = 0; topI < counts.size(); topI++) {
+		size_t count = counts[topI];
+
+		const TopBots<Variables>& selectedTop = topBots[std::uniform_int_distribution<size_t>(0, topBots.size() - 1)(generator)];
+		std::uniform_int_distribution<size_t> botSelector(0, selectedTop.bots.size() - 1);
+
+		Monotonic<Variables> top = selectedTop.top;
+		permuteRandom(top, generator);
+		testSet << "1_" << top.bf.bitset << '_';
+		printBits(testSet, 0, 64);
+		testSet << '_';
+		printBits(testSet, 0, 8);
+		testSet << std::endl;
+
+		std::cout << "Starting generation" << std::endl;
+		for(size_t i = 0; i < count; i++) {
+			testSet << "0_";
+			Monotonic<Variables> bot = selectedTop.bots[botSelector(generator)];
+			permuteRandom(bot, generator);
+			testSet << bot.bf.bitset << '_';
+			uint64_t resultingBotSum = 0;
+			uint16_t resultingBotCount = 0;
+
+			bot.forEachPermutation(permuteStartVar, 7, [&](const Monotonic<Variables>& permBot) {
+				if(permBot <= top) {
+					resultingBotSum += computePCoefficientAllowBadBots(top, permBot);
+					resultingBotCount++;
+				}
+			});
+
+			printBits(testSet, resultingBotSum, 64);
+			testSet << '_';
+			printBits(testSet, resultingBotCount, 8);
+			testSet << std::endl;
+		}
+	}
+
+	testSet.close();
+}
+
+
 void permutCheck24TestSet() {
 	constexpr unsigned int Variables = 7;
 
@@ -236,6 +289,21 @@ void permutCheck24TestSet() {
 	testSetFile.close();
 }
 
+/*
+	Parses "38431,31,13854,111,3333" to {38431,31,13854,111,3333}
+*/
+std::vector<size_t> parseSizeList(const std::string& strList) {
+	std::stringstream strStream(strList);
+	std::string segment;
+	std::vector<size_t> resultingCounts;
+
+	while(std::getline(strStream, segment, ',')) {
+		resultingCounts.push_back(std::stoi(segment));
+	}
+
+	return resultingCounts;
+}
+
 CommandSet testSetCommands{"Test Set Generation", {
 	{"benchmarkSample1", []() {benchmarkSample<1>(); }},
 	{"benchmarkSample2", []() {benchmarkSample<2>(); }},
@@ -266,4 +334,7 @@ CommandSet testSetCommands{"Test Set Generation", {
 
 	{"pipeline6TestSet", [](const std::string& size) {pipelinePackTestSet(std::stoi(size), 4, FileName::pipeline6PackTestSet(7)); }},
 	{"pipeline24PackTestSet", [](const std::string& size) {pipelinePackTestSet(std::stoi(size), 3, FileName::pipeline24PackTestSet(7)); }},
+
+	{"pipeline6TestSetOpenCL", [](const std::string& sizeList) {pipelinePackTestSetForOpenCL(parseSizeList(sizeList), 4, FileName::pipeline6PackTestSetForOpenCL(7)); }},
+	{"pipeline24PackTestSetOpenCL", [](const std::string& sizeList) {pipelinePackTestSetForOpenCL(parseSizeList(sizeList), 3, FileName::pipeline24PackTestSetForOpenCL(7)); }},
 }};

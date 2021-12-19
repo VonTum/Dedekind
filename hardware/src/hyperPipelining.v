@@ -30,7 +30,7 @@ module hyperpipe
 
 endmodule
 
-module hyperpipeEnabled
+module shiftRegister
 #(parameter CYCLES = 1, parameter WIDTH = 1, parameter RESET_VALUE = 0) 
 (
 	input clk,
