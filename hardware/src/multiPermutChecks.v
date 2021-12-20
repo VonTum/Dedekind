@@ -111,12 +111,12 @@ module permutCvtIntermediaries24to6 #(
 );
 
 function automatic integer swapRemovedVarWithZero;
-    input integer var;
+    input integer v;
     begin
-        if(var == REMOVED_VAR)
+        if(v == REMOVED_VAR)
             swapRemovedVarWithZero = 0;
         else
-            swapRemovedVarWithZero = var;
+            swapRemovedVarWithZero = v;
     end
 endfunction
 

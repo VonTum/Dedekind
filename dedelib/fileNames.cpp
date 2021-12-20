@@ -73,11 +73,17 @@ std::string pipeline6PackTestSet(unsigned int Variables) {
 std::string pipeline24PackTestSet(unsigned int Variables) {
 	return makeBasicName(Variables, "pipeline24PackTestSet", ".mem");
 }
-std::string pipeline6PackTestSetForOpenCL(unsigned int Variables) {
+std::string pipeline6PackTestSetForOpenCLMem(unsigned int Variables) {
 	return makeBasicName(Variables, "pipeline6PackTestSetForOpenCL", ".mem");
 }
-std::string pipeline24PackTestSetForOpenCL(unsigned int Variables) {
+std::string pipeline6PackTestSetForOpenCLCpp(unsigned int Variables) {
+	return makeBasicName(Variables, "pipeline6PackTestSetForOpenCL_generated", ".cpp");
+}
+std::string pipeline24PackTestSetForOpenCLMem(unsigned int Variables) {
 	return makeBasicName(Variables, "pipeline24PackTestSetForOpenCL", ".mem");
+}
+std::string pipeline24PackTestSetForOpenCLCpp(unsigned int Variables) {
+	return makeBasicName(Variables, "pipeline24PackTestSetForOpenCL_generated", ".cpp");
 }
 
 std::string permuteCheck24TestSet(unsigned int Variables) {

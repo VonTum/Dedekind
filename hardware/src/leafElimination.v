@@ -1,5 +1,5 @@
 `timescale 1ns / 1ps
-`include "leafElimination.vhd"
+`include "leafElimination_header.v"
 
 module leafEliminationElement #(parameter COUNT = 3) (
     input mainWire,
@@ -40,14 +40,14 @@ endfunction
 function integer getNthBit;
     input integer val;
     input integer n;
-    input bit;
+    input integer isBitOn;
     
     integer correctBitsPassed;
     integer i;
     begin
         correctBitsPassed = 0;
         for(i = 0; i < 32; i = i + 1) begin
-            if(val[i] == bit) begin
+            if(val[i] == isBitOn) begin
                 if(correctBitsPassed == n) begin
                     getNthBit = i;
                 end

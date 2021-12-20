@@ -8,7 +8,7 @@ module varSwap #(
     output [127:0] dataOut
 );
 
-`include "inlineVarSwap.vhd"
+`include "inlineVarSwap_header.v"
 
 `VAR_SWAP_INLINE(FIRST_VAR, SECOND_VAR, dataIn, dataOut)
 

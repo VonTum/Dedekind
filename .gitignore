@@ -20,3 +20,7 @@ data/
 *.mbfLinks
 *.xlsx
 *.mbfU64
+*.aocx
+*.aocr
+*.aoco
+

@@ -26,11 +26,11 @@ module hasNeighbor(
 
 generate
     genvar outI;
-    genvar var;
+    genvar v;
     for(outI = 0; outI < 128; outI = outI + 1) begin
         wire[6:0] inputWires;
-        for(var = 0; var < 7; var = var + 1) begin
-            assign inputWires[var] = graphIn[((outI & (1 << var)) != 0) ? outI - (1 << var) : outI + (1 << var)];
+        for(v = 0; v < 7; v = v + 1) begin
+            assign inputWires[v] = graphIn[((outI & (1 << v)) != 0) ? outI - (1 << v) : outI + (1 << v)];
         end
         assign hasNeighboring[outI] = |inputWires;
     end

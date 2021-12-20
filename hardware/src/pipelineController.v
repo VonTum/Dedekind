@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-`include "pipelineGlobals.vhd"
+`include "pipelineGlobals_header.v"
 
 
 module pipelineController#(parameter BIG_ADDR_WIDTH = 32) (

@@ -1,0 +1,4 @@
+bin/
+.emu_models/
+**/*_generated7.cpp
+

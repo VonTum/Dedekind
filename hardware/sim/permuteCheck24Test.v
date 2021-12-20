@@ -26,7 +26,7 @@ wire[23:0] validBotPermutationsUnderTest;
 permuteCheck24 elementUnderTest(top, bot, 1, validBotPermutationsUnderTest);
 assign {vABCD, vABDC, vACBD, vACDB, vADBC, vADCB, vBACD, vBADC, vBCAD, vBCDA, vBDAC, vBDCA, vCBAD, vCBDA, vCABD, vCADB, vCDBA, vCDAB, vDBCA, vDBAC, vDCBA, vDCAB, vDABC, vDACB} = validBotPermutationsUnderTest;
 
-`include "inlineVarSwap.vhd"
+`include "inlineVarSwap_header.v"
 
 // generate the permuted bots
 wire[127:0] botABCD = bot;       // vs33 (no swap)

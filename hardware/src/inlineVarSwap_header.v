@@ -1,12 +1,13 @@
 function automatic hasVar;
-    input integer index;
-    input integer var;
+    input integer binaryNum;
+    input integer varIdx;
     
     begin
-        hasVar = (index & (1 << var)) != 0;
+        hasVar = (binaryNum & (1 << varIdx)) != 0;
     end
 endfunction
 
+// Returns the index from where the wire connecting to the out index should come if VAR_A and VAR_B are swapped. 
 function automatic integer getInIndex;
     input integer outIndex;
     input integer VAR_A;

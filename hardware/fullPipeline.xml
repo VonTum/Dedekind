@@ -60,9 +60,9 @@
     </C_MODEL>
     <REQUIREMENTS>
       <!--Verilog Headers -->
-      <FILE name="src/inlineVarSwap.vhd"/>
-      <FILE name="src/pipelineGlobals.vhd"/>
-      <FILE name="src/leafElimination.vhd"/>
+      <FILE name="src/inlineVarSwap_header.v"/>
+      <FILE name="src/pipelineGlobals_header.v"/>
+      <FILE name="src/leafElimination_header.v"/>
       
       <!-- Source Files -->
       <FILE name="src/openCLFullPipeline.v"/>
