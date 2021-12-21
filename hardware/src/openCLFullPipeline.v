@@ -5,7 +5,7 @@ module openCLFullPipeline (
     input clock,
     input resetn,
 	input ivalid, 
-	input iready, // not hooked up, pipeline does not handle output stalls
+	input iready,
 	output ovalid,
 	output oready,
     
@@ -24,20 +24,27 @@ wire[4:0] fifoFullness;
 wire[`ADDR_WIDTH-1:0] botIndex;
 wire isBotValid;
 
+wire[63:0] pipelineResult;
+wire pipelineResultValid;
+wire slowThePipeline;
+
+wire pipelineManagerIsReadyForBotIn;
+assign oready = pipelineManagerIsReadyForBotIn && !slowThePipeline;
+
 pipelineManager pipelineMngr(
     .clk(clock),
     .rst(rst),
     
     .startNewTop(startNewTop),
     .topIn(bot), // Reuse bot for topIn
-    .isBotInValid(ivalid),
-    .readyForBotIn(oready),
-    .resultValid(ovalid),
+    .isBotInValid(ivalid && !slowThePipeline),
+    .readyForBotIn(pipelineManagerIsReadyForBotIn),
+    .resultValid(pipelineResultValid),
     
     .top(top),
     .botIndex(botIndex),
     .isBotValid(isBotValid),
-    .fifoAlmostFull(fifoFullness >= 25)
+    .pipelineReady(fifoFullness <= 25)
 );
 
 wire[5:0] validBotPermutations;
@@ -54,8 +61,23 @@ fullPipeline pipeline (
     .isBotValid(isBotValid),
     .validBotPermutations(validBotPermutations), // == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
     .fifoFullness(fifoFullness),
-    .summedDataOut(summedDataPcoeffCountOut[37:0]),
-    .pcoeffCountOut(summedDataPcoeffCountOut[50:48])
+    .summedDataOut(pipelineResult[37:0]),
+    .pcoeffCountOut(pipelineResult[50:48])
 );
+
+
+outputBuffer resultsBuf (
+    .clk(clock),
+    .rst(rst),
+    
+    .dataInValid(pipelineResultValid),
+    .dataIn(pipelineResult),
+    
+    .slowInputting(slowThePipeline),
+    .dataOutReady(iready),
+    .dataOutValid(ovalid),
+    .dataOut(summedDataPcoeffCountOut)
+);
+
 
 endmodule

@@ -28,6 +28,9 @@ parameter MEMSIZE = 65000;
 reg[1+128+64+8-1:0] dataTable[MEMSIZE-1:0];
 initial $readmemb("pipeline6PackTestSetForOpenCL7.mem", dataTable);
 
+reg[64+8-1:0] resultsTable[MEMSIZE-1:0];
+//initial for(integer i = 0; i < MEMSIZE; i = i + 1) resultsTable[i] = 0;
+
 always @(posedge clk) if(inputIndex >= MEMSIZE) inputBotValid <= 0;
 
 reg[$clog2(MEMSIZE)-1:0] inputIndex = 0;
@@ -38,7 +41,11 @@ wire[127:0] bot;
 wire startNewTop;
 wire isReadyForInput;
 wire validOutput;
-//wire isReadyForOutput = 1; // controller is always ready for output
+reg isReadyForOutput = 1; // controller is always ready for output
+
+initial begin
+    forever #20000 isReadyForOutput = !isReadyForOutput;
+end
 
 wire[63:0] summedDataPcoeffCountOut;
 wire[37:0] summedData = summedDataPcoeffCountOut[37:0];
@@ -48,7 +55,7 @@ openCLFullPipeline openclfp (
     .clock(clk),
     .resetn(!rst),
 	.ivalid(inputBotValid), 
-	//.iready(isReadyForOutput), // not hooked up, pipeline does not handle output stalls
+	.iready(isReadyForOutput),
 	.ovalid(validOutput),
 	.oready(isReadyForInput), 
     
@@ -58,13 +65,16 @@ openCLFullPipeline openclfp (
     .summedDataPcoeffCountOut(summedDataPcoeffCountOut)   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
-
+wire isPassingInput = inputBotValid & isReadyForInput;
+wire isPassingOutput = validOutput & isReadyForOutput;
 
 always @(posedge clk) if(!rst) begin
-    if(inputBotValid & isReadyForInput) begin
+    if(isPassingInput) begin
         inputIndex <= inputIndex + 1;
     end
-    if(validOutput) begin
+    if(isPassingOutput) begin
+        resultsTable[outputIndex] = {27'b0, summedData, 5'b00000, pcoeffCount};
+        
         outputIndex <= outputIndex + 1;
     end
 end
@@ -76,7 +86,7 @@ assign {startNewTop, bot} = dataTable[inputIndex][1+128+64+8-1 : 64+8];
 wire[37:0] offsetSum = dataTable[outputIndex][37+8-1 : 8];
 wire[2:0] offsetCount = dataTable[outputIndex][2 : 0];
 
-wire CORRECT_SUM = validOutput ? (summedData == offsetSum) : 1'bX;
-wire CORRECT_COUNT = validOutput ? (pcoeffCount == offsetCount) : 1'bX;
+wire CORRECT_SUM = isPassingOutput ? (summedData == offsetSum) : 1'bX;
+wire CORRECT_COUNT = isPassingOutput ? (pcoeffCount == offsetCount) : 1'bX;
 
 endmodule

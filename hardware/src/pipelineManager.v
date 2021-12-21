@@ -1,6 +1,59 @@
 `timescale 1ns / 1ps
 `include "pipelineGlobals_header.v"
 
+
+
+
+module isBotValidShifter #(parameter OUTPUT_LATENCY = `OUTPUT_READ_LATENCY) (
+    input clk,
+    input rst,
+    
+    input advanceShiftReg,
+    input isBotValid,
+    output outputBotValid,
+    output isEmpty
+);
+
+localparam SHIFT_DEPTH = (1 << `ADDR_WIDTH) - `OUTPUT_INDEX_OFFSET;
+
+reg[`ADDR_WIDTH-1:0] cyclesUntilEmpty;
+assign isEmpty = cyclesUntilEmpty == 0;
+
+always @(posedge clk) begin
+    if(rst) begin
+        cyclesUntilEmpty <= 0;
+    end else begin
+        if(advanceShiftReg) begin
+            if(isBotValid) begin
+                cyclesUntilEmpty <= SHIFT_DEPTH;
+            end else begin
+                if(!isEmpty) cyclesUntilEmpty <= cyclesUntilEmpty - 1;
+            end
+        end
+    end
+end
+
+wire isLastBotInShiftRegisterValid;
+shiftRegister #(.CYCLES(SHIFT_DEPTH), .WIDTH(1), .RESET_VALUE(1'b0)) validIndicesRegister(
+    clk,
+    advanceShiftReg,
+    rst,
+    isBotValid,
+    isLastBotInShiftRegisterValid
+);
+
+reg prevAdvanceShiftReg; always @(posedge clk) prevAdvanceShiftReg <= advanceShiftReg;
+
+hyperpipe #(.CYCLES(OUTPUT_LATENCY), .WIDTH(1)) outputBotDelay(
+    clk,
+    isLastBotInShiftRegisterValid & prevAdvanceShiftReg, // the & prevAdvanceShiftReg makes sure outputs are 1-clock pulses
+    outputBotValid
+);
+
+endmodule
+
+
+
 module pipelineManager (
     input clk,
     input rst,
@@ -18,43 +71,34 @@ module pipelineManager (
     output reg[127:0] top,
     output reg[`ADDR_WIDTH-1:0] botIndex,
     output isBotValid,
-    input fifoAlmostFull
+    input pipelineReady
 );
-
-reg[`ADDR_WIDTH-1:0] lastValidBotIndex;
-reg allBotsCleared;
-wire[`ADDR_WIDTH-1:0] botIndexSinceLast = botIndex - lastValidBotIndex;
 
 reg newTopWaiting;
 reg[127:0] newTopInWaiting;
 
 reg isInitializing;
 
-
-wire canAcceptNewBot = !fifoAlmostFull;
-wire advancingShiftReg = canAcceptNewBot & !isInitializing;
+wire advancingShiftReg = pipelineReady & !isInitializing;
 assign readyForBotIn = advancingShiftReg & !newTopWaiting;
 assign isBotValid = isBotInValid & readyForBotIn;
 
-wire outputBotAvailable;
-shiftRegister #(.CYCLES((1 << `ADDR_WIDTH) - `OUTPUT_INDEX_OFFSET), .WIDTH(1), .RESET_VALUE(1'b0)) validIndicesRegister(
-    clk,
-    advancingShiftReg,
-    rst,
-    isBotValid,
-    outputBotAvailable
+wire allBotsCleared;
+isBotValidShifter isBotValidHistory (
+    .clk(clk),
+    .rst(rst),
+    
+    .advanceShiftReg(advancingShiftReg),
+    .isBotValid(isBotValid),
+    .outputBotValid(resultValid),
+    .isEmpty(allBotsCleared)
 );
-
-
-
-hyperpipe #(.CYCLES(`OUTPUT_READ_LATENCY), .WIDTH(1)) outputBotDelay(clk, outputBotAvailable & advancingShiftReg, resultValid);
 
 wire[`ADDR_WIDTH-1:0] INITIALIZATION_START = -1;
 
 always @(posedge clk) begin
     if(rst) begin
         isInitializing <= 1'b0;
-        allBotsCleared <= 1'b1;
         newTopWaiting <= 1'b0;
         
         newTopInWaiting <= 128'bX;
@@ -69,7 +113,7 @@ always @(posedge clk) begin
         botIndex <= -`OUTPUT_INDEX_OFFSET; // start initializing at -1024, because the first module of the collectionModule will not have been initialized
     
     // A new top arrives, is stored temporarely while the previous top is finished up
-    end else if(canAcceptNewBot) begin
+    end else if(pipelineReady) begin
         if(botIndex == INITIALIZATION_START) begin
             isInitializing <= 1'b0;
         end
@@ -78,15 +122,6 @@ always @(posedge clk) begin
             if(startNewTop & !newTopWaiting) begin
                 newTopInWaiting <= topIn;
                 newTopWaiting <= 1'b1;
-            end
-        end
-        
-        if(readyForBotIn & !startNewTop) begin
-            lastValidBotIndex <= botIndex;
-            allBotsCleared <= 1'b0;
-        end else begin
-            if(botIndexSinceLast >= (1 << `ADDR_WIDTH) - `OUTPUT_INDEX_OFFSET) begin
-                allBotsCleared <= 1'b1;
             end
         end
         
