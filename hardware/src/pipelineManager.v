@@ -45,7 +45,9 @@ shiftRegister #(.CYCLES((1 << `ADDR_WIDTH) - `OUTPUT_INDEX_OFFSET), .WIDTH(1), .
     outputBotAvailable
 );
 
-hyperpipe #(.CYCLES(`OUTPUT_READ_LATENCY), .WIDTH(1)) outputBotDelay(clk, outputBotAvailable, resultValid);
+
+
+hyperpipe #(.CYCLES(`OUTPUT_READ_LATENCY), .WIDTH(1)) outputBotDelay(clk, outputBotAvailable & advancingShiftReg, resultValid);
 
 wire[`ADDR_WIDTH-1:0] INITIALIZATION_START = -1;
 

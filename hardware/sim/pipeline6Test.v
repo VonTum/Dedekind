@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-`include "pipelineGlobals_header.v"
+`include "../src/pipelineGlobals_header.v"
 
 module pipeline6Test();
 

@@ -239,6 +239,7 @@ void pipelinePackTestSetForOpenCL(std::vector<size_t> counts, unsigned int permu
 		std::cout << "Starting generation" << std::endl;
 		for(size_t i = 0; i < count; i++) {
 			Monotonic<Variables> bot = selectedTop.bots[botSelector(generator)];
+			permuteRandom(bot, generator);
 			uint64_t resultingBotSum = 0;
 			uint16_t resultingBotCount = 0;
 
@@ -250,7 +251,6 @@ void pipelinePackTestSetForOpenCL(std::vector<size_t> counts, unsigned int permu
 			});
 
 			testSet << "0_";
-			permuteRandom(bot, generator);
 			testSet << bot.bf.bitset << '_';
 			printBits(testSet, resultingBotSum, 64);
 			testSet << '_';

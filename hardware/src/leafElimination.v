@@ -40,7 +40,7 @@ endfunction
 function integer getNthBit;
     input integer val;
     input integer n;
-    input integer isBitOn;
+    input isBitOn;
     
     integer correctBitsPassed;
     integer i;

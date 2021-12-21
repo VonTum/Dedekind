@@ -22,7 +22,7 @@ wire[5:0] validBotPermutationsUnderTest;
 permuteCheck6 elementUnderTest(top, bot, validBotPermutationsUnderTest);
 
 
-`include "inlineVarSwap_header.v"
+`include "../src/inlineVarSwap_header.v"
 
 // generate the permuted bots
 wire[127:0] botABC = bot;
