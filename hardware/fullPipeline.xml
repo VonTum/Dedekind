@@ -22,7 +22,7 @@
            For variable latency functions, pipeline around this function will be balanced to this 
            value. Setting EXPECTED_LATENCY to a different value will still produce correct results
            but may affect number of stalls inside the pipeline. -->
-      <EXPECTED_LATENCY value="8200"/> <!-- mem size is 8192, so just a bit more for stalls-->
+      <EXPECTED_LATENCY value="7200"/> <!-- mem size is 8192-1024, so just a bit more for stalls-->
       
       <!-- Number of multiple inputs that can be processed simultaneously by this function.
            If IS_STALL_FREE="no" and IS_FIXED_LATENCY="no", the CAPACITY value must be specified.
@@ -47,7 +47,7 @@
       <AVALON port="clock" type="clock"/>
       <AVALON port="resetn" type="resetn"/>
       <AVALON port="ivalid" type="ivalid"/>
-      <AVALON port="iready" type="iready"/> <!-- Not supported-->
+      <AVALON port="iready" type="iready"/>
       <AVALON port="ovalid" type="ovalid"/>
       <AVALON port="oready" type="oready"/>
       <INPUT  port="botUpper" width="64"/>
@@ -68,6 +68,7 @@
       <FILE name="src/openCLFullPipeline.v"/>
           <FILE name="src/pipelineManager.v"/>
                <FILE name="src/hyperPipelining.v"/>
+          <FILE name="src/outputBuffer.v"/>
           <FILE name="src/multiPermutChecks.v"/>
           <FILE name="src/fullPipeline.v"/>
                <FILE name="src/inputModule.v"/>
@@ -88,6 +89,9 @@
       <!--<FILE name="src/ip/pipelineFifo.ip"/>-->
           <FILE name="src/ip/pipelineFifo/synth/pipelineFifo.v"/>
           <FILE name="src/ip/pipelineFifo/fifo_1910/synth/pipelineFifo_fifo_1910_o2naleq.v"/>
+     <!--<FILE name="src/ip/outputBufferFifo.ip"/>-->
+          <FILE name="src/ip/outputBufferFifo/synth/outputBufferFifo.v"/>
+          <FILE name="src/ip/outputBufferFifo/fifo_1910/synth/outputBufferFifo_fifo_1910_3r4w6zi.v"/>
       
       <!-- Constraints -->
       <!--<FILE name="src/pipelineClock.sdc"/>-->
