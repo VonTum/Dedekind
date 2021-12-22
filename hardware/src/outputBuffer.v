@@ -24,7 +24,8 @@ assign dataOutValid = !fifoEmpty;
 
 FIFO #(.WIDTH(64), .DEPTH_LOG2(`FIFO_DEPTH_BITS)) buffer (
     .clk(clk),
-	 
+    .rst(rst),
+	
     // input side
     .writeEnable(dataInValid),
     .dataIn(dataIn),

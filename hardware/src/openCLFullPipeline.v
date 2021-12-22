@@ -3,6 +3,7 @@
 
 module openCLFullPipeline (
     input clock,
+    input clock2x, // apparently this specific name gives access to a 2x speed clock. Very useful!
     input resetn,
 	input ivalid, 
 	input iready,
@@ -24,7 +25,6 @@ wire[4:0] fifoFullness;
 wire[`ADDR_WIDTH-1:0] botIndex;
 wire isBotValid;
 
-wire[63:0] pipelineResult;
 wire pipelineResultValid;
 wire slowThePipeline;
 
@@ -51,6 +51,8 @@ wire[5:0] validBotPermutations;
 permuteCheck6 permuteChecker (top, bot, isBotValid, validBotPermutations);
 
 
+wire[63:0] pipelineResult;
+assign pipelineResult[63:41] = 0;
 fullPipeline pipeline (
     .clk(clock),
     .rst(rst),
@@ -62,10 +64,14 @@ fullPipeline pipeline (
     .validBotPermutations(validBotPermutations), // == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
     .fifoFullness(fifoFullness),
     .summedDataOut(pipelineResult[37:0]),
-    .pcoeffCountOut(pipelineResult[50:48])
+    .pcoeffCountOut(pipelineResult[40:38])
 );
 
+wire[63:0] dataFromFIFO;
 
+wire validOut;
+reg LAST_RESORT_OVALID = 0;
+assign ovalid = validOut || LAST_RESORT_OVALID;
 outputBuffer resultsBuf (
     .clk(clock),
     .rst(rst),
@@ -75,9 +81,46 @@ outputBuffer resultsBuf (
     
     .slowInputting(slowThePipeline),
     .dataOutReady(iready),
-    .dataOutValid(ovalid),
-    .dataOut(summedDataPcoeffCountOut)
+    .dataOutValid(validOut),
+    .dataOut(dataFromFIFO)
 );
 
+
+/*
+TEMP TESTING
+*/
+
+reg LAST_RESORT_hasReset = 0;
+reg LAST_RESORT_hasStarted = 0;
+reg[31:0] clockTicksSinceStarted = 0;
+
+always @(posedge clock) begin
+    if(!resetn) begin
+        LAST_RESORT_hasReset <= 1;
+        LAST_RESORT_hasStarted <= 0;
+        clockTicksSinceStarted <= 0;
+        LAST_RESORT_OVALID <= 0;
+    end else begin
+        if(LAST_RESORT_hasReset && ivalid) begin
+            LAST_RESORT_hasStarted <= 1;
+        end
+        if(LAST_RESORT_hasStarted) begin
+            clockTicksSinceStarted <= clockTicksSinceStarted + 1;
+        end
+        if(clockTicksSinceStarted >= 1000000) begin
+            LAST_RESORT_OVALID <= 1;
+        end
+    end
+end
+
+// clock2x test
+reg[10:0] clock2xReg;
+reg[10:0] clockReg;
+
+always @(posedge clock) if(resetn) clockReg <= 0; else clockReg <= clockReg + 1;
+always @(posedge clock2x) if(resetn) clock2xReg <= 0; else clock2xReg <= clock2xReg + 1;
+
+assign summedDataPcoeffCountOut[63:42] = {clock2xReg, clockReg};
+assign summedDataPcoeffCountOut[41:0] = dataFromFIFO[41:0];
 
 endmodule

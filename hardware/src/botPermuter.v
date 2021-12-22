@@ -3,6 +3,7 @@
 // permutes the last 3 variables
 module botPermuter #(parameter EXTRA_DATA_WIDTH = 12) (
     input clk,
+    input rst,
     
     // input side
     input[127:0] botIn,
@@ -21,16 +22,7 @@ module botPermuter #(parameter EXTRA_DATA_WIDTH = 12) (
 
 reg[127:0] savedBot;
 reg[EXTRA_DATA_WIDTH-1:0] savedExtraData;
-reg[5:0] validBotPermutes = 6'b000000;
-
-initial begin
-    savedBot = 0;
-    savedExtraData = 0;
-    permutedBotValid = 0;
-    permutedBot = 0;
-    selectedPermutationOut = 7;
-    extraDataOut = 0;
-end
+reg[5:0] validBotPermutes;
 
 // This marks the permutation that should be removed next
 wire[5:0] shouldNotRemove = {
@@ -67,7 +59,7 @@ always @(validBotPermutes) begin
 end
 
 wire[127:0] permutedBotFromSelector;
-botPermuteSelector3 combinatorialSelector (
+botPermuteSelector6 combinatorialSelector (
     savedBot,
     validBotPermutes,
     permutedBotFromSelector
@@ -76,30 +68,40 @@ botPermuteSelector3 combinatorialSelector (
 assign requestBotFromInput = requestBot & isDone;
 
 always @(posedge clk) begin
-    if(requestBotFromInput) begin
-        savedBot <= botIn;
-        savedExtraData <= extraDataIn;
-    end
-    if(requestBot) begin
-        if(isDone) begin
-            if(botInIsValid)
-                validBotPermutes <= validBotPermutesIn;
-            else
-                validBotPermutes <= 6'b000000;
-        end else begin
-            validBotPermutes <= validBotPermutes & shouldNotRemove;
+    if(rst) begin
+        savedBot <= 0;
+        savedExtraData <= 0;
+        permutedBotValid <= 0;
+        permutedBot <= 0;
+        selectedPermutationOut <= 7;
+        extraDataOut <= 0;
+        validBotPermutes <= 6'b000000;
+    end else begin
+        if(requestBotFromInput) begin
+            savedBot <= botIn;
+            savedExtraData <= extraDataIn;
         end
-        
-        permutedBotValid <= validBotPermutes != 0;
-        permutedBot <= permutedBotFromSelector;
-        extraDataOut <= savedExtraData;
-        selectedPermutationOut <= selectedPermutation;
+        if(requestBot) begin
+            if(isDone) begin
+                if(botInIsValid)
+                    validBotPermutes <= validBotPermutesIn;
+                else
+                    validBotPermutes <= 6'b000000;
+            end else begin
+                validBotPermutes <= validBotPermutes & shouldNotRemove;
+            end
+            
+            permutedBotValid <= validBotPermutes != 0;
+            permutedBot <= permutedBotFromSelector;
+            extraDataOut <= savedExtraData;
+            selectedPermutationOut <= selectedPermutation;
+        end
     end
 end
 
 endmodule
 
-module botPermuteSelector3 (
+module botPermuteSelector6 (
     input[127:0] bot,
     input[5:0] validBotPermutes, // == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
     output[127:0] permutedBot

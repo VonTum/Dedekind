@@ -112,6 +112,7 @@ wire[2:0] subAddrIn;
 
 inputModule6 #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH)) inputHandler (
     .clk(clk),
+    .rst(rst),
     
     // input side
     .bot(bot),

@@ -8,6 +8,7 @@
 
 module inputModule6 #(parameter EXTRA_DATA_WIDTH = 12) (
     input clk,
+    input rst,
     
     // input side
     input[127:0] bot,
@@ -45,6 +46,7 @@ pipelineFifo botQueue (
 `else
 FIFO #(.WIDTH(128+6+EXTRA_DATA_WIDTH), .DEPTH_LOG2(`FIFO_DEPTH_LOG2)) botQueue (
     .clk(clk),
+    .rst(rst),
     
     .writeEnable(anyBotPermutIsValid),
     .dataIn({bot,validBotPermutesIn,extraDataIn}),
@@ -67,6 +69,7 @@ assign {botFromFifo, validBotPermutesFromFifo, extraDataFromFifo} = dataFromFifo
 
 botPermuter #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH)) permuter (
     .clk(clk),
+    .rst(rst),
     
     // input side
     .botIn(botFromFifo),

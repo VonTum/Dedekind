@@ -44,12 +44,12 @@ wire validOutput;
 reg isReadyForOutput = 1; // controller is always ready for output
 
 initial begin
-    forever #20000 isReadyForOutput = !isReadyForOutput;
+    forever #4 isReadyForOutput = !isReadyForOutput;
 end
 
 wire[63:0] summedDataPcoeffCountOut;
 wire[37:0] summedData = summedDataPcoeffCountOut[37:0];
-wire[2:0] pcoeffCount = summedDataPcoeffCountOut[50:48];
+wire[2:0] pcoeffCount = summedDataPcoeffCountOut[40:38];
 
 openCLFullPipeline openclfp (
     .clock(clk),
