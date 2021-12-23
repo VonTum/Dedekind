@@ -104,6 +104,19 @@ module fullPipeline (
 );
 
 wire anyBotPermutIsValid = isBotValid & (|validBotPermutations);
+
+// Some extra slack for a better fitting
+// WARNING: fifo fullness lags behind actual fifo fullness, avoid overflow by using slmostFull!
+wire[127:0] botD;
+wire[`ADDR_WIDTH-1:0] botIndexD;
+wire[5:0] validBotPermutationsD;
+wire anyBotPermutIsValidD;
+hyperpipe #(.CYCLES(2), .WIDTH(128+1+6+`ADDR_WIDTH)) inputsPipe(
+    clk, 
+    {bot, anyBotPermutIsValid, validBotPermutations, botIndex}, 
+    {botD, anyBotPermutIsValidD, validBotPermutationsD, botIndexD}
+);
+
 wire botAvailableFifo;
 wire coreRequests, coreDone;
 wire[127:0] botFromFifo;
@@ -115,11 +128,11 @@ inputModule6 #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH)) inputHandler (
     .rst(rst),
     
     // input side
-    .bot(bot),
-    .anyBotPermutIsValid(anyBotPermutIsValid),
-    .validBotPermutesIn(validBotPermutations),
+    .bot(botD),
+    .anyBotPermutIsValid(anyBotPermutIsValidD),
+    .validBotPermutesIn(validBotPermutationsD),
     .fifoFullness(fifoFullness),
-    .extraDataIn(botIndex),
+    .extraDataIn(botIndexD),
     
     // output side, to countConnectedCore
     .requestBot(coreRequests),
@@ -128,25 +141,6 @@ inputModule6 #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH)) inputHandler (
     .extraDataOut(addrIn),
     .selectedBotPermutation(subAddrIn)
 );
-
-/*
-module inputModule6 #(parameter EXTRA_DATA_WIDTH = `ADDR_WIDTH) (
-    input clk,
-    
-    // input side
-    input[127:0] bot,
-    input anyBotPermutIsValid, // == botIsValid & &validBotPermutesIn
-    input[5:0] validBotPermutesIn, // == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
-    input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
-    output[4:0] fifoFullness,
-    
-    // output side
-    input requestBot,
-    output[127:0] botOut,
-    output botOutValid,
-    output[2:0] selectedBotPermutation,
-    output[EXTRA_DATA_WIDTH-1:0] extraDataOut
-*/
 
 wire[`ADDR_WIDTH-1:0] addrOut;
 wire[2:0] subAddrOut;

@@ -29,7 +29,7 @@ initial begin
     inputBotValid = 1;
 end
 
-parameter MEMSIZE = 200;
+parameter MEMSIZE = 60000;
 reg[1+128+64+8-1:0] dataTable[MEMSIZE-1:0];
 initial $readmemb("pipeline6PackTestSetForOpenCL7.mem", dataTable);
 

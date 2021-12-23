@@ -74,7 +74,7 @@ module pipelineManager (
     input pipelineReady
 );
 
-reg topReg;
+reg[127:0] topReg;
 // No false paths sadly, so this hyperpipe should at least help reduce fitting strain. Can be up to `OUTPUT_INDEX_OFFSET = 1024 cycles
 hyperpipe #(.CYCLES(30), .WIDTH(128)) topPipe(clk, topReg, top);
 
