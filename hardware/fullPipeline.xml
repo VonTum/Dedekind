@@ -82,7 +82,7 @@
                          <FILE name="src/monotonize.v"/>
                <FILE name="src/collectionModule.v"/>
       <!-- IP Blocks -->
-      <FILE name="src/M20k.v"/>
+      <FILE name="src/M20K.v"/>
       <FILE name="src/FIFO.v"/>
       <!--<FILE name="src/ip/collectorM20k.ip"/>-->
           <!--<FILE name="src/ip/collectorM20K/synth/collectorM20K.v"/>

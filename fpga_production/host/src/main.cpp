@@ -29,6 +29,8 @@
 #include "CL/opencl.h"
 #include "AOCLUtils/aocl_utils.h"
 
+#include "../../dedelib/toString.h"
+
 #include "dataFormat.h"
 
 using namespace aocl_utils;
@@ -37,7 +39,7 @@ using namespace aocl_utils;
 
 
 // Runtime constants
-static unsigned int BUFSIZE = 200;
+static cl_int BUFSIZE = 500;
 
 // OpenCL runtime configuration
 static cl_platform_id platform = NULL;
@@ -98,7 +100,7 @@ int main(int argc, char** argv) {
   checkError(status, "Failed to enqueue writing to upperBotsMem buffer");
   status = clEnqueueWriteBuffer(queue,lowerBotsMem,0,0,BUFSIZE*sizeof(uint64_t),lowerBotsIn,0,0,0);
   checkError(status, "Failed to enqueue writing to lowerBotsMem buffer");
-
+  
   // Set the kernel arguments for kernel
   status = clSetKernelArg(fullPipelineKernel,0,sizeof(cl_mem),&upperBotsMem);
   checkError(status, "Failed to set fullPipelineKernel arg 0");
@@ -106,7 +108,7 @@ int main(int argc, char** argv) {
   checkError(status, "Failed to set fullPipelineKernel arg 1");
   status = clSetKernelArg(fullPipelineKernel,2,sizeof(cl_mem),&resultsMem);
   checkError(status, "Failed to set fullPipelineKernel arg 2");
-  status = clSetKernelArg(fullPipelineKernel,3,sizeof(cl_int),&N);
+  status = clSetKernelArg(fullPipelineKernel,3,sizeof(cl_int),&BUFSIZE);
   checkError(status, "Failed to set fullPipelineKernel arg 3");
 
   // Configure work set over which the kernel will execute
@@ -114,7 +116,7 @@ int main(int argc, char** argv) {
   size_t lSize = 1; 
 
   // Launch the kernels
-  int NUM_ITERATIONS = 2;
+  int NUM_ITERATIONS = 1;
   printf("Enqueueing fullPipelineKernel %d times with global size %d\n", NUM_ITERATIONS, (int) gSize);
 
   // Launch fullPipelineKernel
@@ -128,9 +130,9 @@ int main(int argc, char** argv) {
 
   
 
-  //status = clFinish(queue);
-  //checkError(status, "Failed to finish");
-  std::this_thread::sleep_for(std::chrono::milliseconds(4000));
+  status = clFinish(queue);
+  checkError(status, "Failed to finish");
+  //std::this_thread::sleep_for(std::chrono::milliseconds(4000));
 
   double stopTime = aocl_utils::getCurrentTimestamp();
   printf ("Kernel computation using library function took %g seconds\n", stopTime - startTime);
@@ -143,10 +145,37 @@ int main(int argc, char** argv) {
   checkError(status, "Failed to read buffer resultsMem to resultsOut");
   
   std::cout << "" << std::endl;
+
+  int corrects = 0;
+  int nonZeroCorrects = 0;
+  int totals = 0;
+  int nonZeroTotals = 0;
+
   for(size_t i = 0; i < BUFSIZE; i++) {
-    std::cout << i << ": Correct: " << allData[i].connectCount << " From FPGA: " << (resultsOut[i] & 0xFFFFFFFFFFFF) << ", ";
-    std::cout << " Correct: " << allData[i].numTerms << " From FPGA: " << (resultsOut[i] >> 48) << std::endl;
+    uint64_t resultConnectCount = resultsOut[i] & ((uint64_t(1) << 37) - 1);
+    uint64_t resultNumTerms = (resultsOut[i] >> 38) & ((1 << 3) - 1);
+    uint64_t resultClock = (resultsOut[i] >> 42) & ((1 << 11) - 1);
+    uint64_t resultClock2x = (resultsOut[i] >> 53) & ((1 << 11) - 1);
+
+    if(allData[i].connectCount != 0 || resultConnectCount != 0) {
+      std::cout << i << ": [ConCount] Correct: " << allData[i].connectCount << " FPGA: " << resultConnectCount << std::endl;
+      std::cout << i << ": [NumTerms] Correct: " << allData[i].numTerms << " FPGA: " << resultNumTerms << std::endl;
+      std::cout << "[Clock]: " << resultClock << std::endl;
+      std::cout << "[Clock2x]: " << resultClock2x << std::endl;
+    }
+    
+    if(!allData[i].isTop) {
+      if(resultConnectCount == allData[i].connectCount && resultNumTerms == allData[i].numTerms) {
+        corrects++;
+        if(resultConnectCount != 0) nonZeroCorrects++;
+      }
+      totals++;
+      if(allData[i].connectCount != 0) nonZeroTotals++;
+    }
   }
+
+  std::cout << "Total tally: " << corrects << "/" << totals << std::endl;
+  std::cout << "Nonzero tally: " << nonZeroCorrects << "/" << nonZeroTotals << std::endl;
 
   // Free the resources allocated
   cleanup();
