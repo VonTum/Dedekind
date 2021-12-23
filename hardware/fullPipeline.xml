@@ -29,7 +29,7 @@
            Otherwise, it is not required.
            If CAPACITY is strictly less than EXPECTED_LATENCY, the compiler will automatically 
            insert capacity-balancing FIFOs after this function when required. -->
-      <CAPACITY value="6000"/> <!-- mem size is 8192, but only 6128 is active at a time-->
+      <CAPACITY value="20"/> <!-- mem size is 8192, but only 6128 is active at a time-->
       
       <!-- Set to "yes" to indicate that this function has side-effects. Calls to functions
            with side-effects will not be optimized away and only valid data will be fed
@@ -69,6 +69,7 @@
           <FILE name="src/pipelineManager.v"/>
                <FILE name="src/hyperPipelining.v"/>
           <FILE name="src/outputBuffer.v"/>
+          <FILE name="src/resetNormalizer.v"/>
           <FILE name="src/multiPermutChecks.v"/>
           <FILE name="src/fullPipeline.v"/>
                <FILE name="src/inputModule.v"/>
@@ -81,17 +82,17 @@
                          <FILE name="src/monotonize.v"/>
                <FILE name="src/collectionModule.v"/>
       <!-- IP Blocks -->
-      <!--<FILE name="src/M20k.v"/>-->
-      <!--<FILE name="src/FIFO.v"/>-->
+      <FILE name="src/M20k.v"/>
+      <FILE name="src/FIFO.v"/>
       <!--<FILE name="src/ip/collectorM20k.ip"/>-->
-          <FILE name="src/ip/collectorM20K/synth/collectorM20K.v"/>
-          <FILE name="src/ip/collectorM20K/ram_2port_2020/synth/collectorM20K_ram_2port_2020_7x5qxgq.v"/>
+          <!--<FILE name="src/ip/collectorM20K/synth/collectorM20K.v"/>
+          <FILE name="src/ip/collectorM20K/ram_2port_2020/synth/collectorM20K_ram_2port_2020_7x5qxgq.v"/>-->
       <!--<FILE name="src/ip/pipelineFifo.ip"/>-->
-          <FILE name="src/ip/pipelineFifo/synth/pipelineFifo.v"/>
-          <FILE name="src/ip/pipelineFifo/fifo_1910/synth/pipelineFifo_fifo_1910_o2naleq.v"/>
-     <!--<FILE name="src/ip/outputBufferFifo.ip"/>-->
-          <FILE name="src/ip/outputBufferFifo/synth/outputBufferFifo.v"/>
-          <FILE name="src/ip/outputBufferFifo/fifo_1910/synth/outputBufferFifo_fifo_1910_3r4w6zi.v"/>
+          <!--<FILE name="src/ip/pipelineFifo/synth/pipelineFifo.v"/>
+          <FILE name="src/ip/pipelineFifo/fifo_1910/synth/pipelineFifo_fifo_1910_o2naleq.v"/>-->
+      <!--<FILE name="src/ip/outputBufferFifo.ip"/>-->
+          <!--<FILE name="src/ip/outputBufferFifo/synth/outputBufferFifo.v"/>
+          <FILE name="src/ip/outputBufferFifo/fifo_1910/synth/outputBufferFifo_fifo_1910_3r4w6zi.v"/>-->
       
       <!-- Constraints -->
       <!--<FILE name="src/pipelineClock.sdc"/>-->

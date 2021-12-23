@@ -12,10 +12,15 @@ end
 reg rst;
 reg inputBotValid;
 initial begin
+    rst = 0;
+    #30
     rst = 1;
+    #2
+    rst = 0;
+    /*rst = 1;
     inputBotValid = 0;
     #60
-    rst = 0;
+    rst = 0;*/
     #10
     inputBotValid = 1;
     #30000
@@ -24,7 +29,7 @@ initial begin
     inputBotValid = 1;
 end
 
-parameter MEMSIZE = 65000;
+parameter MEMSIZE = 200;
 reg[1+128+64+8-1:0] dataTable[MEMSIZE-1:0];
 initial $readmemb("pipeline6PackTestSetForOpenCL7.mem", dataTable);
 
@@ -44,7 +49,7 @@ wire validOutput;
 reg isReadyForOutput = 1; // controller is always ready for output
 
 initial begin
-    forever #4 isReadyForOutput = !isReadyForOutput;
+    forever #10000 isReadyForOutput = !isReadyForOutput;
 end
 
 wire[63:0] summedDataPcoeffCountOut;
@@ -86,7 +91,7 @@ assign {startNewTop, bot} = dataTable[inputIndex][1+128+64+8-1 : 64+8];
 wire[37:0] offsetSum = dataTable[outputIndex][37+8-1 : 8];
 wire[2:0] offsetCount = dataTable[outputIndex][2 : 0];
 
-wire CORRECT_SUM = isPassingOutput ? (summedData == offsetSum) : 1'bX;
-wire CORRECT_COUNT = isPassingOutput ? (pcoeffCount == offsetCount) : 1'bX;
+wire CORRECT_SUM = isPassingOutput ? (summedData == offsetSum) : 1'b1; //1'bX;
+wire CORRECT_COUNT = isPassingOutput ? (pcoeffCount == offsetCount) : 1'b1; //1'bX;
 
 endmodule

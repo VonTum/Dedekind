@@ -68,18 +68,22 @@ module pipelineManager (
     
     
     // To pipelines
-    output reg[127:0] top,
+    output[127:0] top,
     output reg[`ADDR_WIDTH-1:0] botIndex,
     output isBotValid,
     input pipelineReady
 );
+
+reg topReg;
+// No false paths sadly, so this hyperpipe should at least help reduce fitting strain. Can be up to `OUTPUT_INDEX_OFFSET = 1024 cycles
+hyperpipe #(.CYCLES(30), .WIDTH(128)) topPipe(clk, topReg, top);
 
 reg newTopWaiting;
 reg[127:0] newTopInWaiting;
 
 reg isInitializing;
 
-wire advancingShiftReg = pipelineReady & !isInitializing;
+wire advancingShiftReg = pipelineReady & !rst & !isInitializing;
 assign readyForBotIn = advancingShiftReg & !newTopWaiting;
 assign isBotValid = isBotInValid & readyForBotIn;
 
@@ -102,18 +106,18 @@ always @(posedge clk) begin
         newTopWaiting <= 1'b0;
         
         newTopInWaiting <= 128'bX;
-        top <= 128'bX;
+        topReg <= 128'bX;
         botIndex <= `ADDR_WIDTH'bX;
         
     // The new top gets loaded in, 
     end else if(newTopWaiting & allBotsCleared) begin
         newTopWaiting <= 1'b0;
         isInitializing <= 1'b1;
-        top <= newTopInWaiting;
+        topReg <= newTopInWaiting;
         botIndex <= -`OUTPUT_INDEX_OFFSET; // start initializing at -1024, because the first module of the collectionModule will not have been initialized
     
     // A new top arrives, is stored temporarely while the previous top is finished up
-    end else if(pipelineReady) begin
+    end else if(pipelineReady & !rst) begin
         if(botIndex == INITIALIZATION_START) begin
             isInitializing <= 1'b0;
         end

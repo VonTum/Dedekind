@@ -62,18 +62,16 @@ module simpleDualPortM20K_20b1024 (
     output[19:0] readData
 );
 
-reg[9:0] memoryA[1023:0];
-reg[9:0] memoryB[1023:0];
+reg[19:0] memory[1023:0];
 
 always @(posedge clk) begin
     if(writeEnable) begin
-        if(writeMask[0]) memoryA[writeAddr] <= writeData[9:0];
-        if(writeMask[1]) memoryB[writeAddr] <= writeData[19:10];
+        if(writeMask[0]) memory[writeAddr][9:0] <= writeData[9:0];
+        if(writeMask[1]) memory[writeAddr][19:10] <= writeData[19:10];
     end
 end
 
-assign readData[09:00] = readEnable ? memoryA[readAddr] : 10'b0000000000;
-assign readData[19:10] = readEnable ? memoryB[readAddr] : 10'b0000000000;
+assign readData = readEnable ? memory[readAddr] : 20'b00000000000000000000;
 endmodule
 
 
@@ -102,8 +100,7 @@ reg writeEnableD;
 reg[9:0] readAddrD;
 
 
-reg[9:0] memoryA[1023:0];
-reg[9:0] memoryB[1023:0];
+reg[19:0] memory[1023:0];
 
 always @(posedge clk) begin
     writeAddrD <= writeAddr;
@@ -114,12 +111,11 @@ always @(posedge clk) begin
     readAddrD <= readAddr;
     
     if(writeEnableD) begin
-        if(writeMaskD[0]) memoryA[writeAddrD] <= writeDataD[9:0];
-        if(writeMaskD[1]) memoryB[writeAddrD] <= writeDataD[19:10];
+        if(writeMaskD[0]) memory[writeAddrD][9:0] <= writeDataD[9:0];
+        if(writeMaskD[1]) memory[writeAddrD][19:10] <= writeDataD[19:10];
     end
     
-    readData[09:00] <= readEnableD ? memoryA[readAddrD] : 10'b0000000000;
-    readData[19:10] <= readEnableD ? memoryB[readAddrD] : 10'b0000000000;
+    readData <= readEnableD ? memory[readAddrD] : 20'b00000000000000000000;
 end
 
 endmodule
