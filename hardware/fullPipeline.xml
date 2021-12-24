@@ -82,17 +82,17 @@
                          <FILE name="src/monotonize.v"/>
                <FILE name="src/collectionModule.v"/>
       <!-- IP Blocks -->
-      <FILE name="src/M20K.v"/>
-      <FILE name="src/FIFO.v"/>
+      <!--<FILE name="src/M20K.v"/>
+      <FILE name="src/FIFO.v"/>-->
       <!--<FILE name="src/ip/collectorM20k.ip"/>-->
-          <!--<FILE name="src/ip/collectorM20K/synth/collectorM20K.v"/>
-          <FILE name="src/ip/collectorM20K/ram_2port_2020/synth/collectorM20K_ram_2port_2020_7x5qxgq.v"/>-->
+          <FILE name="src/ip/collectorM20K/synth/collectorM20K.v"/>
+          <FILE name="src/ip/collectorM20K/ram_2port_2020/synth/collectorM20K_ram_2port_2020_7x5qxgq.v"/>
       <!--<FILE name="src/ip/pipelineFifo.ip"/>-->
-          <!--<FILE name="src/ip/pipelineFifo/synth/pipelineFifo.v"/>
-          <FILE name="src/ip/pipelineFifo/fifo_1910/synth/pipelineFifo_fifo_1910_o2naleq.v"/>-->
+          <FILE name="src/ip/pipelineFifo/synth/pipelineFifo.v"/>
+          <FILE name="src/ip/pipelineFifo/fifo_1910/synth/pipelineFifo_fifo_1910_o2naleq.v"/>
       <!--<FILE name="src/ip/outputBufferFifo.ip"/>-->
-          <!--<FILE name="src/ip/outputBufferFifo/synth/outputBufferFifo.v"/>
-          <FILE name="src/ip/outputBufferFifo/fifo_1910/synth/outputBufferFifo_fifo_1910_3r4w6zi.v"/>-->
+          <FILE name="src/ip/outputBufferFifo/synth/outputBufferFifo.v"/>
+          <FILE name="src/ip/outputBufferFifo/fifo_1910/synth/outputBufferFifo_fifo_1910_3r4w6zi.v"/>
       
       <!-- Constraints -->
       <!--<FILE name="src/pipelineClock.sdc"/>-->

@@ -17,7 +17,13 @@ module isBotValidShifter #(parameter OUTPUT_LATENCY = `OUTPUT_READ_LATENCY) (
 localparam SHIFT_DEPTH = (1 << `ADDR_WIDTH) - `OUTPUT_INDEX_OFFSET;
 
 reg[`ADDR_WIDTH-1:0] cyclesUntilEmpty;
-assign isEmpty = cyclesUntilEmpty == 0;
+
+// A few cycles of delay to make fitting easier
+hyperpipe #(.CYCLES(2), .WIDTH(1)) isEmptyDelay (
+    clk,
+    cyclesUntilEmpty == 0,
+    isEmpty
+);
 
 always @(posedge clk) begin
     if(rst) begin
