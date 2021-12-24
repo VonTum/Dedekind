@@ -45,6 +45,7 @@
     </ATTRIBUTES>
     <INTERFACE>
       <AVALON port="clock" type="clock"/>
+      <AVALON port="clock2x" type="clock2x"/>
       <AVALON port="resetn" type="resetn"/>
       <AVALON port="ivalid" type="ivalid"/>
       <AVALON port="iready" type="iready"/>

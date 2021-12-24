@@ -40,6 +40,9 @@ using namespace aocl_utils;
 
 // Runtime constants
 static cl_int BUFSIZE = 500;
+static int NUM_ITERATIONS = 1;
+static bool SHOW_NONZEROS = false;
+static bool ENABLE_PROFILING = false;
 
 // OpenCL runtime configuration
 static cl_platform_id platform = NULL;
@@ -77,6 +80,22 @@ int main(int argc, char** argv) {
      use_emulator = options.get<bool>("emulator");
    }
 
+   if(options.has("bufsize")) {
+     BUFSIZE = options.get<cl_int>("bufsize");
+   }
+
+   if(options.has("iters")) {
+     NUM_ITERATIONS = options.get<cl_int>("iters");
+   }
+
+   if(options.has("show")) {
+     SHOW_NONZEROS = true;
+   }
+
+   if(options.has("profile")) {
+     ENABLE_PROFILING = true;
+   }
+
   cl_int status;
 
   std::cout << "Loading data..." << std::endl;
@@ -88,8 +107,8 @@ int main(int argc, char** argv) {
     upperBotsIn[i] = allData[i].botOrTopUpper;
     lowerBotsIn[i] = allData[i].botOrTopLower;
 
-    std::cout << upperBotsIn[i] << " ";
-    std::cout << lowerBotsIn[i] << std::endl;
+    //std::cout << upperBotsIn[i] << " ";
+    //std::cout << lowerBotsIn[i] << std::endl;
   }
 
   if(!init()) {
@@ -110,13 +129,15 @@ int main(int argc, char** argv) {
   checkError(status, "Failed to set fullPipelineKernel arg 2");
   status = clSetKernelArg(fullPipelineKernel,3,sizeof(cl_int),&BUFSIZE);
   checkError(status, "Failed to set fullPipelineKernel arg 3");
+  
+  status = clFinish(queue);
+  checkError(status, "Failed to Finish writing buffers");
 
   // Configure work set over which the kernel will execute
   size_t gSize = BUFSIZE/N;
   size_t lSize = 1; 
 
   // Launch the kernels
-  int NUM_ITERATIONS = 1;
   printf("Enqueueing fullPipelineKernel %d times with global size %d\n", NUM_ITERATIONS, (int) gSize);
 
   // Launch fullPipelineKernel
@@ -135,7 +156,7 @@ int main(int argc, char** argv) {
   //std::this_thread::sleep_for(std::chrono::milliseconds(4000));
 
   double stopTime = aocl_utils::getCurrentTimestamp();
-  printf ("Kernel computation using library function took %g seconds\n", stopTime - startTime);
+  printf ("Kernel computation took %g seconds\n", stopTime - startTime);
 
   // Reading results to buffer
   printf("Reading results to buffers...\n");
@@ -157,9 +178,11 @@ int main(int argc, char** argv) {
     uint64_t resultClock = resultsOut[i] >> 41;
 
     if(allData[i].connectCount != 0 || resultConnectCount != 0) {
-      std::cout << i << "> Cycle: " << resultClock << ", \t";
-      std::cout << "[PCoeff] CPU: " << allData[i].connectCount << " FPGA: " << resultConnectCount << ", \t";
-      std::cout << "[NumTerms] CPU: " << allData[i].numTerms << " FPGA: " << resultNumTerms << std::endl;
+      if(SHOW_NONZEROS) {
+        std::cout << i << "> Cycle: " << resultClock << ", \t";
+        std::cout << "[PCoeff] CPU: " << allData[i].connectCount << " FPGA: " << resultConnectCount << ", \t";
+        std::cout << "[NumTerms] CPU: " << allData[i].numTerms << " FPGA: " << resultNumTerms << std::endl;
+      }
     }
     
     if(!allData[i].isTop) {
@@ -235,7 +258,11 @@ bool init() {
   checkError(status, "Failed to create context");
 
   // Create the command queue.
-  queue = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &status);
+  if(ENABLE_PROFILING) {
+    queue = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &status);
+  } else {
+    queue = clCreateCommandQueue(context, device, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, &status);
+  }
   checkError(status, "Failed to create command queue");
 
   // Create the program.
