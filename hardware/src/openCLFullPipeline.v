@@ -17,10 +17,6 @@ module openCLFullPipeline (
     output[63:0] summedDataPcoeffCountOut   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
-// TEMP
-reg LAST_RESORT_ACT = 0;
-
-
 wire[127:0] bot = {botUpper, botLower};
 wire[127:0] top;
 
@@ -35,7 +31,7 @@ wire pipelineResultValid;
 wire slowThePipeline;
 
 wire pipelineManagerIsReadyForBotIn;
-assign oready = (pipelineManagerIsReadyForBotIn && !slowThePipeline) || LAST_RESORT_ACT;
+assign oready = pipelineManagerIsReadyForBotIn && !slowThePipeline;
 
 pipelineManager pipelineMngr(
     .clk(clock),
@@ -58,7 +54,12 @@ permuteCheck6 permuteChecker (top, bot, isBotValid, validBotPermutations);
 
 
 wire[63:0] pipelineResult;
-assign pipelineResult[63:41] = 0;
+
+// clock2x test
+reg[22:0] clockReg; always @(posedge clock) if(rst) clockReg <= 0; else clockReg <= clockReg + 1;
+//reg[10:0] clock2xReg; always @(posedge clock2x) if(rst) clock2xReg <= 0; else clock2xReg <= clock2xReg + 1;
+
+assign pipelineResult[63:41] = clockReg;
 fullPipeline pipeline (
     .clk(clock),
     .rst(rst),
@@ -73,10 +74,6 @@ fullPipeline pipeline (
     .pcoeffCountOut(pipelineResult[40:38])
 );
 
-wire[63:0] dataFromFIFO;
-
-wire validOut;
-assign ovalid = validOut || LAST_RESORT_ACT;
 outputBuffer resultsBuf (
     .clk(clock),
     .rst(rst),
@@ -86,49 +83,8 @@ outputBuffer resultsBuf (
     
     .slowInputting(slowThePipeline),
     .dataOutReady(iready),
-    .dataOutValid(validOut),
-    .dataOut(dataFromFIFO)
+    .dataOutValid(ovalid),
+    .dataOut(summedDataPcoeffCountOut)
 );
-
-
-/*
-TEMP TESTING
-*/
-
-//`define LAST_RESORT_DELAY 100000
-`define LAST_RESORT_DELAY 100000000
-
-reg LAST_RESORT_hasReset = 0;
-reg LAST_RESORT_hasStarted = 0;
-reg[31:0] clockTicksSinceStarted = 0;
-
-always @(posedge clock) begin
-    if(rst) begin
-        LAST_RESORT_hasReset <= 1;
-        LAST_RESORT_hasStarted <= 0;
-        clockTicksSinceStarted <= 0;
-        LAST_RESORT_ACT <= 0;
-    end else begin
-        if(LAST_RESORT_hasReset && ivalid) begin
-            LAST_RESORT_hasStarted <= 1;
-        end
-        if(LAST_RESORT_hasStarted) begin
-            clockTicksSinceStarted <= clockTicksSinceStarted + 1;
-        end
-        if(clockTicksSinceStarted >= `LAST_RESORT_DELAY) begin
-            LAST_RESORT_ACT <= 1;
-        end
-    end
-end
-
-// clock2x test
-reg[10:0] clock2xReg;
-reg[10:0] clockReg;
-
-always @(posedge clock) if(rst) clockReg <= 0; else clockReg <= clockReg + 1;
-always @(posedge clock2x) if(rst) clock2xReg <= 0; else clock2xReg <= clock2xReg + 1;
-
-assign summedDataPcoeffCountOut[63:42] = {clock2xReg, clockReg};
-assign summedDataPcoeffCountOut[41:0] = dataFromFIFO[41:0];
 
 endmodule

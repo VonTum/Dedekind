@@ -154,14 +154,12 @@ int main(int argc, char** argv) {
   for(size_t i = 0; i < BUFSIZE; i++) {
     uint64_t resultConnectCount = resultsOut[i] & ((uint64_t(1) << 37) - 1);
     uint64_t resultNumTerms = (resultsOut[i] >> 38) & ((1 << 3) - 1);
-    uint64_t resultClock = (resultsOut[i] >> 42) & ((1 << 11) - 1);
-    uint64_t resultClock2x = (resultsOut[i] >> 53) & ((1 << 11) - 1);
+    uint64_t resultClock = resultsOut[i] >> 41;
 
     if(allData[i].connectCount != 0 || resultConnectCount != 0) {
-      std::cout << i << ": [ConCount] Correct: " << allData[i].connectCount << " FPGA: " << resultConnectCount << std::endl;
-      std::cout << i << ": [NumTerms] Correct: " << allData[i].numTerms << " FPGA: " << resultNumTerms << std::endl;
-      std::cout << "[Clock]: " << resultClock << std::endl;
-      std::cout << "[Clock2x]: " << resultClock2x << std::endl;
+      std::cout << i << "> Cycle: " << resultClock << ", \t";
+      std::cout << "[PCoeff] CPU: " << allData[i].connectCount << " FPGA: " << resultConnectCount << ", \t";
+      std::cout << "[NumTerms] CPU: " << allData[i].numTerms << " FPGA: " << resultNumTerms << std::endl;
     }
     
     if(!allData[i].isTop) {
