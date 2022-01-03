@@ -42,6 +42,8 @@ using namespace aocl_utils;
 static cl_int BUFSIZE = 500;
 static int NUM_ITERATIONS = 1;
 static bool SHOW_NONZEROS = false;
+static bool SHOW_ALL = false;
+static bool TWO_CLOCKS = false;
 static bool ENABLE_PROFILING = false;
 
 // OpenCL runtime configuration
@@ -90,6 +92,15 @@ int main(int argc, char** argv) {
 
    if(options.has("show")) {
      SHOW_NONZEROS = true;
+   }
+
+   if(options.has("showall")) {
+     SHOW_ALL = true;
+     SHOW_NONZEROS = true;
+   }
+
+   if(options.has("twoclocks")) {
+     TWO_CLOCKS = true;
    }
 
    if(options.has("profile")) {
@@ -177,9 +188,15 @@ int main(int argc, char** argv) {
     uint64_t resultNumTerms = (resultsOut[i] >> 38) & ((1 << 3) - 1);
     uint64_t resultClock = resultsOut[i] >> 41;
 
-    if(allData[i].connectCount != 0 || resultConnectCount != 0) {
+    if(SHOW_ALL || allData[i].connectCount != 0 || resultConnectCount != 0) {
       if(SHOW_NONZEROS) {
-        std::cout << i << "> Cycle: " << resultClock << ", \t";
+        if(TWO_CLOCKS) {
+          uint64_t clk = resultClock >> 11;
+          uint64_t clk2 = resultClock & (1 << 11);
+          std::cout << i << "> clock: " << clk << ", clock2x: " << clk2 << ", \t";
+        } else {
+          std::cout << i << "> clock: " << resultClock << ", \t";
+        }
         std::cout << "[PCoeff] CPU: " << allData[i].connectCount << " FPGA: " << resultConnectCount << ", \t";
         std::cout << "[NumTerms] CPU: " << allData[i].numTerms << " FPGA: " << resultNumTerms << std::endl;
       }

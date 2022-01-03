@@ -41,7 +41,7 @@
       <!-- Set to "yes" to allow multiple instances of this function to be merged by the compiler.
            This property should be set to "yes". 
            Note that marking function with HAS_SIDE_EFFECTS does not prevent merging. -->
-      <ALLOW_MERGING value="no"/>
+      <ALLOW_MERGING value="yes"/>
     </ATTRIBUTES>
     <INTERFACE>
       <AVALON port="clock" type="clock"/>

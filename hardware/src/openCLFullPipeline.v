@@ -56,10 +56,10 @@ permuteCheck6 permuteChecker (top, bot, isBotValid, validBotPermutations);
 wire[63:0] pipelineResult;
 
 // clock2x test
-reg[22:0] clockReg; always @(posedge clock) if(rst) clockReg <= 0; else clockReg <= clockReg + 1;
-//reg[10:0] clock2xReg; always @(posedge clock2x) if(rst) clock2xReg <= 0; else clock2xReg <= clock2xReg + 1;
+reg[11:0] clockReg; always @(posedge clock) if(rst) clockReg <= 0; else clockReg <= clockReg + 1;
+reg[10:0] clock2xReg; always @(posedge clock2x) if(rst) clock2xReg <= 0; else clock2xReg <= clock2xReg + 1;
 
-assign pipelineResult[63:41] = clockReg;
+assign pipelineResult[63:41] = {clockReg, clock2xReg};
 fullPipeline pipeline (
     .clk(clock),
     .rst(rst),
