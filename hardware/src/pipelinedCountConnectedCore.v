@@ -190,14 +190,17 @@ wire[EXTRA_DATA_WIDTH-1:0] extraData;
 wire[127:0] reducedGraphPreDelay;
 wire[127:0] extendedPreDelay;
 wire shouldGrabNewSeedPreDelay;
+
+wire requestPreDelay;
 // PIPELINE STEP 1
-explorationPipeline explorationPipe(top, leftoverGraph, curExtending, reducedGraphPreDelay, extendedPreDelay, request, shouldGrabNewSeedPreDelay);
+explorationPipeline explorationPipe(/*top*/ leftoverGraph, leftoverGraph, curExtending, reducedGraphPreDelay, extendedPreDelay, requestPreDelay, shouldGrabNewSeedPreDelay);
 
 // PIPELINE STEP 4
 // Produce outputs from this run if runEnd
-assign done = valid & request;
-assign extraDataOut = extraData;
-assign connectCount = connectionCount;
+hyperpipe #(.CYCLES(PIPELINE_DEPTH - DATA_IN_LATENCY), .WIDTH(1+1+EXTRA_DATA_WIDTH+6)) outputsPipe(clk,
+    {requestPreDelay, valid & requestPreDelay, extraData,    connectionCount},
+    {request,         done,                    extraDataOut, connectCount}
+);
 
 // delay other wires for DATA_IN_LATENCY
 wire[127:0] reducedGraph;
@@ -209,31 +212,25 @@ wire runEnd;
 wire[5:0] connectionCountPostDelay;
 wire[EXTRA_DATA_WIDTH-1:0] extraDataPostDelay;
 
-hyperpipe #(.CYCLES(DATA_IN_LATENCY), .WIDTH(128+128+128+1+1+1+6+EXTRA_DATA_WIDTH)) inputLatencyPipe(clk,
-    {leftoverGraph,             reducedGraphPreDelay, extendedPreDelay, request, shouldGrabNewSeedPreDelay, valid,          connectionCount,          extraData},
-    {leftoverGraphForSelection, reducedGraph,         extended,         runEnd,  shouldGrabNewSeed,         validPostDelay, connectionCountPostDelay, extraDataPostDelay}
+hyperpipe #(.CYCLES(PIPELINE_DEPTH), .WIDTH(128+128+128+1+1+1+6+EXTRA_DATA_WIDTH)) inputLatencyPipe(clk,
+    {leftoverGraph,             reducedGraphPreDelay, extendedPreDelay, requestPreDelay, shouldGrabNewSeedPreDelay, valid,          connectionCount,          extraData},
+    {leftoverGraphForSelection, reducedGraph,         extended,         runEnd,          shouldGrabNewSeed,         validPostDelay, connectionCountPostDelay, extraDataPostDelay}
 );
 
 // PIPELINE STEP 5
 // Inputs become available
-wire[127:0] selectedLeftoverGraph = rst ? 0 : start ? graphIn : (shouldGrabNewSeed ? reducedGraph : leftoverGraphForSelection);
+assign leftoverGraph = rst ? 0 : start ? graphIn : (shouldGrabNewSeed ? reducedGraph : leftoverGraphForSelection);
 
-wire[EXTRA_DATA_WIDTH-1:0] finalExtraData = runEnd ? extraDataIn : extraDataPostDelay;
-wire finalValid = start ? 1 : (runEnd ? 0 : validPostDelay); 
+assign extraData = runEnd ? extraDataIn : extraDataPostDelay;
+assign valid = start ? 1 : (runEnd ? 0 : validPostDelay); 
 
 // PIPELINE STEP 6
 // Generation of new seed, find index and test if graph is 0 to increment connectCount
 
 wire shouldIncrementConnectionCount;
-wire[127:0] finalCurExtending;
-newSeedProductionPipeline newSeedProductionPipe (selectedLeftoverGraph, extended, shouldGrabNewSeed, shouldIncrementConnectionCount, finalCurExtending);
+newSeedProductionPipeline newSeedProductionPipe (leftoverGraph, extended, shouldGrabNewSeed, shouldIncrementConnectionCount, curExtending);
 
 wire[5:0] selectedConnectCount = start ? connectCountIn : connectionCountPostDelay;
-wire[5:0] finalConnectionCount = selectedConnectCount + shouldIncrementConnectionCount;
-
-hyperpipe #(.CYCLES(PIPELINE_DEPTH - DATA_IN_LATENCY), .WIDTH(128+6+1+EXTRA_DATA_WIDTH+128)) pipelinePipe(clk,
-    {selectedLeftoverGraph, finalConnectionCount, finalValid, finalExtraData, finalCurExtending},
-    {leftoverGraph,         connectionCount,      valid,      extraData,      curExtending}
-);
+assign connectionCount = selectedConnectCount + shouldIncrementConnectionCount;
 
 endmodule

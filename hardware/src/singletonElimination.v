@@ -1,23 +1,4 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 07/23/2021 05:01:41 PM
-// Design Name: 
-// Module Name: singletonElimination
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
 
 module hasNeighbor(
     input[127:0] graphIn,
@@ -85,9 +66,9 @@ wire[2:0] sumsB[7:0];
 wire[3:0] sumsC[3:0];
 wire[4:0] sumsD[1:0];
 generate
-for(i = 0; i < 8; i = i + 1) assign sumsB[i] = sumsA[2*i] + sumsA[2*i+1];
-for(i = 0; i < 4; i = i + 1) assign sumsC[i] = sumsB[2*i] + sumsB[2*i+1];
-for(i = 0; i < 2; i = i + 1) assign sumsD[i] = sumsC[2*i] + sumsC[2*i+1];
+for(i = 0; i < 8; i = i + 1) begin assign sumsB[i] = sumsA[2*i] + sumsA[2*i+1]; end
+for(i = 0; i < 4; i = i + 1) begin assign sumsC[i] = sumsB[2*i] + sumsB[2*i+1]; end
+for(i = 0; i < 2; i = i + 1) begin assign sumsD[i] = sumsC[2*i] + sumsC[2*i+1]; end
 endgenerate
 
 assign singletonCount = sumsD[0] + sumsD[1];
