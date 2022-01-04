@@ -159,7 +159,7 @@ assign shouldGrabNewSeedOut = runEnd | &extentionFinished;
 
 endmodule
 
-// requires a reset signal of at least 2*PIPELINE_DEPTH cycles, or more!
+// requires a reset signal of at least 2*MAX_PIPELINE_DEPTH cycles, or more!
 module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter DATA_IN_LATENCY = 4) (
 	 input clk,
 	 input rst,
@@ -178,7 +178,7 @@ module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter 
 	 output[EXTRA_DATA_WIDTH-1:0] extraDataOut
 );
 
-localparam PIPELINE_DEPTH = 10;
+localparam MAX_PIPELINE_DEPTH = 10;
 
 wire[127:0] leftoverGraph;
 wire[127:0] curExtending;
@@ -197,10 +197,13 @@ explorationPipeline explorationPipe(/*top*/ leftoverGraph, leftoverGraph, curExt
 
 // PIPELINE STEP 4
 // Produce outputs from this run if runEnd
-hyperpipe #(.CYCLES(PIPELINE_DEPTH - DATA_IN_LATENCY), .WIDTH(1+1+EXTRA_DATA_WIDTH+6)) outputsPipe(clk,
-    {requestPreDelay, valid & requestPreDelay, extraData,    connectionCount},
-    {request,         done,                    extraDataOut, connectCount}
+localparam OTHER_DATA_WIDTH = 128+128+128+1+1+1+6+EXTRA_DATA_WIDTH;
+wire[OTHER_DATA_WIDTH-1:0] otherDataInPipe;
+hyperpipe_vlat #(.MAX_PIPE(MAX_PIPELINE_DEPTH - DATA_IN_LATENCY), .WIDTH(1+1+EXTRA_DATA_WIDTH+6 + OTHER_DATA_WIDTH)) outputsPipe(clk,
+    {requestPreDelay, valid & requestPreDelay, extraData,    connectionCount, {leftoverGraph, reducedGraphPreDelay, extendedPreDelay, requestPreDelay, shouldGrabNewSeedPreDelay, valid, connectionCount, extraData}},
+    {request,         done,                    extraDataOut, connectCount,    otherDataInPipe}
 );
+
 
 // delay other wires for DATA_IN_LATENCY
 wire[127:0] reducedGraph;
@@ -212,9 +215,9 @@ wire runEnd;
 wire[5:0] connectionCountPostDelay;
 wire[EXTRA_DATA_WIDTH-1:0] extraDataPostDelay;
 
-hyperpipe #(.CYCLES(PIPELINE_DEPTH), .WIDTH(128+128+128+1+1+1+6+EXTRA_DATA_WIDTH)) inputLatencyPipe(clk,
-    {leftoverGraph,             reducedGraphPreDelay, extendedPreDelay, requestPreDelay, shouldGrabNewSeedPreDelay, valid,          connectionCount,          extraData},
-    {leftoverGraphForSelection, reducedGraph,         extended,         runEnd,          shouldGrabNewSeed,         validPostDelay, connectionCountPostDelay, extraDataPostDelay}
+hyperpipe #(.CYCLES(DATA_IN_LATENCY), .WIDTH(OTHER_DATA_WIDTH)) inputLatencyPipe(clk,
+    otherDataInPipe,
+    {leftoverGraphForSelection, reducedGraph, extended, runEnd, shouldGrabNewSeed, validPostDelay, connectionCountPostDelay, extraDataPostDelay}
 );
 
 // PIPELINE STEP 5
