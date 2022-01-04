@@ -42,7 +42,7 @@ module singletonPopcnt(
     input clk,
     input clkEn,
     input[127:0] singletons,
-    output reg[5:0] singletonCount
+    output[5:0] singletonCount
 );
 
 // singletons can't be next to each other
@@ -69,7 +69,7 @@ generate
 for(i = 0; i < 16; i = i + 1) begin
     //always @(posedge clk) sumsA[i] <= halved[4*i] + halved[4*i+1] + halved[4*i+2] + halved[4*i+3];
     // because the compiler is a big dum dum it way overengineers these sums. We have to use a lookup table. 
-    always @(posedge clk) begin
+    always @(*) begin
         case(halved[4*i+:4])
         4'b0000: sumsA[i] <= 0;   4'b0001: sumsA[i] <= 1;   4'b0010: sumsA[i] <= 1;   4'b0011: sumsA[i] <= 2;
         4'b0100: sumsA[i] <= 1;   4'b0101: sumsA[i] <= 2;   4'b0110: sumsA[i] <= 2;   4'b0111: sumsA[i] <= 3;
@@ -81,16 +81,16 @@ end
 endgenerate
 
 // Finally crunsh all subsums down to our result
-reg[2:0] sumsB[7:0];
-reg[3:0] sumsC[3:0];
-reg[4:0] sumsD[1:0];
+wire[2:0] sumsB[7:0];
+wire[3:0] sumsC[3:0];
+wire[4:0] sumsD[1:0];
 generate
-for(i = 0; i < 8; i = i + 1) always @(posedge clk) sumsB[i] <= sumsA[2*i] + sumsA[2*i+1];
-for(i = 0; i < 4; i = i + 1) always @(posedge clk) sumsC[i] <= sumsB[2*i] + sumsB[2*i+1];
-for(i = 0; i < 2; i = i + 1) always @(posedge clk) sumsD[i] <= sumsC[2*i] + sumsC[2*i+1];
+for(i = 0; i < 8; i = i + 1) assign sumsB[i] = sumsA[2*i] + sumsA[2*i+1];
+for(i = 0; i < 4; i = i + 1) assign sumsC[i] = sumsB[2*i] + sumsB[2*i+1];
+for(i = 0; i < 2; i = i + 1) assign sumsD[i] = sumsC[2*i] + sumsC[2*i+1];
 endgenerate
 
-always @(posedge clk) singletonCount <= sumsD[0] + sumsD[1];
+assign singletonCount = sumsD[0] + sumsD[1];
 
 endmodule
 

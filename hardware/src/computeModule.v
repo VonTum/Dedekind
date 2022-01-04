@@ -27,10 +27,10 @@ wire[127:0] leafEliminatedGraph;
 leafElimination #(.DIRECTION(`DOWN)) le(clk, requestGraph, graphIn, leafEliminatedGraph);
 
 wire[127:0] singletonEliminatedGraph;
-wire[5:0] connectCountInDelayed;
+wire[5:0] connectCountIn;
 wire graphAvailablePostDelay;
 wire[EXTRA_DATA_WIDTH-1:0] extraDataPostDelay;
-singletonElimination se(clk, requestGraph, leafEliminatedGraph, singletonEliminatedGraph, connectCountInDelayed);
+singletonElimination se(clk, requestGraph, leafEliminatedGraph, singletonEliminatedGraph, connectCountIn);
 
 localparam PIPE_STEPS = 1+1+2;
 
@@ -44,7 +44,7 @@ reg coreRequestsGraphD;
 always @(posedge clk) coreRequestsGraphD <= coreRequestsGraph;
 assign requestGraph = coreRequestsGraphD;
 
-pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATENCY(1), .CONNECT_COUNT_IN_LAG(5)) core(
+pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATENCY(1)) core(
     .clk(clk), 
     .rst(rst),
     .top(top),
@@ -53,7 +53,7 @@ pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATE
     .request(coreRequestsGraph), 
     .graphIn(singletonEliminatedGraph), 
     .start(graphAvailablePostDelay & coreRequestsGraphD), 
-    .connectCountInDelayed(connectCountInDelayed), 
+    .connectCountIn(connectCountIn), 
     .extraDataIn(extraDataPostDelay),
     
     // output side
