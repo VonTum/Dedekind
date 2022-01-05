@@ -76,6 +76,8 @@ endmodule
 
 
 module newSeedProductionPipeline (
+    input clk,
+    
     input[127:0] graphIn,
     input[127:0] extended,
     input shouldGrabNewSeed,
@@ -95,65 +97,95 @@ hasFirstBitAnalysis firstBitAnalysis(
     hasFirstBit16
 );
 
+// PIPELINE STAGE
+reg[1:0] hasBit64D;
+reg[4*8-1:0] hasFirstBit4D;
+reg[4*2-1:0] hasFirstBit16D;
+reg[127:0] graphInD;
+reg[127:0] extendedD;
+reg shouldGrabNewSeedD;
+
+always @(posedge clk) begin
+    hasBit64D <= hasBit64;
+    hasFirstBit4D <= hasFirstBit4;
+    hasFirstBit16D <= hasFirstBit16;
+    graphInD <= graphIn;
+    extendedD <= extended;
+    shouldGrabNewSeedD <= shouldGrabNewSeed;
+end
+
 // PIPELINE STEP 3
 newExtendingProducer resultProducer(
-    graphIn,
-    extended,
-    shouldGrabNewSeed,
-    hasBit64,
-    hasFirstBit4,
-    hasFirstBit16,
+    graphInD,
+    extendedD,
+    shouldGrabNewSeedD,
+    hasBit64D,
+    hasFirstBit4D,
+    hasFirstBit16D,
     newCurExtendingOut
 );
 
 // Now we can finally produce the resulting connectionCount
-assign shouldIncrementConnectionCount = shouldGrabNewSeed & (hasBit64[0] | hasBit64[1]);
+assign shouldIncrementConnectionCount = shouldGrabNewSeedD & (hasBit64D[0] | hasBit64D[1]);
 
 endmodule
 
 module explorationPipeline(
+    input clk,
+    
     input[127:0] leftoverGraphIn,
     input[127:0] curExtendingIn,
     
-    output[127:0] reducedGraphOut,
-    output[127:0] extendedOut,
-    output runEnd,
-    output shouldGrabNewSeedOut
+    output reg[127:0] reducedGraphOut,
+    output reg[127:0] extendedOut,
+    output reg runEnd,
+    output reg shouldGrabNewSeedOut
 );
 
 // PIPELINE STEP 1, 2
 wire[127:0] monotonizedUp; monotonizeUp mUp(curExtendingIn, monotonizedUp);
-wire[127:0] midPoint = monotonizedUp & leftoverGraphIn;
+reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp & leftoverGraphIn;
+
+// delays 
+reg[127:0] leftoverGraphIn_MID;
+always @(posedge clk) begin
+    leftoverGraphIn_MID <= leftoverGraphIn;
+end
 
 // PIPELINE STEP 3, 4
-wire[127:0] monotonizedDown; monotonizeDown mDown(midPoint, monotonizedDown);
-assign extendedOut = leftoverGraphIn & monotonizedDown;
-assign reducedGraphOut = leftoverGraphIn & ~monotonizedDown;
+wire[127:0] monotonizedDown_MID; monotonizeDown mDown(midPoint_MID, monotonizedDown_MID);
+
+wire[127:0] reducedGraphOut_MID = leftoverGraphIn_MID & ~monotonizedDown_MID;
+wire[127:0] extendedOut_MID = leftoverGraphIn_MID & monotonizedDown_MID;
 
 // PIPELINE STEP 5
-wire[31:0] reducedGraphIsZeroIntermediates;
-wire[63:0] extentionFinishedIntermediates;
+wire[31:0] reducedGraphIsZeroIntermediates_MID;
+wire[63:0] extentionFinishedIntermediates_MID;
 
 genvar i;
 generate
-    for(i = 0; i < 32; i = i + 1) begin assign reducedGraphIsZeroIntermediates[i] = |reducedGraphOut[4*i +: 4]; end
-    for(i = 0; i < 64; i = i + 1) begin assign extentionFinishedIntermediates[i] = (extendedOut[2*i +: 2] == midPoint[2*i +: 2]); end
+    for(i = 0; i < 32; i = i + 1) begin assign reducedGraphIsZeroIntermediates_MID[i] = |reducedGraphOut_MID[4*i +: 4]; end
+    for(i = 0; i < 64; i = i + 1) begin assign extentionFinishedIntermediates_MID[i] = (extendedOut_MID[2*i +: 2] == midPoint_MID[2*i +: 2]); end
 endgenerate
-
 // PIPELINE STEP 6
-assign runEnd = !(|reducedGraphIsZeroIntermediates); // the new leftoverGraph is empty, request a new graph
+wire runEnd_MID = !(|reducedGraphIsZeroIntermediates_MID); // the new leftoverGraph is empty, request a new graph
 // split
-wire[3:0] extentionFinished; // no change? Then grab the next seed to extend
+wire[3:0] extentionFinished_MID; // no change? Then grab the next seed to extend
 
 generate
-for(i = 0; i < 4; i = i + 1) begin assign extentionFinished[i] = &extentionFinishedIntermediates[16*i +: 16]; end
+for(i = 0; i < 4; i = i + 1) begin assign extentionFinished_MID[i] = &extentionFinishedIntermediates_MID[16*i +: 16]; end
 endgenerate
 
 // a single OR gate, to define shouldGrabNewSeed. 
 // VERY INTERESTING! This was also a horrible bug. The standard path is just shouldGrabNewSeed = extentionFinished. 
 // But if the resulting left over graph is empty, then we must have reached the end of the exploration, so we can quit early!
 // This saves a single cycle in rare cases, and it fixes the aforementioned horrible bug :P
-assign shouldGrabNewSeedOut = runEnd | &extentionFinished;
+always @(posedge clk) begin
+    shouldGrabNewSeedOut <= runEnd_MID | &extentionFinished_MID;
+    runEnd <= runEnd_MID;
+    extendedOut <= extendedOut_MID;
+    reducedGraphOut <= reducedGraphOut_MID;
+end
 
 endmodule
 
@@ -185,51 +217,78 @@ wire shouldGrabNewSeedIn;
 wire[127:0] selectedLeftoverGraphIn;
 wire validIn;
 wire runEndIn;
-wire[5:0] connectionCountIn;
+wire[5:0] storedConnectionCountIn;
 wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn;
-assign {selectedLeftoverGraphIn, extendedIn, runEndIn, shouldGrabNewSeedIn, validIn, connectionCountIn, storedExtraDataIn} = combinatorialStateIn;
+assign {selectedLeftoverGraphIn, extendedIn, runEndIn, shouldGrabNewSeedIn, validIn, storedConnectionCountIn, storedExtraDataIn} = combinatorialStateIn;
+
+wire[EXTRA_DATA_WIDTH-1:0] extraDataWire = runEndIn ? extraDataIn : storedExtraDataIn;
+wire validWire = start ? 1 : (runEndIn ? 0 : validIn);
 
 // PIPELINE STEP 5
 // Inputs become available
 wire[127:0] leftoverGraphWire = rst ? 0 : start ? graphIn : selectedLeftoverGraphIn;
 
-// PIPELINE STEP 6
+// PIPELINE STEP "NEW SEED PRODUCTION"
 // Generation of new seed, find index and test if graph is 0 to increment connectCount
 
-wire shouldIncrementConnectionCount;
-wire[127:0] curExtendingWire;
-newSeedProductionPipeline newSeedProductionPipe (leftoverGraphWire, extendedIn, shouldGrabNewSeedIn, shouldIncrementConnectionCount, curExtendingWire);
+wire shouldIncrementConnectionCount_NSD;
+wire[127:0] curExtendingWire_NSD;
+newSeedProductionPipeline newSeedProductionPipe(clk, leftoverGraphWire, extendedIn, shouldGrabNewSeedIn, shouldIncrementConnectionCount_NSD, curExtendingWire_NSD);
+// delays of other wires
+
+wire start_NSD;
+wire[EXTRA_DATA_WIDTH-1:0] extraDataWire_NSD;
+wire[127:0] leftoverGraphWire_NSD;
+wire[5:0] storedConnectionCountIn_NSD;
+wire[5:0] connectCountIn_NSD;
+wire validWire_NSD;
+hyperpipe #(.CYCLES(1), .WIDTH(1+EXTRA_DATA_WIDTH+128+6+6+1)) newSeedProductionPipeBypassDelay(clk,
+    {start, extraDataWire, leftoverGraphWire, storedConnectionCountIn, connectCountIn, validWire},
+    {start_NSD, extraDataWire_NSD, leftoverGraphWire_NSD, storedConnectionCountIn_NSD, connectCountIn_NSD, validWire_NSD}
+);
 
 // PIPELINE STAGE
-reg[5:0] connectionCountOut;
-reg[127:0] curExtending;
-reg[127:0] leftoverGraph;
-reg validOut;
-reg[EXTRA_DATA_WIDTH-1:0] extraDataWire;
+reg[5:0] connectionCountOut_MID;
+reg[127:0] curExtending_MID;
+reg[127:0] leftoverGraph_MID;
+reg validOut_MID;
+reg[EXTRA_DATA_WIDTH-1:0] extraDataOut_MID;
 always @(posedge clk) begin
-    connectionCountOut <= (start ? connectCountIn : connectionCountIn) + shouldIncrementConnectionCount;
-    curExtending <= curExtendingWire;
-    leftoverGraph <= leftoverGraphWire;
-    validOut <= start ? 1 : (runEndIn ? 0 : validIn);
-    extraDataWire <= runEndIn ? extraDataIn : storedExtraDataIn;
+    connectionCountOut_MID <= (start_NSD ? connectCountIn_NSD : storedConnectionCountIn_NSD) + shouldIncrementConnectionCount_NSD;
+    curExtending_MID <= curExtendingWire_NSD;
+    leftoverGraph_MID <= leftoverGraphWire_NSD;
+    validOut_MID <= validWire_NSD;
+    extraDataOut_MID <= extraDataWire_NSD;
 end
 
-// PIPELINE STEP 1
-wire[127:0] reducedGraph;
-wire[127:0] extendedOut;
-wire shouldGrabNewSeedOut;
-wire requestWire;
-explorationPipeline explorationPipe(leftoverGraph, curExtending, reducedGraph, extendedOut, requestWire, shouldGrabNewSeedOut);
-wire doneWire = validOut & requestWire;
+// PIPELINE STEP "EXPLORATION"
+wire[127:0] reducedGraph_EXPL;
+wire[127:0] extendedOut_EXPL;
+wire shouldGrabNewSeedOut_EXPL;
+wire requestWire_EXPL;
+explorationPipeline explorationPipe(clk, leftoverGraph_MID, curExtending_MID, reducedGraph_EXPL, extendedOut_EXPL, requestWire_EXPL, shouldGrabNewSeedOut_EXPL);
 
-wire[127:0] selectedLeftoverGraphOut = shouldGrabNewSeedOut ? reducedGraph : leftoverGraph;
 
-// PIPELINE STAGE
-always @(posedge clk) combinatorialStateOut <= {selectedLeftoverGraphOut, extendedOut, requestWire, shouldGrabNewSeedOut, validOut, connectionCountOut, extraDataWire};
-always @(posedge clk) extraData <= extraDataWire;
-always @(posedge clk) connectionCount <= connectionCountOut;
-always @(posedge clk) done <= doneWire;
-always @(posedge clk) request <= requestWire;
+// delays
+wire[127:0] leftoverGraph_EXPL;
+wire validOut_EXPL;
+wire[EXTRA_DATA_WIDTH-1:0] extraDataOut_EXPL;
+wire[5:0] connectionCountOut_EXPL;
+hyperpipe #(.CYCLES(2), .WIDTH(128+1+EXTRA_DATA_WIDTH+6)) explorationBypassDelay(clk,
+    {leftoverGraph_MID , validOut_MID , extraDataOut_MID , connectionCountOut_MID },
+    {leftoverGraph_EXPL, validOut_EXPL, extraDataOut_EXPL, connectionCountOut_EXPL}
+);
+
+wire doneWire_EXPL = validOut_EXPL & requestWire_EXPL;
+wire[127:0] selectedLeftoverGraphOut_EXPL = shouldGrabNewSeedOut_EXPL ? reducedGraph_EXPL : leftoverGraph_EXPL;
+
+
+// OUTPUT PIPELINE STAGE
+always @(posedge clk) combinatorialStateOut <= {selectedLeftoverGraphOut_EXPL, extendedOut_EXPL, requestWire_EXPL, shouldGrabNewSeedOut_EXPL, validOut_EXPL, connectionCountOut_EXPL, extraDataOut_EXPL};
+always @(posedge clk) extraData <= extraDataOut_EXPL;
+always @(posedge clk) connectionCount <= connectionCountOut_EXPL;
+always @(posedge clk) done <= doneWire_EXPL;
+always @(posedge clk) request <= requestWire_EXPL;
 endmodule
 
 
