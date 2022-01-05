@@ -191,38 +191,43 @@ assign {selectedLeftoverGraphIn, extendedIn, runEndIn, shouldGrabNewSeedIn, vali
 
 // PIPELINE STEP 5
 // Inputs become available
-wire[127:0] leftoverGraphOut = rst ? 0 : start ? graphIn : selectedLeftoverGraphIn;
-
-wire[EXTRA_DATA_WIDTH-1:0] extraDataWire = runEndIn ? extraDataIn : storedExtraDataIn;
-wire validOut = start ? 1 : (runEndIn ? 0 : validIn); 
+wire[127:0] leftoverGraphWire = rst ? 0 : start ? graphIn : selectedLeftoverGraphIn;
 
 // PIPELINE STEP 6
 // Generation of new seed, find index and test if graph is 0 to increment connectCount
 
 wire shouldIncrementConnectionCount;
-wire[127:0] curExtendingOut;
-newSeedProductionPipeline newSeedProductionPipe (leftoverGraphOut, extendedIn, shouldGrabNewSeedIn, shouldIncrementConnectionCount, curExtendingOut);
+wire[127:0] curExtendingWire;
+newSeedProductionPipeline newSeedProductionPipe (leftoverGraphWire, extendedIn, shouldGrabNewSeedIn, shouldIncrementConnectionCount, curExtendingWire);
 
-wire[5:0] selectedConnectCount = start ? connectCountIn : connectionCountIn;
-wire[5:0] connectionCountWire = selectedConnectCount + shouldIncrementConnectionCount;
-
-wire[127:0] reducedGraphOut;
-wire[127:0] extendedOut;
-wire shouldGrabNewSeedOut;
+// PIPELINE STAGE
+reg[5:0] connectionCountOut;
+reg[127:0] curExtending;
+reg[127:0] leftoverGraph;
+reg validOut;
+reg[EXTRA_DATA_WIDTH-1:0] extraDataWire;
+always @(posedge clk) begin
+    connectionCountOut <= (start ? connectCountIn : connectionCountIn) + shouldIncrementConnectionCount;
+    curExtending <= curExtendingWire;
+    leftoverGraph <= leftoverGraphWire;
+    validOut <= start ? 1 : (runEndIn ? 0 : validIn);
+    extraDataWire <= runEndIn ? extraDataIn : storedExtraDataIn;
+end
 
 // PIPELINE STEP 1
+wire[127:0] reducedGraph;
+wire[127:0] extendedOut;
+wire shouldGrabNewSeedOut;
 wire requestWire;
-explorationPipeline explorationPipe(leftoverGraphOut, curExtendingOut, reducedGraphOut, extendedOut, requestWire, shouldGrabNewSeedOut);
+explorationPipeline explorationPipe(leftoverGraph, curExtending, reducedGraph, extendedOut, requestWire, shouldGrabNewSeedOut);
 wire doneWire = validOut & requestWire;
 
-wire[127:0] selectedLeftoverGraphOut = shouldGrabNewSeedOut ? reducedGraphOut : leftoverGraphOut;
+wire[127:0] selectedLeftoverGraphOut = shouldGrabNewSeedOut ? reducedGraph : leftoverGraph;
 
-// PIPELINE STEP 4
-// Produce outputs from this run if runEnd
-
-always @(posedge clk) combinatorialStateOut <= {selectedLeftoverGraphOut, extendedOut, requestWire, shouldGrabNewSeedOut, validOut, connectionCountWire, extraDataWire};
+// PIPELINE STAGE
+always @(posedge clk) combinatorialStateOut <= {selectedLeftoverGraphOut, extendedOut, requestWire, shouldGrabNewSeedOut, validOut, connectionCountOut, extraDataWire};
 always @(posedge clk) extraData <= extraDataWire;
-always @(posedge clk) connectionCount <= connectionCountWire;
+always @(posedge clk) connectionCount <= connectionCountOut;
 always @(posedge clk) done <= doneWire;
 always @(posedge clk) request <= requestWire;
 endmodule
