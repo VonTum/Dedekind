@@ -112,9 +112,7 @@ assign shouldIncrementConnectionCount = shouldGrabNewSeed & (hasBit64[0] | hasBi
 endmodule
 
 module explorationPipeline(
-    input[127:0] top,
-    
-    input[127:0] leftoverGraphInDelayed,
+    input[127:0] leftoverGraphIn,
     input[127:0] curExtendingIn,
     
     output[127:0] reducedGraphOut,
@@ -125,12 +123,12 @@ module explorationPipeline(
 
 // PIPELINE STEP 1, 2
 wire[127:0] monotonizedUp; monotonizeUp mUp(curExtendingIn, monotonizedUp);
-wire[127:0] midPoint = monotonizedUp & top;
+wire[127:0] midPoint = monotonizedUp & leftoverGraphIn;
 
 // PIPELINE STEP 3, 4
 wire[127:0] monotonizedDown; monotonizeDown mDown(midPoint, monotonizedDown);
-assign extendedOut = leftoverGraphInDelayed & monotonizedDown;
-assign reducedGraphOut = leftoverGraphInDelayed & ~monotonizedDown;
+assign extendedOut = leftoverGraphIn & monotonizedDown;
+assign reducedGraphOut = leftoverGraphIn & ~monotonizedDown;
 
 // PIPELINE STEP 5
 wire[31:0] reducedGraphIsZeroIntermediates;
@@ -161,151 +159,78 @@ endmodule
 
 `define OTHER_DATA_WIDTH (128+128+128+1+1+1+6+EXTRA_DATA_WIDTH)
 
-module countConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10) (
+module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10) (
+    input clk,
     input rst,
-    input[127:0] top, // top wire remains constant for the duration of a run, no need to factor it into pipeline
     
     // input side
-    output requestPreDelay,
+    output reg request,
     input[127:0] graphIn,
     input start,
     input[5:0] connectCountIn,
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
     
     // output side
-    output donePreDelay,
-    output[5:0] connectionCount,
-    output[EXTRA_DATA_WIDTH-1:0] extraData,
+    output reg done,
+    output reg[5:0] connectionCount,
+    output reg[EXTRA_DATA_WIDTH-1:0] extraData,
     
     // state loop
     input[`OTHER_DATA_WIDTH-1:0] combinatorialStateIn,
-    output[`OTHER_DATA_WIDTH-1:0] combinatorialStateOut
+    output reg[`OTHER_DATA_WIDTH-1:0] combinatorialStateOut
 );
 
-wire[127:0] reducedGraph;
-wire[127:0] extended;
-wire shouldGrabNewSeed;
-wire[127:0] leftoverGraphForSelection;
-wire validPostDelay;
-wire runEnd;
-wire[5:0] connectionCountPostDelay;
-wire[EXTRA_DATA_WIDTH-1:0] extraDataPostDelay;
-assign {leftoverGraphForSelection, reducedGraph, extended, runEnd, shouldGrabNewSeed, validPostDelay, connectionCountPostDelay, extraDataPostDelay} = combinatorialStateIn;
+wire[127:0] reducedGraphIn;
+wire[127:0] extendedIn;
+wire shouldGrabNewSeedIn;
+wire[127:0] leftoverGraphIn;
+wire validIn;
+wire runEndIn;
+wire[5:0] connectionCountIn;
+wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn;
+assign {leftoverGraphIn, reducedGraphIn, extendedIn, runEndIn, shouldGrabNewSeedIn, validIn, connectionCountIn, storedExtraDataIn} = combinatorialStateIn;
 
 // PIPELINE STEP 5
 // Inputs become available
-wire[127:0] leftoverGraph = rst ? 0 : start ? graphIn : (shouldGrabNewSeed ? reducedGraph : leftoverGraphForSelection);
+wire[127:0] leftoverGraphOut = rst ? 0 : start ? graphIn : (shouldGrabNewSeedIn ? reducedGraphIn : leftoverGraphIn);
 
-assign extraData = runEnd ? extraDataIn : extraDataPostDelay;
-wire valid = start ? 1 : (runEnd ? 0 : validPostDelay); 
+wire[EXTRA_DATA_WIDTH-1:0] extraDataWire = runEndIn ? extraDataIn : storedExtraDataIn;
+wire validOut = start ? 1 : (runEndIn ? 0 : validIn); 
 
 // PIPELINE STEP 6
 // Generation of new seed, find index and test if graph is 0 to increment connectCount
 
 wire shouldIncrementConnectionCount;
-wire[127:0] curExtending;
-newSeedProductionPipeline newSeedProductionPipe (leftoverGraph, extended, shouldGrabNewSeed, shouldIncrementConnectionCount, curExtending);
+wire[127:0] curExtendingOut;
+newSeedProductionPipeline newSeedProductionPipe (leftoverGraphOut, extendedIn, shouldGrabNewSeedIn, shouldIncrementConnectionCount, curExtendingOut);
 
-wire[5:0] selectedConnectCount = start ? connectCountIn : connectionCountPostDelay;
-assign connectionCount = selectedConnectCount + shouldIncrementConnectionCount;
+wire[5:0] selectedConnectCount = start ? connectCountIn : connectionCountIn;
+wire[5:0] connectionCountWire = selectedConnectCount + shouldIncrementConnectionCount;
 
-wire[127:0] reducedGraphPreDelay;
-wire[127:0] extendedPreDelay;
-wire shouldGrabNewSeedPreDelay;
+wire[127:0] reducedGraphOut;
+wire[127:0] extendedOut;
+wire shouldGrabNewSeedOut;
 
-assign donePreDelay = valid & requestPreDelay;
 // PIPELINE STEP 1
-explorationPipeline explorationPipe(/*top*/ leftoverGraph, leftoverGraph, curExtending, reducedGraphPreDelay, extendedPreDelay, requestPreDelay, shouldGrabNewSeedPreDelay);
+wire requestWire;
+explorationPipeline explorationPipe(leftoverGraphOut, curExtendingOut, reducedGraphOut, extendedOut, requestWire, shouldGrabNewSeedOut);
+wire doneWire = validOut & requestWire;
 
 // PIPELINE STEP 4
 // Produce outputs from this run if runEnd
 
-assign combinatorialStateOut = {leftoverGraph, reducedGraphPreDelay, extendedPreDelay, requestPreDelay, shouldGrabNewSeedPreDelay, valid, connectionCount, extraData};
-
-
+always @(posedge clk) combinatorialStateOut <= {leftoverGraphOut, reducedGraphOut, extendedOut, requestWire, shouldGrabNewSeedOut, validOut, connectionCountWire, extraDataWire};
+always @(posedge clk) extraData <= extraDataWire;
+always @(posedge clk) connectionCount <= connectionCountWire;
+always @(posedge clk) done <= doneWire;
+always @(posedge clk) request <= requestWire;
 endmodule
 
-module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10, parameter MAX_PIPELINE_DEPTH = 10) (
-    input clk,
-    input rst,
-    input[127:0] top, // top wire remains constant for the duration of a run, no need to factor it into pipeline
-    
-    // input side
-    output request,
-    input[127:0] graphIn,
-    input start,
-    input[5:0] connectCountIn,
-    input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
-    
-    // output side
-    output done,
-    output[5:0] connectCount,
-    output[EXTRA_DATA_WIDTH-1:0] extraDataOut,
-    
-    // state loop
-    input[`OTHER_DATA_WIDTH-1:0] combinatorialStateIn,
-    output[`OTHER_DATA_WIDTH-1:0] combinatorialStateOut
-);
-
-localparam INPUT_PIPE_WIDTH = 1+128+128+1+6+EXTRA_DATA_WIDTH+`OTHER_DATA_WIDTH;
-
-reg[INPUT_PIPE_WIDTH-1:0] bigInputReg; always @(posedge clk) bigInputReg <= {rst, top, graphIn, start, connectCountIn, extraDataIn, combinatorialStateIn};
-
-wire rstD;
-wire[127:0] topD;
-wire[127:0] graphInD;
-wire startD;
-wire[5:0] connectCountInD;
-wire[EXTRA_DATA_WIDTH-1:0] extraDataInD;
-wire[`OTHER_DATA_WIDTH-1:0] combinatorialStateInD;
-
-hyperpipe #(.CYCLES(10), .WIDTH(INPUT_PIPE_WIDTH)) inputsPipe(clk,
-    bigInputReg,
-    {rstD, topD, graphInD, startD, connectCountInD, extraDataInD, combinatorialStateInD}
-);
-
-wire requestPreDelay;
-wire donePreDelay;
-wire[5:0] connectionCount;
-wire[EXTRA_DATA_WIDTH-1:0] extraData;
-
-wire[`OTHER_DATA_WIDTH-1:0] combinatorialStateOutPreDelay;
-
-countConnectedCombinatorial #(EXTRA_DATA_WIDTH) combinatorialComponent (
-    rstD,
-    topD, // top wire remains constant for the duration of a run, no need to factor it into pipeline
-    
-    // input side
-    requestPreDelay,
-    graphInD,
-    startD,
-    connectCountInD,
-    extraDataInD,
-    
-    // output side
-    donePreDelay,
-    connectionCount,
-    extraData,
-    
-    combinatorialStateInD,
-    combinatorialStateOutPreDelay
-);
-localparam OUTPUT_PIPE_WIDTH = 1+1+EXTRA_DATA_WIDTH+6 + `OTHER_DATA_WIDTH;
-
-reg[OUTPUT_PIPE_WIDTH-1:0] bigOutputReg; always @(posedge clk) bigOutputReg <= {requestPreDelay, donePreDelay, extraData, connectionCount, combinatorialStateOutPreDelay};
-assign {request, done, extraDataOut, connectCount, combinatorialStateOut} = bigOutputReg;
-/*hyperpipe #(.CYCLES(4), .WIDTH(OUTPUT_PIPE_WIDTH)) outputsPipe(clk,
-    {requestPreDelay, donePreDelay, extraData,    connectionCount, combinatorialStateOutPreDelay},
-    {request,         done,         extraDataOut, connectCount,    combinatorialStateOut}
-);*/
-
-endmodule
 
 // requires a reset signal of at least 2*MAX_PIPELINE_DEPTH cycles, or more!
 module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter DATA_IN_LATENCY = 4) (
     input clk,
     input rst,
-    input[127:0] top, // top wire remains constant for the duration of a run, no need to factor it into pipeline
     
     // input side
     output request,
@@ -328,7 +253,6 @@ localparam MAX_PIPELINE_DEPTH = 30;
 pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH, MAX_PIPELINE_DEPTH - DATA_IN_LATENCY) combinatorialComponent (
     clk,
     rst,
-    top, // top wire remains constant for the duration of a run, no need to factor it into pipeline
     
     // input side
     request,

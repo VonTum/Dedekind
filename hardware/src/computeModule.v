@@ -47,7 +47,6 @@ assign requestGraph = coreRequestsGraphD;
 pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATENCY(1)) core(
     .clk(clk), 
     .rst(rst),
-    .top(top),
     
     // input side
     .request(coreRequestsGraph), 
