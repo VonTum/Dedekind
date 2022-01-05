@@ -1,29 +1,33 @@
 `timescale 1ns / 1ps
 
 module hasFirstBitAnalysis(
+    input clk,
+    
     input[127:0] graphIn,
     output[1:0] hasBit64,
     // grouped in sets of 4, an element is marked '1' if its 4 bits contain the first bit of the 16 bits of the group
-    output[4*8-1:0] hasFirstBit4,
+    output reg[4*8-1:0] hasFirstBit4,
     // grouped in sets of 4, an element is marked '1' if its 16 bits contain the first bit of the 64 bits of the group
     output[4*2-1:0] hasFirstBit16
 );
 
 wire[31:0] hasBit4;
-wire[7:0] hasBit16;
+reg[7:0] hasBit16;
 genvar i;
 generate
 for(i = 0; i < 32; i = i + 1) begin assign hasBit4[i] = |graphIn[i*4+:4]; end
-for(i = 0; i < 8; i = i + 1) begin assign hasBit16[i] = |hasBit4[i*4+:4]; end
+for(i = 0; i < 8; i = i + 1) begin always @(posedge clk) hasBit16[i] <= |hasBit4[i*4+:4]; end
 for(i = 0; i < 2; i = i + 1) begin assign hasBit64[i] = |hasBit16[i*4+:4]; end
 endgenerate
 
 generate
 for(i = 0; i < 8; i = i + 1) begin
-    assign hasFirstBit4[4*i+0] = hasBit4[4*i];
-    assign hasFirstBit4[4*i+1] = !hasBit4[4*i] & hasBit4[4*i+1];
-    assign hasFirstBit4[4*i+2] = !hasBit4[4*i] & !hasBit4[4*i+1] & hasBit4[4*i+2];
-    assign hasFirstBit4[4*i+3] = !hasBit4[4*i] & !hasBit4[4*i+1] & !hasBit4[4*i+2] & hasBit4[4*i+3];
+    always @(posedge clk) begin
+        hasFirstBit4[4*i+0] <= hasBit4[4*i];
+        hasFirstBit4[4*i+1] <= !hasBit4[4*i] & hasBit4[4*i+1];
+        hasFirstBit4[4*i+2] <= !hasBit4[4*i] & !hasBit4[4*i+1] & hasBit4[4*i+2];
+        hasFirstBit4[4*i+3] <= !hasBit4[4*i] & !hasBit4[4*i+1] & !hasBit4[4*i+2] & hasBit4[4*i+3];
+    end
 end
 endgenerate
 
@@ -97,15 +101,26 @@ always @(posedge clk) begin
 end
 
 // PIPELINE STEP 1 and 2
-wire[1:0] hasBit64_START;
-wire[4*8-1:0] hasFirstBit4_START;
-wire[4*2-1:0] hasFirstBit16_START;
+wire[1:0] hasBit64_HASBIT;
+wire[4*8-1:0] hasFirstBit4_HASBIT;
+wire[4*2-1:0] hasFirstBit16_HASBIT;
 hasFirstBitAnalysis firstBitAnalysis(
+    clk,
     graphIn_START,
-    hasBit64_START,
-    hasFirstBit4_START,
-    hasFirstBit16_START
+    hasBit64_HASBIT,
+    hasFirstBit4_HASBIT,
+    hasFirstBit16_HASBIT
 );
+
+// delays
+reg[127:0] graphIn_HASBIT;
+reg[127:0] extended_HASBIT;
+reg shouldGrabNewSeed_HASBIT;
+always @(posedge clk) begin
+    graphIn_HASBIT <= graphIn_START;
+    extended_HASBIT <= extended_START;
+    shouldGrabNewSeed_HASBIT <= shouldGrabNewSeed_START;
+end
 
 // PIPELINE STAGE
 reg[1:0] hasBit64_RESULT;
@@ -116,12 +131,12 @@ reg[127:0] extended_RESULT;
 reg shouldGrabNewSeed_RESULT;
 
 always @(posedge clk) begin
-    hasBit64_RESULT <= hasBit64_START;
-    hasFirstBit4_RESULT <= hasFirstBit4_START;
-    hasFirstBit16_RESULT <= hasFirstBit16_START;
-    graphIn_RESULT <= graphIn_START;
-    extended_RESULT <= extended_START;
-    shouldGrabNewSeed_RESULT <= shouldGrabNewSeed_START;
+    hasBit64_RESULT <= hasBit64_HASBIT;
+    hasFirstBit4_RESULT <= hasFirstBit4_HASBIT;
+    hasFirstBit16_RESULT <= hasFirstBit16_HASBIT;
+    graphIn_RESULT <= graphIn_HASBIT;
+    extended_RESULT <= extended_HASBIT;
+    shouldGrabNewSeed_RESULT <= shouldGrabNewSeed_HASBIT;
 end
 
 // PIPELINE STEP 3
@@ -210,6 +225,8 @@ endmodule
 
 `define OTHER_DATA_WIDTH (128+128+1+1+1+6+EXTRA_DATA_WIDTH)
 
+// The combinatorial pipeline that does all the work. Loopback is done outside of this module through combinatorialStateIn/Out
+// Pipeline stages are marked by wire_STAGE for clarity
 module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10) (
     input clk,
     input rst,
@@ -261,7 +278,7 @@ wire[127:0] leftoverGraphWire_NSD;
 wire[5:0] storedConnectionCountIn_NSD;
 wire[5:0] connectCountIn_NSD;
 wire validWire_NSD;
-hyperpipe #(.CYCLES(2), .WIDTH(1+EXTRA_DATA_WIDTH+128+6+6+1)) newSeedProductionPipeBypassDelay(clk,
+hyperpipe #(.CYCLES(3), .WIDTH(1+EXTRA_DATA_WIDTH+128+6+6+1)) newSeedProductionPipeBypassDelay(clk,
     {start, extraDataWire, leftoverGraphWire, storedConnectionCountIn, connectCountIn, validWire},
     {start_NSD, extraDataWire_NSD, leftoverGraphWire_NSD, storedConnectionCountIn_NSD, connectCountIn_NSD, validWire_NSD}
 );
