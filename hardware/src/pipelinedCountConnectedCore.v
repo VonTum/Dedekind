@@ -157,7 +157,7 @@ assign shouldGrabNewSeedOut = runEnd | &extentionFinished;
 
 endmodule
 
-`define OTHER_DATA_WIDTH (128+128+128+1+1+1+6+EXTRA_DATA_WIDTH)
+`define OTHER_DATA_WIDTH (128+128+1+1+1+6+EXTRA_DATA_WIDTH)
 
 module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10) (
     input clk,
@@ -180,19 +180,18 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10) (
     output reg[`OTHER_DATA_WIDTH-1:0] combinatorialStateOut
 );
 
-wire[127:0] reducedGraphIn;
 wire[127:0] extendedIn;
 wire shouldGrabNewSeedIn;
-wire[127:0] leftoverGraphIn;
+wire[127:0] selectedLeftoverGraphIn;
 wire validIn;
 wire runEndIn;
 wire[5:0] connectionCountIn;
 wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn;
-assign {leftoverGraphIn, reducedGraphIn, extendedIn, runEndIn, shouldGrabNewSeedIn, validIn, connectionCountIn, storedExtraDataIn} = combinatorialStateIn;
+assign {selectedLeftoverGraphIn, extendedIn, runEndIn, shouldGrabNewSeedIn, validIn, connectionCountIn, storedExtraDataIn} = combinatorialStateIn;
 
 // PIPELINE STEP 5
 // Inputs become available
-wire[127:0] leftoverGraphOut = rst ? 0 : start ? graphIn : (shouldGrabNewSeedIn ? reducedGraphIn : leftoverGraphIn);
+wire[127:0] leftoverGraphOut = rst ? 0 : start ? graphIn : selectedLeftoverGraphIn;
 
 wire[EXTRA_DATA_WIDTH-1:0] extraDataWire = runEndIn ? extraDataIn : storedExtraDataIn;
 wire validOut = start ? 1 : (runEndIn ? 0 : validIn); 
@@ -216,10 +215,12 @@ wire requestWire;
 explorationPipeline explorationPipe(leftoverGraphOut, curExtendingOut, reducedGraphOut, extendedOut, requestWire, shouldGrabNewSeedOut);
 wire doneWire = validOut & requestWire;
 
+wire[127:0] selectedLeftoverGraphOut = shouldGrabNewSeedOut ? reducedGraphOut : leftoverGraphOut;
+
 // PIPELINE STEP 4
 // Produce outputs from this run if runEnd
 
-always @(posedge clk) combinatorialStateOut <= {leftoverGraphOut, reducedGraphOut, extendedOut, requestWire, shouldGrabNewSeedOut, validOut, connectionCountWire, extraDataWire};
+always @(posedge clk) combinatorialStateOut <= {selectedLeftoverGraphOut, extendedOut, requestWire, shouldGrabNewSeedOut, validOut, connectionCountWire, extraDataWire};
 always @(posedge clk) extraData <= extraDataWire;
 always @(posedge clk) connectionCount <= connectionCountWire;
 always @(posedge clk) done <= doneWire;
@@ -248,9 +249,7 @@ module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter 
 wire[`OTHER_DATA_WIDTH-1:0] combinatorialStateIn;
 wire[`OTHER_DATA_WIDTH-1:0] combinatorialStateOut;
 
-localparam MAX_PIPELINE_DEPTH = 30;
-
-pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH, MAX_PIPELINE_DEPTH - DATA_IN_LATENCY) combinatorialComponent (
+pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH) combinatorialComponent (
     clk,
     rst,
     
