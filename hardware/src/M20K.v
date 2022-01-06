@@ -1,24 +1,6 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 10/09/2021 01:36:06 AM
-// Design Name: 
-// Module Name: M20K
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
 
+`include "ipSettings_header.v"
 
 module simpleDualPortM20K40b512 (
     input writeClk,
@@ -88,8 +70,68 @@ module simpleDualPortM20K_20b1024Registered (
     
     input readEnable, // if not enabled, outputs 0
     input[9:0] readAddr,
-    output reg[19:0] readData
+    output[19:0] readData
 );
+
+
+`ifdef USE_M20K_IP
+altera_syncram  altera_syncram_component (
+                .address_a (writeAddr),
+                .address_b (readAddr),
+                .byteena_a (writeMask),
+                .clock0 (clk),
+                .data_a (writeData),
+                .rden_b (readEnable),
+                .wren_a (writeEnable),
+                .q_b (readData),
+                .aclr0 (1'b0),
+                .aclr1 (1'b0),
+                .address2_a (1'b1),
+                .address2_b (1'b1),
+                .addressstall_a (1'b0),
+                .addressstall_b (1'b0),
+                .byteena_b (1'b1),
+                .clock1 (1'b1),
+                .clocken0 (1'b1),
+                .clocken1 (1'b1),
+                .clocken2 (1'b1),
+                .clocken3 (1'b1),
+                .data_b ({20{1'b1}}),
+                .eccencbypass (1'b0),
+                .eccencparity (8'b0),
+                .eccstatus (),
+                .q_a (),
+                .rden_a (1'b1),
+                .sclr (1'b0),
+                .wren_b (1'b0));
+    defparam
+        altera_syncram_component.address_aclr_b  = "NONE",
+        altera_syncram_component.address_reg_b  = "CLOCK0",
+        altera_syncram_component.byte_size  = 10,
+        altera_syncram_component.clock_enable_input_a  = "BYPASS",
+        altera_syncram_component.clock_enable_input_b  = "BYPASS",
+        altera_syncram_component.clock_enable_output_b  = "BYPASS",
+        altera_syncram_component.enable_force_to_zero  = "TRUE",
+        altera_syncram_component.intended_device_family  = "Stratix 10",
+        altera_syncram_component.lpm_type  = "altera_syncram",
+        altera_syncram_component.maximum_depth  = 1024,
+        altera_syncram_component.numwords_a  = 1024,
+        altera_syncram_component.numwords_b  = 1024,
+        altera_syncram_component.operation_mode  = "DUAL_PORT",
+        altera_syncram_component.outdata_aclr_b  = "NONE",
+        altera_syncram_component.outdata_sclr_b  = "NONE",
+        altera_syncram_component.outdata_reg_b  = "CLOCK0",
+        altera_syncram_component.power_up_uninitialized  = "TRUE",
+        altera_syncram_component.ram_block_type  = "M20K",
+        altera_syncram_component.rdcontrol_reg_b  = "CLOCK0",
+        altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
+        altera_syncram_component.widthad_a  = 10,
+        altera_syncram_component.widthad_b  = 10,
+        altera_syncram_component.width_a  = 20,
+        altera_syncram_component.width_b  = 20,
+        altera_syncram_component.width_byteena_a  = 2;
+
+`else
 
 reg[9:0] writeAddrD;
 reg[1:0] writeMaskD;
@@ -101,6 +143,9 @@ reg[9:0] readAddrD;
 
 
 reg[19:0] memory[1023:0];
+
+reg[19:0] readDataReg;
+assign readData = readDataReg;
 
 always @(posedge clk) begin
     writeAddrD <= writeAddr;
@@ -115,7 +160,9 @@ always @(posedge clk) begin
         if(writeMaskD[1]) memory[writeAddrD][19:10] <= writeDataD[19:10];
     end
     
-    readData <= readEnableD ? memory[readAddrD] : 20'b00000000000000000000;
+    readDataReg <= readEnableD ? memory[readAddrD] : 20'b00000000000000000000;
 end
+
+`endif
 
 endmodule

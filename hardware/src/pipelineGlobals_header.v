@@ -8,8 +8,3 @@
 `define OUTPUT_INDEX_OFFSET (1 << `OUTPUT_INDEX_OFFSET_BITS)
  // number of clock cycles of read latency. 
 `define OUTPUT_READ_LATENCY 10
-
-`ifdef ALTERA_RESERVED_QIS
-    `define USE_FIFO_IP
-    `define USE_COLLECTOR_RAM_IP
-`endif

@@ -28,44 +28,6 @@ always @(posedge clk) begin
     blockWriteAddr <= readEnable ? readAddr : writeAddr;
 end
 
-`ifdef USE_COLLECTOR_RAM_IP
-collectorM20K memBlock01 (
-    .clock(clk),
-	 
-    .wren(blockWrite),
-    .wraddress(blockWriteAddr),
-    .byteena_a(writeMasks[1:0]),
-    .data({blockWriteData,blockWriteData}),
-	 
-    .rden(readEnable),
-    .rdaddress(readAddr),
-    .q(readData[19:00])
-);
-collectorM20K memBlock23 (
-    .clock(clk),
-	 
-    .wren(blockWrite),
-    .wraddress(blockWriteAddr),
-    .byteena_a(writeMasks[3:2]),
-    .data({blockWriteData,blockWriteData}),
-	 
-    .rden(readEnable),
-    .rdaddress(readAddr),
-    .q(readData[39:20])
-);
-collectorM20K memBlock45 (
-    .clock(clk),
-	 
-    .wren(blockWrite),
-    .wraddress(blockWriteAddr),
-    .byteena_a(writeMasks[5:4]),
-    .data({blockWriteData,blockWriteData}),
-	 
-    .rden(readEnable),
-    .rdaddress(readAddr),
-    .q(readData[59:40])
-);
-`else
 simpleDualPortM20K_20b1024Registered memBlock01 (
     .clk(clk),
     
@@ -102,8 +64,6 @@ simpleDualPortM20K_20b1024Registered memBlock45 (
     .readAddr(readAddr),
     .readData(readData[59:40])
 );
-`endif
-
 
 endmodule
 

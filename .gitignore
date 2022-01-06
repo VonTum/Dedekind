@@ -3,6 +3,7 @@ Debug/
 *.filters
 *.user
 *.json
+*.out
 Dedekind/.gitattributes
 x64/
 x86/

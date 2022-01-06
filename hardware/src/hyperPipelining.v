@@ -2,6 +2,8 @@
 //
 // Hyper-Pipelining Module
 
+`include "ipSettings_header.v"
+
 (* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION off" *) 
 module hyperpipe 
 #(parameter CYCLES = 1, parameter WIDTH = 1) 
@@ -13,8 +15,8 @@ module hyperpipe
 
 	generate if (CYCLES==0) begin : GEN_COMB_INPUT
 		assign dout = din;
-	end 
-	else begin : GEN_REG_INPUT  
+	end else
+	begin : GEN_REG_INPUT  
 		integer i;
 		reg [WIDTH-1:0] R_data [CYCLES-1:0];
         
@@ -42,8 +44,32 @@ module shiftRegister
 
 	generate if (CYCLES==0) begin : GEN_COMB_INPUT
 		assign dout = din;
-	end 
-	else begin : GEN_REG_INPUT  
+	end else
+`ifdef USE_SHIFTREG_IP
+	if(CYCLES >= 5 && WIDTH >= 41) begin
+	   wire[WIDTH-1:0] unusedTap;
+		altshift_taps  ALTSHIFT_TAPS_component (
+			.clock (clk),
+			.shiftin (din),
+			.shiftout (dout),
+			.taps (unusedTap)
+			// synopsys translate_off
+			,
+			.aclr (),
+			.clken (),
+			.sclr ()
+			// synopsys translate_on
+		);
+defparam
+		ALTSHIFT_TAPS_component.intended_device_family  = "Stratix 10",
+		ALTSHIFT_TAPS_component.lpm_hint  = CYCLES <= 32 ? "RAM_BLOCK_TYPE=MLAB" : "RAM_BLOCK_TYPE=M20K",
+		ALTSHIFT_TAPS_component.lpm_type  = "altshift_taps",
+		ALTSHIFT_TAPS_component.number_of_taps  = 1,
+		ALTSHIFT_TAPS_component.tap_distance  = CYCLES,
+		ALTSHIFT_TAPS_component.width  = WIDTH;
+	end else
+`endif
+	begin : GEN_REG_INPUT  
 		integer i;
 		reg [WIDTH-1:0] R_data [CYCLES-1:0];
         

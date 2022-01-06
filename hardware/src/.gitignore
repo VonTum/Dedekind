@@ -13,6 +13,5 @@ qdb/
 tmp-clearbox/
 simulation/
 #**/synth/
-#ip/
-ip/*/
+ip/
 

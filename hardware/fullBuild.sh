@@ -14,3 +14,5 @@ module load intelFPGA_pro nalla_pcie toolchain/gompi
 
 aoc fullPipelineKernel.cl -o fullPipelineKernel.aocx -I scr -L . -l fullPipeline.aoclib
 
+cp fullPipelineKernel.aocx ../fpga_production/bin
+

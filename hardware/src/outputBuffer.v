@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-`include "pipelineGlobals_header.v"
+`include "ipSettings_header.v"
 
 // This module can buffer the data 
 module outputBuffer(

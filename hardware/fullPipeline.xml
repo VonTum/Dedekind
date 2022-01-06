@@ -41,7 +41,7 @@
       <!-- Set to "yes" to allow multiple instances of this function to be merged by the compiler.
            This property should be set to "yes". 
            Note that marking function with HAS_SIDE_EFFECTS does not prevent merging. -->
-      <ALLOW_MERGING value="yes"/>
+      <ALLOW_MERGING value="no"/>
     </ATTRIBUTES>
     <INTERFACE>
       <AVALON port="clock" type="clock"/>
@@ -64,6 +64,7 @@
       <FILE name="src/inlineVarSwap_header.v"/>
       <FILE name="src/pipelineGlobals_header.v"/>
       <FILE name="src/leafElimination_header.v"/>
+      <FILE name="src/ipSettings_header.v"/>
       
       <!-- Source Files -->
       <FILE name="src/openCLFullPipeline.v"/>
@@ -82,22 +83,13 @@
                     <FILE name="src/pipelinedCountConnectedCore.v"/>
                          <FILE name="src/monotonize.v"/>
                <FILE name="src/collectionModule.v"/>
+               
       <!-- IP Blocks -->
-      <!--<FILE name="src/M20K.v"/>
-      <FILE name="src/FIFO.v"/>-->
-      <!--<FILE name="src/ip/collectorM20k.ip"/>-->
-          <FILE name="src/ip/collectorM20K/synth/collectorM20K.v"/>
-          <FILE name="src/ip/collectorM20K/ram_2port_2020/synth/collectorM20K_ram_2port_2020_7x5qxgq.v"/>
-      <!--<FILE name="src/ip/pipelineFifo.ip"/>-->
-          <FILE name="src/ip/pipelineFifo/synth/pipelineFifo.v"/>
-          <FILE name="src/ip/pipelineFifo/fifo_1910/synth/pipelineFifo_fifo_1910_o2naleq.v"/>
-      <!--<FILE name="src/ip/outputBufferFifo.ip"/>-->
-          <FILE name="src/ip/outputBufferFifo/synth/outputBufferFifo.v"/>
-          <FILE name="src/ip/outputBufferFifo/fifo_1910/synth/outputBufferFifo_fifo_1910_3r4w6zi.v"/>
+      <FILE name="src/M20K.v"/>
+      <FILE name="src/FIFO.v"/>
       
       <!-- Constraints -->
       <!--<FILE name="src/pipelineClock.sdc"/>-->
     </REQUIREMENTS>
   </FUNCTION>
 </RTL_SPEC>
-

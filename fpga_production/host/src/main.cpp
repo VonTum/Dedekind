@@ -192,7 +192,7 @@ int main(int argc, char** argv) {
       if(SHOW_NONZEROS) {
         if(TWO_CLOCKS) {
           uint64_t clk = resultClock >> 11;
-          uint64_t clk2 = resultClock & (1 << 11);
+          uint64_t clk2 = resultClock & ((1 << 11) - 1);
           std::cout << i << "> clock: " << clk << ", clock2x: " << clk2 << ", \t";
         } else {
           std::cout << i << "> clock: " << resultClock << ", \t";
