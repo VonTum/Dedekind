@@ -40,7 +40,7 @@ always @(posedge clk) begin
 end
 
 wire isLastBotInShiftRegisterValid;
-shiftRegister #(.CYCLES(SHIFT_DEPTH), .WIDTH(1), .RESET_VALUE(1'b0)) validIndicesRegister(
+enabledShiftRegister #(.CYCLES(SHIFT_DEPTH), .WIDTH(1), .RESET_VALUE(1'b0)) validIndicesRegister(
     clk,
     advanceShiftReg,
     rst,

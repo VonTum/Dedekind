@@ -17,7 +17,6 @@ endmodule
 
 module leafElimination #(parameter DIRECTION = `DOWN) (
     input clk,
-    input clkEn,
     input [127:0] graphIn,
     output reg [127:0] graphOut
 );
@@ -59,7 +58,7 @@ function integer getNthBit;
 endfunction
 
 wire[127:0] graphPreOut;
-always @(posedge clk) if(clkEn) graphOut <= graphPreOut;
+always @(posedge clk) graphOut <= graphPreOut;
 generate
     assign graphPreOut[0] = graphIn[0];
     assign graphPreOut[127] = graphIn[127];

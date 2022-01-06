@@ -30,7 +30,36 @@ module hyperpipe
 
 endmodule
 
-module shiftRegister
+// This is for generating shift register pipes
+(* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION on" *) 
+module shiftRegister 
+#(parameter CYCLES = 1, parameter WIDTH = 1) 
+(
+	input clk,
+	input [WIDTH-1:0] din,
+	output [WIDTH-1:0] dout
+);
+
+	generate if (CYCLES==0) begin : GEN_COMB_INPUT
+		assign dout = din;
+	end 
+	else begin : GEN_REG_INPUT  
+		integer i;
+		reg [WIDTH-1:0] R_data [CYCLES-1:0];
+        
+		always @ (posedge clk) 
+		begin   
+			R_data[0] <= din;      
+			for(i = 1; i < CYCLES; i = i + 1) 
+            	R_data[i] <= R_data[i-1];
+		end
+		assign dout = R_data[CYCLES-1];
+	end
+	endgenerate  
+
+endmodule
+
+module enabledShiftRegister
 #(parameter CYCLES = 1, parameter WIDTH = 1, parameter RESET_VALUE = 0) 
 (
 	input clk,

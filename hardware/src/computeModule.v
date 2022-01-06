@@ -2,14 +2,14 @@
 
 `include "leafElimination_header.v"
 
-module computeModule #(parameter EXTRA_DATA_WIDTH = 14) (
+module computeModule #(parameter EXTRA_DATA_WIDTH = 14, parameter REQUEST_LATENCY = 3) (
     input clk,
     input rst,
     input[127:0] top,
     
     // input side
     input[127:0] botIn,
-    input graphAvailable,
+    input start,
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
     output requestGraph,
     
@@ -19,40 +19,36 @@ module computeModule #(parameter EXTRA_DATA_WIDTH = 14) (
     output[EXTRA_DATA_WIDTH-1:0] extraDataOut
 );
 
-reg[127:0] graphIn; always @(posedge clk) if(requestGraph) graphIn <= top & ~botIn;
+reg[127:0] graphIn; always @(posedge clk) graphIn <= top & ~botIn;
 
 // PIPELINE STEP 1
 wire[127:0] leafEliminatedGraph;
 
-leafElimination #(.DIRECTION(`DOWN)) le(clk, requestGraph, graphIn, leafEliminatedGraph);
+leafElimination #(.DIRECTION(`DOWN)) le(clk, graphIn, leafEliminatedGraph);
 
 wire[127:0] singletonEliminatedGraph;
-wire[5:0] connectCountIn;
-wire graphAvailablePostDelay;
+wire[5:0] startingConnectCountIn_DELAYED;
+wire startPostDelay;
 wire[EXTRA_DATA_WIDTH-1:0] extraDataPostDelay;
-singletonElimination se(clk, requestGraph, leafEliminatedGraph, singletonEliminatedGraph, connectCountIn);
+singletonElimination se(clk, leafEliminatedGraph, singletonEliminatedGraph, startingConnectCountIn_DELAYED);
 
 localparam PIPE_STEPS = 1+1+2;
 
-shiftRegister #(.CYCLES(PIPE_STEPS), .WIDTH(1), .RESET_VALUE(0))
-    graphAvalailbePipe (clk, requestGraph, rst, graphAvailable, graphAvailablePostDelay);
-shiftRegister #(.CYCLES(PIPE_STEPS), .WIDTH(EXTRA_DATA_WIDTH), .RESET_VALUE(1'bX))
-    extraDataPipe      (clk, requestGraph, rst, extraDataIn, extraDataPostDelay);
+shiftRegister #(.CYCLES(PIPE_STEPS), .WIDTH(1+EXTRA_DATA_WIDTH)) graphAvalailbePipe (clk, 
+    {start, extraDataIn}, 
+    {startPostDelay, extraDataPostDelay}
+);
 
-wire coreRequestsGraph;
-reg coreRequestsGraphD;
-always @(posedge clk) coreRequestsGraphD <= coreRequestsGraph;
-assign requestGraph = coreRequestsGraphD;
 
-pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATENCY(1)) core(
+pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATENCY(PIPE_STEPS + REQUEST_LATENCY), .STARTING_CONNECT_COUNT_LAG(5)) core(
     .clk(clk), 
     .rst(rst),
     
     // input side
-    .request(coreRequestsGraph), 
+    .request(requestGraph), 
     .graphIn(singletonEliminatedGraph), 
-    .start(graphAvailablePostDelay & coreRequestsGraphD), 
-    .connectCountIn(connectCountIn), 
+    .start(startPostDelay), 
+    .startingConnectCountIn_DELAYED(startingConnectCountIn_DELAYED), 
     .extraDataIn(extraDataPostDelay),
     
     // output side
