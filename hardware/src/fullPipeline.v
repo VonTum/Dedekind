@@ -152,39 +152,38 @@ assign readyForBotBurst = usedw_writeSide <= 20;
 wire[127:0] botToComputeModule;
 wire[`COMPUTE_MODULE_EXTRA_DATA_WIDTH-1:0] extraDataToComputeModule;
 wire readRequestFromComputeModule;
-wire empty;
-wire dataValidToComputeModule = !empty & readRequestFromComputeModule;
+wire dataValidToComputeModule;
 
 wire coreRequestsPreDelay;
 `define REQUEST_LATENCY 3
 hyperpipe #(.CYCLES(`REQUEST_LATENCY), .WIDTH(1)) requestPipe(clk, coreRequestsPreDelay, readRequestFromComputeModule);
 
-FIFO #(.WIDTH(128+`COMPUTE_MODULE_EXTRA_DATA_WIDTH), .DEPTH_LOG2(5)) fifoToComputeModule(
+`define FIFO2_LATENCY 3
+FastFIFO #(.WIDTH(128+`COMPUTE_MODULE_EXTRA_DATA_WIDTH)) fifoToComputeModule(
     .clk(clk),
     .rst(rst),
      
     // input side
     .writeEnable(botAvailableFromInputModule),
     .dataIn({botFromInputModule, {addrIn, subAddrIn}}),
-    .usedw(usedw_writeSide),
+    .full(),
+    .ready(),
+    .usedw_writeSide(usedw_writeSide),
     
     // output side
-    .readEnable(readRequestFromComputeModule & !empty),
+    .readEnable(readRequestFromComputeModule), // FIFO2 has read protection, no need to check empty
     .dataOut({botToComputeModule, extraDataToComputeModule}),
-    .empty(empty)
+    .empty(),
+    .dataOutValid(dataValidToComputeModule),
+    .usedw_readSide()
 );
-
-
-
-
-
 
 wire coreDone;
 wire[5:0] countOut;
 wire[`ADDR_WIDTH-1:0] addrOut;
 wire[2:0] subAddrOut;
 
-computeModule #(.EXTRA_DATA_WIDTH(`COMPUTE_MODULE_EXTRA_DATA_WIDTH), .REQUEST_LATENCY(`REQUEST_LATENCY)) computeCore(
+computeModule #(.EXTRA_DATA_WIDTH(`COMPUTE_MODULE_EXTRA_DATA_WIDTH), .REQUEST_LATENCY(`REQUEST_LATENCY + `FIFO2_LATENCY)) computeCore(
     .clk(clk),
     .rst(rst),
     .top(top),

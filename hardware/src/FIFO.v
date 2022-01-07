@@ -100,8 +100,19 @@ module FastFIFO #(parameter WIDTH = 20) (
 
 
 `ifdef USE_FIFO2_IP
+
+localparam FIFO_RADIX = 20; // For MLAB
+
+localparam FIFO2_WIDTH_ENLARGED_TO_RADIX = WIDTH + (FIFO_RADIX - (WIDTH % FIFO_RADIX)) % FIFO_RADIX;
+
+wire[FIFO2_WIDTH_ENLARGED_TO_RADIX-1:0] dataInWide;
+wire[FIFO2_WIDTH_ENLARGED_TO_RADIX-1:0] dataOutWide;
+assign dataInWide[WIDTH-1:0] = dataIn;
+assign dataInWide[FIFO2_WIDTH_ENLARGED_TO_RADIX-1:WIDTH] = 0;
+assign dataOut = dataOutWide[WIDTH-1:0];
+
 alt_pipeline_dcfifo #(
-    .DATAWIDTH(WIDTH),
+    .DATAWIDTH(FIFO2_WIDTH_ENLARGED_TO_RADIX),
     .RAM_BLK_TYPE("MLAB"),
     .USE_ACLR_PORT(0),
     .RAM_WRPTR_DUPLICATE(0),
@@ -114,21 +125,28 @@ alt_pipeline_dcfifo #(
     .w_sclr       (rst),
     .r_sclr       (rst),
     .w_req        (writeEnable),
-    .w_data       (dataIn),
+    .w_data       (dataInWide),
     .w_usedw      (usedw_writeSide),
     .w_full       (full),
     .w_ready      (ready),
     .r_req        (readEnable),
-    .r_data       (dataOut),
+    .r_data       (dataOutWide),
     .r_usedw      (usedw_readSide),
     .r_empty      (empty),
     .r_valid      (dataOutValid)
 );
 `else
 
+wire writeEnableDelayed;
+wire[WIDTH-1:0] dataInDelayed;
+hyperpipe #(.CYCLES(2), .WIDTH(WIDTH+1)) writeDelayPipe (clk,
+    {writeEnable, dataIn},
+    {writeEnableDelayed, dataInDelayed}
+);
+
 wire[WIDTH-1:0] dOutPreDelay;
-wire dataOutValidPreDelay;
-hyperpipe #(.CYCLES(3), .WIDTH(WIDTH+5+1)) delayPipe (clk,
+wire dataOutValidPreDelay = readEnable & !empty;
+hyperpipe #(.CYCLES(3), .WIDTH(WIDTH+1+5)) readDelayPipe (clk,
     {dOutPreDelay, dataOutValidPreDelay, usedw_writeSide},
     {dataOut, dataOutValid, usedw_readSide}
 );
@@ -140,12 +158,12 @@ FIFO #(.WIDTH(WIDTH), .DEPTH_LOG2(5)) fifo (
     .rst(rst),
      
     // input side
-    .writeEnable(writeEnable & !full), // Write protection
-    .dataIn(dataIn),
+    .writeEnable(writeEnableDelayed & !full), // Write protection
+    .dataIn(dataInDelayed),
     .full(full),
     
     // output side
-    .readEnable(readEnable & !empty), // Read protection
+    .readEnable(dataOutValidPreDelay), // Read protection
     .dataOut(dOutPreDelay),
     .empty(empty),
      
