@@ -6,14 +6,12 @@ module botPermuter #(parameter EXTRA_DATA_WIDTH = 12) (
     input rst,
     
     // input side
+    input startNewBurst,
     input[127:0] botIn,
-    input botInIsValid,
     input[5:0] validBotPermutesIn, // == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
-    output requestBotFromInput,
     
     // output side
-    input requestBot,
     output reg permutedBotValid,
     output reg[127:0] permutedBot,
     output reg[2:0] selectedPermutationOut,
@@ -34,30 +32,6 @@ wire[5:0] shouldNotRemove = {
     |validBotPermutes[5:1]
 };
 
-reg[2:0] selectedPermutation;
-reg isDone;
-always @(validBotPermutes) begin
-    casez(validBotPermutes)
-        6'b1?????: selectedPermutation <= 5;
-        6'b01????: selectedPermutation <= 4;
-        6'b001???: selectedPermutation <= 3;
-        6'b0001??: selectedPermutation <= 2;
-        6'b00001?: selectedPermutation <= 1;
-        6'b000001: selectedPermutation <= 0;
-        6'b000000: selectedPermutation <= 7;
-    endcase
-    casez(validBotPermutes)
-        6'b100000: isDone <= 1;
-        6'b010000: isDone <= 1;
-        6'b001000: isDone <= 1;
-        6'b000100: isDone <= 1;
-        6'b000010: isDone <= 1;
-        6'b000001: isDone <= 1;
-        6'b000000: isDone <= 1;
-        default: isDone <= 0;
-    endcase
-end
-
 wire[127:0] permutedBotFromSelector;
 botPermuteSelector6 combinatorialSelector (
     savedBot,
@@ -65,37 +39,34 @@ botPermuteSelector6 combinatorialSelector (
     permutedBotFromSelector
 );
 
-assign requestBotFromInput = requestBot & isDone;
+always @(posedge clk) begin
+    casez(validBotPermutes)
+        6'b1?????: selectedPermutationOut <= 5;
+        6'b01????: selectedPermutationOut <= 4;
+        6'b001???: selectedPermutationOut <= 3;
+        6'b0001??: selectedPermutationOut <= 2;
+        6'b00001?: selectedPermutationOut <= 1;
+        6'b000001: selectedPermutationOut <= 0;
+        6'b000000: selectedPermutationOut <= 7;
+    endcase
+    
+    permutedBotValid <= validBotPermutes != 6'b000000;
+    permutedBot <= permutedBotFromSelector;
+    extraDataOut <= savedExtraData;
+end
 
 always @(posedge clk) begin
     if(rst) begin
-        savedBot <= 0;
-        savedExtraData <= 0;
-        permutedBotValid <= 0;
-        permutedBot <= 0;
-        selectedPermutationOut <= 7;
-        extraDataOut <= 0;
+        savedBot <= 1'bX;
+        savedExtraData <= 1'bX;
         validBotPermutes <= 6'b000000;
     end else begin
-        if(requestBotFromInput) begin
+        if(startNewBurst) begin
             savedBot <= botIn;
             savedExtraData <= extraDataIn;
-        end
-        if(requestBot) begin
-            if(isDone) begin
-                if(botInIsValid)
-                    validBotPermutes <= validBotPermutesIn;
-                else
-                    validBotPermutes <= 6'b000000;
-            end else begin
-                validBotPermutes <= validBotPermutes & shouldNotRemove;
-            end
-            
-            permutedBotValid <= validBotPermutes != 0;
-            permutedBot <= permutedBotFromSelector;
-            extraDataOut <= savedExtraData;
-            selectedPermutationOut <= selectedPermutation;
-        end
+            validBotPermutes <= validBotPermutesIn;
+        end else
+            validBotPermutes <= validBotPermutes & shouldNotRemove;
     end
 end
 
@@ -110,13 +81,13 @@ module botPermuteSelector6 (
 wire[15:0] botParts[7:0];
 genvar i;
 generate
-for(i = 0; i < 8; i = i + 1) assign botParts[i] = bot[i*16 +: 16];
+for(i = 0; i < 8; i = i + 1) begin assign botParts[i] = bot[i*16 +: 16]; end
 endgenerate
 
 
 wire[15:0] permutedBotParts[7:0];
 generate
-for(i = 0; i < 8; i = i + 1) assign permutedBot[i*16 +: 16] = permutedBotParts[i];
+for(i = 0; i < 8; i = i + 1) begin assign permutedBot[i*16 +: 16] = permutedBotParts[i]; end
 endgenerate
 
 assign permutedBotParts[3'b000] = botParts[3'b000];
