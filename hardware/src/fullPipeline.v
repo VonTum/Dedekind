@@ -117,12 +117,9 @@ hyperpipe #(.CYCLES(2), .WIDTH(128+1+6+`ADDR_WIDTH)) inputsPipe(
     {botD, anyBotPermutIsValidD, validBotPermutationsD, botIndexD}
 );
 
-wire botAvailableFifo;
-wire coreRequests;
-wire coreRequestsDelayed;
-`define REQUEST_LATENCY 3
-hyperpipe #(.CYCLES(`REQUEST_LATENCY), .WIDTH(1)) requestPipe(clk, coreRequests, coreRequestsDelayed);
-wire[127:0] botFromFifo;
+wire readyForBotBurst;
+wire botAvailableFromInputModule;
+wire[127:0] botFromInputModule;
 wire[`ADDR_WIDTH-1:0] addrIn;
 wire[2:0] subAddrIn;
 
@@ -138,28 +135,65 @@ inputModule6 #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH)) inputHandler (
     .extraDataIn(botIndexD),
     
     // output side, to countConnectedCore
-    .requestBot(coreRequestsDelayed),
-    .botOutValid(botAvailableFifo),
-    .botOut(botFromFifo),
+    .readyForBotBurst(readyForBotBurst),
+    .botOutValid(botAvailableFromInputModule),
+    .botOut(botFromInputModule),
     .extraDataOut(addrIn),
     .selectedBotPermutation(subAddrIn)
 );
+
+`define COMPUTE_MODULE_EXTRA_DATA_WIDTH (`ADDR_WIDTH + 3)
+
+// Inpput Module Side
+wire[4:0] usedw_writeSide;
+assign readyForBotBurst = usedw_writeSide <= 20;
+
+// Compute Module Side
+wire[127:0] botToComputeModule;
+wire[`COMPUTE_MODULE_EXTRA_DATA_WIDTH-1:0] extraDataToComputeModule;
+wire readRequestFromComputeModule;
+wire empty;
+wire dataValidToComputeModule = !empty & readRequestFromComputeModule;
+
+wire coreRequestsPreDelay;
+`define REQUEST_LATENCY 3
+hyperpipe #(.CYCLES(`REQUEST_LATENCY), .WIDTH(1)) requestPipe(clk, coreRequestsPreDelay, readRequestFromComputeModule);
+
+FIFO #(.WIDTH(128+`COMPUTE_MODULE_EXTRA_DATA_WIDTH), .DEPTH_LOG2(5)) fifoToComputeModule(
+    .clk(clk),
+    .rst(rst),
+     
+    // input side
+    .writeEnable(botAvailableFromInputModule),
+    .dataIn({botFromInputModule, {addrIn, subAddrIn}}),
+    .usedw(usedw_writeSide),
+    
+    // output side
+    .readEnable(readRequestFromComputeModule & !empty),
+    .dataOut({botToComputeModule, extraDataToComputeModule}),
+    .empty(empty)
+);
+
+
+
+
+
 
 wire coreDone;
 wire[5:0] countOut;
 wire[`ADDR_WIDTH-1:0] addrOut;
 wire[2:0] subAddrOut;
 
-computeModule #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH + 3), .REQUEST_LATENCY(`REQUEST_LATENCY)) computeCore(
+computeModule #(.EXTRA_DATA_WIDTH(`COMPUTE_MODULE_EXTRA_DATA_WIDTH), .REQUEST_LATENCY(`REQUEST_LATENCY)) computeCore(
     .clk(clk),
     .rst(rst),
     .top(top),
     
     // input side
-    .botIn(botFromFifo),
-    .start(botAvailableFifo & coreRequestsDelayed),
-    .extraDataIn({addrIn, subAddrIn}),
-    .requestGraph(coreRequests),
+    .botIn(botToComputeModule),
+    .start(dataValidToComputeModule),
+    .extraDataIn(extraDataToComputeModule),
+    .requestGraph(coreRequestsPreDelay),
     
     // output side
     .done(coreDone),
