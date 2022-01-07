@@ -1,7 +1,5 @@
 `timescale 1ns / 1ps
 
-`include "ipSettings_header.v"
-
 // This module can buffer the data 
 module outputBuffer(
     input clk,
@@ -24,20 +22,6 @@ always @(posedge clk) slowInputting <= outputFifoFullness >= 1000; // want to le
 wire fifoEmpty;
 assign dataOutValid = !fifoEmpty;
 
-`ifdef USE_FIFO_IP
-outputBufferFifo buffer (
-    .clock(clk),
-    .sclr(rst),
-    .wrreq(dataInValid),
-    .data(dataIn),
-	 
-    .rdreq(dataOutReady & !fifoEmpty),
-    .q(dataOut),
-    .empty(fifoEmpty),
-	 
-    .usedw(outputFifoFullness)
-);
-`else
 FIFO #(.WIDTH(64), .DEPTH_LOG2(`FIFO_DEPTH_BITS)) buffer (
     .clk(clk),
     .rst(rst),
@@ -54,6 +38,5 @@ FIFO #(.WIDTH(64), .DEPTH_LOG2(`FIFO_DEPTH_BITS)) buffer (
 	 
     .usedw(outputFifoFullness)
 );
-`endif
 
 endmodule
