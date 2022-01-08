@@ -158,7 +158,7 @@ wire coreRequestsPreDelay;
 `define REQUEST_LATENCY 3
 hyperpipe #(.CYCLES(`REQUEST_LATENCY), .WIDTH(1)) requestPipe(clk, coreRequestsPreDelay, readRequestFromComputeModule);
 
-`define FIFO2_LATENCY 3
+`define FIFO2_LATENCY 0
 FastFIFO #(.WIDTH(128+`COMPUTE_MODULE_EXTRA_DATA_WIDTH)) fifoToComputeModule(
     .clk(clk),
     .rst(rst),
@@ -166,16 +166,12 @@ FastFIFO #(.WIDTH(128+`COMPUTE_MODULE_EXTRA_DATA_WIDTH)) fifoToComputeModule(
     // input side
     .writeEnable(botAvailableFromInputModule),
     .dataIn({botFromInputModule, {addrIn, subAddrIn}}),
-    .full(),
-    .ready(),
-    .usedw_writeSide(usedw_writeSide),
+    .usedw(usedw_writeSide),
     
     // output side
-    .readEnable(readRequestFromComputeModule), // FIFO2 has read protection, no need to check empty
+    .readRequest(readRequestFromComputeModule), // FIFO2 has read protection, no need to check empty
     .dataOut({botToComputeModule, extraDataToComputeModule}),
-    .empty(),
-    .dataOutValid(dataValidToComputeModule),
-    .usedw_readSide()
+    .dataOutValid(dataValidToComputeModule)
 );
 
 wire coreDone;
