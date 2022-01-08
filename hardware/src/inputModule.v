@@ -36,22 +36,20 @@ reg[2:0] cyclesUntilNextBotRequest;
 wire readyForBotRequest = cyclesUntilNextBotRequest == 0;
 wire fifoEmpty;
 wire popFifo = readyForBotBurst & readyForBotRequest;
-wire fifoDataValid = popFifo & !fifoEmpty;
+wire fifoDataValid;
 wire[128+EXTRA_DATA_WIDTH+6-1:0] dataFromFifo;
 
-FIFO #(.WIDTH(128+6+EXTRA_DATA_WIDTH), .DEPTH_LOG2(5 /*Size 32*/)) botQueue (
+FastFIFO #(.WIDTH(128+6+EXTRA_DATA_WIDTH), .DEPTH_LOG2(5 /*Size 32*/)) botQueue (
     .clk(clk),
     .rst(rst),
     
     .writeEnable(anyBotPermutIsValid),
     .dataIn({bot,validBotPermutesIn,extraDataIn}),
-    .full(_unused_full),
+    .usedw(fifoFullness),
     
-    .readEnable(fifoDataValid),
+    .readRequest(popFifo),
     .dataOut(dataFromFifo),
-    .empty(fifoEmpty),
-	 
-    .usedw(fifoFullness)
+    .dataOutValid(fifoDataValid)
 );
 
 wire fifoDataAvailable = !fifoEmpty;
