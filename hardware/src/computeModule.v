@@ -19,20 +19,25 @@ module computeModule #(parameter EXTRA_DATA_WIDTH = 14, parameter REQUEST_LATENC
     output[EXTRA_DATA_WIDTH-1:0] extraDataOut
 );
 
-reg[127:0] graphIn; always @(posedge clk) graphIn <= top & ~botIn;
+// 1 PIPE STEP
+reg[127:0] botInD;
+always @(posedge clk) botInD <= botIn;
 
-// PIPELINE STEP 1
+// 1 PIPE STEP
+reg[127:0] graphIn; always @(posedge clk) graphIn <= top & ~botInD;
+
+// 1 PIPE STEP
 wire[127:0] leafEliminatedGraph;
-
 leafElimination #(.DIRECTION(`DOWN)) le(clk, graphIn, leafEliminatedGraph);
 
+// 2 PIPE STEPS
 wire[127:0] singletonEliminatedGraph;
 wire[5:0] startingConnectCountIn_DELAYED;
 wire startPostDelay;
 wire[EXTRA_DATA_WIDTH-1:0] extraDataPostDelay;
 singletonElimination se(clk, leafEliminatedGraph, singletonEliminatedGraph, startingConnectCountIn_DELAYED);
 
-localparam PIPE_STEPS = 1+1+2;
+localparam PIPE_STEPS = 1+1+1+2;
 
 shiftRegister #(.CYCLES(PIPE_STEPS), .WIDTH(1+EXTRA_DATA_WIDTH)) graphAvalailbePipe (clk, 
     {start, extraDataIn}, 

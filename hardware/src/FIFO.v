@@ -183,7 +183,7 @@ always @(posedge clk) begin
     end
 end
 
-assign dataOut = (writeEnableReg && writeAddrReg == readAddrReg) ? 20'hXXXXX : memory[readAddrReg];
+assign dataOut = (writeEnableReg && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
 
 `endif
 
@@ -212,7 +212,8 @@ reg[4:0] readsValidUpTo; always @(posedge clk) readsValidUpTo <= writeAddr + 1;
 assign usedw = readsValidUpTo - nextReadAddr;
 
 wire fifoHasData = readsValidUpTo != nextReadAddr;
-assign dataOutValid = readRequest & fifoHasData;
+wire isReading = readRequest & fifoHasData;
+assign dataOutValid = isReading;
 
 always @(posedge clk) begin
     if(rst) begin
@@ -220,7 +221,7 @@ always @(posedge clk) begin
         nextReadAddr <= 1;
         writeAddr <= 0;
     end else begin
-        if(dataOutValid) begin
+        if(isReading) begin
             nextReadAddr <= nextReadAddr + 1;
         end
         
@@ -240,7 +241,7 @@ MLAB_RAM #(WIDTH) fifoMemory (
     .dataIn(dataIn),
     
     // Read Side
-    .readAddressStall(!dataOutValid),
+    .readAddressStall(!isReading),
     .readAddr(nextReadAddr),
     .dataOut(dataOut)
 );

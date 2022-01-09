@@ -36,10 +36,10 @@ reg[2:0] cyclesUntilNextBotRequest;
 wire readyForBotRequest = cyclesUntilNextBotRequest == 0;
 wire fifoEmpty;
 wire popFifo = readyForBotBurst & readyForBotRequest;
-wire fifoDataValid;
-wire[128+EXTRA_DATA_WIDTH+6-1:0] dataFromFifo;
+wire fifoDataValidPreDelay;
+wire[128+EXTRA_DATA_WIDTH+6-1:0] dataFromFifoPreDelay;
 
-FastFIFO #(.WIDTH(128+6+EXTRA_DATA_WIDTH), .DEPTH_LOG2(5 /*Size 32*/)) botQueue (
+FastFIFO #(.WIDTH(128+6+EXTRA_DATA_WIDTH)) botQueue (
     .clk(clk),
     .rst(rst),
     
@@ -48,9 +48,12 @@ FastFIFO #(.WIDTH(128+6+EXTRA_DATA_WIDTH), .DEPTH_LOG2(5 /*Size 32*/)) botQueue 
     .usedw(fifoFullness),
     
     .readRequest(popFifo),
-    .dataOut(dataFromFifo),
-    .dataOutValid(fifoDataValid)
+    .dataOut(dataFromFifoPreDelay),
+    .dataOutValid(fifoDataValidPreDelay)
 );
+reg fifoDataValid; always @(posedge clk) if(popFifo) fifoDataValid <= fifoDataValidPreDelay;
+reg[128+EXTRA_DATA_WIDTH+6-1:0] dataFromFifo; always @(posedge clk) if(popFifo) dataFromFifo <= dataFromFifoPreDelay;
+wire startNewBurst = fifoDataValid & popFifo;
 
 wire fifoDataAvailable = !fifoEmpty;
 wire[127:0] botFromFifo;
@@ -64,7 +67,7 @@ popcnt6 permuteCounter(validBotPermutesFromFifo, validBotPermutesPopCnt);
 always @(posedge clk) begin
     if(rst)
         cyclesUntilNextBotRequest <= 0;
-    else if(fifoDataValid)
+    else if(startNewBurst)
         cyclesUntilNextBotRequest <= validBotPermutesPopCnt;
     else if(!readyForBotRequest)
         cyclesUntilNextBotRequest <= cyclesUntilNextBotRequest - 1;
@@ -76,7 +79,7 @@ botPermuter #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH)) permuter (
     .rst(rst),
     
     // input side
-    .startNewBurst(fifoDataValid),
+    .startNewBurst(startNewBurst),
     .botIn(botFromFifo),
     .validBotPermutesIn(validBotPermutesFromFifo), 
     .extraDataIn(extraDataFromFifo),
