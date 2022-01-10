@@ -1,42 +1,52 @@
 `timescale 1ns / 1ps
 
+`define NEW_SEED_HASBIT_DEPTH 3
+`define NEW_SEED_HASBIT_OFFSET 1+`NEW_SEED_HASBIT_DEPTH
+`define NEW_SEED_DEPTH 4
+`define EXPLORATION_DEPTH 3
+
 module hasFirstBitAnalysis(
     input clk,
     
     input[127:0] graphIn,
-    output[1:0] hasBit64,
+    output reg[1:0] hasBit64,
     // grouped in sets of 4, an element is marked '1' if its 4 bits contain the first bit of the 16 bits of the group
     output reg[4*8-1:0] hasFirstBit4,
     // grouped in sets of 4, an element is marked '1' if its 16 bits contain the first bit of the 64 bits of the group
-    output[4*2-1:0] hasFirstBit16
+    output reg[4*2-1:0] hasFirstBit16
 );
 
-wire[31:0] hasBit4;
+reg[31:0] hasBit4;
 reg[7:0] hasBit16;
 genvar i;
 generate
-for(i = 0; i < 32; i = i + 1) begin assign hasBit4[i] = |graphIn[i*4+:4]; end
+for(i = 0; i < 32; i = i + 1) begin always @(posedge clk) hasBit4[i] <= |graphIn[i*4+:4]; end
 for(i = 0; i < 8; i = i + 1) begin always @(posedge clk) hasBit16[i] <= |hasBit4[i*4+:4]; end
-for(i = 0; i < 2; i = i + 1) begin assign hasBit64[i] = |hasBit16[i*4+:4]; end
+for(i = 0; i < 2; i = i + 1) begin always @(posedge clk) hasBit64[i] = |hasBit16[i*4+:4]; end
 endgenerate
+
+reg[4*8-1:0] hasFirstBit4PreDelay;
 
 generate
 for(i = 0; i < 8; i = i + 1) begin
     always @(posedge clk) begin
-        hasFirstBit4[4*i+0] <= hasBit4[4*i];
-        hasFirstBit4[4*i+1] <= !hasBit4[4*i] & hasBit4[4*i+1];
-        hasFirstBit4[4*i+2] <= !hasBit4[4*i] & !hasBit4[4*i+1] & hasBit4[4*i+2];
-        hasFirstBit4[4*i+3] <= !hasBit4[4*i] & !hasBit4[4*i+1] & !hasBit4[4*i+2] & hasBit4[4*i+3];
+        hasFirstBit4PreDelay[4*i+0] <= hasBit4[4*i];
+        hasFirstBit4PreDelay[4*i+1] <= !hasBit4[4*i] & hasBit4[4*i+1];
+        hasFirstBit4PreDelay[4*i+2] <= !hasBit4[4*i] & !hasBit4[4*i+1] & hasBit4[4*i+2];
+        hasFirstBit4PreDelay[4*i+3] <= !hasBit4[4*i] & !hasBit4[4*i+1] & !hasBit4[4*i+2] & hasBit4[4*i+3];
     end
 end
 endgenerate
+always @(posedge clk) hasFirstBit4 <= hasFirstBit4PreDelay;
 
 generate
 for(i = 0; i < 2; i = i + 1) begin
-    assign hasFirstBit16[4*i+0] =  hasBit16[4*i];
-    assign hasFirstBit16[4*i+1] = !hasBit16[4*i] &  hasBit16[4*i+1];
-    assign hasFirstBit16[4*i+2] = !hasBit16[4*i] & !hasBit16[4*i+1] &  hasBit16[4*i+2];
-    assign hasFirstBit16[4*i+3] = !hasBit16[4*i] & !hasBit16[4*i+1] & !hasBit16[4*i+2] & hasBit16[4*i+3];
+    always @(posedge clk) begin
+        hasFirstBit16[4*i+0] <=  hasBit16[4*i];
+        hasFirstBit16[4*i+1] <= !hasBit16[4*i] &  hasBit16[4*i+1];
+        hasFirstBit16[4*i+2] <= !hasBit16[4*i] & !hasBit16[4*i+1] &  hasBit16[4*i+2];
+        hasFirstBit16[4*i+3] <= !hasBit16[4*i] & !hasBit16[4*i+1] & !hasBit16[4*i+2] & hasBit16[4*i+3];
+    end
 end
 endgenerate
 endmodule
@@ -83,7 +93,7 @@ module newSeedProductionPipeline (
     input clk,
     
     input[127:0] graphIn,
-    input[127:0] extended,
+    input[127:0] extended_HASBIT,
     input shouldGrabNewSeed,
     
     output shouldIncrementConnectionCount,
@@ -91,12 +101,10 @@ module newSeedProductionPipeline (
 );
 
 reg[127:0] graphIn_START;
-reg[127:0] extended_START;
 reg shouldGrabNewSeed_START;
 
 always @(posedge clk) begin
     graphIn_START <= graphIn;
-    extended_START <= extended;
     shouldGrabNewSeed_START <= shouldGrabNewSeed;
 end
 
@@ -113,45 +121,27 @@ hasFirstBitAnalysis firstBitAnalysis(
 );
 
 // delays
-reg[127:0] graphIn_HASBIT;
-reg[127:0] extended_HASBIT;
-reg shouldGrabNewSeed_HASBIT;
-always @(posedge clk) begin
-    graphIn_HASBIT <= graphIn_START;
-    extended_HASBIT <= extended_START;
-    shouldGrabNewSeed_HASBIT <= shouldGrabNewSeed_START;
-end
+wire[127:0] graphIn_HASBIT;
+wire shouldGrabNewSeed_HASBIT;
 
-// PIPELINE STAGE
-reg[1:0] hasBit64_RESULT;
-reg[4*8-1:0] hasFirstBit4_RESULT;
-reg[4*2-1:0] hasFirstBit16_RESULT;
-reg[127:0] graphIn_RESULT;
-reg[127:0] extended_RESULT;
-reg shouldGrabNewSeed_RESULT;
-
-always @(posedge clk) begin
-    hasBit64_RESULT <= hasBit64_HASBIT;
-    hasFirstBit4_RESULT <= hasFirstBit4_HASBIT;
-    hasFirstBit16_RESULT <= hasFirstBit16_HASBIT;
-    graphIn_RESULT <= graphIn_HASBIT;
-    extended_RESULT <= extended_HASBIT;
-    shouldGrabNewSeed_RESULT <= shouldGrabNewSeed_HASBIT;
-end
+hyperpipe #(.CYCLES(`NEW_SEED_HASBIT_DEPTH), .WIDTH(128+1)) START_TO_HASBIT_DELAY (clk,
+    {graphIn_START, shouldGrabNewSeed_START},
+    {graphIn_HASBIT, shouldGrabNewSeed_HASBIT}
+);
 
 // PIPELINE STEP 3
 newExtendingProducer resultProducer(
-    graphIn_RESULT,
-    extended_RESULT,
-    shouldGrabNewSeed_RESULT,
-    hasBit64_RESULT,
-    hasFirstBit4_RESULT,
-    hasFirstBit16_RESULT,
+    graphIn_HASBIT,
+    extended_HASBIT,
+    shouldGrabNewSeed_HASBIT,
+    hasBit64_HASBIT,
+    hasFirstBit4_HASBIT,
+    hasFirstBit16_HASBIT,
     newCurExtendingOut
 );
 
 // Now we can finally produce the resulting connectionCount
-assign shouldIncrementConnectionCount = shouldGrabNewSeed_RESULT & (hasBit64_RESULT[0] | hasBit64_RESULT[1]);
+assign shouldIncrementConnectionCount = shouldGrabNewSeed_HASBIT & (hasBit64_HASBIT[0] | hasBit64_HASBIT[1]);
 
 endmodule
 
@@ -223,15 +213,10 @@ end
 
 endmodule
 
-`define OTHER_DATA_WIDTH (128+128+1+1+1+6+EXTRA_DATA_WIDTH)
-
-`define NEW_SEED_DEPTH 3
-`define EXPLORATION_DEPTH 3
-
 `define OFFSET_NSD `NEW_SEED_DEPTH
 `define OFFSET_MID (`OFFSET_NSD+1)
 `define OFFSET_EXPL (`OFFSET_MID+`EXPLORATION_DEPTH)
-`define TOTAL_PIPELINE_STEAGES (`OFFSET_EXPL+1)
+`define TOTAL_PIPELINE_STAGES `OFFSET_EXPL
 
 
 // The combinatorial pipeline that does all the work. Loopback is done outside of this module through combinatorialStateIn/Out
@@ -241,33 +226,31 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10, p
     input rst,
     
     // input side
-    output reg request,
     input[127:0] graphIn,
     input start,
     input[5:0] startingConnectCountIn_DELAYED,
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
     
-    // output side
-    output reg done,
-    output reg[5:0] connectionCount,
-    output reg[EXTRA_DATA_WIDTH-1:0] extraData,
-    
     // state loop
-    input[`OTHER_DATA_WIDTH-1:0] combinatorialStateIn,
-    output reg[`OTHER_DATA_WIDTH-1:0] combinatorialStateOut
+    input runEndIn,
+    input[127:0] extendedIn_HASBIT,
+    input[127:0] selectedLeftoverGraphIn,
+    input shouldGrabNewSeedIn, 
+    input validIn, 
+    input[5:0] storedConnectionCountIn, 
+    input[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn,
+    
+    output request_EXPL,
+    output[127:0] extendedOut_EXPL,
+    output[127:0] selectedLeftoverGraphOut_EXPL,
+    output shouldGrabNewSeedOut_EXPL,
+    output validOut, 
+    output[5:0] connectionCountOut_EXPL, 
+    output[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut
 );
 
-wire[127:0] extendedIn;
-wire shouldGrabNewSeedIn;
-wire[127:0] selectedLeftoverGraphIn;
-wire validIn;
-wire runEndIn;
-wire[5:0] storedConnectionCountIn;
-wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn;
-assign {selectedLeftoverGraphIn, extendedIn, runEndIn, shouldGrabNewSeedIn, validIn, storedConnectionCountIn, storedExtraDataIn} = combinatorialStateIn;
-
-wire[EXTRA_DATA_WIDTH-1:0] extraDataWire = runEndIn ? extraDataIn : storedExtraDataIn;
-wire validWire = start ? 1 : (runEndIn ? 0 : validIn);
+assign storedExtraDataOut = runEndIn ? extraDataIn : storedExtraDataIn;
+assign validOut = start ? 1 : (runEndIn ? 0 : validIn);
 
 // PIPELINE STEP 5
 // Inputs become available
@@ -278,35 +261,29 @@ wire[127:0] leftoverGraphWire = rst ? 0 : start ? graphIn : selectedLeftoverGrap
 
 wire shouldIncrementConnectionCount_NSD;
 wire[127:0] curExtendingWire_NSD;
-newSeedProductionPipeline newSeedProductionPipe(clk, leftoverGraphWire, extendedIn, shouldGrabNewSeedIn, shouldIncrementConnectionCount_NSD, curExtendingWire_NSD);
+newSeedProductionPipeline newSeedProductionPipe(clk, leftoverGraphWire, extendedIn_HASBIT, shouldGrabNewSeedIn, shouldIncrementConnectionCount_NSD, curExtendingWire_NSD);
 // delays of other wires
 
 wire start_NSD;
-wire[EXTRA_DATA_WIDTH-1:0] extraDataWire_NSD;
 wire[127:0] leftoverGraphWire_NSD;
 wire[5:0] storedConnectionCountIn_NSD;
-wire validWire_NSD;
-shiftRegister #(.CYCLES(`NEW_SEED_DEPTH), .WIDTH(1+EXTRA_DATA_WIDTH+128+6+1)) newSeedProductionPipeBypassDelay(clk,
-    {start, extraDataWire, leftoverGraphWire, storedConnectionCountIn, validWire},
-    {start_NSD, extraDataWire_NSD, leftoverGraphWire_NSD, storedConnectionCountIn_NSD, validWire_NSD}
+hyperpipe #(.CYCLES(`NEW_SEED_DEPTH), .WIDTH(1+128+6)) newSeedProductionPipeBypassDelay(clk,
+    {start, leftoverGraphWire, storedConnectionCountIn},
+    {start_NSD, leftoverGraphWire_NSD, storedConnectionCountIn_NSD}
 );
 
 // PIPELINE STAGE
 reg[127:0] curExtending_MID;
 reg[127:0] leftoverGraph_MID;
-reg validOut_MID;
-reg[EXTRA_DATA_WIDTH-1:0] extraDataOut_MID;
 always @(posedge clk) begin
     curExtending_MID <= curExtendingWire_NSD;
     leftoverGraph_MID <= leftoverGraphWire_NSD;
-    validOut_MID <= validWire_NSD;
-    extraDataOut_MID <= extraDataWire_NSD;
 end
 
 wire start_DELAYED;
 wire shouldIncrementConnectionCount_DELAYED;
 wire[5:0] storedConnectionCountIn_DELAYED;
-shiftRegister #(.CYCLES(STARTING_CONNECT_COUNT_LAG - `OFFSET_NSD), .WIDTH(1+1+6)) startingConnectCountSyncPipe(clk,
+hyperpipe #(.CYCLES(STARTING_CONNECT_COUNT_LAG - `OFFSET_NSD), .WIDTH(1+1+6)) startingConnectCountSyncPipe(clk,
     {start_NSD, shouldIncrementConnectionCount_NSD, storedConnectionCountIn_NSD},
     {start_DELAYED, shouldIncrementConnectionCount_DELAYED, storedConnectionCountIn_DELAYED}
 );
@@ -316,36 +293,26 @@ wire[5:0] connectionCountOut_DELAYED = (start_DELAYED ? startingConnectCountIn_D
 
 // PIPELINE STEP "EXPLORATION"
 wire[127:0] reducedGraph_EXPL;
-wire[127:0] extendedOut_EXPL;
-wire shouldGrabNewSeedOut_EXPL;
-wire requestWire_EXPL;
-explorationPipeline explorationPipe(clk, leftoverGraph_MID, curExtending_MID, reducedGraph_EXPL, extendedOut_EXPL, requestWire_EXPL, shouldGrabNewSeedOut_EXPL);
+// output wire[127:0] extendedOut_EXPL;
+// output wire shouldGrabNewSeedOut_EXPL;
+// output wire request_EXPL;
+explorationPipeline explorationPipe(clk, leftoverGraph_MID, curExtending_MID, reducedGraph_EXPL, extendedOut_EXPL, request_EXPL, shouldGrabNewSeedOut_EXPL);
 
 
 // delays
 wire[127:0] leftoverGraph_EXPL;
-wire validOut_EXPL;
-wire[EXTRA_DATA_WIDTH-1:0] extraDataOut_EXPL;
-shiftRegister #(.CYCLES(`EXPLORATION_DEPTH), .WIDTH(128+1+EXTRA_DATA_WIDTH)) explorationBypassDelay(clk,
-    {leftoverGraph_MID , validOut_MID , extraDataOut_MID},
-    {leftoverGraph_EXPL, validOut_EXPL, extraDataOut_EXPL}
+hyperpipe #(.CYCLES(`EXPLORATION_DEPTH), .WIDTH(128)) explorationBypassDelay(clk,
+    leftoverGraph_MID,
+    leftoverGraph_EXPL
 );
-wire[5:0] connectionCountOut_EXPL;
-shiftRegister #(.CYCLES(`OFFSET_EXPL - STARTING_CONNECT_COUNT_LAG), .WIDTH(6)) connectCountOutSyncPipe(clk,
+// output wire[5:0] connectionCountOut_EXPL;
+hyperpipe #(.CYCLES(`OFFSET_EXPL - STARTING_CONNECT_COUNT_LAG), .WIDTH(6)) connectCountOutSyncPipe(clk,
     connectionCountOut_DELAYED,
     connectionCountOut_EXPL
 );
 
-wire doneWire_EXPL = validOut_EXPL & requestWire_EXPL;
-wire[127:0] selectedLeftoverGraphOut_EXPL = shouldGrabNewSeedOut_EXPL ? reducedGraph_EXPL : leftoverGraph_EXPL;
-
-
-// OUTPUT PIPELINE STAGE
-always @(posedge clk) combinatorialStateOut <= {selectedLeftoverGraphOut_EXPL, extendedOut_EXPL, requestWire_EXPL, shouldGrabNewSeedOut_EXPL, validOut_EXPL, connectionCountOut_EXPL, extraDataOut_EXPL};
-always @(posedge clk) extraData <= extraDataOut_EXPL;
-always @(posedge clk) connectionCount <= connectionCountOut_EXPL;
-always @(posedge clk) done <= doneWire_EXPL;
-always @(posedge clk) request <= requestWire_EXPL;
+// output wire[127:0] selectedLeftoverGraphOut_EXPL;
+assign selectedLeftoverGraphOut_EXPL = shouldGrabNewSeedOut_EXPL ? reducedGraph_EXPL : leftoverGraph_EXPL;
 endmodule
 
 
@@ -367,33 +334,72 @@ module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter 
     output[EXTRA_DATA_WIDTH-1:0] extraDataOut
 );
 
-wire[`OTHER_DATA_WIDTH-1:0] combinatorialStateIn;
-wire[`OTHER_DATA_WIDTH-1:0] combinatorialStateOut;
+wire runEndIn;
+wire[127:0] extendedIn_HASBIT;
+wire[127:0] selectedLeftoverGraphIn;
+wire shouldGrabNewSeedIn;
+wire validIn;
+wire[5:0] storedConnectionCountIn;
+wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn;
+
+assign done = runEndIn & validIn;
+assign connectCount = storedConnectionCountIn;
+assign extraDataOut = storedExtraDataIn;
+
+wire requestOut_EXPL;
+wire[127:0] extendedOut_EXPL;
+wire[127:0] selectedLeftoverGraphOut_EXPL;
+wire shouldGrabNewSeedOut_EXPL;
+wire validOut;
+wire[5:0] connectionCountOut_EXPL;
+wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut;
+
+assign request = requestOut_EXPL;
 
 pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH, STARTING_CONNECT_COUNT_LAG) combinatorialComponent (
     clk,
     rst,
     
     // input side
-    request,
     graphIn,
     start,
     startingConnectCountIn_DELAYED,
     extraDataIn,
     
-    // output side
-    done,
-    connectCount,
-    extraDataOut,
+    // combinatorial state loop
+    runEndIn,
+    extendedIn_HASBIT,
+    selectedLeftoverGraphIn,
+    shouldGrabNewSeedIn,
+    validIn,
+    storedConnectionCountIn,
+    storedExtraDataIn,
     
-    combinatorialStateIn,
-    combinatorialStateOut
+    requestOut_EXPL,
+    extendedOut_EXPL,
+    selectedLeftoverGraphOut_EXPL,
+    shouldGrabNewSeedOut_EXPL,
+    validOut,
+    connectionCountOut_EXPL,
+    storedExtraDataOut
 );
 
 // delay other wires for DATA_IN_LATENCY
-shiftRegister #(.CYCLES(DATA_IN_LATENCY), .WIDTH(`OTHER_DATA_WIDTH)) inputLatencyPipe(clk,
-    combinatorialStateOut,
-    combinatorialStateIn
+shiftRegister #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_EXPL + DATA_IN_LATENCY + `NEW_SEED_HASBIT_OFFSET), .WIDTH(128)) loopBackPipeExtended (clk,
+    extendedOut_EXPL,
+    extendedIn_HASBIT
+);
+
+// delay other wires for DATA_IN_LATENCY
+shiftRegister #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_EXPL + DATA_IN_LATENCY), .WIDTH(128+1+1+6)) loopBackPipeSelectedLeftoverGraph(clk,
+    {selectedLeftoverGraphOut_EXPL, requestOut_EXPL, shouldGrabNewSeedOut_EXPL, connectionCountOut_EXPL},
+    {selectedLeftoverGraphIn, runEndIn, shouldGrabNewSeedIn, storedConnectionCountIn}
+);
+
+// delay other wires for DATA_IN_LATENCY
+shiftRegister #(.CYCLES(`TOTAL_PIPELINE_STAGES + DATA_IN_LATENCY), .WIDTH(1+EXTRA_DATA_WIDTH)) loopBackPipeValidAndExtraData (clk,
+    {validOut, storedExtraDataOut},
+    {validIn, storedExtraDataIn}
 );
 
 endmodule

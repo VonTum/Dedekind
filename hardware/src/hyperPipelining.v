@@ -46,7 +46,7 @@ module shiftRegister
 		assign dataOut = dataIn;
 	end else
 `ifdef USE_SHIFTREG_IP
-	if(CYCLES >= 5 && WIDTH >= 41) begin
+	if(CYCLES >= 5 && CYCLES * WIDTH >= 41) begin
         wire[WIDTH-1:0] unusedTap;
         wire[WIDTH-1:0] dataOutDirectlyFromMemory;
         altshift_taps  ALTSHIFT_TAPS_component (
@@ -70,8 +70,8 @@ defparam
 		ALTSHIFT_TAPS_component.lpm_hint  = CYCLES <= 32 ? "RAM_BLOCK_TYPE=MLAB" : "RAM_BLOCK_TYPE=M20K",
 		ALTSHIFT_TAPS_component.lpm_type  = "altshift_taps",
 		ALTSHIFT_TAPS_component.number_of_taps  = 1,
-		ALTSHIFT_TAPS_component.tap_distance  = CYCLES,
-		ALTSHIFT_TAPS_component.width  = WIDTH-1;
+		ALTSHIFT_TAPS_component.tap_distance  = CYCLES-1,
+		ALTSHIFT_TAPS_component.width  = WIDTH;
 	end else
 `endif
 	begin : GEN_REG_INPUT  
