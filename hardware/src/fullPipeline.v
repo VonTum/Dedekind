@@ -117,7 +117,13 @@ hyperpipe #(.CYCLES(2), .WIDTH(128+1+6+`ADDR_WIDTH)) inputsPipe(
     {botD, anyBotPermutIsValidD, validBotPermutationsD, botIndexD}
 );
 
+wire[4:0] usedw_writeSide;
 wire readyForBotBurst;
+// Some slack because this may be a long-ish wire, also exact timing isn't really important, delay cycles vs max fifo fullness tradeoff
+hyperpipe #(.CYCLES(2), .WIDTH(1)) readyForBotBurstPipe(clk, 
+    usedw_writeSide <= 20,
+    readyForBotBurst
+);
 wire botAvailableFromInputModule;
 wire[127:0] botFromInputModule;
 wire[`ADDR_WIDTH-1:0] addrIn;
@@ -143,10 +149,6 @@ inputModule6 #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH)) inputHandler (
 );
 
 `define COMPUTE_MODULE_EXTRA_DATA_WIDTH (`ADDR_WIDTH + 3)
-
-// Inpput Module Side
-wire[4:0] usedw_writeSide;
-assign readyForBotBurst = usedw_writeSide <= 20;
 
 // Compute Module Side
 wire[127:0] botToComputeModule;

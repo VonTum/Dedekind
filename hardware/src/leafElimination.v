@@ -2,15 +2,18 @@
 `include "leafElimination_header.v"
 
 module leafEliminationElement #(parameter COUNT = 3) (
+    input clk,
     input mainWire,
     input [COUNT - 1:0] oneWires,
     input [6 - COUNT:0] orWires,
-    output nonLeafOut
+    output reg nonLeafOut
 );
 
 wire hasExactlyOneWire;
+
 exactlyOne #(COUNT) hasExactlyOne(oneWires, hasExactlyOneWire);
-assign nonLeafOut = mainWire & !(hasExactlyOneWire & !(|orWires));
+
+always @(posedge clk) nonLeafOut <= mainWire & !(hasExactlyOneWire & !(|orWires));
 
 endmodule
 
@@ -58,10 +61,12 @@ function integer getNthBit;
 endfunction
 
 wire[127:0] graphPreOut;
+reg graph0; always @(posedge clk) graph0 <= graphIn[0];
+reg graph127; always @(posedge clk) graph127 <= graphIn[127];
+assign graphPreOut[0] = graph0;
+assign graphPreOut[127] = graph127;
 always @(posedge clk) graphOut <= graphPreOut;
 generate
-    assign graphPreOut[0] = graphIn[0];
-    assign graphPreOut[127] = graphIn[127];
     for(genvar outI = 1; outI < 127; outI = outI + 1) begin
         wire[popcntStatic(outI, 7)-1:0] wiresBelow;
         wire[6-popcntStatic(outI, 7):0] wiresAbove;
@@ -76,6 +81,7 @@ generate
         
         if(DIRECTION == `UP) begin
             leafEliminationElement #(popcntStatic(outI, 7)) elem(
+                .clk(clk),
                 .mainWire(graphIn[outI]), 
                 .oneWires(wiresBelow), 
                 .orWires(wiresAbove), 
@@ -83,6 +89,7 @@ generate
             );
         end else begin
             leafEliminationElement #(7-popcntStatic(outI, 7)) elem(
+                .clk(clk),
                 .mainWire(graphIn[outI]), 
                 .oneWires(wiresAbove), 
                 .orWires(wiresBelow), 

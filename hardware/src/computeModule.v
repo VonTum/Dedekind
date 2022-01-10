@@ -26,7 +26,7 @@ always @(posedge clk) botInD <= botIn;
 // 1 PIPE STEP
 reg[127:0] graphIn; always @(posedge clk) graphIn <= top & ~botInD;
 
-// 1 PIPE STEP
+// 2 PIPE STEP
 wire[127:0] leafEliminatedGraph;
 leafElimination #(.DIRECTION(`DOWN)) le(clk, graphIn, leafEliminatedGraph);
 
@@ -37,7 +37,7 @@ wire startPostDelay;
 wire[EXTRA_DATA_WIDTH-1:0] extraDataPostDelay;
 singletonElimination se(clk, leafEliminatedGraph, singletonEliminatedGraph, startingConnectCountIn_DELAYED);
 
-localparam PIPE_STEPS = 1+1+1+2;
+localparam PIPE_STEPS = 1+1+2+2;
 
 shiftRegister #(.CYCLES(PIPE_STEPS), .WIDTH(1+EXTRA_DATA_WIDTH)) graphAvalailbePipe (clk, 
     {start, extraDataIn}, 

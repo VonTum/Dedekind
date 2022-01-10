@@ -38,35 +38,39 @@ module shiftRegister
 #(parameter CYCLES = 1, parameter WIDTH = 1) 
 (
 	input clk,
-	input [WIDTH-1:0] din,
-	output [WIDTH-1:0] dout
+	input [WIDTH-1:0] dataIn,
+	output [WIDTH-1:0] dataOut
 );
 
 	generate if (CYCLES==0) begin : GEN_COMB_INPUT
-		assign dout = din;
+		assign dataOut = dataIn;
 	end else
 `ifdef USE_SHIFTREG_IP
 	if(CYCLES >= 5 && WIDTH >= 41) begin
-	   wire[WIDTH-1:0] unusedTap;
-		altshift_taps  ALTSHIFT_TAPS_component (
-			.clock (clk),
-			.shiftin (din),
-			.shiftout (dout),
-			.taps (unusedTap)
-			// synopsys translate_off
-			,
-			.aclr (),
-			.clken (),
-			.sclr ()
-			// synopsys translate_on
-		);
+        wire[WIDTH-1:0] unusedTap;
+        wire[WIDTH-1:0] dataOutDirectlyFromMemory;
+        altshift_taps  ALTSHIFT_TAPS_component (
+            .clock (clk),
+            .shiftin (dataIn),
+            .shiftout (dataOutDirectlyFromMemory),
+            .taps (unusedTap),
+            // synopsys translate_off
+            .aclr (),
+            .clken (),
+            .sclr ()
+            // synopsys translate_on
+        );
+        // Separate out one of the stages into a register at the end to improve timing
+        reg[WIDTH-1:0] dataOutReg;
+        always @(posedge clk) dataOutReg <= dataOutDirectlyFromMemory;
+        assign dataOut = dataOutReg;
 defparam
 		ALTSHIFT_TAPS_component.intended_device_family  = "Stratix 10",
 		ALTSHIFT_TAPS_component.lpm_hint  = CYCLES <= 32 ? "RAM_BLOCK_TYPE=MLAB" : "RAM_BLOCK_TYPE=M20K",
 		ALTSHIFT_TAPS_component.lpm_type  = "altshift_taps",
 		ALTSHIFT_TAPS_component.number_of_taps  = 1,
 		ALTSHIFT_TAPS_component.tap_distance  = CYCLES,
-		ALTSHIFT_TAPS_component.width  = WIDTH;
+		ALTSHIFT_TAPS_component.width  = WIDTH-1;
 	end else
 `endif
 	begin : GEN_REG_INPUT  
@@ -75,11 +79,11 @@ defparam
         
 		always @ (posedge clk) 
 		begin   
-			R_data[0] <= din;      
+			R_data[0] <= dataIn;      
 			for(i = 1; i < CYCLES; i = i + 1) 
             	R_data[i] <= R_data[i-1];
 		end
-		assign dout = R_data[CYCLES-1];
+		assign dataOut = R_data[CYCLES-1];
 	end
 	endgenerate  
 
