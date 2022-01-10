@@ -10,7 +10,7 @@ reg[5:0] cyclesSinceReset = 0;
 reg rstReg = 1'b1;
 
 // to ease fitting
-hyperpipe #(.CYCLES(5), .WIDTH(1)) rstPipe(clk, rstReg, rst);
+hyperpipe #(.CYCLES(4), .WIDTH(1)) rstPipe(clk, rstReg, rst);
 
 always @(posedge clk) begin
     if(!resetn) begin

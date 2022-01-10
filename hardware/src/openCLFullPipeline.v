@@ -5,10 +5,10 @@ module openCLFullPipeline (
     input clock,
     input clock2x, // apparently this specific name gives access to a 2x speed clock. Very useful!
     input resetn,
-	input ivalid, 
-	input iready,
-	output ovalid,
-	output oready,
+    input ivalid, 
+    input iready,
+    output ovalid,
+    output oready,
     
     // we reuse bot to set the top, to save on inputs. 
     input startNewTop,
@@ -56,10 +56,15 @@ permuteCheck6 permuteChecker (top, bot, isBotValid, validBotPermutations);
 wire[63:0] pipelineResult;
 
 // clock2x test
-reg[11:0] clockReg; always @(posedge clock) if(rst) clockReg <= 0; else clockReg <= clockReg + 1;
+/*reg[11:0] clockReg; always @(posedge clock) if(rst) clockReg <= 0; else clockReg <= clockReg + 1;
 reg[10:0] clock2xReg; always @(posedge clock2x) if(rst) clock2xReg <= 0; else clock2xReg <= clock2xReg + 1;
+assign pipelineResult[63:41] = {clockReg, clock2xReg};*/
 
-assign pipelineResult[63:41] = {clockReg, clock2xReg};
+// clock count
+reg[22:0] clockReg; always @(posedge clock) if(rst) clockReg <= 0; else clockReg <= clockReg + 1;
+assign pipelineResult[63:41] = clockReg;
+
+
 fullPipeline pipeline (
     .clk(clock),
     .rst(rst),

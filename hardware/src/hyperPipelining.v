@@ -53,8 +53,9 @@ module shiftRegister
             .clock (clk),
             .shiftin (dataIn),
             .shiftout (dataOutDirectlyFromMemory),
-            .taps (unusedTap),
+            .taps (unusedTap)
             // synopsys translate_off
+				, // These ports may not be generated in some situations, due to the above directive. Store comma with them to not cause an error
             .aclr (),
             .clken (),
             .sclr ()
