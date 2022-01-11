@@ -1,8 +1,9 @@
 `timescale 1ns / 1ps
 
 module hasNeighbor(
+    input clk,
     input[127:0] graphIn,
-    output[127:0] hasNeighboring
+    output reg[127:0] hasNeighboringD
 );
 
 generate
@@ -13,7 +14,7 @@ generate
         for(v = 0; v < 7; v = v + 1) begin
             assign inputWires[v] = graphIn[((outI & (1 << v)) != 0) ? outI - (1 << v) : outI + (1 << v)];
         end
-        assign hasNeighboring[outI] = |inputWires;
+        always @(posedge clk) hasNeighboringD[outI] <= |inputWires;
     end
 endgenerate
 
@@ -82,11 +83,10 @@ module singletonElimination(
     output[5:0] singletonCount
 );
 
-wire[127:0] hasNeighboring;
-hasNeighbor neighborChecker(graphIn, hasNeighboring);
+wire[127:0] hasNeighboringD;
+hasNeighbor neighborChecker(clk, graphIn, hasNeighboringD);
 
 reg[127:0] graphInD; always @(posedge clk) graphInD <= graphIn;
-reg[127:0] hasNeighboringD; always @(posedge clk) hasNeighboringD <= hasNeighboring;
 
 wire[127:0] singletons = graphInD & ~hasNeighboringD;
 always @(posedge clk) nonSingletons <= graphInD & hasNeighboringD;

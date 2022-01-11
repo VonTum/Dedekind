@@ -2,18 +2,29 @@
 `include "leafElimination_header.v"
 
 module leafEliminationElement #(parameter COUNT = 3) (
-    input clk,
     input mainWire,
     input [COUNT - 1:0] oneWires,
     input [6 - COUNT:0] orWires,
-    output reg nonLeafOut
+    output nonLeafOut
 );
 
+/*wire hasExactlyOneWireD;
+wire hasNoOrWiresD;
+reg mainWireD; always @(posedge clk) mainWireD <= mainWire;
+
+generate
+    if(COUNT >= 4) begin
+        
+    end else begin
+        
+    end
+endgenerate*/
+
 wire hasExactlyOneWire;
-
 exactlyOne #(COUNT) hasExactlyOne(oneWires, hasExactlyOneWire);
+assign hasNoOrWires = !(|orWires);
 
-always @(posedge clk) nonLeafOut <= mainWire & !(hasExactlyOneWire & !(|orWires));
+assign nonLeafOut = mainWire & !(hasExactlyOneWire & hasNoOrWires);
 
 endmodule
 
@@ -60,37 +71,36 @@ function integer getNthBit;
 
 endfunction
 
+reg[127:0] graphInD; always @(posedge clk) graphInD <= graphIn;
+
 wire[127:0] graphPreOut;
-reg graph0; always @(posedge clk) graph0 <= graphIn[0];
-reg graph127; always @(posedge clk) graph127 <= graphIn[127];
-assign graphPreOut[0] = graph0;
-assign graphPreOut[127] = graph127;
-always @(posedge clk) graphOut <= graphPreOut;
+assign graphPreOut[0] = graphInD[0];
+assign graphPreOut[127] = graphInD[127];
+reg[127:0] graphPreOutD; always @(posedge clk) graphPreOutD <= graphPreOut;
+always @(posedge clk) graphOut <= graphPreOutD;
 generate
     for(genvar outI = 1; outI < 127; outI = outI + 1) begin
         wire[popcntStatic(outI, 7)-1:0] wiresBelow;
         wire[6-popcntStatic(outI, 7):0] wiresAbove;
         
         for(genvar wireI = 0; wireI < popcntStatic(outI, 7); wireI = wireI + 1) begin
-            assign wiresBelow[wireI] = graphIn[outI & ~(1 << getNthBit(outI, wireI, 1))];
+            assign wiresBelow[wireI] = graphInD[outI & ~(1 << getNthBit(outI, wireI, 1))];
         end
         
         for(genvar wireI = 0; wireI < 7-popcntStatic(outI, 7); wireI = wireI + 1) begin
-            assign wiresAbove[wireI] = graphIn[outI | (1 << getNthBit(outI, wireI, 0))];
+            assign wiresAbove[wireI] = graphInD[outI | (1 << getNthBit(outI, wireI, 0))];
         end
         
         if(DIRECTION == `UP) begin
             leafEliminationElement #(popcntStatic(outI, 7)) elem(
-                .clk(clk),
-                .mainWire(graphIn[outI]), 
+                .mainWire(graphInD[outI]), 
                 .oneWires(wiresBelow), 
                 .orWires(wiresAbove), 
                 .nonLeafOut(graphPreOut[outI])
             );
         end else begin
             leafEliminationElement #(7-popcntStatic(outI, 7)) elem(
-                .clk(clk),
-                .mainWire(graphIn[outI]), 
+                .mainWire(graphInD[outI]), 
                 .oneWires(wiresAbove), 
                 .orWires(wiresBelow), 
                 .nonLeafOut(graphPreOut[outI])

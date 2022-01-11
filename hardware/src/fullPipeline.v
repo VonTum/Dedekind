@@ -157,7 +157,7 @@ wire readRequestFromComputeModule;
 wire dataValidToComputeModule;
 
 wire coreRequestsPreDelay;
-`define REQUEST_LATENCY 3
+`define REQUEST_LATENCY 5
 hyperpipe #(.CYCLES(`REQUEST_LATENCY), .WIDTH(1)) requestPipe(clk, coreRequestsPreDelay, readRequestFromComputeModule);
 
 `define FIFO2_LATENCY 0

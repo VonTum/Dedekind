@@ -55,7 +55,8 @@ static cl_kernel fullPipelineKernel = NULL;
 static cl_program program = NULL;
 static cl_mem lowerBotsMem = NULL;
 static cl_mem upperBotsMem = NULL;
-static cl_mem resultsMem = NULL;
+#define RESULTS_BUFFER_COUNT 4
+static cl_mem resultsMem[RESULTS_BUFFER_COUNT]{NULL, NULL, NULL, NULL};
 static cl_int N = 1;
 
 // Control whether the emulator should be used.
@@ -63,13 +64,71 @@ static bool use_emulator = false;
 
 
 // Function prototypes
-bool init();
+bool init(const char* kernelFile);
 void cleanup();
 static void device_info_ulong( cl_device_id device, cl_device_info param, const char* name);
 static void device_info_uint( cl_device_id device, cl_device_info param, const char* name);
 static void device_info_bool( cl_device_id device, cl_device_info param, const char* name);
 static void device_info_string( cl_device_id device, cl_device_info param, const char* name);
 static void display_device_info( cl_device_id device );
+
+
+// inclusive, simimar to verilog. getBitRange(v, 11, 3) == v[11:3]
+uint64_t getBitRange(uint64_t v, int highestBit, int lowestBit) {
+  uint64_t shiftedRight = v >> lowestBit;
+  int bitWidth = highestBit - lowestBit + 1;
+  uint64_t mask = (uint64_t(1) << bitWidth) - 1;
+  return shiftedRight & mask;
+}
+
+
+void summarizeResultsBuffer(uint64_t* resultsOut, cl_int bufSize) {
+  int corrects = 0;
+  int nonZeroCorrects = 0;
+  int totals = 0;
+  int nonZeroTotals = 0;
+
+  for(size_t i = 0; i < bufSize; i++) {
+    uint64_t resultConnectCount = getBitRange(resultsOut[i], 37, 0);
+    uint64_t resultNumTerms = getBitRange(resultsOut[i], 40, 38);
+    uint64_t resultClock = getBitRange(resultsOut[i], 63, 41);
+
+    if(SHOW_ALL || allData[i].connectCount != 0 || resultConnectCount != 0) {
+      if(SHOW_NONZEROS) {
+        if(TWO_CLOCKS) {
+          uint64_t clk = getBitRange(resultClock, 22, 11);
+          uint64_t clk2 = getBitRange(resultClock, 10, 0);
+          std::cout << i << "> clock: " << clk << ", clock2x: " << clk2 << ", \t";
+        } else {
+          std::cout << i << "> clock: " << resultClock << ", \t";
+        }
+        std::cout << "[PCoeff] CPU: " << allData[i].connectCount << " FPGA: " << resultConnectCount << ", \t";
+        std::cout << "[NumTerms] CPU: " << allData[i].numTerms << " FPGA: " << resultNumTerms << std::endl;
+      }
+    }
+    
+    if(!allData[i].isTop) {
+      if(resultConnectCount == allData[i].connectCount && resultNumTerms == allData[i].numTerms) {
+        corrects++;
+        if(resultConnectCount != 0) nonZeroCorrects++;
+      }
+      totals++;
+      if(allData[i].connectCount != 0) nonZeroTotals++;
+    }
+  }
+
+  uint64_t firstClock = getBitRange(resultsOut[0], 63, 41);
+  uint64_t lastClock = getBitRange(resultsOut[bufSize-1], 63, 41);
+
+  std::cout << "Total tally: " << corrects << "/" << totals << std::endl;
+  std::cout << "Nonzero tally: " << nonZeroCorrects << "/" << nonZeroTotals << std::endl;
+  std::cout << "First Clock: " << firstClock << std::endl;
+  std::cout << "Last Clock: " << lastClock << std::endl;
+  std::cout << "Cycles Taken: " << (lastClock - firstClock) << std::endl;
+}
+
+
+
 
 // Entry point.
 int main(int argc, char** argv) {
@@ -122,7 +181,14 @@ int main(int argc, char** argv) {
     //std::cout << lowerBotsIn[i] << std::endl;
   }
 
-  if(!init()) {
+  std::string kernelFile = "fullPipelineKernel";
+
+   if(options.has("kernelFile")) {
+     kernelFile = options.get<std::string>("kernelFile");
+     std::cout << "Set Kernel file to: " << kernelFile << "[.aocx]" << std::endl;
+   }
+
+  if(!init(kernelFile.c_str())) {
     return -1;
   }
 
@@ -130,20 +196,18 @@ int main(int argc, char** argv) {
   checkError(status, "Failed to enqueue writing to upperBotsMem buffer");
   status = clEnqueueWriteBuffer(queue,lowerBotsMem,0,0,BUFSIZE*sizeof(uint64_t),lowerBotsIn,0,0,0);
   checkError(status, "Failed to enqueue writing to lowerBotsMem buffer");
+
+  status = clFinish(queue);
+  checkError(status, "Failed to Finish writing buffers");
   
   // Set the kernel arguments for kernel
   status = clSetKernelArg(fullPipelineKernel,0,sizeof(cl_mem),&upperBotsMem);
   checkError(status, "Failed to set fullPipelineKernel arg 0");
   status = clSetKernelArg(fullPipelineKernel,1,sizeof(cl_mem),&lowerBotsMem);
   checkError(status, "Failed to set fullPipelineKernel arg 1");
-  status = clSetKernelArg(fullPipelineKernel,2,sizeof(cl_mem),&resultsMem);
-  checkError(status, "Failed to set fullPipelineKernel arg 2");
   status = clSetKernelArg(fullPipelineKernel,3,sizeof(cl_int),&BUFSIZE);
   checkError(status, "Failed to set fullPipelineKernel arg 3");
   
-  status = clFinish(queue);
-  checkError(status, "Failed to Finish writing buffers");
-
   // Configure work set over which the kernel will execute
   size_t gSize = BUFSIZE/N;
   size_t lSize = 1; 
@@ -155,12 +219,14 @@ int main(int argc, char** argv) {
   double startTime = aocl_utils::getCurrentTimestamp();
   
   for(size_t i = 0; i < NUM_ITERATIONS; i++) {
-    status = clEnqueueNDRangeKernel(queue, fullPipelineKernel, 1, NULL, &gSize, &lSize, 0, NULL, NULL);
-    checkError(status, "Failed to launch fullPipelineKernel");
-    std::cout << "Kernel launched!" << std::endl;
+    for(size_t j = 0; j < RESULTS_BUFFER_COUNT; j++) {
+      status = clSetKernelArg(fullPipelineKernel,2,sizeof(cl_mem),&resultsMem[j]);
+      checkError(status, "Failed to set fullPipelineKernel arg 2");
+      status = clEnqueueNDRangeKernel(queue, fullPipelineKernel, 1, NULL, &gSize, &lSize, 0, NULL, NULL);
+      checkError(status, "Failed to launch fullPipelineKernel");
+      std::cout << "Kernel launched!" << std::endl;
+    }
   }
-
-  
 
   status = clFinish(queue);
   checkError(status, "Failed to finish");
@@ -171,49 +237,14 @@ int main(int argc, char** argv) {
 
   // Reading results to buffer
   printf("Reading results to buffers...\n");
-  status = clEnqueueReadBuffer(queue, resultsMem, 1, 0, BUFSIZE*sizeof(uint64_t), resultsOut, 0, 0, 0);
-  checkError(status, "Failed to enqueue read buffer resultsMem to resultsOut");
-  status = clFinish(queue);
-  checkError(status, "Failed to read buffer resultsMem to resultsOut");
-  
-  std::cout << "" << std::endl;
-
-  int corrects = 0;
-  int nonZeroCorrects = 0;
-  int totals = 0;
-  int nonZeroTotals = 0;
-
-  for(size_t i = 0; i < BUFSIZE; i++) {
-    uint64_t resultConnectCount = resultsOut[i] & ((uint64_t(1) << 37) - 1);
-    uint64_t resultNumTerms = (resultsOut[i] >> 38) & ((1 << 3) - 1);
-    uint64_t resultClock = resultsOut[i] >> 41;
-
-    if(SHOW_ALL || allData[i].connectCount != 0 || resultConnectCount != 0) {
-      if(SHOW_NONZEROS) {
-        if(TWO_CLOCKS) {
-          uint64_t clk = resultClock >> 11;
-          uint64_t clk2 = resultClock & ((1 << 11) - 1);
-          std::cout << i << "> clock: " << clk << ", clock2x: " << clk2 << ", \t";
-        } else {
-          std::cout << i << "> clock: " << resultClock << ", \t";
-        }
-        std::cout << "[PCoeff] CPU: " << allData[i].connectCount << " FPGA: " << resultConnectCount << ", \t";
-        std::cout << "[NumTerms] CPU: " << allData[i].numTerms << " FPGA: " << resultNumTerms << std::endl;
-      }
-    }
+  for(size_t i = 0; i < RESULTS_BUFFER_COUNT; i++) {
+    status = clEnqueueReadBuffer(queue, resultsMem[i], 1, 0, BUFSIZE*sizeof(uint64_t), resultsOut, 0, 0, 0);
+    checkError(status, "Failed to enqueue read buffer resultsMem to resultsOut");
+    status = clFinish(queue);
+    checkError(status, "Failed to read buffer resultsMem to resultsOut");
     
-    if(!allData[i].isTop) {
-      if(resultConnectCount == allData[i].connectCount && resultNumTerms == allData[i].numTerms) {
-        corrects++;
-        if(resultConnectCount != 0) nonZeroCorrects++;
-      }
-      totals++;
-      if(allData[i].connectCount != 0) nonZeroTotals++;
-    }
+    summarizeResultsBuffer(resultsOut, BUFSIZE);
   }
-
-  std::cout << "Total tally: " << corrects << "/" << totals << std::endl;
-  std::cout << "Nonzero tally: " << nonZeroCorrects << "/" << nonZeroTotals << std::endl;
 
   // Free the resources allocated
   cleanup();
@@ -227,7 +258,7 @@ int main(int argc, char** argv) {
 
 /////// HELPER FUNCTIONS ///////
 
-bool init() {
+bool init(const char* kernelFile) {
   cl_int status;
 
   if(!setCwdToExeDir()) {
@@ -283,7 +314,8 @@ bool init() {
   checkError(status, "Failed to create command queue");
 
   // Create the program.
-  std::string binary_file = getBoardBinaryFile("fullPipelineKernel", device);
+  std::cout << "Using kernel file " << kernelFile << "[.aocx]" << std::endl;
+  std::string binary_file = getBoardBinaryFile(kernelFile, device);
   printf("Using AOCX: %s\n", binary_file.c_str());
   program = createProgramFromBinary(context, binary_file.c_str(), &device, 1);
 
@@ -301,8 +333,10 @@ bool init() {
   checkError(status, "Failed to create the lowerBotsMem buffer");
   upperBotsMem = clCreateBuffer(context, CL_MEM_READ_ONLY, BUFSIZE*sizeof(uint64_t), 0, &status);
   checkError(status, "Failed to create the upperBotsMem buffer");
-  resultsMem = clCreateBuffer(context, CL_MEM_WRITE_ONLY, BUFSIZE*sizeof(uint64_t), 0, &status);
-  checkError(status, "Failed to create the resultsMem buffer");
+  for(size_t i = 0; i < RESULTS_BUFFER_COUNT; i++) {
+    resultsMem[i] = clCreateBuffer(context, CL_MEM_WRITE_ONLY, BUFSIZE*sizeof(uint64_t), 0, &status);
+    checkError(status, "Failed to create the resultsMem buffer");
+  }
   return true;
 }
 
@@ -326,8 +360,10 @@ void cleanup() {
   if(upperBotsMem){
     clReleaseMemObject(upperBotsMem);
   }
-  if(resultsMem){
-    clReleaseMemObject(resultsMem);
+  for(size_t i = 0; i < RESULTS_BUFFER_COUNT; i++) {
+    if(resultsMem[i]){
+      clReleaseMemObject(resultsMem[i]);
+    }
   }
 }
 

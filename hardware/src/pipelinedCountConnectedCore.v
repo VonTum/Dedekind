@@ -356,9 +356,11 @@ wire validIn;
 wire[5:0] storedConnectionCountIn;
 wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn;
 
-assign done = runEndIn & validIn;
-assign connectCount = storedConnectionCountIn;
-assign extraDataOut = storedExtraDataIn;
+// Some extra register slack towards the collector to improve its fitting
+hyperpipe #(.CYCLES(3), .WIDTH(1+6+EXTRA_DATA_WIDTH)) outputPipe (clk,
+    {runEndIn & validIn, storedConnectionCountIn, storedExtraDataIn},
+	 {done, connectCount, extraDataOut}
+);
 
 wire requestOut_EXPL;
 wire[127:0] extendedOut_DOWN;

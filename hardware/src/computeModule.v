@@ -37,11 +37,15 @@ wire startPostDelay;
 wire[EXTRA_DATA_WIDTH-1:0] extraDataPostDelay;
 singletonElimination se(clk, leafEliminatedGraph, singletonEliminatedGraph, startingConnectCountIn_DELAYED);
 
-localparam PIPE_STEPS = 1+1+2+2;
+localparam PIPE_STEPS = 1+1+3+2;
 
-shiftRegister #(.CYCLES(PIPE_STEPS), .WIDTH(1+EXTRA_DATA_WIDTH)) graphAvalailbePipe (clk, 
-    {start, extraDataIn}, 
-    {startPostDelay, extraDataPostDelay}
+hyperpipe #(.CYCLES(PIPE_STEPS), .WIDTH(1)) startPipe(clk,
+    start, startPostDelay
+);
+
+shiftRegister #(.CYCLES(PIPE_STEPS), .WIDTH(EXTRA_DATA_WIDTH)) extraDataPipe (clk, 
+    extraDataIn, 
+    extraDataPostDelay
 );
 
 
