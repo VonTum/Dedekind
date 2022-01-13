@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
   checkError(status, "Failed to set fullPipelineKernel arg 3");
   
   // Configure work set over which the kernel will execute
-  size_t gSize = BUFSIZE/N;
+  size_t gSize = 1;
   size_t lSize = 1; 
 
   // Launch the kernels
