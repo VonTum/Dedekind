@@ -26,10 +26,10 @@
 #include <math.h>
 #include <cstring>
 #include <thread>
-#include "CL/opencl.h"
+#include <CL/opencl.h>
 #include "AOCLUtils/aocl_utils.h"
 
-#include "../../dedelib/toString.h"
+#include "../dedelib/toString.h"
 
 #include "dataFormat.h"
 
