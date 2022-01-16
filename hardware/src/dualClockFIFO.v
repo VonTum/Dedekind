@@ -30,7 +30,7 @@ endmodule
 
 
 
-module dualClockFIFO #(parameter WIDTH = 160, parameter DEPTH_LOG2 = 5, parameter SHOW_AHEAD = 0, parameter SYNC_STAGES = 5) (
+module dualClockFIFO #(parameter WIDTH = 160, parameter DEPTH_LOG2 = 5, parameter SYNC_STAGES = 5) (
     input aclr,
     
     input rdclk,
@@ -68,14 +68,14 @@ defparam
     dcfifo_component.intended_device_family  = "Stratix 10",
     dcfifo_component.lpm_hint  = "RAM_BLOCK_TYPE=MLAB,DISABLE_DCFIFO_EMBEDDED_TIMING_CONSTRAINT=TRUE",
     dcfifo_component.lpm_numwords  = (1 << DEPTH_LOG2),
-    dcfifo_component.lpm_showahead  = SHOW_AHEAD ? "ON" : "OFF",
+    dcfifo_component.lpm_showahead  = "OFF",
     dcfifo_component.lpm_type  = "dcfifo",
     dcfifo_component.lpm_width  = WIDTH,
     dcfifo_component.lpm_widthu  = DEPTH_LOG2,
     dcfifo_component.overflow_checking  = "OFF",
     dcfifo_component.rdsync_delaypipe  = SYNC_STAGES,
     dcfifo_component.read_aclr_synch  = "ON",
-    dcfifo_component.underflow_checking  = "OFF",
+    dcfifo_component.underflow_checking  = "ON",
     dcfifo_component.use_eab  = "ON",
     dcfifo_component.write_aclr_synch  = "ON",
     dcfifo_component.wrsync_delaypipe  = SYNC_STAGES;
@@ -103,21 +103,15 @@ always @(posedge rdclk or posedge aclr) begin
     if(aclr) begin
         readHead <= 0;
     end else begin
-        if(readEnable) begin
+        if(readEnable & !rdempty) begin
             readHead <= readHead + 1; // uses unsigned overflow
         end
     end
 end
 
-generate
-if(SHOW_AHEAD) begin
-    assign dataOut = memory[readHead];
-end else begin
-    reg[WIDTH-1:0] dataOutReg;
-    assign dataOut = dataOutReg;
-    always @(posedge rdclk) dataOutReg <= memory[readHead];
-end
-endgenerate
+reg[WIDTH-1:0] dataOutReg;
+assign dataOut = dataOutReg;
+always @(posedge rdclk) dataOutReg <= memory[readHead];
 
 always @(posedge wrclk or posedge aclr) begin
     if(aclr) begin

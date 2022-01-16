@@ -4,6 +4,9 @@ create_clock -name debugPipelineClk -period 1.6ns [get_ports clk]
 create_clock -name pipelineClk -period 1.6ns [get_ports clock]
 create_generated_clock -name computeClk -multiply_by 2 -master_clock pipelineClk -source [get_ports clock] [get_ports clock2x]
 
+create_clock -name dualClockFIFOrdclk -period 1.0ns [get_ports rdclk]
+create_clock -name dualClockFIFOwrclk -period 1.0ns [get_ports wrclk]
+
 # The bus clock, running at a far slower rate such that long lines are useable
 # create_generated_clock -name busClk -source [get_ports clk] -master_clock pipelineClk -divide_by 4 [get_ports busClk]
 
