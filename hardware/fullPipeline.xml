@@ -87,6 +87,7 @@
       <!-- IP Blocks -->
       <FILE name="src/M20K.v"/>
       <FILE name="src/FIFO.v"/>
+      <FILE name="src/dualClockFIFO.v"/>
       
       <!-- Constraints -->
       <!--<FILE name="src/pipelineClock.sdc"/>-->
