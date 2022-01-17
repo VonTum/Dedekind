@@ -77,8 +77,8 @@ openCLFullPipelineClock2xAdapter openclfp (
     .summedDataPcoeffCountOut(summedDataPcoeffCountOut)   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
-reg isPassingInput; always @(posedge clock) isPassingInput <= inputBotValid & isReadyForInput;
-reg isPassingOutput; always @(posedge clock) isPassingOutput <= validOutput & isReadyForOutput;
+wire isPassingInput = inputBotValid & isReadyForInput;
+wire isPassingOutput = validOutput & isReadyForOutput;
 
 always @(posedge clock) if(!rst) begin
     if(isPassingInput) begin

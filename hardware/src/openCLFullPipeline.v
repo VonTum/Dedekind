@@ -3,7 +3,7 @@
 
 module openCLFullPipeline (
     input clock,
-    input resetn,
+    input rst,
     input ivalid, 
     input iready,
     output ovalid,
@@ -18,9 +18,6 @@ module openCLFullPipeline (
 
 wire[127:0] bot = {botUpper, botLower};
 wire[127:0] top;
-
-wire rst;
-resetNormalizer rstNormalizer(clock, resetn, rst);
 
 wire[4:0] fifoFullness;
 wire[`ADDR_WIDTH-1:0] botIndex;

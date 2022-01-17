@@ -5,6 +5,7 @@
 
 
 // data width is one bit as properly synchronizing multiple bits is impossible. 
+(* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *) 
 module synchronizer #(parameter WIDTH = 1, parameter SYNC_STAGES = 3) (
     input inClk,
     input[WIDTH-1:0] dataIn,
@@ -127,20 +128,21 @@ assign rdusedw = writeHeadSyncToRead - readHead;
 assign rdempty = writeHeadSyncToRead == readHead;
 assign wrfull = wrusedw == (1 << DEPTH_LOG2) - 1;
 
+reg[WIDTH-1:0] dataOutReg;
+assign dataOut = dataOutReg;
 
+wire isReading = readEnable & !rdempty;
 always @(posedge rdclk or posedge rdclr) begin
     if(rdclr) begin
         readHead <= 0;
+        dataOutReg <= {WIDTH{1'bX}};
     end else begin
-        if(readEnable & !rdempty) begin
+        if(isReading) begin
+            dataOutReg <= memory[readHead];
             readHead <= readHead + 1; // uses unsigned overflow
         end
     end
 end
-
-reg[WIDTH-1:0] dataOutReg;
-assign dataOut = dataOutReg;
-always @(posedge rdclk) dataOutReg <= memory[readHead];
 
 always @(posedge wrclk or posedge rdclr) begin
     if(rdclr) begin

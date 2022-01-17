@@ -17,10 +17,13 @@ module openCLFullPipelineClock2xAdapter(
 );
 
 
-wire resetn2x;
-// resetSynchronizer rstSynchronizer(clock2x, reset, resetn2x);
-// Slow to fast clock domain, can use regular synchronizer. 
-synchronizer #(.SYNC_STAGES(4)) rstSynchronizer(clock, resetn, clock2x, resetn2x);
+wire rst;
+wire isInitialized;
+resetNormalizer rstNormalizer(clock, resetn, rst, isInitialized);
+wire rst2x;
+wire rst2xPostSync;
+synchronizer #(.SYNC_STAGES(4)) rstSynchronizer(clock, rst, clock2x, rst2x);
+hyperpipe #(.CYCLES(5)) rst2xPipe(clock2x, rst2xPostSync, rst2x);
 
 wire ivalid2x;
 wire iready2x;
@@ -34,7 +37,7 @@ wire[63:0] summedDataPcoeffCountOut2x;
 
 openCLFullPipeline fastPipeline (
     .clock(clock2x),
-    .resetn(resetn2x),
+    .rst(rst2x),
     .ivalid(ivalid2x), 
     .iready(iready2x),
     .ovalid(ovalid2x),
@@ -45,15 +48,6 @@ openCLFullPipeline fastPipeline (
     .botUpper(botUpper2x),
     .summedDataPcoeffCountOut(summedDataPcoeffCountOut2x)
 );
-
-
-reg isInitialized2x;
-always @(posedge clock2x) begin
-    if(!resetn2x) isInitialized2x <= 1'b0;
-    else if(oready2x) isInitialized2x <= 1'b1;
-end
-wire isInitialized;
-synchronizer #(.SYNC_STAGES(4)) isInitializedSynchronizer (clock2x, isInitialized2x, clock, isInitialized);
 
 wire[4:0] inputFIFOusedw;
 assign oready = (inputFIFOusedw <= 27) & isInitialized;
@@ -66,7 +60,7 @@ dualClockFIFOWithDataValid #(.WIDTH(64+64+1)) inputFIFO (
     .wrusedw(inputFIFOusedw),
     
     .rdclk(clock2x),
-    .rdclr(!resetn2x),
+    .rdclr(rst2x),
     .readEnable(oready2x),
     .dataOutValid(ivalid2x),
     .dataOut({botLower2x, botUpper2x, startNewTop2x})
@@ -83,8 +77,8 @@ dualClockFIFOWithDataValid #(.WIDTH(64)) outputFIFO (
     .wrusedw(outputFIFOusedw2x),
     
     .rdclk(clock),
-    .rdclr(!resetn),
-    .readEnable(iready),
+    .rdclr(rst),
+    .readEnable(iready || !ovalid), // keep trying to read if not valid, to get lookahead-like behaviour
     .dataOutValid(ovalid),
     .dataOut(summedDataPcoeffCountOut)
 );
