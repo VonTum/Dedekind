@@ -4,10 +4,15 @@
 
 module openCLFullPipelineTest();
 
-reg clk;
+reg clock;
 initial begin
-    clk = 0;
-    forever #1 clk = ~clk;
+    clock = 0;
+    forever #2 clock = ~clock;
+end
+reg clock2x;
+initial begin
+    clock2x = 0;
+    forever #1 clock2x = ~clock2x;
 end
 reg rst;
 reg inputBotValid;
@@ -36,10 +41,10 @@ initial $readmemb("pipeline6PackTestSetForOpenCL7.mem", dataTable);
 reg[64+8-1:0] resultsTable[MEMSIZE-1:0];
 //initial for(integer i = 0; i < MEMSIZE; i = i + 1) resultsTable[i] = 0;
 
-always @(inputBotValid or inputIndex) if(inputIndex >= MEMSIZE) inputBotValid <= 0;
-
 reg[$clog2(MEMSIZE)-1:0] inputIndex = 0;
 reg[$clog2(MEMSIZE)-1:0] outputIndex = 0;
+
+always @(inputBotValid or inputIndex) if(inputIndex >= MEMSIZE) inputBotValid <= 0;
 
 wire[127:0] bot;
 
@@ -56,8 +61,10 @@ wire[63:0] summedDataPcoeffCountOut;
 wire[37:0] summedData = summedDataPcoeffCountOut[37:0];
 wire[2:0] pcoeffCount = summedDataPcoeffCountOut[40:38];
 
-openCLFullPipeline openclfp (
-    .clock(clk),
+openCLFullPipelineClock2xAdapter openclfp (
+    .clock2x(clock2x),
+//openCLFullPipeline openclfp (
+    .clock(clock),
     .resetn(!rst),
 	.ivalid(inputBotValid), 
 	.iready(isReadyForOutput),
@@ -70,10 +77,10 @@ openCLFullPipeline openclfp (
     .summedDataPcoeffCountOut(summedDataPcoeffCountOut)   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
-wire isPassingInput = inputBotValid & isReadyForInput;
-wire isPassingOutput = validOutput & isReadyForOutput;
+reg isPassingInput; always @(posedge clock) isPassingInput <= inputBotValid & isReadyForInput;
+reg isPassingOutput; always @(posedge clock) isPassingOutput <= validOutput & isReadyForOutput;
 
-always @(posedge clk) if(!rst) begin
+always @(posedge clock) if(!rst) begin
     if(isPassingInput) begin
         inputIndex <= inputIndex + 1;
     end
@@ -85,8 +92,6 @@ always @(posedge clk) if(!rst) begin
 end
 
 assign {startNewTop, bot} = dataTable[inputIndex][1+128+64+8-1 : 64+8];
-
-
 
 wire[37:0] offsetSum = dataTable[outputIndex][37+8-1 : 8];
 wire[2:0] offsetCount = dataTable[outputIndex][2 : 0];

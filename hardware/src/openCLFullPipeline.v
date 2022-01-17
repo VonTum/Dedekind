@@ -3,7 +3,6 @@
 
 module openCLFullPipeline (
     input clock,
-    input clock2x, // apparently this specific name gives access to a 2x speed clock. Very useful!
     input resetn,
     input ivalid, 
     input iready,

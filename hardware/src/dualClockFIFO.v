@@ -28,27 +28,56 @@ assign dataOut = syncRegs[0];
 endmodule
 
 
+module resetSynchronizer #(parameter SYNC_STAGES = 3) (
+    input clk,
+    input aresetnIn, // asynchronous input reset
+    output resetnOut
+);
 
+reg rstLine[SYNC_STAGES-1:0];
+
+generate
+genvar i;
+for(i = 0; i < SYNC_STAGES - 1; i = i + 1) begin
+    always @(posedge clk or negedge aresetnIn) begin
+        if(!aresetnIn) begin
+            rstLine[i] <= 1'b0;
+        end else begin
+            rstLine[i] <= rstLine[i+1];
+        end
+    end
+end
+always @(posedge clk or negedge aresetnIn) begin
+    if(!aresetnIn) begin
+        rstLine[SYNC_STAGES - 1] <= 1'b0;
+    end else begin
+        rstLine[SYNC_STAGES-1] <= 1'b1;
+    end
+end
+endgenerate
+
+assign resetnOut = rstLine[0];
+
+endmodule
 
 module dualClockFIFO #(parameter WIDTH = 160, parameter DEPTH_LOG2 = 5, parameter SYNC_STAGES = 5) (
-    input aclr,
-    
-    input rdclk,
-    input readEnable,
-    output rdempty,
-    output[WIDTH-1:0] dataOut,
-    output[DEPTH_LOG2-1:0] rdusedw,
-    
     input wrclk,
     input writeEnable,
     output wrfull,
     input[WIDTH-1:0] dataIn,
-    output[DEPTH_LOG2-1:0] wrusedw
+    output[DEPTH_LOG2-1:0] wrusedw,
+    
+    input rdclk,
+    input rdclr, // aclr is synchronized to read clock
+    input readEnable,
+    output rdempty,
+    output[WIDTH-1:0] dataOut,
+    output[DEPTH_LOG2-1:0] rdusedw
 );
 
 `ifdef USE_DC_FIFO_IP
 dcfifo  dcfifo_component (
-    .aclr(aclr),
+    .aclr(rdclr),
     .data(dataIn),
     .rdclk(rdclk),
     .rdreq(readEnable),
@@ -73,11 +102,11 @@ defparam
     dcfifo_component.lpm_width  = WIDTH,
     dcfifo_component.lpm_widthu  = DEPTH_LOG2,
     dcfifo_component.overflow_checking  = "OFF",
-    dcfifo_component.rdsync_delaypipe  = SYNC_STAGES,
-    dcfifo_component.read_aclr_synch  = "ON",
     dcfifo_component.underflow_checking  = "ON",
     dcfifo_component.use_eab  = "ON",
+    dcfifo_component.read_aclr_synch  = "OFF",
     dcfifo_component.write_aclr_synch  = "ON",
+    dcfifo_component.rdsync_delaypipe  = SYNC_STAGES,
     dcfifo_component.wrsync_delaypipe  = SYNC_STAGES;
     
 `else
@@ -95,12 +124,12 @@ synchronizer #(.WIDTH(DEPTH_LOG2), .SYNC_STAGES(SYNC_STAGES)) readSyncPipe(rdclk
 
 assign wrusedw = writeHead - readHeadSyncToWrite;
 assign rdusedw = writeHeadSyncToRead - readHead;
-assign rdempty = wrusedw == 0;
+assign rdempty = writeHeadSyncToRead == readHead;
 assign wrfull = wrusedw == (1 << DEPTH_LOG2) - 1;
 
 
-always @(posedge rdclk or posedge aclr) begin
-    if(aclr) begin
+always @(posedge rdclk or posedge rdclr) begin
+    if(rdclr) begin
         readHead <= 0;
     end else begin
         if(readEnable & !rdempty) begin
@@ -113,8 +142,8 @@ reg[WIDTH-1:0] dataOutReg;
 assign dataOut = dataOutReg;
 always @(posedge rdclk) dataOutReg <= memory[readHead];
 
-always @(posedge wrclk or posedge aclr) begin
-    if(aclr) begin
+always @(posedge wrclk or posedge rdclr) begin
+    if(rdclr) begin
         writeHead <= 0;
     end else begin
         if(writeEnable) begin
@@ -125,5 +154,47 @@ always @(posedge wrclk or posedge aclr) begin
 end
 
 `endif
+
+endmodule
+
+
+module dualClockFIFOWithDataValid #(parameter WIDTH = 160, parameter DEPTH_LOG2 = 5, parameter SYNC_STAGES = 5) (
+    input wrclk,
+    input writeEnable,
+    input[WIDTH-1:0] dataIn,
+    output[DEPTH_LOG2-1:0] wrusedw,
+    
+    input rdclk,
+    input rdclr,
+    input readEnable,
+    output reg dataOutValid,
+    output[WIDTH-1:0] dataOut
+);
+
+wire rdempty;
+always @(posedge rdclk) begin
+    if(rdclr) begin
+        dataOutValid <= 1'b0;
+    end else begin
+        if(readEnable) begin
+            dataOutValid <= !rdempty;
+        end
+    end
+end
+
+dualClockFIFO #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .SYNC_STAGES(SYNC_STAGES)) fifo (
+    .wrclk(wrclk),
+    .writeEnable(writeEnable),
+    .wrfull(), // unused, writes should be paused ahead of time
+    .dataIn(dataIn),
+    .wrusedw(wrusedw),
+    
+    .rdclk(rdclk),
+    .rdclr(rdclr),
+    .readEnable(readEnable),
+    .rdempty(rdempty),
+    .dataOut(dataOut),
+    .rdusedw() // unused, reads should poll the dataOutValid flag
+);
 
 endmodule
