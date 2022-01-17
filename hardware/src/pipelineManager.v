@@ -17,17 +17,15 @@ module isBotValidShifter #(parameter OUTPUT_LATENCY = `OUTPUT_READ_LATENCY) (
 localparam SHIFT_DEPTH = (1 << `ADDR_WIDTH) - `OUTPUT_INDEX_OFFSET;
 
 reg[`ADDR_WIDTH-1:0] cyclesUntilEmpty;
+reg[`ADDR_WIDTH-1:0] cyclesUntilResetFinished;
 
-// A few cycles of delay to make fitting easier
-hyperpipe #(.CYCLES(2), .WIDTH(1)) isEmptyDelay (
-    clk,
-    cyclesUntilEmpty == 0,
-    isEmpty
-);
+assign isEmpty = cyclesUntilEmpty == 0;
+wire isResetFinished = cyclesUntilResetFinished == 0;
 
 always @(posedge clk) begin
     if(rst) begin
         cyclesUntilEmpty <= 0;
+        cyclesUntilResetFinished <= SHIFT_DEPTH;
     end else begin
         if(advanceShiftReg) begin
             if(isBotValid) begin
@@ -35,24 +33,27 @@ always @(posedge clk) begin
             end else begin
                 if(!isEmpty) cyclesUntilEmpty <= cyclesUntilEmpty - 1;
             end
+            if(!isResetFinished) cyclesUntilResetFinished <= cyclesUntilResetFinished - 1;
         end
     end
 end
 
 wire isLastBotInShiftRegisterValid;
-enabledShiftRegister #(.CYCLES(SHIFT_DEPTH), .WIDTH(1), .RESET_VALUE(1'b0)) validIndicesRegister(
+enabledShiftRegister #(.CYCLES(SHIFT_DEPTH), .WIDTH(1)) validIndicesRegister(
     clk,
     advanceShiftReg,
-    rst,
+    1'b0,
     isBotValid,
     isLastBotInShiftRegisterValid
 );
+
+wire isLastBotInShiftRegisterValidIncludingReset = isLastBotInShiftRegisterValid & isResetFinished;
 
 reg prevAdvanceShiftReg; always @(posedge clk) prevAdvanceShiftReg <= advanceShiftReg;
 
 hyperpipe #(.CYCLES(OUTPUT_LATENCY), .WIDTH(1)) outputBotDelay(
     clk,
-    isLastBotInShiftRegisterValid & prevAdvanceShiftReg, // the & prevAdvanceShiftReg makes sure outputs are 1-clock pulses
+    isLastBotInShiftRegisterValidIncludingReset & prevAdvanceShiftReg, // the & prevAdvanceShiftReg makes sure outputs are 1-clock pulses
     outputBotValid
 );
 

@@ -96,7 +96,7 @@ dcfifo  dcfifo_component (
 defparam
     dcfifo_component.enable_ecc  = "FALSE",
     dcfifo_component.intended_device_family  = "Stratix 10",
-    dcfifo_component.lpm_hint  = "RAM_BLOCK_TYPE=MLAB,DISABLE_DCFIFO_EMBEDDED_TIMING_CONSTRAINT=TRUE",
+    dcfifo_component.lpm_hint  = "RAM_BLOCK_TYPE=MLAB,DISABLE_DCFIFO_EMBEDDED_TIMING_CONSTRAINT=FALSE",
     dcfifo_component.lpm_numwords  = (1 << DEPTH_LOG2),
     dcfifo_component.lpm_showahead  = "OFF",
     dcfifo_component.lpm_type  = "dcfifo",
