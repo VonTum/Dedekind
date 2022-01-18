@@ -23,7 +23,7 @@ resetNormalizer rstNormalizer(clock, resetn, rst, isInitialized);
 wire rst2x;
 wire rst2xPostSync;
 synchronizer #(.SYNC_STAGES(4)) rstSynchronizer(clock, rst, clock2x, rst2xPostSync);
-hyperpipe #(.CYCLES(9)) rst2xPipe(clock2x, rst2xPostSync, rst2x);
+hyperpipe #(.CYCLES(5)) rst2xPipe(clock2x, rst2xPostSync, rst2x);
 
 wire ivalid2x;
 wire iready2x;
@@ -67,8 +67,8 @@ dualClockFIFOWithDataValid #(.WIDTH(64+64+1)) inputFIFO (
 );
 
 wire[4:0] outputFIFOusedw2x;
-hyperpipe #(.CYCLES(2)) oready2xPipe(clock2x, outputFIFOusedw2x <= 27, iready2x);
-wire movingDataToOutput2x = iready2x & ovalid2x;
+hyperpipe #(.CYCLES(2)) oready2xPipe(clock2x, outputFIFOusedw2x <= 20, iready2x);
+wire movingDataToOutput2x = ovalid2x;
 
 dualClockFIFOWithDataValid #(.WIDTH(64)) outputFIFO (
     .wrclk(clock2x),

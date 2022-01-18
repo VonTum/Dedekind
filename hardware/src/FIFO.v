@@ -77,25 +77,28 @@ end
 endmodule
 
 
-module MLAB_RAM #(parameter WIDTH = 20) (
+module FIFO_MEMORY #(parameter WIDTH = 20, parameter DEPTH_LOG2 = 5, parameter IS_MLAB = 1/* = DEPTH_LOG2 <= 5*/) (
     input clk,
-    input rst,
     
     // Write Side
     input writeEnable,
-    input[4:0] writeAddr,
+    input[DEPTH_LOG2-1:0] writeAddr,
     input[WIDTH-1:0] dataIn,
     
     // Read Side
     input readAddressStall,
-    input[4:0] readAddr,
-    output[WIDTH-1:0] dataOut
+    input[DEPTH_LOG2-1:0] readAddr,
+    output[WIDTH-1:0] dataOut,
+    output[1:0] hasBitError
 );
 
-`ifdef USE_MLAB_IP
+`ifdef USE_FIFO_MEMORY_IP
 
-localparam BLOCK_SIZE = 20; // For MLAB
+localparam BLOCK_SIZE = IS_MLAB ? 20 : 32;
 localparam WIDTH_ENLARGED_TO_BLOCK_SIZE = WIDTH + (BLOCK_SIZE - (WIDTH % BLOCK_SIZE)) % BLOCK_SIZE;
+
+wire[1:0] eccstatus;
+assign hasBitError = IS_MLAB ? 1'b0 : eccstatus[1];
 
 wire[WIDTH_ENLARGED_TO_BLOCK_SIZE-1:0] dataInWide;
 wire[WIDTH_ENLARGED_TO_BLOCK_SIZE-1:0] dataOutWide;
@@ -105,13 +108,13 @@ assign dataOut = dataOutWide[WIDTH-1:0];
 
 altera_syncram  altera_syncram_component (
     .clock0 (clk),
-    .aclr0 (rst),
     .address_a (writeAddr),
     .address_b (readAddr),
     .addressstall_b (readAddressStall),
     .data_a (dataInWide),
     .wren_a (writeEnable),
     .q_b (dataOutWide),
+    .aclr0 (1'b0),
     .aclr1 (1'b0),
     .address2_a (1'b1),
     .address2_b (1'b1),
@@ -126,78 +129,80 @@ altera_syncram  altera_syncram_component (
     .data_b ({160{1'b1}}),
     .eccencbypass (1'b0),
     .eccencparity (8'b0),
-    .eccstatus (),
+    .eccstatus (eccstatus),
     .q_a (),
     .rden_a (1'b1),
     .rden_b (1'b1),
     .sclr (1'b0),
     .wren_b (1'b0));
 defparam
-    altera_syncram_component.address_aclr_b  = "CLEAR0",
+    altera_syncram_component.address_aclr_b  = "NONE",
     altera_syncram_component.address_reg_b  = "CLOCK0",
     altera_syncram_component.clock_enable_input_a  = "BYPASS",
     altera_syncram_component.clock_enable_input_b  = "BYPASS",
     altera_syncram_component.clock_enable_output_b  = "BYPASS",
     altera_syncram_component.intended_device_family  = "Stratix 10",
     altera_syncram_component.lpm_type  = "altera_syncram",
-    altera_syncram_component.maximum_depth  = 32,
-    altera_syncram_component.numwords_a  = 32,
-    altera_syncram_component.numwords_b  = 32,
+    altera_syncram_component.numwords_a  = (1 << DEPTH_LOG2),
+    altera_syncram_component.numwords_b  = (1 << DEPTH_LOG2),
     altera_syncram_component.operation_mode  = "DUAL_PORT",
     altera_syncram_component.outdata_aclr_b  = "NONE",
     altera_syncram_component.outdata_sclr_b  = "NONE",
-    altera_syncram_component.outdata_reg_b  = "UNREGISTERED",
+    altera_syncram_component.outdata_reg_b  = IS_MLAB ? "UNREGISTERED" : "CLOCK0",
     altera_syncram_component.power_up_uninitialized  = "FALSE",
-    altera_syncram_component.ram_block_type  = "MLAB",
+    altera_syncram_component.ram_block_type  = IS_MLAB ? "MLAB" : "M20K",
     altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
-    altera_syncram_component.widthad_a  = 5,
-    altera_syncram_component.widthad_b  = 5,
+    altera_syncram_component.widthad_a  = DEPTH_LOG2,
+    altera_syncram_component.widthad_b  = DEPTH_LOG2,
     altera_syncram_component.width_a  = WIDTH_ENLARGED_TO_BLOCK_SIZE,
     altera_syncram_component.width_b  = WIDTH_ENLARGED_TO_BLOCK_SIZE,
-    altera_syncram_component.width_byteena_a  = 1;
+    altera_syncram_component.width_byteena_a  = 1,
+    altera_syncram_component.enable_ecc  = IS_MLAB ? "FALSE" : "TRUE",
+    altera_syncram_component.ecc_pipeline_stage_enabled  = IS_MLAB ? "FALSE" : "TRUE",
+    altera_syncram_component.enable_ecc_encoder_bypass  = "FALSE",
+    altera_syncram_component.enable_force_to_zero  = "TRUE",
+    altera_syncram_component.width_eccstatus  = 2;
 
 `else
 
-reg[WIDTH-1:0] memory[31:0];
+reg[WIDTH-1:0] memory[(1 << DEPTH_LOG2) - 1:0];
 
-reg[4:0] writeAddrReg;
+reg[DEPTH_LOG2-1:0] writeAddrReg;
 reg[WIDTH-1:0] writeDataReg;
 reg writeEnableReg;
 
-reg[4:0] readAddrReg;
-
-always @(posedge clk or posedge rst) begin
-    if(rst)
-        readAddrReg <= 0;
-    else
-        if(!readAddressStall) readAddrReg <= readAddr;
-end
+reg[DEPTH_LOG2-1:0] readAddrReg;
 
 always @(posedge clk) begin
-    writeAddrReg <= writeAddr;
-    writeDataReg <= dataIn;
-    writeEnableReg <= writeEnable;
+    if(!readAddressStall) readAddrReg <= readAddr;
     
     if(writeEnableReg) begin
         memory[writeAddrReg] <= writeDataReg;
     end
+    
+    writeAddrReg <= writeAddr;
+    writeDataReg <= dataIn;
+    writeEnableReg <= writeEnable;
 end
 
-assign dataOut = (writeEnableReg && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
+wire[WIDTH-1:0] dataFromMem = (writeEnableReg && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
+hyperpipe #(.CYCLES(IS_MLAB ? 0 : 2), .WIDTH(WIDTH)) dataOutPipe(clk, dataFromMem, dataOut);
+
+assign hasBitError = 1'b0;
 
 `endif
 
 endmodule
 
 // Has a read latency of 0 cycles after assertion of readRequest. (Then if the fifo had data dataOutValid should be asserted)
-module FastFIFO #(parameter WIDTH = 20) (
+module FastFIFO #(parameter WIDTH = 20, parameter DEPTH_LOG2 = 5, parameter IS_MLAB = 1/* = DEPTH_LOG2 <= 5*/) (
     input clk,
     input rst,
      
     // input side
     input writeEnable,
     input[WIDTH-1:0] dataIn,
-    output[4:0] usedw,
+    output[DEPTH_LOG2-1:0] usedw,
     
     // output side
     input readRequest,
@@ -205,23 +210,27 @@ module FastFIFO #(parameter WIDTH = 20) (
     output dataOutValid
 );
 
-reg[4:0] nextReadAddr;
-reg[4:0] writeAddr;
+reg rstD; always @(posedge clk) rstD <= rst;
 
-reg[4:0] readsValidUpTo; always @(posedge clk) readsValidUpTo <= writeAddr + 1;
+reg[DEPTH_LOG2-1:0] nextReadAddr;
+reg[DEPTH_LOG2-1:0] writeAddr;
+
+reg[DEPTH_LOG2-1:0] readsValidUpTo; always @(posedge clk) readsValidUpTo <= writeAddr + 1;
 assign usedw = readsValidUpTo - nextReadAddr;
 
 wire fifoHasData = readsValidUpTo != nextReadAddr;
-wire isReading = readRequest & fifoHasData;
-assign dataOutValid = isReading;
+wire isReading = readRequest && fifoHasData && !rstD;
+hyperpipe #(.CYCLES(IS_MLAB ? 0 : 2)) isReadingPipe(clk, isReading, dataOutValid);
 
+// clever trick to properly set the rdaddr register of the memory block
+wire isReadingOrHasJustReset = isReading || rstD;
 always @(posedge clk) begin
     if(rst) begin
         // also resets readAddr field within the MLAB to 0
-        nextReadAddr <= 1;
+        nextReadAddr <= 0;
         writeAddr <= 0;
     end else begin
-        if(isReading) begin
+        if(isReadingOrHasJustReset) begin
             nextReadAddr <= nextReadAddr + 1;
         end
         
@@ -231,9 +240,12 @@ always @(posedge clk) begin
     end
 end
 
-MLAB_RAM #(WIDTH) fifoMemory (
+wire readAddressStall = !isReadingOrHasJustReset;
+reg readAddressStallD; always @(posedge clk) readAddressStallD <= readAddressStall;
+reg[DEPTH_LOG2-1:0] nextReadAddrD; always @(posedge clk) nextReadAddrD <= nextReadAddr;
+
+FIFO_MEMORY #(WIDTH, DEPTH_LOG2, IS_MLAB) fifoMemory (
     .clk(clk),
-    .rst(rst),
     
     // Write Side
     .writeEnable(writeEnable),
@@ -241,7 +253,7 @@ MLAB_RAM #(WIDTH) fifoMemory (
     .dataIn(dataIn),
     
     // Read Side
-    .readAddressStall(!isReading),
+    .readAddressStall(readAddressStall),
     .readAddr(nextReadAddr),
     .dataOut(dataOut)
 );

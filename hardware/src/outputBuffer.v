@@ -19,24 +19,19 @@ wire[`FIFO_DEPTH_BITS-1:0] outputFifoFullness;
 
 always @(posedge clk) slowInputting <= outputFifoFullness >= 1000; // want to leave >7000 margin so the pipeline can empty out entirely. 
 
-wire fifoEmpty;
-assign dataOutValid = !fifoEmpty;
-
-FIFO #(.WIDTH(64), .DEPTH_LOG2(`FIFO_DEPTH_BITS)) buffer (
+FastFIFO #(.WIDTH(64), .DEPTH_LOG2(`FIFO_DEPTH_BITS), .IS_MLAB(0)) buffer (
     .clk(clk),
     .rst(rst),
 	
     // input side
     .writeEnable(dataInValid),
     .dataIn(dataIn),
-    .full(__fullUnconnected),
+    .usedw(outputFifoFullness),
     
     // output side
-    .readEnable(dataOutReady & !fifoEmpty),
+    .readRequest(dataOutReady),
     .dataOut(dataOut),
-    .empty(fifoEmpty),
-	 
-    .usedw(outputFifoFullness)
+    .dataOutValid(dataOutValid)
 );
 
 endmodule
