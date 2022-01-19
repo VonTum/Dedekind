@@ -34,12 +34,13 @@ module inputModule6 #(parameter EXTRA_DATA_WIDTH = 12) (
 
 reg[2:0] cyclesUntilNextBotRequest;
 wire readyForBotRequest = cyclesUntilNextBotRequest == 0;
-wire fifoEmpty;
-wire popFifo = readyForBotBurst & readyForBotRequest;
+reg popFifoDataMayBeAvailableNow; // used to rate-limit requests from the fifo
+wire popFifo = readyForBotBurst && readyForBotRequest && !popFifoDataMayBeAvailableNow;
+always @(posedge clk) popFifoDataMayBeAvailableNow <= rst ? 0 : popFifo;
 wire fifoDataValidPreDelay;
 wire[128+EXTRA_DATA_WIDTH+6-1:0] dataFromFifoPreDelay;
 
-FastFIFO #(.WIDTH(128+6+EXTRA_DATA_WIDTH)) botQueue (
+FastFIFO #(.WIDTH(128+6+EXTRA_DATA_WIDTH), .READ_ADDR_STAGES(1)) botQueue (
     .clk(clk),
     .rst(rst),
     
@@ -51,11 +52,10 @@ FastFIFO #(.WIDTH(128+6+EXTRA_DATA_WIDTH)) botQueue (
     .dataOut(dataFromFifoPreDelay),
     .dataOutValid(fifoDataValidPreDelay)
 );
-reg fifoDataValid; always @(posedge clk) if(popFifo) fifoDataValid <= fifoDataValidPreDelay;
-reg[128+EXTRA_DATA_WIDTH+6-1:0] dataFromFifo; always @(posedge clk) if(popFifo) dataFromFifo <= dataFromFifoPreDelay;
-wire startNewBurst = fifoDataValid & popFifo;
+reg fifoDataValid; always @(posedge clk) if(popFifoDataMayBeAvailableNow) fifoDataValid <= fifoDataValidPreDelay;
+reg[128+EXTRA_DATA_WIDTH+6-1:0] dataFromFifo; always @(posedge clk) if(popFifoDataMayBeAvailableNow) dataFromFifo <= dataFromFifoPreDelay;
+wire startNewBurst = fifoDataValid & popFifoDataMayBeAvailableNow;
 
-wire fifoDataAvailable = !fifoEmpty;
 wire[127:0] botFromFifo;
 wire[5:0] validBotPermutesFromFifo;// == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
 wire[EXTRA_DATA_WIDTH-1:0] extraDataFromFifo;

@@ -72,8 +72,8 @@ wire coreRequestsPreDelay;
 `define REQUEST_LATENCY 5
 hyperpipe #(.CYCLES(`REQUEST_LATENCY), .WIDTH(1)) requestPipe(clk, coreRequestsPreDelay, readRequestFromComputeModule);
 
-`define FIFO2_LATENCY 0
-FastFIFO #(.WIDTH(128+`COMPUTE_MODULE_EXTRA_DATA_WIDTH)) fifoToComputeModule(
+`define FIFO2_LATENCY 1
+FastFIFO #(.WIDTH(128+`COMPUTE_MODULE_EXTRA_DATA_WIDTH), .READ_ADDR_STAGES(1)) fifoToComputeModule(
     .clk(clk),
     .rst(rst),
      

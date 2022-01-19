@@ -19,7 +19,7 @@ wire[`FIFO_DEPTH_BITS-1:0] outputFifoFullness;
 
 always @(posedge clk) slowInputting <= outputFifoFullness >= 1000; // want to leave >7000 margin so the pipeline can empty out entirely. 
 
-FastFIFO #(.WIDTH(64), .DEPTH_LOG2(`FIFO_DEPTH_BITS), .IS_MLAB(0)) buffer (
+FastFIFO #(.WIDTH(64), .DEPTH_LOG2(`FIFO_DEPTH_BITS), .IS_MLAB(0), .READ_ADDR_STAGES(1)) buffer (
     .clk(clk),
     .rst(rst),
 	

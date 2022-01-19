@@ -195,10 +195,10 @@ assign hasBitError = 1'b0;
 endmodule
 
 // Has a read latency of 0 cycles after assertion of readRequest. (Then if the fifo had data dataOutValid should be asserted)
-module FastFIFO #(parameter WIDTH = 20, parameter DEPTH_LOG2 = 5, parameter IS_MLAB = 1/* = DEPTH_LOG2 <= 5*/) (
+module FastFIFO #(parameter WIDTH = 20, parameter DEPTH_LOG2 = 5, parameter IS_MLAB = 1/* = DEPTH_LOG2 <= 5*/, parameter READ_ADDR_STAGES = 0, parameter WRITE_ADDR_STAGES = 1) (
     input clk,
     input rst,
-     
+    
     // input side
     input writeEnable,
     input[WIDTH-1:0] dataIn,
@@ -215,12 +215,13 @@ reg rstD; always @(posedge clk) rstD <= rst;
 reg[DEPTH_LOG2-1:0] nextReadAddr;
 reg[DEPTH_LOG2-1:0] writeAddr;
 
-reg[DEPTH_LOG2-1:0] readsValidUpTo; always @(posedge clk) readsValidUpTo <= writeAddr + 1;
+wire[DEPTH_LOG2-1:0] readsValidUpTo; 
+hyperpipe #(.CYCLES(WRITE_ADDR_STAGES+1), .WIDTH(DEPTH_LOG2)) readsValidUpToPipe(clk, writeAddr + 1, readsValidUpTo);
 assign usedw = readsValidUpTo - nextReadAddr;
 
 wire fifoHasData = readsValidUpTo != nextReadAddr;
 wire isReading = readRequest && fifoHasData && !rstD;
-hyperpipe #(.CYCLES(IS_MLAB ? 0 : 2)) isReadingPipe(clk, isReading, dataOutValid);
+hyperpipe #(.CYCLES((IS_MLAB ? 0 : 2) + READ_ADDR_STAGES)) isReadingPipe(clk, isReading, dataOutValid);
 
 // clever trick to properly set the rdaddr register of the memory block
 wire isReadingOrHasJustReset = isReading || rstD;
@@ -240,21 +241,34 @@ always @(posedge clk) begin
     end
 end
 
+wire writeEnableD;
+wire[DEPTH_LOG2-1:0] writeAddrD;
+wire[WIDTH-1:0] dataInD;
+
+hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(1+DEPTH_LOG2+WIDTH)) writePipe(clk, 
+    {writeEnable,  writeAddr,  dataIn},
+    {writeEnableD, writeAddrD, dataInD}
+);
+
 wire readAddressStall = !isReadingOrHasJustReset;
-reg readAddressStallD; always @(posedge clk) readAddressStallD <= readAddressStall;
-reg[DEPTH_LOG2-1:0] nextReadAddrD; always @(posedge clk) nextReadAddrD <= nextReadAddr;
+wire readAddressStallD;
+wire[DEPTH_LOG2-1:0] nextReadAddrD;
+hyperpipe #(.CYCLES(READ_ADDR_STAGES), .WIDTH(1+DEPTH_LOG2)) readAddressStallPipe(clk, 
+    {readAddressStall,  nextReadAddr}, 
+    {readAddressStallD, nextReadAddrD}
+);
 
 FIFO_MEMORY #(WIDTH, DEPTH_LOG2, IS_MLAB) fifoMemory (
     .clk(clk),
     
     // Write Side
-    .writeEnable(writeEnable),
-    .writeAddr(writeAddr),
-    .dataIn(dataIn),
+    .writeEnable(writeEnableD),
+    .writeAddr(writeAddrD),
+    .dataIn(dataInD),
     
     // Read Side
-    .readAddressStall(readAddressStall),
-    .readAddr(nextReadAddr),
+    .readAddressStall(readAddressStallD),
+    .readAddr(nextReadAddrD),
     .dataOut(dataOut)
 );
 
