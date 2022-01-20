@@ -2,7 +2,7 @@
 
 `include "ipSettings_header.v"
 
-(* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION off;-name SYNCHRONIZER_IDENTIFICATION off" *)
+(* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION off; -name SYNCHRONIZER_IDENTIFICATION off" *)
 module hyperpipe 
 #(parameter CYCLES = 1, parameter WIDTH = 1) 
 (
@@ -31,7 +31,7 @@ module hyperpipe
 endmodule
 
 // This is for generating shift register pipes
-(* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION on;-name SYNCHRONIZER_IDENTIFICATION off" *) 
+(* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION on; -name SYNCHRONIZER_IDENTIFICATION off" *) 
 module shiftRegister 
 #(parameter CYCLES = 1, parameter WIDTH = 1) 
 (

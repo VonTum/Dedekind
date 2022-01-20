@@ -5,7 +5,6 @@
 
 
 // data width is one bit as properly synchronizing multiple bits is impossible. 
-(* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *) 
 module synchronizer #(parameter WIDTH = 1, parameter SYNC_STAGES = 3) (
     input inClk,
     input[WIDTH-1:0] dataIn,
@@ -17,7 +16,7 @@ module synchronizer #(parameter WIDTH = 1, parameter SYNC_STAGES = 3) (
 reg[WIDTH-1:0] inReg;
 always @(posedge inClk) inReg <= dataIn;
 
-reg[WIDTH-1:0] syncRegs[SYNC_STAGES-2:0];
+(* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *) reg[WIDTH-1:0] syncRegs[SYNC_STAGES-2:0];
 always @(posedge outClk) syncRegs[SYNC_STAGES-2] <= inReg;
 
 generate
@@ -173,9 +172,12 @@ module dualClockFIFOWithDataValid #(parameter WIDTH = 160, parameter DEPTH_LOG2 
     output[WIDTH-1:0] dataOut
 );
 
+wire rdclrLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
+hyperpipe #(.CYCLES(2)) rstPipe(rdclk, rdclr, rdclrLocal);
+
 wire rdempty;
 always @(posedge rdclk) begin
-    if(rdclr) begin
+    if(rdclrLocal) begin
         dataOutValid <= 1'b0;
     end else begin
         if(readEnable) begin
@@ -192,7 +194,7 @@ dualClockFIFO #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .SYNC_STAGES(SYNC_STAGES
     .wrusedw(wrusedw),
     
     .rdclk(rdclk),
-    .rdclr(rdclr),
+    .rdclr(rdclrLocal),
     .readEnable(readEnable),
     .rdempty(rdempty),
     .dataOut(dataOut),

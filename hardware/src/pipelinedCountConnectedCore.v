@@ -271,12 +271,17 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10, p
     output[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut
 );
 
+
+wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
+hyperpipe #(.CYCLES(2)) rstPipe(clk, rst, rstLocal);
+
+
 assign storedExtraDataOut = runEndIn ? extraDataIn : storedExtraDataIn;
 assign validOut = start ? 1 : (runEndIn ? 0 : validIn);
 
 // PIPELINE STEP 5
 // Inputs become available
-wire[127:0] leftoverGraphWire = rst ? 0 : start ? graphIn : selectedLeftoverGraphIn;
+wire[127:0] leftoverGraphWire = rstLocal ? 0 : start ? graphIn : selectedLeftoverGraphIn;
 
 // PIPELINE STEP "NEW SEED PRODUCTION"
 // Generation of new seed, find index and test if graph is 0 to increment connectCount

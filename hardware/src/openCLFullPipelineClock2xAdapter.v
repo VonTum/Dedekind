@@ -23,7 +23,7 @@ resetNormalizer rstNormalizer(clock, resetn, rst, isInitialized);
 wire rst2x;
 wire rst2xPostSync;
 synchronizer #(.SYNC_STAGES(4)) rstSynchronizer(clock, rst, clock2x, rst2xPostSync);
-hyperpipe #(.CYCLES(5)) rst2xPipe(clock2x, rst2xPostSync, rst2x);
+hyperpipe #(.CYCLES(1)) rst2xPipe(clock2x, rst2xPostSync, rst2x);
 
 wire ivalid2x;
 wire iready2x;

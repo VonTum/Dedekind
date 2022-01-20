@@ -16,6 +16,11 @@ module openCLFullPipeline (
     output[63:0] summedDataPcoeffCountOut   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
+
+wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
+hyperpipe #(.CYCLES(2)) rstPipe(clock, rst, rstLocal);
+
+
 wire[127:0] bot = {botUpper, botLower};
 wire[127:0] top;
 
@@ -31,7 +36,7 @@ assign oready = pipelineManagerIsReadyForBotIn && !slowThePipeline;
 
 pipelineManager pipelineMngr(
     .clk(clock),
-    .rst(rst),
+    .rst(rstLocal),
     
     .startNewTop(startNewTop),
     .topIn(bot), // Reuse bot for topIn
@@ -52,18 +57,18 @@ permuteCheck6 permuteChecker (top, bot, isBotValid, validBotPermutations);
 wire[63:0] pipelineResult;
 
 // clock2x test
-/*reg[11:0] clockReg; always @(posedge clock) if(rst) clockReg <= 0; else clockReg <= clockReg + 1;
-reg[10:0] clock2xReg; always @(posedge clock2x) if(rst) clock2xReg <= 0; else clock2xReg <= clock2xReg + 1;
+/*reg[11:0] clockReg; always @(posedge clock) if(rstLocal) clockReg <= 0; else clockReg <= clockReg + 1;
+reg[10:0] clock2xReg; always @(posedge clock2x) if(rstLocal) clock2xReg <= 0; else clock2xReg <= clock2xReg + 1;
 assign pipelineResult[63:41] = {clockReg, clock2xReg};*/
 
 // clock count
-reg[22:0] clockReg; always @(posedge clock) if(rst) clockReg <= 0; else clockReg <= clockReg + 1;
+reg[22:0] clockReg; always @(posedge clock) if(rstLocal) clockReg <= 0; else clockReg <= clockReg + 1;
 assign pipelineResult[63:41] = clockReg;
 
 
 fullPipeline pipeline (
     .clk(clock),
-    .rst(rst),
+    .rst(rstLocal),
     .top(top),
     
     .bot(bot), // Represents all final 3 var swaps
@@ -77,7 +82,7 @@ fullPipeline pipeline (
 
 outputBuffer resultsBuf (
     .clk(clock),
-    .rst(rst),
+    .rst(rstLocal),
     
     .dataInValid(pipelineResultValid),
     .dataIn(pipelineResult),

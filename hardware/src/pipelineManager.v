@@ -14,6 +14,9 @@ module isBotValidShifter #(parameter OUTPUT_LATENCY = `OUTPUT_READ_LATENCY) (
     output isEmpty
 );
 
+wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
+hyperpipe #(.CYCLES(2)) rstPipe(clk, rst, rstLocal);
+
 localparam SHIFT_DEPTH = (1 << `ADDR_WIDTH) - `OUTPUT_INDEX_OFFSET;
 
 reg[`ADDR_WIDTH-1:0] cyclesUntilEmpty;
@@ -23,7 +26,7 @@ assign isEmpty = cyclesUntilEmpty == 0;
 wire isResetFinished = cyclesUntilResetFinished == 0;
 
 always @(posedge clk) begin
-    if(rst) begin
+    if(rstLocal) begin
         cyclesUntilEmpty <= 0;
         cyclesUntilResetFinished <= SHIFT_DEPTH;
     end else begin
@@ -83,7 +86,7 @@ module pipelineManager (
 
 // Makes all paths starting at topReg false paths. This is possible because top is a de-facto global constant. 
 // Data delay is allowed to go up to `OUTPUT_INDEX_OFFSET = 1024 cycles, which I assume will be plenty
-(* altera_attribute = "-name CUT ON -to *" *)
+(* altera_attribute = "-name CUT ON -to *" *) // Does not seem to do anything honestly
 reg[127:0] topReg;
 assign top = topReg;
 
@@ -92,7 +95,10 @@ reg[127:0] newTopInWaiting;
 
 reg isInitializing;
 
-wire advancingShiftReg = pipelineReady & !rst & !isInitializing;
+wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
+hyperpipe #(.CYCLES(2)) rstPipe(clk, rst, rstLocal);
+
+wire advancingShiftReg = pipelineReady & !rstLocal & !isInitializing;
 assign readyForBotIn = advancingShiftReg & !newTopWaiting;
 assign isBotValid = isBotInValid & readyForBotIn;
 
@@ -109,8 +115,9 @@ isBotValidShifter isBotValidHistory (
 
 wire[`ADDR_WIDTH-1:0] INITIALIZATION_START = -1;
 
+
 always @(posedge clk) begin
-    if(rst) begin
+    if(rstLocal) begin
         isInitializing <= 1'b0;
         newTopWaiting <= 1'b0;
         
@@ -126,7 +133,7 @@ always @(posedge clk) begin
         botIndex <= -`OUTPUT_INDEX_OFFSET; // start initializing at -1024, because the first module of the collectionModule will not have been initialized
     
     // A new top arrives, is stored temporarely while the previous top is finished up
-    end else if(pipelineReady & !rst) begin
+    end else if(pipelineReady) begin
         if(botIndex == INITIALIZATION_START) begin
             isInitializing <= 1'b0;
         end

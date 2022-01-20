@@ -18,6 +18,11 @@ module botPermuter #(parameter EXTRA_DATA_WIDTH = 12) (
     output reg[EXTRA_DATA_WIDTH-1:0] extraDataOut
 );
 
+
+wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
+hyperpipe #(.CYCLES(2)) rstPipe(clk, rst, rstLocal);
+
+
 reg[127:0] savedBot;
 reg[EXTRA_DATA_WIDTH-1:0] savedExtraData;
 reg[5:0] validBotPermutes;
@@ -56,7 +61,7 @@ always @(posedge clk) begin
 end
 
 always @(posedge clk) begin
-    if(rst) begin
+    if(rstLocal) begin
         savedBot <= 1'bX;
         savedExtraData <= 1'bX;
         validBotPermutes <= 6'b000000;

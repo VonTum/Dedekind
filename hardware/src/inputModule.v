@@ -32,11 +32,15 @@ module inputModule6 #(parameter EXTRA_DATA_WIDTH = 12) (
     output[EXTRA_DATA_WIDTH-1:0] extraDataOut
 );
 
+wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
+hyperpipe #(.CYCLES(2)) rstPipe(clk, rst, rstLocal);
+
+
 reg[2:0] cyclesUntilNextBotRequest;
 wire readyForBotRequest = cyclesUntilNextBotRequest == 0;
 reg popFifoDataMayBeAvailableNow; // used to rate-limit requests from the fifo
 wire popFifo = readyForBotBurst && readyForBotRequest && !popFifoDataMayBeAvailableNow;
-always @(posedge clk) popFifoDataMayBeAvailableNow <= rst ? 0 : popFifo;
+always @(posedge clk) popFifoDataMayBeAvailableNow <= rstLocal ? 0 : popFifo;
 wire fifoDataValidPreDelay;
 wire[128+EXTRA_DATA_WIDTH+6-1:0] dataFromFifoPreDelay;
 
@@ -65,7 +69,7 @@ assign {botFromFifo, validBotPermutesFromFifo, extraDataFromFifo} = dataFromFifo
 wire[2:0] validBotPermutesPopCnt;
 popcnt6 permuteCounter(validBotPermutesFromFifo, validBotPermutesPopCnt);
 always @(posedge clk) begin
-    if(rst)
+    if(rstLocal)
         cyclesUntilNextBotRequest <= 0;
     else if(startNewBurst)
         cyclesUntilNextBotRequest <= validBotPermutesPopCnt;

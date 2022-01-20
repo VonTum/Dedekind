@@ -19,12 +19,15 @@ module computeModule #(parameter EXTRA_DATA_WIDTH = 14, parameter REQUEST_LATENC
     output[EXTRA_DATA_WIDTH-1:0] extraDataOut
 );
 
+wire[127:0] topLocal; // Manual top distribution tree. I can't use SDC constraints so this will have to do
+hyperpipe #(.CYCLES(2), .WIDTH(128)) topPipe(clk, top, topLocal);
+
 // 1 PIPE STEP
 reg[127:0] botInD;
 always @(posedge clk) botInD <= botIn;
 
 // 1 PIPE STEP
-reg[127:0] graphIn; always @(posedge clk) graphIn <= top & ~botInD;
+reg[127:0] graphIn; always @(posedge clk) graphIn <= topLocal & ~botInD;
 
 // 2 PIPE STEP
 wire[127:0] leafEliminatedGraph;
