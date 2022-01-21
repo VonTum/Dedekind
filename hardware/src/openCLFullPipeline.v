@@ -63,7 +63,9 @@ assign pipelineResult[63:41] = {clockReg, clock2xReg};*/
 
 // clock count
 reg[22:0] clockReg; always @(posedge clock) if(rstLocal) clockReg <= 0; else clockReg <= clockReg + 1;
-assign pipelineResult[63:41] = clockReg;
+wire[22:0] clockRegLax;
+hyperpipe #(.CYCLES(2), .WIDTH(23)) clockRegPipe(clock, clockReg, clockRegLax);
+assign pipelineResult[63:41] = clockRegLax;
 
 
 fullPipeline pipeline (

@@ -16,7 +16,7 @@ module hyperpipe
 	end else
 	begin : GEN_REG_INPUT  
 		integer i;
-		reg [WIDTH-1:0] R_data [CYCLES-1:0];
+		(* maxfan = 5 *) reg [WIDTH-1:0] R_data [CYCLES-1:0];
         
 		always @ (posedge clk) 
 		begin   
