@@ -18,9 +18,9 @@ reg rst;
 reg inputBotValid;
 initial begin
     rst = 0;
-    #30
+    #31
     rst = 1;
-    #2
+    #4
     rst = 0;
     /*rst = 1;
     inputBotValid = 0;

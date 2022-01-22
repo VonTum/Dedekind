@@ -16,10 +16,49 @@ module openCLFullPipelineClock2xAdapter(
     output[63:0] summedDataPcoeffCountOut   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
+wire[127:0] bot = {botUpper, botLower};
+wire botInValid = ivalid && !startNewTop;
+wire topInValid = ivalid && startNewTop;
 
 wire rst;
 wire isInitialized;
 resetNormalizer rstNormalizer(clock, resetn, rst, isInitialized);
+
+wire[127:0] top;
+wire stallInput;
+wire ovalidOverride;
+
+wire outputQueueOValid;
+
+wire[4:0] inputFIFOusedw;
+assign oready = (inputFIFOusedw <= 27) & isInitialized & !stallInput;
+wire receivingData = oready & botInValid;
+wire sendingData = iready & outputQueueOValid;
+
+assign ovalid = outputQueueOValid || ovalidOverride;
+
+
+topManager topMngr (
+    .clk(clock),
+    .rst(rst),
+    
+    .topIn(bot),
+    .topInValid(oready & topInValid),
+    
+    .topOut(top),
+    
+    // Input queue side
+    .botWentIn(receivingData),
+    .stallInput(stallInput),
+    
+    // Output queue side
+    .botWentOut(sendingData),
+    .iready(iready),
+    .ovalidOverride(ovalidOverride)
+);
+
+
+
 wire rst2x;
 wire rst2xPostSync;
 synchronizer #(.SYNC_STAGES(4)) rstSynchronizer(clock, rst, clock2x, rst2xPostSync);
@@ -30,9 +69,7 @@ wire iready2x;
 wire ovalid2x;
 wire oready2x;
 
-wire startNewTop2x;
-wire[63:0] botLower2x; // Represents all final 3 var swaps
-wire[63:0] botUpper2x; // Represents all final 3 var swaps
+wire[127:0] bot2x;
 wire[63:0] summedDataPcoeffCountOut2x; 
 
 openCLFullPipeline fastPipeline (
@@ -43,27 +80,23 @@ openCLFullPipeline fastPipeline (
     .ovalid(ovalid2x),
     .oready(oready2x),
     
-    .startNewTop(startNewTop2x),
-    .botLower(botLower2x),
-    .botUpper(botUpper2x),
+    .top(top), // Async signal, does not need synchronization to new clock domain
+    
+    .bot(bot2x),
     .summedDataPcoeffCountOut(summedDataPcoeffCountOut2x)
 );
 
-wire[4:0] inputFIFOusedw;
-assign oready = (inputFIFOusedw <= 27) & isInitialized;
-wire receivingData = oready & ivalid;
-
-dualClockFIFOWithDataValid #(.WIDTH(64+64+1)) inputFIFO (
+dualClockFIFOWithDataValid #(.WIDTH(128)) inputFIFO (
     .wrclk(clock),
     .writeEnable(receivingData),
-    .dataIn({botLower, botUpper, startNewTop}),
+    .dataIn(bot),
     .wrusedw(inputFIFOusedw),
     
     .rdclk(clock2x),
     .rdclr(rst2x),
     .readEnable(oready2x),
     .dataOutValid(ivalid2x),
-    .dataOut({botLower2x, botUpper2x, startNewTop2x})
+    .dataOut(bot2x)
 );
 
 wire[4:0] outputFIFOusedw2x;
@@ -79,7 +112,7 @@ dualClockFIFOWithDataValid #(.WIDTH(64)) outputFIFO (
     .rdclk(clock),
     .rdclr(rst),
     .readEnable(iready || !ovalid), // keep trying to read if not valid, to get lookahead-like behaviour
-    .dataOutValid(ovalid),
+    .dataOutValid(outputQueueOValid),
     .dataOut(summedDataPcoeffCountOut)
 );
 

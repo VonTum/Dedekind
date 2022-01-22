@@ -1,13 +1,13 @@
 `timescale 1ns / 1ps
 
-module resetNormalizer #(parameter RESET_CYCLES = 15, parameter INITIALIZE_CYCLES = 25) (
+module resetNormalizer #(parameter RESET_CYCLES = 15, parameter INITIALIZE_CYCLES = 8000) (
     input clk,
     input resetn,
     output reg rst,
     output reg isInitialized
 );
 
-reg[5:0] cyclesSinceReset = 0;
+reg[13:0] cyclesSinceReset = 0;
 
 always @(posedge clk) begin
     if(!resetn) begin

@@ -9,20 +9,17 @@ module openCLFullPipeline (
     output ovalid,
     output oready,
     
+    // Remains constant for the duration of a run
+    input[127:0] top,
+    
     // we reuse bot to set the top, to save on inputs. 
-    input startNewTop,
-    input[63:0] botLower, // Represents all final 3 var swaps
-    input[63:0] botUpper, // Represents all final 3 var swaps
+    input[127:0] bot, // Represents all final 3 var swaps
     output[63:0] summedDataPcoeffCountOut   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
 
 wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
 hyperpipe #(.CYCLES(2)) rstPipe(clock, rst, rstLocal);
-
-
-wire[127:0] bot = {botUpper, botLower};
-wire[127:0] top;
 
 wire[4:0] fifoFullness;
 wire[`ADDR_WIDTH-1:0] botIndex;
@@ -38,13 +35,10 @@ pipelineManager pipelineMngr(
     .clk(clock),
     .rst(rstLocal),
     
-    .startNewTop(startNewTop),
-    .topIn(bot), // Reuse bot for topIn
     .isBotInValid(ivalid && !slowThePipeline),
     .readyForBotIn(pipelineManagerIsReadyForBotIn),
     .resultValid(pipelineResultValid),
     
-    .top(top),
     .botIndex(botIndex),
     .isBotValid(isBotValid),
     .pipelineReady(fifoFullness <= 25)
