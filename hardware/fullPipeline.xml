@@ -68,6 +68,7 @@
       
       <!-- Source Files -->
       <FILE name="src/openCLFullPipelineClock2xAdapter.v"/>
+      <FILE name="src/topManager.v"/>
       <FILE name="src/openCLFullPipeline.v"/>
           <FILE name="src/pipelineManager.v"/>
                <FILE name="src/hyperPipelining.v"/>

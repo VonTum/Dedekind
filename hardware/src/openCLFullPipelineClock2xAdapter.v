@@ -100,7 +100,7 @@ dualClockFIFOWithDataValid #(.WIDTH(128)) inputFIFO (
 );
 
 wire[4:0] outputFIFOusedw2x;
-hyperpipe #(.CYCLES(2)) oready2xPipe(clock2x, outputFIFOusedw2x <= 20, iready2x);
+hyperpipe #(.CYCLES(4)) iready2xPipe(clock2x, outputFIFOusedw2x <= 20, iready2x);
 wire movingDataToOutput2x = ovalid2x;
 
 dualClockFIFOWithDataValid #(.WIDTH(64)) outputFIFO (

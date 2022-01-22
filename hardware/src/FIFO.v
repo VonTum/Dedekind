@@ -262,7 +262,7 @@ assign hasBitError = 1'b0;
 endmodule
 
 // Has a read latency of 0 cycles after assertion of readRequest. (Then if the fifo had data dataOutValid should be asserted)
-module FastFIFO #(parameter WIDTH = 20, parameter DEPTH_LOG2 = 5, parameter IS_MLAB = 1/* = DEPTH_LOG2 <= 5*/, parameter READ_ADDR_STAGES = 0, parameter WRITE_ADDR_STAGES = 1) (
+module FastFIFO #(parameter WIDTH = 20, parameter DEPTH_LOG2 = 5, parameter IS_MLAB = 1/* = DEPTH_LOG2 <= 5*/, parameter READ_ADDR_STAGES = 0, parameter WRITE_ADDR_STAGES = 2) (
     input clk,
     input rst,
     

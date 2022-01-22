@@ -120,28 +120,34 @@ else if(UPPER_ADDR_BITS == 3)
 else assign totalReadData = 60'bX;
 endgenerate
 
-wire[5:0] counts[5:0];
-wire countValids[5:0];
-wire[3:0] eccValues[5:0];
+reg[5:0] counts[5:0];
+reg countValids[5:0];
+reg[3:0] eccValues[5:0];
 
-wire[35:0] pcoeffs[5:0];
+reg[35:0] pcoeffs[5:0];
 
 generate
 for(i = 0; i < 6; i = i + 1) begin
-    assign counts[i][3:0] = totalReadData[10*i+3 : 10*i];
-    assign counts[i][5:4] = totalReadData[10*i+5 : 10*i+4] - 1;
-    assign countValids[i] = totalReadData[10*i+5 : 10*i+4] != 2'b00;
-    assign eccValues[i] = totalReadData[10*i+9 : 10*i+6];
-    assign pcoeffs[i] = countValids[i] ? (35'b1 << counts[i]) : 35'b0;
+    always @(posedge clk) begin
+        counts[i][3:0] <= totalReadData[10*i+3 : 10*i];
+        counts[i][5:4] <= totalReadData[10*i+5 : 10*i+4] - 1;
+        countValids[i] <= totalReadData[10*i+5 : 10*i+4] != 2'b00;
+        eccValues[i] <= totalReadData[10*i+9 : 10*i+6];
+        pcoeffs[i] <= countValids[i] ? (35'b1 << counts[i]) : 35'b0;
+    end
 end
 endgenerate
 
-localparam RAM_CYCLES = 2;
+localparam RAM_CYCLES = 3;
 localparam SUM_CYCLES = `OUTPUT_READ_LATENCY - RAM_CYCLES;
 
-wire[37:0] summedDataPipeStart = (pcoeffs[0] + pcoeffs[1]) + (pcoeffs[2] + pcoeffs[3]) + (pcoeffs[4] + pcoeffs[5]);
+reg[36:0] pcoeffs01; always @(posedge clk) pcoeffs01 <= pcoeffs[0] + pcoeffs[1];
+reg[36:0] pcoeffs23; always @(posedge clk) pcoeffs23 <= pcoeffs[2] + pcoeffs[3];
+reg[36:0] pcoeffs45; always @(posedge clk) pcoeffs45 <= pcoeffs[4] + pcoeffs[5];
+
+wire[37:0] summedDataPipeStart = pcoeffs01 + pcoeffs23 + pcoeffs45;
 // hyperpipe registers get divided across this big sum to improve FMax
-hyperpipe #(.CYCLES(SUM_CYCLES), .WIDTH(38)) summedDataPipe(clk, summedDataPipeStart, summedDataOut);
+hyperpipe #(.CYCLES(SUM_CYCLES - 2), .WIDTH(38)) summedDataPipe(clk, summedDataPipeStart, summedDataOut);
 
 wire[2:0] pcoeffCountPrePipe = (countValids[0] + countValids[1])
        + (countValids[2] + countValids[3])
