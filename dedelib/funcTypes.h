@@ -384,10 +384,10 @@ Monotonic<Variables> acProd(const Monotonic<Variables>& a, const Monotonic<Varia
 
 // if yes, leaves bot in a permutation that was (bot <= top)
 template<unsigned int Variables>
-bool hasPermutationBelow(Monotonic<Variables> top, Monotonic<Variables>& bot) {
+bool hasPermutationBelow(Monotonic<Variables> top, Monotonic<Variables>& bot, unsigned int fromVar = 0, unsigned int toVar = Variables) {
 	bool foundPermutation = false;
 	Monotonic<Variables> bestPermutation;
-	bot.forEachPermutation([&top, &foundPermutation, &bestPermutation](Monotonic<Variables> permutedBot) {
+	bot.forEachPermutation(fromVar, toVar, [&top, &foundPermutation, &bestPermutation](Monotonic<Variables> permutedBot) {
 		if(permutedBot <= top) {
 			foundPermutation = true;
 			bestPermutation = permutedBot;

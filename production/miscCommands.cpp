@@ -6,10 +6,13 @@
 #include <map>
 #include <string>
 #include <chrono>
+
+#include "../dedelib/funcTypes.h"
 #include "../dedelib/dedekindDecomposition.h"
 #include "../dedelib/valuedDecomposition.h"
 #include "../dedelib/toString.h"
 #include "../dedelib/serialization.h"
+#include "../dedelib/generators.h"
 
 #include "../dedelib/codeGen.h"
 
@@ -398,6 +401,54 @@ BooleanFunction<Variables> findLongestMiddleLayerChain() {
 	return longestChain;
 }
 
+void countValidPermutationSetFraction(std::vector<size_t> counts, unsigned int groupVarIndex) {
+	constexpr unsigned int Variables = 7;
+	std::vector<TopBots<Variables>> topBots = readTopBots<Variables>(500);
+
+	auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+	std::default_random_engine generator(seed);
+	std::cout << "Seed: " << seed << std::endl;
+
+	for(size_t topI = 0; topI < counts.size(); topI++) {
+		size_t count = counts[topI];
+
+		const TopBots<Variables>& selectedTop = topBots[std::uniform_int_distribution<size_t>(0, topBots.size() - 1)(generator)];
+		std::uniform_int_distribution<size_t> botSelector(0, selectedTop.bots.size() - 1);
+
+		Monotonic<Variables> top = selectedTop.top;
+		permuteRandom(top, generator);
+
+		std::cout << "Starting generation" << std::endl;
+
+		size_t validPermutationSetsTotal = 0;
+		size_t totalPermutationSetsTotal = 0;
+
+		for(size_t i = 0; i < count; i++) {
+			Monotonic<Variables> bot = selectedTop.bots[botSelector(generator)];
+			permuteRandom(bot, generator);
+
+			size_t validPermutationSets = 0;
+			size_t totalPermutationSets = 0;
+			
+			bot.forEachPermutation(0, Variables, [&](Monotonic<Variables> permutedBot){
+				if(hasPermutationBelow(selectedTop.top, permutedBot, groupVarIndex, Variables)) {
+					validPermutationSets++;
+				}
+				totalPermutationSets++;
+			});
+
+			// Has at least one valid permutation. This is necessary because these are already filitered out by the FlatMBFStructure
+			if(validPermutationSets > 0) {
+				validPermutationSetsTotal += validPermutationSets;
+				totalPermutationSetsTotal += totalPermutationSets;
+				
+				//std::cout << "Permutation set found: " << validPermutationSets << "/" << totalPermutationSets << std::endl;
+			}
+		}
+		std::cout << "Total fraction: " << validPermutationSetsTotal << "/" << totalPermutationSetsTotal << "=" << (double(validPermutationSetsTotal) / totalPermutationSetsTotal) << std::endl;
+	}
+}
+
 CommandSet miscCommands{"Misc", {
 	{"ramTest", []() {doRAMTest(); }},
 
@@ -507,6 +558,15 @@ CommandSet miscCommands{"Misc", {
 	{"computeIntervalSizesFast5", []() {computeIntervalSizesFast<5>(); }},
 	{"computeIntervalSizesFast6", []() {computeIntervalSizesFast<6>(); }},
 	{"computeIntervalSizesFast7", []() {computeIntervalSizesFast<7>(); }},
+
+	{"countValidPermutationSetFraction7_0", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 0); }},
+	{"countValidPermutationSetFraction7_1", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 1); }},
+	{"countValidPermutationSetFraction7_2", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 2); }},
+	{"countValidPermutationSetFraction7_3", []() {countValidPermutationSetFraction(std::vector<size_t>{100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100}, 3); }},
+	{"countValidPermutationSetFraction7_4", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 4); }},
+	{"countValidPermutationSetFraction7_5", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 5); }},
+	{"countValidPermutationSetFraction7_6", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 6); }},
+	{"countValidPermutationSetFraction7_7", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 7); }}
 }, {
 	{"checkIntervalLayers1", [](const std::string& size) {checkIntervalLayers<1>(std::stoi(size)); }},
 	{"checkIntervalLayers2", [](const std::string& size) {checkIntervalLayers<2>(std::stoi(size)); }},

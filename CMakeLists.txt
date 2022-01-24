@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20.1)
+cmake_minimum_required(VERSION 3.18.4)
 
 project(Dedekind VERSION 1.0)
 
@@ -65,7 +65,7 @@ add_executable(benchmarks
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 add_executable(fpga_production
   fpga_production/main.cpp
-  fpga_production/pipeline6PackTestSetForOpenCL_generated7.cpp
+  # fpga_production/pipeline6PackTestSetForOpenCL_generated7.cpp
   fpga_production/AOCLUtils/opencl.cpp
   fpga_production/AOCLUtils/options.cpp
 )

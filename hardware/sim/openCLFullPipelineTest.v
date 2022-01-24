@@ -34,9 +34,9 @@ initial begin
     inputBotValid = 1;
 end
 
-parameter MEMSIZE = 60000;
+parameter MEMSIZE = 20000;
 reg[1+128+64+8-1:0] dataTable[MEMSIZE-1:0];
-initial $readmemb("pipeline6PackTestSetForOpenCL7.mem", dataTable);
+initial $readmemb("pipeline24PackTestSetForOpenCL7.mem", dataTable);
 
 reg[64+8-1:0] resultsTable[MEMSIZE-1:0];
 //initial for(integer i = 0; i < MEMSIZE; i = i + 1) resultsTable[i] = 0;
@@ -58,8 +58,8 @@ initial begin
 end
 
 wire[63:0] summedDataPcoeffCountOut;
-wire[37:0] summedData = summedDataPcoeffCountOut[37:0];
-wire[2:0] pcoeffCount = summedDataPcoeffCountOut[40:38];
+wire[39:0] summedData = summedDataPcoeffCountOut[39:0];
+wire[4:0] pcoeffCount = summedDataPcoeffCountOut[44:40];
 
 openCLFullPipelineClock2xAdapter openclfp (
     .clock2x(clock2x),
@@ -85,7 +85,7 @@ always @(posedge clock) if(!rst) begin
         inputIndex <= inputIndex + 1;
     end
     if(isPassingOutput) begin
-        resultsTable[outputIndex] = {27'b0, summedData, 5'b00000, pcoeffCount};
+        resultsTable[outputIndex] = {25'b0, summedData, 3'b000, pcoeffCount};
         
         outputIndex <= outputIndex + 1;
     end
@@ -93,8 +93,8 @@ end
 
 assign {startNewTop, bot} = dataTable[inputIndex][1+128+64+8-1 : 64+8];
 
-wire[37:0] offsetSum = dataTable[outputIndex][37+8-1 : 8];
-wire[2:0] offsetCount = dataTable[outputIndex][2 : 0];
+wire[39:0] offsetSum = dataTable[outputIndex][39+8-1 : 8];
+wire[4:0] offsetCount = dataTable[outputIndex][4 : 0];
 
 wire CORRECT_SUM = isPassingOutput ? (summedData == offsetSum) : 1'b1; //1'bX;
 wire CORRECT_COUNT = isPassingOutput ? (pcoeffCount == offsetCount) : 1'b1; //1'bX;

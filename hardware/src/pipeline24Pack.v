@@ -10,7 +10,8 @@ module pipeline24Pack(
     input[127:0] bot,
     input[`ADDR_WIDTH-1:0] botIndex,
     input isBotValid,
-    output[4:0] maxFullness,
+    input[23:0] validBotPermutations, // == {permutesABCD, permutesBACD, permutesCBAD, permutesDBCA}
+    output reg[4:0] maxFullness,
     output[39:0] summedData, // log2(24*2^35)=39.5849625007 -> 40 bits
     output[4:0] pcoeffCount // log2(24)=4.5849625007 -> 5 bits
 );
@@ -28,19 +29,7 @@ wire[5:0] permutesBACD;
 wire[5:0] permutesCBAD;
 wire[5:0] permutesDBCA;
 
-permuteCheck24 permutChecker (
-    .top(top),
-    .bot(bot),
-    .isBotValid(isBotValid),
-    .validBotPermutations({permutesABCD, permutesBACD, permutesCBAD, permutesDBCA})
-);
-
-
-wire[3:0] fullWires;
-wire[3:0] almostFullWires;
-
-assign full = |fullWires;
-assign almostFull = |almostFullWires;
+assign {permutesABCD, permutesBACD, permutesCBAD, permutesDBCA} = validBotPermutations;
 
 wire[37:0] sums[3:0];
 wire[2:0] counts[3:0];
@@ -52,11 +41,15 @@ fullPipeline p2(clk, rst, top, botCBAD, botIndex, isBotValid, permutesCBAD, full
 fullPipeline p3(clk, rst, top, botDBCA, botIndex, isBotValid, permutesDBCA, fullnesses[3], sums[3], counts[3]);
 
 // combine outputs
-assign summedData = (sums[0] + sums[1]) + (sums[2] + sums[3]);
-assign pcoeffCount = (counts[0] + counts[1]) + (counts[2] + counts[3]);
+reg[38:0] sum01; always @(posedge clk) sum01 <= sums[0] + sums[1];
+reg[38:0] sum23; always @(posedge clk) sum23 <= sums[2] + sums[3];
+reg[39:0] fullSum; always @(posedge clk) fullSum <= sum01 + sum23;
+reg[4:0] fullCount; always @(posedge clk) fullCount <= (counts[0] + counts[1]) + (counts[2] + counts[3]);
+hyperpipe #(.CYCLES(`OUTPUT_READ_LATENCY_24PACK-2), .WIDTH(40)) sumPipe(clk, fullSum, summedData);
+hyperpipe #(.CYCLES(`OUTPUT_READ_LATENCY_24PACK-1), .WIDTH(5)) countPipe(clk, fullCount, pcoeffCount);
 
-wire[4:0] maxFullness01 = fullnesses[0] > fullnesses[1] ? fullnesses[0] : fullnesses[1];
-wire[4:0] maxFullness23 = fullnesses[2] > fullnesses[3] ? fullnesses[2] : fullnesses[3];
-assign maxFullness = maxFullness01 > maxFullness23 ? maxFullness01 : maxFullness23;
+reg[4:0] maxFullness01; always @(posedge clk) maxFullness01 <= fullnesses[0] > fullnesses[1] ? fullnesses[0] : fullnesses[1];
+reg[4:0] maxFullness23; always @(posedge clk) maxFullness23 <= fullnesses[2] > fullnesses[3] ? fullnesses[2] : fullnesses[3];
+always @(posedge clk) maxFullness <= maxFullness01 > maxFullness23 ? maxFullness01 : maxFullness23;
 
 endmodule

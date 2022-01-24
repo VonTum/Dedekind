@@ -139,7 +139,7 @@ end
 endgenerate
 
 localparam RAM_CYCLES = 3;
-localparam SUM_CYCLES = `OUTPUT_READ_LATENCY - RAM_CYCLES;
+localparam SUM_CYCLES = `OUTPUT_PIPELINE_READ_LATENCY - RAM_CYCLES;
 
 reg[36:0] pcoeffs01; always @(posedge clk) pcoeffs01 <= pcoeffs[0] + pcoeffs[1];
 reg[36:0] pcoeffs23; always @(posedge clk) pcoeffs23 <= pcoeffs[2] + pcoeffs[3];

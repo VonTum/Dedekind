@@ -6,38 +6,13 @@
 #include "../dedelib/toString.h"
 #include "../dedelib/serialization.h"
 #include "../dedelib/pcoeff.h"
+#include "../dedelib/generators.h"
 
 #include "../dedelib/flatMBFStructure.h"
 #include "../dedelib/flatPCoeff.h"
 
 #include <random>
 #include <sstream>
-
-
-template<unsigned int Variables, typename RandomEngine>
-void permuteRandom(BooleanFunction<Variables>& bf, RandomEngine& generator, unsigned int from = 0, unsigned int to = Variables) {
-	for(unsigned int i = from; i < to; i++) {
-		unsigned int selectedIndex = std::uniform_int_distribution<unsigned int>(i, to - 1)(generator);
-		if(selectedIndex == i) continue; // leave i where it is
-		bf.swap(i, selectedIndex); // put selectedIndex in position i
-	}
-}
-
-template<unsigned int Variables, typename RandomEngine>
-void permuteRandom(AntiChain<Variables>& ac, RandomEngine& generator, unsigned int from = 0, unsigned int to = Variables) {
-	permuteRandom<Variables, RandomEngine>(ac.bf, generator, from, to);
-}
-
-template<unsigned int Variables, typename RandomEngine>
-void permuteRandom(Monotonic<Variables>& mbf, RandomEngine& generator, unsigned int from = 0, unsigned int to = Variables) {
-	permuteRandom<Variables, RandomEngine>(mbf.bf, generator, from, to);
-}
-
-template<unsigned int Variables, typename RandomEngine>
-void permuteRandom(Layer<Variables>& layer, RandomEngine& generator, unsigned int from = 0, unsigned int to = Variables) {
-	permuteRandom<Variables, RandomEngine>(layer.bf, generator, from, to);
-}
-
 
 
 
@@ -302,6 +277,10 @@ void permutCheck24TestSet() {
 	}
 	testSetFile.close();
 }
+
+
+
+
 
 /*
 	Parses "38431,31,13854,111,3333" to {38431,31,13854,111,3333}

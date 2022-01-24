@@ -44,25 +44,20 @@ pipelineManager pipelineMngr(
     .pipelineReady(fifoFullness <= 25)
 );
 
-wire[5:0] validBotPermutations;
-permuteCheck6 permuteChecker (top, bot, isBotValid, validBotPermutations);
+wire[23:0] validBotPermutations;
+permuteCheck24 permuteChecker (top, bot, isBotValid, validBotPermutations);
 
 
 wire[63:0] pipelineResult;
 
-// clock2x test
-/*reg[11:0] clockReg; always @(posedge clock) if(rstLocal) clockReg <= 0; else clockReg <= clockReg + 1;
-reg[10:0] clock2xReg; always @(posedge clock2x) if(rstLocal) clock2xReg <= 0; else clock2xReg <= clock2xReg + 1;
-assign pipelineResult[63:41] = {clockReg, clock2xReg};*/
-
 // clock count
-reg[22:0] clockReg; always @(posedge clock) if(rstLocal) clockReg <= 0; else clockReg <= clockReg + 1;
-wire[22:0] clockRegLax;
-hyperpipe #(.CYCLES(2), .WIDTH(23)) clockRegPipe(clock, clockReg, clockRegLax);
-assign pipelineResult[63:41] = clockRegLax;
+reg[18:0] clockReg; always @(posedge clock) if(rstLocal) clockReg <= 0; else clockReg <= clockReg + 1;
+wire[18:0] clockRegLax;
+hyperpipe #(.CYCLES(2), .WIDTH(19)) clockRegPipe(clock, clockReg, clockRegLax);
+assign pipelineResult[63:45] = clockRegLax;
 
 
-fullPipeline pipeline (
+pipeline24Pack pipeline (
     .clk(clock),
     .rst(rstLocal),
     .top(top),
@@ -71,9 +66,9 @@ fullPipeline pipeline (
     .botIndex(botIndex),
     .isBotValid(isBotValid),
     .validBotPermutations(validBotPermutations), // == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
-    .fifoFullness(fifoFullness),
-    .summedDataOut(pipelineResult[37:0]),
-    .pcoeffCountOut(pipelineResult[40:38])
+    .maxFullness(fifoFullness),
+    .summedData(pipelineResult[39:0]),
+    .pcoeffCount(pipelineResult[44:40])
 );
 
 outputBuffer resultsBuf (
