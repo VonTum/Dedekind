@@ -261,8 +261,14 @@ assign hasBitError = 1'b0;
 
 endmodule
 
-// Has a read latency of 0 cycles after assertion of readRequest. (Then if the fifo had data dataOutValid should be asserted)
-module FastFIFO #(parameter WIDTH = 20, parameter DEPTH_LOG2 = 5, parameter IS_MLAB = 1/* = DEPTH_LOG2 <= 5*/, parameter READ_ADDR_STAGES = 0, parameter WRITE_ADDR_STAGES = 2) (
+// Has a read latency of READ_ADDR_STAGES(MLAB) - READ_ADDR_STAGES+2(M20K) cycles after assertion of readRequest. (Then if the fifo had data dataOutValid should be asserted)
+module FastFIFO #(
+    parameter WIDTH = 20,
+    parameter DEPTH_LOG2 = 5,
+    parameter IS_MLAB = 1,// = DEPTH_LOG2 <= 5
+    parameter READ_ADDR_STAGES = 0,
+    parameter WRITE_ADDR_STAGES = 2, 
+    parameter READ_RATE_LIMIT = 0) (// Number of cycles between reads
     input clk,
     input rst,
     
@@ -274,7 +280,8 @@ module FastFIFO #(parameter WIDTH = 20, parameter DEPTH_LOG2 = 5, parameter IS_M
     // output side
     input readRequest,
     output[WIDTH-1:0] dataOut,
-    output dataOutValid
+    output dataOutValid,
+    output empty
 );
 
 wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
@@ -289,8 +296,29 @@ wire[DEPTH_LOG2-1:0] readsValidUpTo;
 hyperpipe #(.CYCLES(WRITE_ADDR_STAGES+1), .WIDTH(DEPTH_LOG2)) readsValidUpToPipe(clk, writeAddr + 1, readsValidUpTo);
 assign usedw = readsValidUpTo - nextReadAddr;
 
-wire fifoHasData = readsValidUpTo != nextReadAddr;
-wire isReading = readRequest && fifoHasData && !rstD;
+assign empty = readsValidUpTo == nextReadAddr;
+
+wire isReading;
+generate
+if(READ_RATE_LIMIT <= 1) begin
+    assign isReading = readRequest && !empty && !rstD;
+end else begin
+    reg[$clog2(READ_RATE_LIMIT-1)-1:0] cyclesSinceLastRead;
+    wire throttlerIsReadyForNextOutput = cyclesSinceLastRead == READ_RATE_LIMIT-1;
+    assign isReading = readRequest && !empty && !rstD && throttlerIsReadyForNextOutput;
+    always @(posedge clk) begin
+        if(rstLocal || isReading) begin
+            cyclesSinceLastRead <= 0;
+        end else begin
+            if(!throttlerIsReadyForNextOutput) begin
+                cyclesSinceLastRead <= cyclesSinceLastRead + 1;
+            end
+        end
+    end
+end
+endgenerate
+
+
 hyperpipe #(.CYCLES((IS_MLAB ? 0 : 2) + READ_ADDR_STAGES)) isReadingPipe(clk, isReading, dataOutValid);
 
 // clever trick to properly set the rdaddr register of the memory block

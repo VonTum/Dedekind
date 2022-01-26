@@ -420,6 +420,8 @@ void countValidPermutationSetFraction(std::vector<size_t> counts, unsigned int g
 
 		std::cout << "Starting generation" << std::endl;
 
+		size_t totalValidPermutationsTotal = 0;
+		size_t totalPermutationsTestedTotal = 0;
 		size_t validPermutationSetsTotal = 0;
 		size_t totalPermutationSetsTotal = 0;
 
@@ -427,13 +429,23 @@ void countValidPermutationSetFraction(std::vector<size_t> counts, unsigned int g
 			Monotonic<Variables> bot = selectedTop.bots[botSelector(generator)];
 			permuteRandom(bot, generator);
 
+			size_t totalValidPermutations = 0;
 			size_t validPermutationSets = 0;
 			size_t totalPermutationSets = 0;
 			
 			bot.forEachPermutation(0, Variables, [&](Monotonic<Variables> permutedBot){
-				if(hasPermutationBelow(selectedTop.top, permutedBot, groupVarIndex, Variables)) {
+				size_t permutationsInThisPermutationThatAreValid = 0;
+				permutedBot.forEachPermutation(groupVarIndex, Variables, [&](Monotonic<Variables> subPermutedBot){
+					if(subPermutedBot <= selectedTop.top) {
+						permutationsInThisPermutationThatAreValid++;
+					}
+					totalPermutationsTestedTotal++;
+				});
+				/*if(hasPermutationBelow(selectedTop.top, permutedBot, groupVarIndex, Variables)) {*/
+				if(permutationsInThisPermutationThatAreValid > 0) {
 					validPermutationSets++;
 				}
+				totalValidPermutations += permutationsInThisPermutationThatAreValid;
 				totalPermutationSets++;
 			});
 
@@ -441,11 +453,14 @@ void countValidPermutationSetFraction(std::vector<size_t> counts, unsigned int g
 			if(validPermutationSets > 0) {
 				validPermutationSetsTotal += validPermutationSets;
 				totalPermutationSetsTotal += totalPermutationSets;
+				totalValidPermutationsTotal += totalValidPermutations;
 				
 				//std::cout << "Permutation set found: " << validPermutationSets << "/" << totalPermutationSets << std::endl;
 			}
 		}
 		std::cout << "Total fraction: " << validPermutationSetsTotal << "/" << totalPermutationSetsTotal << "=" << (double(validPermutationSetsTotal) / totalPermutationSetsTotal) << std::endl;
+		std::cout << "Total valid permutations per valid set: " << totalValidPermutationsTotal << "/" << validPermutationSetsTotal << "=" << (double(totalValidPermutationsTotal) / validPermutationSetsTotal) << std::endl;
+		std::cout << "Total permutation fraction:" << totalValidPermutationsTotal << "/" << totalPermutationsTestedTotal << "=" << (double(totalValidPermutationsTotal) / totalPermutationsTestedTotal) << std::endl;
 	}
 }
 

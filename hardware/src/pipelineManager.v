@@ -64,10 +64,13 @@ module pipelineManager (
 	output resultValid,
     
     // To pipelines
-    output reg[`ADDR_WIDTH-1:0] botIndex,
+    output[`ADDR_WIDTH-1:0] botIndex,
     output isBotValid,
     input pipelineReady
 );
+
+reg[`ADDR_WIDTH-1:0] botIndexReg = 0;
+assign botIndex = botIndexReg;
 
 wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
 hyperpipe #(.CYCLES(2)) rstPipe(clk, rst, rstLocal);
@@ -86,10 +89,8 @@ isBotValidShifter isBotValidHistory (
 );
 
 always @(posedge clk) begin
-    if(rstLocal) begin
-        botIndex <= 0;
-    end else if(pipelineReady) begin
-        botIndex <= botIndex + 1;
+    if(pipelineReady) begin
+        botIndexReg <= botIndexReg + 1;
     end
 end
 

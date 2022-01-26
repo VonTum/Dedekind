@@ -22,4 +22,5 @@ function automatic integer getInIndex;
     end
 endfunction
 
-`define VAR_SWAP_INLINE(VAR_A, VAR_B, SOURCE_WIRES, DESTINATION_WIRES) generate for(genvar outI = 0; outI < 128; outI = outI + 1) begin assign DESTINATION_WIRES[outI] = SOURCE_WIRES[getInIndex(outI, VAR_A, VAR_B)]; end endgenerate
+`define VAR_SWAP_INLINE_WITHIN_GENERATE(VAR_A, VAR_B, SOURCE_WIRES, DESTINATION_WIRES) for(genvar outI = 0; outI < 128; outI = outI + 1) begin assign DESTINATION_WIRES[outI] = SOURCE_WIRES[getInIndex(outI, VAR_A, VAR_B)]; end
+`define VAR_SWAP_INLINE(VAR_A, VAR_B, SOURCE_WIRES, DESTINATION_WIRES) generate `VAR_SWAP_INLINE_WITHIN_GENERATE(VAR_A, VAR_B, SOURCE_WIRES, DESTINATION_WIRES) endgenerate

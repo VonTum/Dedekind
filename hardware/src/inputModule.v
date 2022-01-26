@@ -38,7 +38,7 @@ hyperpipe #(.CYCLES(2)) rstPipe(clk, rst, rstLocal);
 
 reg[2:0] cyclesUntilNextBotRequest;
 wire readyForBotRequest = cyclesUntilNextBotRequest == 0;
-reg popFifoDataMayBeAvailableNow; // used to rate-limit requests from the fifo
+reg popFifoDataMayBeAvailableNow;
 wire popFifo = readyForBotBurst && readyForBotRequest && !popFifoDataMayBeAvailableNow;
 always @(posedge clk) popFifoDataMayBeAvailableNow <= rstLocal ? 0 : popFifo;
 wire fifoDataValidPreDelay;

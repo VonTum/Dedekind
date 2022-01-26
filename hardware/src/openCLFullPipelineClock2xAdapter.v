@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`include "pipelineGlobals_header.v"
 
 module openCLFullPipelineClock2xAdapter(
     input clock,
@@ -70,7 +71,10 @@ wire ovalid2x;
 wire oready2x;
 
 wire[127:0] bot2x;
-wire[63:0] summedDataPcoeffCountOut2x; 
+
+wire[`SUMMED_DATA_WIDTH-1:0] summedDataOut2x;
+wire[`PCOEFF_COUNT_WIDTH-1:0] pcoeffCountOut2x;
+
 
 openCLFullPipeline fastPipeline (
     .clock(clock2x),
@@ -83,7 +87,8 @@ openCLFullPipeline fastPipeline (
     .top(top), // Async signal, does not need synchronization to new clock domain
     
     .bot(bot2x),
-    .summedDataPcoeffCountOut(summedDataPcoeffCountOut2x)
+    .summedDataOut(summedDataOut2x),
+    .pcoeffCountOut(pcoeffCountOut2x)
 );
 
 dualClockFIFOWithDataValid #(.WIDTH(128)) inputFIFO (
@@ -99,21 +104,23 @@ dualClockFIFOWithDataValid #(.WIDTH(128)) inputFIFO (
     .dataOut(bot2x)
 );
 
+assign summedDataPcoeffCountOut[63:`SUMMED_DATA_WIDTH + `PCOEFF_COUNT_WIDTH] = 0;
+
 wire[4:0] outputFIFOusedw2x;
 hyperpipe #(.CYCLES(4)) iready2xPipe(clock2x, outputFIFOusedw2x <= 20, iready2x);
 wire movingDataToOutput2x = ovalid2x;
 
-dualClockFIFOWithDataValid #(.WIDTH(64)) outputFIFO (
+dualClockFIFOWithDataValid #(.WIDTH(`SUMMED_DATA_WIDTH + `PCOEFF_COUNT_WIDTH)) outputFIFO (
     .wrclk(clock2x),
     .writeEnable(movingDataToOutput2x),
-    .dataIn(summedDataPcoeffCountOut2x),
+    .dataIn({pcoeffCountOut2x, summedDataOut2x}),
     .wrusedw(outputFIFOusedw2x),
     
     .rdclk(clock),
     .rdclr(rst),
     .readEnable(iready || !ovalid), // keep trying to read if not valid, to get lookahead-like behaviour
     .dataOutValid(outputQueueOValid),
-    .dataOut(summedDataPcoeffCountOut)
+    .dataOut(summedDataPcoeffCountOut[`SUMMED_DATA_WIDTH + `PCOEFF_COUNT_WIDTH-1:0])
 );
 
 endmodule

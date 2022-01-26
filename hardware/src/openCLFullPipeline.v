@@ -14,7 +14,8 @@ module openCLFullPipeline (
     
     // we reuse bot to set the top, to save on inputs. 
     input[127:0] bot, // Represents all final 3 var swaps
-    output[63:0] summedDataPcoeffCountOut   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
+    output[`SUMMED_DATA_WIDTH-1:0] summedDataOut,
+    output[`PCOEFF_COUNT_WIDTH-1:0] pcoeffCountOut
 );
 
 
@@ -26,7 +27,7 @@ wire[`ADDR_WIDTH-1:0] botIndex;
 wire isBotValid;
 
 wire pipelineResultValid;
-wire slowThePipeline;
+reg slowThePipeline;
 
 wire pipelineManagerIsReadyForBotIn;
 assign oready = pipelineManagerIsReadyForBotIn && !slowThePipeline;
@@ -47,15 +48,8 @@ pipelineManager pipelineMngr(
 wire[23:0] validBotPermutations;
 permuteCheck24 permuteChecker (top, bot, isBotValid, validBotPermutations);
 
-
-wire[63:0] pipelineResult;
-
-// clock count
-reg[18:0] clockReg; always @(posedge clock) if(rstLocal) clockReg <= 0; else clockReg <= clockReg + 1;
-wire[18:0] clockRegLax;
-hyperpipe #(.CYCLES(2), .WIDTH(19)) clockRegPipe(clock, clockReg, clockRegLax);
-assign pipelineResult[63:45] = clockRegLax;
-
+wire[`SUMMED_DATA_WIDTH-1:0] summedData;
+wire[`PCOEFF_COUNT_WIDTH-1:0] pcoeffCount;
 
 pipeline24Pack pipeline (
     .clk(clock),
@@ -67,21 +61,30 @@ pipeline24Pack pipeline (
     .isBotValid(isBotValid),
     .validBotPermutations(validBotPermutations), // == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
     .maxFullness(fifoFullness),
-    .summedData(pipelineResult[39:0]),
-    .pcoeffCount(pipelineResult[44:40])
+    .summedData(summedData),
+    .pcoeffCount(pcoeffCount)
 );
 
-outputBuffer resultsBuf (
+// Output buffer
+// Space for 8192 elements
+`define FIFO_DEPTH_BITS 13
+wire[`FIFO_DEPTH_BITS-1:0] outputFifoFullness;
+
+always @(posedge clock) slowThePipeline <= outputFifoFullness >= 1000; // want to leave >7000 margin so the pipeline can empty out entirely. 
+
+FastFIFO #(.WIDTH(`SUMMED_DATA_WIDTH + `PCOEFF_COUNT_WIDTH), .DEPTH_LOG2(`FIFO_DEPTH_BITS), .IS_MLAB(0), .READ_ADDR_STAGES(1)) resultsBuffer (
     .clk(clock),
     .rst(rstLocal),
+	
+    // input side
+    .writeEnable(pipelineResultValid),
+    .dataIn({summedData, pcoeffCount}),
+    .usedw(outputFifoFullness),
     
-    .dataInValid(pipelineResultValid),
-    .dataIn(pipelineResult),
-    
-    .slowInputting(slowThePipeline),
-    .dataOutReady(iready),
-    .dataOutValid(ovalid),
-    .dataOut(summedDataPcoeffCountOut)
+    // output side
+    .readRequest(iready),
+    .dataOut({summedDataOut, pcoeffCountOut}),
+    .dataOutValid(ovalid)
 );
 
 endmodule

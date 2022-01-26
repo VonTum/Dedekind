@@ -42,7 +42,7 @@ wire[DEPTH_LOG2-1:0] usedw;
 wire[WIDTH-1:0] dataOut;
 wire dataOutValid;
 
-FastFIFO #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2)) fifoUnderTest (
+FastFIFO #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .READ_RATE_LIMIT(2)) fifoUnderTest (
     clk,
     rst,
     
