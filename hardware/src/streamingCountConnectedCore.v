@@ -1,6 +1,7 @@
 `timescale 1ns / 1ps
 
 `define PIPELINE_FIFO_DEPTH_LOG2 9
+`define ADDR_WIDTH 13
 
 module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 2) (
     input clk,
@@ -32,12 +33,8 @@ wire dataValidToComputeModule;
 
 // FIFO has 3 cycles read latency
 `define FIFO_READ_LATENCY 3
-FastFIFO #(
-    .WIDTH(128+`ADDR_WIDTH),
-    .DEPTH_LOG2(`PIPELINE_FIFO_DEPTH_LOG2),
-    .IS_MLAB(0),
-    .READ_ADDR_STAGES(1)
-) inputFIFO (
+
+FastFIFO #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(`PIPELINE_FIFO_DEPTH_LOG2), .IS_MLAB(0), .READ_ADDR_STAGES(1)) fifoIn(
     .clk(clk),
     .rst(rst),
      

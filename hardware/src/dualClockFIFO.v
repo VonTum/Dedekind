@@ -60,7 +60,7 @@ assign resetnOut = rstLine[0];
 
 endmodule
 
-module dualClockFIFO #(parameter WIDTH = 160, parameter DEPTH_LOG2 = 5, parameter SYNC_STAGES = 5) (
+module dualClockFIFO #(parameter WIDTH = 60, parameter DEPTH_LOG2 = 5, parameter SYNC_STAGES = 5) (
     input wrclk,
     input writeEnable,
     output wrfull,

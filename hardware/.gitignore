@@ -16,6 +16,7 @@ dedekind.xpr
 *.aocx.tmp
 *.qsf
 *.qws
+*.history
 output_files/
 qdb/
 tmp-clearbox/
