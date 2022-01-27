@@ -244,6 +244,49 @@ void pipelinePackTestSetForOpenCL(std::vector<size_t> counts, unsigned int permu
 	testSetCpp.close();
 }
 
+void singleStreamPipelineTestSetOpenCL(std::vector<size_t> counts, std::string outFileMem) {
+	constexpr unsigned int Variables = 7;
+	std::vector<TopBots<Variables>> topBots = readTopBots<Variables>(5000);
+
+	auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+	std::default_random_engine generator(seed);
+	std::cout << "Seed: " << seed << std::endl;
+
+	std::ofstream testSet(outFileMem); // plain text file memory file
+	
+	for(size_t topI = 0; topI < counts.size(); topI++) {
+		size_t count = counts[topI];
+
+		const TopBots<Variables>& selectedTop = topBots[std::uniform_int_distribution<size_t>(0, topBots.size() - 1)(generator)];
+		std::uniform_int_distribution<size_t> botSelector(0, selectedTop.bots.size() - 1);
+
+		Monotonic<Variables> top = selectedTop.top;
+		permuteRandom(top, generator);
+		testSet << "1_" << top.bf.bitset << '_';
+		printBits(testSet, 0, 8);
+		testSet << std::endl;
+
+		std::cout << "Starting generation" << std::endl;
+		for(size_t i = 0; i < count; ) {
+			Monotonic<Variables> bot = selectedTop.bots[botSelector(generator)];
+			permuteRandom(bot, generator);
+
+			if(bot <= top) {
+				uint64_t connectCount = countConnectedVeryFast(top.bf & ~bot.bf);
+
+				testSet << "0_";
+				testSet << bot.bf.bitset << '_';
+				printBits(testSet, connectCount, 8);
+				testSet << std::endl;
+
+				i++;
+			}
+		}
+	}
+
+	testSet.close();
+}
+
 
 void permutCheck24TestSet() {
 	constexpr unsigned int Variables = 7;
@@ -330,4 +373,5 @@ CommandSet testSetCommands{"Test Set Generation", {
 
 	{"pipeline6TestSetOpenCL", [](const std::string& sizeList) {pipelinePackTestSetForOpenCL(parseSizeList(sizeList), 4, FileName::pipeline6PackTestSetForOpenCLMem(7), FileName::pipeline6PackTestSetForOpenCLCpp(7)); }},
 	{"pipeline24PackTestSetOpenCL", [](const std::string& sizeList) {pipelinePackTestSetForOpenCL(parseSizeList(sizeList), 3, FileName::pipeline24PackTestSetForOpenCLMem(7), FileName::pipeline24PackTestSetForOpenCLCpp(7)); }},
+	{"singleStreamPipelineTestSetOpenCL", [](const std::string& sizeList) {singleStreamPipelineTestSetOpenCL(parseSizeList(sizeList), FileName::singleStreamPipelineTestSetForOpenCLMem(7)); }},
 }};

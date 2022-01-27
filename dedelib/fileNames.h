@@ -21,6 +21,7 @@ std::string pipeline6PackTestSetForOpenCLMem(unsigned int Variables);
 std::string pipeline6PackTestSetForOpenCLCpp(unsigned int Variables);
 std::string pipeline24PackTestSetForOpenCLMem(unsigned int Variables);
 std::string pipeline24PackTestSetForOpenCLCpp(unsigned int Variables);
+std::string singleStreamPipelineTestSetForOpenCLMem(unsigned int Variables);
 
 std::string permuteCheck24TestSet(unsigned int Variables);
 

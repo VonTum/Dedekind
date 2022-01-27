@@ -77,7 +77,12 @@ end
 endmodule
 
 
-module FIFO_MEMORY #(parameter WIDTH = 20, parameter DEPTH_LOG2 = 5, parameter IS_MLAB = 1/* = DEPTH_LOG2 <= 5*/) (
+module MEMORY_BLOCK #(
+    parameter WIDTH = 20,
+    parameter DEPTH_LOG2 = 5,
+    parameter IS_MLAB = 1,// = DEPTH_LOG2 <= 5
+    parameter READ_DURING_WRITE = "DONT_CARE" // Options are "DONT_CARE", "OLD_DATA" and "NEW_DATA"
+) (
     input clk,
     
     // Write Side
@@ -94,7 +99,7 @@ module FIFO_MEMORY #(parameter WIDTH = 20, parameter DEPTH_LOG2 = 5, parameter I
 
 `ifdef USE_FIFO_MEMORY_IP
 
-localparam BLOCK_SIZE = IS_MLAB ? 20 : 32;
+localparam BLOCK_SIZE = IS_MLAB ? 20 : (DEPTH_LOG2 <= 9 ? 32 : DEPTH_LOG2 == 10 ? 16 : 8);
 localparam WIDTH_ENLARGED_TO_BLOCK_SIZE = WIDTH + (BLOCK_SIZE - (WIDTH % BLOCK_SIZE)) % BLOCK_SIZE;
 
 wire[WIDTH_ENLARGED_TO_BLOCK_SIZE-1:0] dataInWide;
@@ -154,7 +159,7 @@ defparam
     altera_syncram_component.outdata_reg_b  = "UNREGISTERED",
     altera_syncram_component.power_up_uninitialized  = "FALSE",
     altera_syncram_component.ram_block_type  = "MLAB",
-    altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
+    altera_syncram_component.read_during_write_mode_mixed_ports  = READ_DURING_WRITE,
     altera_syncram_component.widthad_a  = DEPTH_LOG2,
     altera_syncram_component.widthad_b  = DEPTH_LOG2,
     altera_syncram_component.width_a  = WIDTH_ENLARGED_TO_BLOCK_SIZE,
@@ -215,7 +220,7 @@ defparam
     altera_syncram_component.outdata_reg_b  = "CLOCK0",
     altera_syncram_component.power_up_uninitialized  = "FALSE",
     altera_syncram_component.ram_block_type  = "M20K",
-    altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
+    altera_syncram_component.read_during_write_mode_mixed_ports  = READ_DURING_WRITE,
     altera_syncram_component.widthad_a  = DEPTH_LOG2,
     altera_syncram_component.widthad_b  = DEPTH_LOG2,
     altera_syncram_component.width_a  = WIDTH_ENLARGED_TO_BLOCK_SIZE,
@@ -252,10 +257,10 @@ always @(posedge clk) begin
     writeEnableReg <= writeEnable;
 end
 
-wire[WIDTH-1:0] dataFromMem = (writeEnableReg && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
+wire[WIDTH-1:0] dataFromMem = (writeEnableReg && READ_DURING_WRITE == "DONT_CARE" && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
 hyperpipe #(.CYCLES(IS_MLAB ? 0 : 2), .WIDTH(WIDTH)) dataOutPipe(clk, dataFromMem, dataOut);
 
-assign hasBitError = 1'b0;
+assign eccStatus = 1'b0;
 
 `endif
 
@@ -404,7 +409,7 @@ hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(WIDTH)) writeDataPipe(clk,
     dataInD
 );
 
-FIFO_MEMORY #(WIDTH, DEPTH_LOG2, IS_MLAB) fifoMemory (
+MEMORY_BLOCK #(WIDTH, DEPTH_LOG2, IS_MLAB) fifoMemory (
     .clk(clk),
     
     // Write Side
@@ -506,7 +511,7 @@ hyperpipe #(.CYCLES(PARTITION_B_LAG), .WIDTH(1+DEPTH_LOG2+1+DEPTH_LOG2)) partiti
     {writeEnableD_B, writeAddrD_B, readAddressStallD_B, nextReadAddrD_B}
 );
 
-FIFO_MEMORY #(WIDTH_A, DEPTH_LOG2, IS_MLAB) fifoMemoryA (
+MEMORY_BLOCK #(WIDTH_A, DEPTH_LOG2, IS_MLAB) fifoMemoryA (
     .clk(clk),
     
     // Write Side
@@ -521,7 +526,7 @@ FIFO_MEMORY #(WIDTH_A, DEPTH_LOG2, IS_MLAB) fifoMemoryA (
     .eccStatus(eccStatusA)
 );
 
-FIFO_MEMORY #(WIDTH_B, DEPTH_LOG2, IS_MLAB) fifoMemoryB (
+MEMORY_BLOCK #(WIDTH_B, DEPTH_LOG2, IS_MLAB) fifoMemoryB (
     .clk(clk),
     
     // Write Side
