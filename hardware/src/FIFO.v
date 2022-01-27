@@ -89,7 +89,7 @@ module FIFO_MEMORY #(parameter WIDTH = 20, parameter DEPTH_LOG2 = 5, parameter I
     input readAddressStall,
     input[DEPTH_LOG2-1:0] readAddr,
     output[WIDTH-1:0] dataOut,
-    output[1:0] hasBitError
+    output eccStatus
 );
 
 `ifdef USE_FIFO_MEMORY_IP
@@ -163,12 +163,12 @@ defparam
     altera_syncram_component.enable_force_to_zero  = "FALSE",
     altera_syncram_component.enable_ecc  = "FALSE";
 
-assign hasBitError = 1'b0;
+assign eccStatus = 1'b0;
 end else begin
 
 /* M20K */
-wire[(IS_MLAB ? -1 : 1):0] eccstatus;
-assign hasBitError = eccstatus[1];
+wire[(IS_MLAB ? -1 : 1):0] eccStatusWire;
+assign eccStatus = eccStatusWire[1];
 
 altera_syncram  altera_syncram_component (
     .clock0 (clk),
@@ -193,7 +193,7 @@ altera_syncram  altera_syncram_component (
     .data_b ({WIDTH_ENLARGED_TO_BLOCK_SIZE{1'b1}}),
     .eccencbypass (1'b0),
     .eccencparity (8'b0),
-    .eccstatus (eccstatus),
+    .eccstatus (eccStatusWire),
     .q_a (),
     .rden_a (1'b1),
     .rden_b (1'b1),
@@ -262,26 +262,31 @@ assign hasBitError = 1'b0;
 endmodule
 
 // Has a read latency of READ_ADDR_STAGES(MLAB) - READ_ADDR_STAGES+2(M20K) cycles after assertion of readRequest. (Then if the fifo had data dataOutValid should be asserted)
-module FastFIFO #(
-    parameter WIDTH = 20,
+module FastFIFOController #(
     parameter DEPTH_LOG2 = 5,
     parameter IS_MLAB = 1,// = DEPTH_LOG2 <= 5
     parameter READ_ADDR_STAGES = 0,
-    parameter WRITE_ADDR_STAGES = 2, 
-    parameter READ_RATE_LIMIT = 0) (// Number of cycles between reads
+    parameter WRITE_ADDR_STAGES = 2
+) (
     input clk,
     input rst,
     
     // input side
     input writeEnable,
-    input[WIDTH-1:0] dataIn,
     output[DEPTH_LOG2-1:0] usedw,
     
     // output side
     input readRequest,
-    output[WIDTH-1:0] dataOut,
     output dataOutValid,
-    output empty
+    output empty,
+    
+    // Memory write side
+    output writeEnableD,
+    output[DEPTH_LOG2-1:0] writeAddrD,
+    
+    // Memory read side
+    output readAddressStallD,
+    output[DEPTH_LOG2-1:0] nextReadAddrD
 );
 
 wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
@@ -298,26 +303,7 @@ assign usedw = readsValidUpTo - nextReadAddr;
 
 assign empty = readsValidUpTo == nextReadAddr;
 
-wire isReading;
-generate
-if(READ_RATE_LIMIT <= 1) begin
-    assign isReading = readRequest && !empty && !rstD;
-end else begin
-    reg[$clog2(READ_RATE_LIMIT-1)-1:0] cyclesSinceLastRead;
-    wire throttlerIsReadyForNextOutput = cyclesSinceLastRead == READ_RATE_LIMIT-1;
-    assign isReading = readRequest && !empty && !rstD && throttlerIsReadyForNextOutput;
-    always @(posedge clk) begin
-        if(rstLocal || isReading) begin
-            cyclesSinceLastRead <= 0;
-        end else begin
-            if(!throttlerIsReadyForNextOutput) begin
-                cyclesSinceLastRead <= cyclesSinceLastRead + 1;
-            end
-        end
-    end
-end
-endgenerate
-
+wire isReading = readRequest && !empty && !rstD;
 
 hyperpipe #(.CYCLES((IS_MLAB ? 0 : 2) + READ_ADDR_STAGES)) isReadingPipe(clk, isReading, dataOutValid);
 
@@ -339,21 +325,83 @@ always @(posedge clk) begin
     end
 end
 
-wire writeEnableD;
-wire[DEPTH_LOG2-1:0] writeAddrD;
-wire[WIDTH-1:0] dataInD;
 
-hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(1+DEPTH_LOG2+WIDTH)) writePipe(clk, 
-    {writeEnable,  writeAddr,  dataIn},
-    {writeEnableD, writeAddrD, dataInD}
+hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(1+DEPTH_LOG2)) writePipe(clk, 
+    {writeEnable,  writeAddr},
+    {writeEnableD, writeAddrD}
 );
 
 wire readAddressStall = !isReadingOrHasJustReset;
-wire readAddressStallD;
-wire[DEPTH_LOG2-1:0] nextReadAddrD;
 hyperpipe #(.CYCLES(READ_ADDR_STAGES), .WIDTH(1+DEPTH_LOG2)) readAddressStallPipe(clk, 
     {readAddressStall,  nextReadAddr}, 
     {readAddressStallD, nextReadAddrD}
+);
+
+endmodule
+
+// Has a read latency of READ_ADDR_STAGES(MLAB) - READ_ADDR_STAGES+2(M20K) cycles after assertion of readRequest. (Then if the fifo had data dataOutValid should be asserted)
+module FastFIFO #(
+    parameter WIDTH = 20,
+    parameter DEPTH_LOG2 = 5,
+    parameter IS_MLAB = 1,// = DEPTH_LOG2 <= 5
+    parameter READ_ADDR_STAGES = 0,
+    parameter WRITE_ADDR_STAGES = 2
+) (
+    input clk,
+    input rst,
+    
+    // input side
+    input writeEnable,
+    input[WIDTH-1:0] dataIn,
+    output[DEPTH_LOG2-1:0] usedw,
+    
+    // output side
+    input readRequest,
+    output[WIDTH-1:0] dataOut,
+    output dataOutValid,
+    output empty,
+    output eccStatus
+);
+
+// Memory write side
+wire writeEnableD;
+wire[DEPTH_LOG2-1:0] writeAddrD;
+
+// Memory read side
+wire readAddressStallD;
+wire[DEPTH_LOG2-1:0] nextReadAddrD;
+
+FastFIFOController #(
+    .DEPTH_LOG2(DEPTH_LOG2),
+    .IS_MLAB(IS_MLAB),
+    .READ_ADDR_STAGES(READ_ADDR_STAGES),
+    .WRITE_ADDR_STAGES(WRITE_ADDR_STAGES)
+) controller (
+    clk,
+    rst,
+    
+    // input side
+    writeEnable,
+    usedw,
+    
+    // output side
+    readRequest,
+    dataOutValid,
+    empty,
+    
+    // Memory write side
+    writeEnableD,
+    writeAddrD,
+    
+    // Memory read side
+    readAddressStallD,
+    nextReadAddrD
+);
+
+wire[WIDTH-1:0] dataInD;
+hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(WIDTH)) writeDataPipe(clk, 
+    dataIn,
+    dataInD
 );
 
 FIFO_MEMORY #(WIDTH, DEPTH_LOG2, IS_MLAB) fifoMemory (
@@ -367,7 +415,126 @@ FIFO_MEMORY #(WIDTH, DEPTH_LOG2, IS_MLAB) fifoMemory (
     // Read Side
     .readAddressStall(readAddressStallD),
     .readAddr(nextReadAddrD),
-    .dataOut(dataOut)
+    .dataOut(dataOut),
+    .eccStatus(eccStatus)
 );
 
 endmodule
+
+
+
+// Has a read latency of READ_ADDR_STAGES(MLAB) - READ_ADDR_STAGES+2(M20K) cycles after assertion of readRequest. (Then if the fifo had data dataOutValid should be asserted)
+module FastFIFOPartitioned #(
+    parameter WIDTH_A = 20,
+    parameter WIDTH_B = 20,
+    parameter DEPTH_LOG2 = 5,
+    parameter IS_MLAB = 1,// = DEPTH_LOG2 <= 5
+    parameter READ_ADDR_STAGES = 0,
+    parameter WRITE_ADDR_STAGES = 2, 
+    parameter PARTITION_B_LAG = 3
+) (
+    input clk,
+    input rst,
+    
+    // input side
+    input writeEnable,
+    input[WIDTH_A-1:0] dataAIn,
+    input[WIDTH_B-1:0] dataBIn,
+    output[DEPTH_LOG2-1:0] usedw,
+    
+    // output side
+    input readRequest,
+    output[WIDTH_A-1:0] dataAOut,
+    output[WIDTH_B-1:0] dataBOut,
+    output dataOutValid,
+    output empty,
+    output eccStatusA,
+    output eccStatusB
+);
+
+// Memory write side
+wire writeEnableD;
+wire[DEPTH_LOG2-1:0] writeAddrD;
+
+// Memory read side
+wire readAddressStallD;
+wire[DEPTH_LOG2-1:0] nextReadAddrD;
+
+FastFIFOController #(
+    .DEPTH_LOG2(DEPTH_LOG2),
+    .IS_MLAB(IS_MLAB),
+    .READ_ADDR_STAGES(READ_ADDR_STAGES),
+    .WRITE_ADDR_STAGES(WRITE_ADDR_STAGES)
+) controller (
+    clk,
+    rst,
+    
+    // input side
+    writeEnable,
+    usedw,
+    
+    // output side
+    readRequest,
+    dataOutValid,
+    empty,
+    
+    // Memory write side
+    writeEnableD,
+    writeAddrD,
+    
+    // Memory read side
+    readAddressStallD,
+    nextReadAddrD
+);
+
+wire[WIDTH_A-1:0] dataAInD;
+hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(WIDTH_A)) writeDataAPipe(clk, dataAIn, dataAInD);
+
+wire[WIDTH_A-1:0] dataBInD;
+hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(WIDTH_B)) writeDataBPipe(clk, dataBIn, dataBInD);
+
+// Memory write side
+wire writeEnableD_B;
+wire[DEPTH_LOG2-1:0] writeAddrD_B;
+
+// Memory read side
+wire readAddressStallD_B;
+wire[DEPTH_LOG2-1:0] nextReadAddrD_B;
+
+hyperpipe #(.CYCLES(PARTITION_B_LAG), .WIDTH(1+DEPTH_LOG2+1+DEPTH_LOG2)) partitionBMemorySignals(clk, 
+    {writeEnableD,   writeAddrD,   readAddressStallD,   nextReadAddrD},
+    {writeEnableD_B, writeAddrD_B, readAddressStallD_B, nextReadAddrD_B}
+);
+
+FIFO_MEMORY #(WIDTH_A, DEPTH_LOG2, IS_MLAB) fifoMemoryA (
+    .clk(clk),
+    
+    // Write Side
+    .writeEnable(writeEnableD),
+    .writeAddr(writeAddrD),
+    .dataIn(dataAInD),
+    
+    // Read Side
+    .readAddressStall(readAddressStallD),
+    .readAddr(nextReadAddrD),
+    .dataOut(dataAOut),
+    .eccStatus(eccStatusA)
+);
+
+FIFO_MEMORY #(WIDTH_B, DEPTH_LOG2, IS_MLAB) fifoMemoryB (
+    .clk(clk),
+    
+    // Write Side
+    .writeEnable(writeEnableD_B),
+    .writeAddr(writeAddrD_B),
+    .dataIn(dataBInD),
+    
+    // Read Side
+    .readAddressStall(readAddressStallD_B),
+    .readAddr(nextReadAddrD_B),
+    .dataOut(dataBOut),
+    .eccStatus(eccStatusB)
+);
+
+endmodule
+
