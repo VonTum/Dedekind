@@ -1,9 +1,10 @@
 `timescale 1ns / 1ps
 
 `define PIPELINE_FIFO_DEPTH_LOG2 9
+
 `define ADDR_WIDTH 13
 
-module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 2) (
+module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     input clk,
     input rst,
     input[127:0] top,
@@ -33,8 +34,12 @@ wire dataValidToComputeModule;
 
 // FIFO has 3 cycles read latency
 `define FIFO_READ_LATENCY 3
-
-FastFIFO #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(`PIPELINE_FIFO_DEPTH_LOG2), .IS_MLAB(0), .READ_ADDR_STAGES(1)) fifoIn(
+FastFIFO #(
+    .WIDTH(128+`ADDR_WIDTH),
+    .DEPTH_LOG2(`PIPELINE_FIFO_DEPTH_LOG2),
+    .IS_MLAB(0),
+    .READ_ADDR_STAGES(1)
+) inputFIFO (
     .clk(clk),
     .rst(rst),
      
@@ -86,19 +91,65 @@ MEMORY_BLOCK #(.WIDTH(6), .DEPTH_LOG2(`ADDR_WIDTH), .IS_MLAB(0)) collectorMemory
     .eccStatus(collectorECC)
 );
 
-MEMORY_BLOCK #(.WIDTH(1+EXTRA_DATA_WIDTH), .DEPTH_LOG2(`ADDR_WIDTH), .IS_MLAB(0), .READ_DURING_WRITE("OLD_DATA")) isValidMemory (
+botDataMemoryModule #(1+EXTRA_DATA_WIDTH) isValidExtraDataMemory (
+    clk,
+    curBotIndex,
+    {isBotValid, extraDataIn},
+    {resultValid, extraDataOut},
+    isBotValidECC
+);
+
+endmodule
+
+module botDataMemoryModule #(parameter WIDTH = 2) (
+    input clk,
+    input[`ADDR_WIDTH-1:0] curBotIndex,
+    
+    input[WIDTH-1:0] dataIn,
+    output[WIDTH-1:0] dataOut,
+    output isBotValidECC
+);
+
+// Annoyingly ECC memory requires a width of block size 32 bits, so we have to chunk data together before writing to the memory
+`define IS_VALID_MEMORY_CHUNK_SIZE_LOG2 4 // 16 elements per chunk
+`define IS_VALID_MEMORY_CHUNK_SIZE (1 << `IS_VALID_MEMORY_CHUNK_SIZE_LOG2)
+
+wire[WIDTH * `IS_VALID_MEMORY_CHUNK_SIZE-1:0] packedIsValidDataToMem;
+wire[WIDTH * `IS_VALID_MEMORY_CHUNK_SIZE-1:0] packedIsValidDataFromMem;
+packingShiftRegister #(.WIDTH(WIDTH), .DEPTH(`IS_VALID_MEMORY_CHUNK_SIZE)) packer (
+    .clk(clk),
+    .dataIn(dataIn),
+    .packedDataOut(packedIsValidDataToMem)
+);
+wire[`ADDR_WIDTH - `IS_VALID_MEMORY_CHUNK_SIZE_LOG2-1:0] curBotIndexMSB = curBotIndex[`ADDR_WIDTH-1:`IS_VALID_MEMORY_CHUNK_SIZE_LOG2];
+wire[`IS_VALID_MEMORY_CHUNK_SIZE_LOG2-1:0] curBotIndexLSB = curBotIndex[`IS_VALID_MEMORY_CHUNK_SIZE_LOG2-1:0];
+
+reg[`ADDR_WIDTH - `IS_VALID_MEMORY_CHUNK_SIZE_LOG2-1:0] prevBotIndexMSB; always @(posedge clk) prevBotIndexMSB <= curBotIndexMSB;
+reg pushValidBlock; always @(posedge clk) pushValidBlock <= curBotIndexLSB == `IS_VALID_MEMORY_CHUNK_SIZE-1;
+
+reg[`ADDR_WIDTH - `IS_VALID_MEMORY_CHUNK_SIZE_LOG2-1:0] validChunkWriteAddr; always @(posedge clk) validChunkWriteAddr <= curBotIndexMSB;
+MEMORY_BLOCK #(.WIDTH((WIDTH) * `IS_VALID_MEMORY_CHUNK_SIZE), .DEPTH_LOG2(`ADDR_WIDTH - `IS_VALID_MEMORY_CHUNK_SIZE_LOG2), .IS_MLAB(0)) isValidMemory (
     .clk(clk),
     
     // Write Side
-    .writeEnable(1'b1),
-    .writeAddr(curBotIndex),
-    .dataIn({isBotValid, extraDataIn}),
+    .writeEnable(pushValidBlock),
+    .writeAddr(validChunkWriteAddr),
+    .dataIn(packedIsValidDataToMem),
     
     // Read Side
     .readAddressStall(1'b0),
-    .readAddr(curBotIndex),
-    .dataOut({resultValid, extraDataOut}),
+    .readAddr(curBotIndexMSB),
+    .dataOut(packedIsValidDataFromMem),
     .eccStatus(isBotValidECC)
 );
+
+wire validBlockAvailableReadSide; hyperpipe #(.CYCLES(3)) validBlockPipe(clk, pushValidBlock, validBlockAvailableReadSide);
+unpackingShiftRegister #(.WIDTH(WIDTH), .DEPTH(`IS_VALID_MEMORY_CHUNK_SIZE)) unpacker (
+    .clk(clk),
+    .startNewBatch(validBlockAvailableReadSide),
+    .dataIn(packedIsValidDataFromMem),
+    .unpackedDataOut(dataOut)
+);
+
 
 endmodule

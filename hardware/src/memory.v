@@ -190,3 +190,56 @@ assign eccStatus = 1'b0;
 `endif
 
 endmodule
+
+
+
+
+module packingShiftRegister #(parameter WIDTH = 2, parameter DEPTH = 16) (
+    input clk,
+    input[WIDTH-1:0] dataIn,
+    
+    output[DEPTH*WIDTH-1:0] packedDataOut
+);
+
+reg[WIDTH-1:0] shifter[DEPTH-1:0];
+
+generate
+    genvar i;
+    always @(posedge clk) shifter[0] <= dataIn;
+    for(i = 1; i < DEPTH; i = i + 1) begin : PACKING_SHIFT_REG_SHIFTER
+        always @(posedge clk) shifter[i] <= shifter[i-1];
+    end
+    for(i = 0; i < DEPTH; i = i + 1) begin : OUTPUT_DATA
+        assign packedDataOut[WIDTH*i+:WIDTH] = shifter[i];
+    end
+endgenerate
+
+endmodule
+
+module unpackingShiftRegister #(parameter WIDTH = 2, parameter DEPTH = 16) (
+    input clk,
+    input startNewBatch,
+    input[DEPTH*WIDTH-1:0] dataIn,
+    
+    output[WIDTH-1:0] unpackedDataOut
+);
+
+reg[WIDTH-1:0] shifter[DEPTH-2:0];
+
+assign unpackedDataOut = startNewBatch ? dataIn[DEPTH*WIDTH-1:(DEPTH-1)*WIDTH] : shifter[DEPTH-2];
+
+generate
+    genvar i;
+    for(i = 1; i < DEPTH-1; i = i + 1) begin : INPUT_DATA
+        always @(posedge clk) begin
+            shifter[i] <= startNewBatch ? dataIn[WIDTH*i+:WIDTH] : shifter[i-1];
+        end
+    end
+    always @(posedge clk) begin
+        // Last shifter does not need to be guarded, a new batch should be started right before garbage data could come in. 
+        // Optimizer will remove the test due to don't care, but will show up in simulation which is nice
+        shifter[0] <= startNewBatch ? dataIn[0+:WIDTH] : {WIDTH{1'bX}};
+    end
+endgenerate
+
+endmodule
