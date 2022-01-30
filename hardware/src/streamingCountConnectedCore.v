@@ -1,8 +1,6 @@
 `timescale 1ns / 1ps
 
-`define PIPELINE_FIFO_DEPTH_LOG2 9
-
-`define ADDR_WIDTH 13
+`include "pipelineGlobals_header.v"
 
 module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     input clk,
@@ -13,16 +11,25 @@ module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     input isBotValid,
     input[127:0] bot,
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
-    output[`PIPELINE_FIFO_DEPTH_LOG2-1:0] usedw,
+    output slowDownInput,
     
     // Output side
     output resultValid,
     output[5:0] connectCount,
     output[EXTRA_DATA_WIDTH-1:0] extraDataOut,
-    output inputFifoECC,
-    output collectorECC,
-    output isBotValidECC
+    output eccStatus
 );
+
+wire inputFifoECC;
+wire collectorECC;
+wire isBotValidECC;
+
+assign eccStatus = inputFifoECC || collectorECC || isBotValidECC;
+
+`define PIPELINE_FIFO_DEPTH_LOG2 9
+
+wire [`PIPELINE_FIFO_DEPTH_LOG2-1:0] usedw;
+assign slowDownInput = usedw > `ADDR_DEPTH / 22 - 50; // 22 cycles is the longest a bot could spend in the pipeline
 
 reg[`ADDR_WIDTH-1:0] curBotIndex = 0;
 always @(posedge clk) curBotIndex <= curBotIndex + 1;

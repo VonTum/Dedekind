@@ -1,3 +1,4 @@
+
 // Address width of the pipeline, supported values 12 (4096 addresses) and 13 (8192 addresses)
 `define ADDR_WIDTH 13
 // depth of the address buffer

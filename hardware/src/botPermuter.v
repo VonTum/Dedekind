@@ -10,6 +10,7 @@ module botPermuter #(parameter EXTRA_DATA_WIDTH = 12) (
     input[127:0] botIn,
     input[5:0] validBotPermutesIn, // == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
+    output reg done,
     
     // output side
     output reg permutedBotValid,
@@ -45,6 +46,16 @@ botPermuteSelector6 combinatorialSelector (
 );
 
 always @(posedge clk) begin
+    casez(validBotPermutes)
+        6'b100000: done <= 1;
+        6'b010000: done <= 1;
+        6'b001000: done <= 1;
+        6'b000100: done <= 1;
+        6'b000010: done <= 1;
+        6'b000001: done <= 1;
+        6'b000000: done <= 1;
+        default: done <= 0;
+    endcase
     casez(validBotPermutes)
         6'b1?????: selectedPermutationOut <= 5;
         6'b01????: selectedPermutationOut <= 4;

@@ -5,7 +5,7 @@
 module FIFO #(parameter WIDTH = 16, parameter DEPTH_LOG2 = 5) (
     input clk,
     input rst,
-     
+    
     // input side
     input writeEnable,
     input[WIDTH-1:0] dataIn,
@@ -15,7 +15,7 @@ module FIFO #(parameter WIDTH = 16, parameter DEPTH_LOG2 = 5) (
     input readEnable,
     output[WIDTH-1:0] dataOut,
     output empty,
-     
+    
     output[DEPTH_LOG2-1:0] usedw
 );
 `ifdef USE_FIFO_IP
