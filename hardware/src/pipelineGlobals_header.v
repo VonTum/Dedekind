@@ -14,7 +14,7 @@
  // number of clock cycles of read latency. 
 `define OUTPUT_READ_LATENCY (`OUTPUT_PIPELINE_READ_LATENCY + `OUTPUT_READ_LATENCY_24PACK)
 
-
+`define PCOEFF_COUNT_BITWIDTH 8
 `define SUMMED_DATA_WIDTH 40
 `define PCOEFF_COUNT_WIDTH 5
 

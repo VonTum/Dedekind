@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module aggregatingPipeline #(parameter PCOEFF_COUNT_BITWIDTH = 10) (
+module aggregatingPipeline (
     input clk,
     input rst,
     input[127:0] top,
@@ -11,8 +11,8 @@ module aggregatingPipeline #(parameter PCOEFF_COUNT_BITWIDTH = 10) (
     output slowDownInput,
     
     output resultsValid,
-    output reg[PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
-    output reg[PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
+    output reg[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
+    output reg[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
     
     output eccStatus
 );

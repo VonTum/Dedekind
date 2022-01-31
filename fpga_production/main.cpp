@@ -43,7 +43,6 @@ static cl_int BUFSIZE = 500;
 static int NUM_ITERATIONS = 1;
 static bool SHOW_NONZEROS = false;
 static bool SHOW_ALL = false;
-static bool TWO_CLOCKS = false;
 static bool ENABLE_PROFILING = false;
 
 // OpenCL runtime configuration
@@ -89,19 +88,11 @@ void summarizeResultsBuffer(uint64_t* resultsOut, cl_int bufSize) {
   int nonZeroTotals = 0;
 
   for(size_t i = 0; i < bufSize; i++) {
-    uint64_t resultConnectCount = getBitRange(resultsOut[i], 37, 0);
-    uint64_t resultNumTerms = getBitRange(resultsOut[i], 40, 38);
-    uint64_t resultClock = getBitRange(resultsOut[i], 63, 41);
+    uint64_t resultConnectCount = getBitRange(resultsOut[i], 47, 0);
+    uint64_t resultNumTerms = getBitRange(resultsOut[i], 12+48-1, 48);
 
     if(SHOW_ALL || allData[i].connectCount != 0 || resultConnectCount != 0) {
       if(SHOW_NONZEROS) {
-        if(TWO_CLOCKS) {
-          uint64_t clk = getBitRange(resultClock, 22, 11);
-          uint64_t clk2 = getBitRange(resultClock, 10, 0);
-          std::cout << i << "> clock: " << clk << ", clock2x: " << clk2 << ", \t";
-        } else {
-          std::cout << i << "> clock: " << resultClock << ", \t";
-        }
         std::cout << "[PCoeff] CPU: " << allData[i].connectCount << " FPGA: " << resultConnectCount << ", \t";
         std::cout << "[NumTerms] CPU: " << allData[i].numTerms << " FPGA: " << resultNumTerms << std::endl;
       }
@@ -117,14 +108,8 @@ void summarizeResultsBuffer(uint64_t* resultsOut, cl_int bufSize) {
     }
   }
 
-  uint64_t firstClock = getBitRange(resultsOut[0], 63, 41);
-  uint64_t lastClock = getBitRange(resultsOut[bufSize-1], 63, 41);
-
   std::cout << "Total tally: " << corrects << "/" << totals << std::endl;
   std::cout << "Nonzero tally: " << nonZeroCorrects << "/" << nonZeroTotals << std::endl;
-  std::cout << "First Clock: " << firstClock << std::endl;
-  std::cout << "Last Clock: " << lastClock << std::endl;
-  std::cout << "Cycles Taken: " << (lastClock - firstClock) << std::endl;
 }
 
 
@@ -156,10 +141,6 @@ int main(int argc, char** argv) {
    if(options.has("showall")) {
      SHOW_ALL = true;
      SHOW_NONZEROS = true;
-   }
-
-   if(options.has("twoclocks")) {
-     TWO_CLOCKS = true;
    }
 
    if(options.has("profile")) {

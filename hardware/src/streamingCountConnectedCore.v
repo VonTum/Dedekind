@@ -59,6 +59,7 @@ FastFIFO #(
     .readRequest(readRequestFromComputeModule), // FIFO2 has read protection, no need to check empty
     .dataOut({botToComputeModule, botToComputeModuleAddr}),
     .dataOutValid(dataValidToComputeModule),
+    .empty(),
     .eccStatus(inputFifoECC)
 );
 

@@ -244,6 +244,65 @@ void pipelinePackTestSetForOpenCL(std::vector<size_t> counts, unsigned int permu
 	testSetCpp.close();
 }
 
+void FullPermutePipelineTestSetOpenCL(std::vector<size_t> counts, std::string outFileMem, std::string outFileCpp) {
+	constexpr unsigned int Variables = 7;
+	std::vector<TopBots<Variables>> topBots = readTopBots<Variables>(5000);
+
+	auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
+	std::default_random_engine generator(seed);
+	std::cout << "Seed: " << seed << std::endl;
+
+	std::ofstream testSet(outFileMem); // plain text file memory file
+	std::ofstream testSetCpp(outFileCpp); // plain text file cpp file
+
+	testSetCpp << "#include \"dataFormat.h\"" << std::endl;
+	testSetCpp << "std::vector<DataItem> allData{" << std::endl;
+
+	for(size_t topI = 0; topI < counts.size(); topI++) {
+		size_t count = counts[topI];
+
+		const TopBots<Variables>& selectedTop = topBots[std::uniform_int_distribution<size_t>(0, topBots.size() - 1)(generator)];
+		std::uniform_int_distribution<size_t> botSelector(0, selectedTop.bots.size() - 1);
+
+		Monotonic<Variables> top = selectedTop.top;
+		permuteRandom(top, generator);
+		testSet << "1_" << top.bf.bitset << '_';
+		printBits(testSet, 0, 16);
+		testSet << '_';
+		printBits(testSet, 0, 48);
+		testSet << std::endl;
+
+		testSetCpp << "{true, 0b"; printBits(testSetCpp, _mm_extract_epi64(top.bf.bitset.data, 1), 64);
+		testSetCpp << ", 0b"; printBits(testSetCpp, _mm_extract_epi64(top.bf.bitset.data, 0), 64);
+		testSetCpp << ", " << 0 << ", " << 0 << "}," << std::endl;
+		std::cout << "Starting generation" << std::endl;
+
+		BooleanFunction<Variables> tempGraphsBuf[factorial(Variables)];
+		for(size_t i = 0; i < count; i++) {
+			Monotonic<Variables> bot = selectedTop.bots[botSelector(generator)];
+			permuteRandom(bot, generator);
+
+			ProcessedPCoeffSum countConnectedSum = processPCoeffSum<Variables>(top, bot, tempGraphsBuf);
+
+			testSet << "0_";
+			testSet << bot.bf.bitset << '_';
+			printBits(testSet, countConnectedSum.pcoeffCount, 16);
+			testSet << '_';
+			printBits(testSet, countConnectedSum.pcoeffSum, 48);
+			testSet << std::endl;
+
+			testSetCpp << "{false, 0b"; printBits(testSetCpp, _mm_extract_epi64(bot.bf.bitset.data, 1), 64);
+			testSetCpp << ", 0b"; printBits(testSetCpp, _mm_extract_epi64(bot.bf.bitset.data, 0), 64);
+			testSetCpp << ", " << countConnectedSum.pcoeffSum << ", " << countConnectedSum.pcoeffCount << "}," << std::endl;
+		}
+	}
+
+	testSetCpp << "};" << std::endl;
+
+	testSet.close();
+	testSetCpp.close();
+}
+
 void singleStreamPipelineTestSetOpenCL(std::vector<size_t> counts, std::string outFileMem) {
 	constexpr unsigned int Variables = 7;
 	std::vector<TopBots<Variables>> topBots = readTopBots<Variables>(5000);
@@ -374,4 +433,6 @@ CommandSet testSetCommands{"Test Set Generation", {
 	{"pipeline6TestSetOpenCL", [](const std::string& sizeList) {pipelinePackTestSetForOpenCL(parseSizeList(sizeList), 4, FileName::pipeline6PackTestSetForOpenCLMem(7), FileName::pipeline6PackTestSetForOpenCLCpp(7)); }},
 	{"pipeline24PackTestSetOpenCL", [](const std::string& sizeList) {pipelinePackTestSetForOpenCL(parseSizeList(sizeList), 3, FileName::pipeline24PackTestSetForOpenCLMem(7), FileName::pipeline24PackTestSetForOpenCLCpp(7)); }},
 	{"singleStreamPipelineTestSetOpenCL", [](const std::string& sizeList) {singleStreamPipelineTestSetOpenCL(parseSizeList(sizeList), FileName::singleStreamPipelineTestSetForOpenCLMem(7)); }},
+
+	{"FullPermutePipelineTestSetOpenCL", [](const std::string& sizeList) {FullPermutePipelineTestSetOpenCL(parseSizeList(sizeList), FileName::FullPermutePipelineTestSetOpenCLMem(7), FileName::FullPermutePipelineTestSetOpenCLCpp(7)); }}
 }};

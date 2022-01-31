@@ -5,14 +5,19 @@ module pipeline120Pack(
     input clk,
     input rst,
     
+    // Input side
     input[127:0] top,
     input[127:0] bot,
-    input[11:0] botIndex,
     input isBotValid,
-    output wor full,
-    output wor almostFull,
-    output[41:0] summedData, // log2(120*2^35)=41.9068905956 -> 42 bits
-    output[6:0] pcoeffCount // log2(120)=6.90689059561 -> 7 bits
+    input batchDone,
+    output wor slowDownInput,
+    
+    // Output side
+    input grabResults,
+    output wand resultsAvailable,
+    output reg[`PCOEFF_COUNT_BITWIDTH+5+35-1:0] pcoeffSum,
+    output reg[`PCOEFF_COUNT_BITWIDTH+5-1:0] pcoeffCount,
+    output wor eccStatus
 );
 
 `include "inlineVarSwap_header.v"
@@ -24,20 +29,27 @@ wire[127:0] botCBADE; `VAR_SWAP_INLINE(2,4,botABCDE, botCBADE)
 wire[127:0] botDBCAE; `VAR_SWAP_INLINE(2,5,botABCDE, botDBCAE)
 wire[127:0] botEBCDA; `VAR_SWAP_INLINE(2,6,botABCDE, botEBCDA)
 
-wire[4:0] fullWires;
-wire[4:0] almostFullWires;
+wire[`PCOEFF_COUNT_BITWIDTH+2+35-1:0] sums[4:0];
+wire[`PCOEFF_COUNT_BITWIDTH+2-1:0] counts[4:0];
 
-wire[39:0] sum1; wire[4:0] count1; pipeline24Pack p1(clk, rst, top, botABCDE, botIndex, isBotValid, fullWires[0], almostFullWires[0], sum1, count1);
-wire[39:0] sum2; wire[4:0] count2; pipeline24Pack p2(clk, rst, top, botBACDE, botIndex, isBotValid, fullWires[1], almostFullWires[1], sum2, count2);
-wire[39:0] sum3; wire[4:0] count3; pipeline24Pack p3(clk, rst, top, botCBADE, botIndex, isBotValid, fullWires[2], almostFullWires[2], sum3, count3);
-wire[39:0] sum4; wire[4:0] count4; pipeline24Pack p4(clk, rst, top, botDBCAE, botIndex, isBotValid, fullWires[3], almostFullWires[3], sum4, count4);
-wire[39:0] sum5; wire[4:0] count5; pipeline24Pack p5(clk, rst, top, botEBCDA, botIndex, isBotValid, fullWires[4], almostFullWires[4], sum5, count5);
+pipeline24PackV2WithFIFO p1(clk, rst, top, botABCDE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[0], counts[0], eccStatus);
+pipeline24PackV2WithFIFO p2(clk, rst, top, botBACDE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[1], counts[1], eccStatus);
+pipeline24PackV2WithFIFO p3(clk, rst, top, botCBADE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[2], counts[2], eccStatus);
+pipeline24PackV2WithFIFO p4(clk, rst, top, botDBCAE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[3], counts[3], eccStatus);
+pipeline24PackV2WithFIFO p5(clk, rst, top, botEBCDA, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[4], counts[4], eccStatus);
 
-// combine outputs
-assign summedData = (sum1 + sum2) + sum3 + (sum4 + sum5);
-assign pcoeffCount = (count1 + count2) + count3 + (count4 + count5);
+reg[`PCOEFF_COUNT_BITWIDTH+3+35-1:0] sum01; always @(posedge clk) sum01 <= sums[0] + sums[1];
+reg[`PCOEFF_COUNT_BITWIDTH+3+35-1:0] sum23; always @(posedge clk) sum23 <= sums[2] + sums[3];
+reg[`PCOEFF_COUNT_BITWIDTH+2+35-1:0] sum4D; always @(posedge clk) sum4D <= sums[4];
+reg[`PCOEFF_COUNT_BITWIDTH+3+35-1:0] sum01D; always @(posedge clk) sum01D <= sum01;
+reg[`PCOEFF_COUNT_BITWIDTH+4+35-1:0] sum234; always @(posedge clk) sum234 <= sum23 + sum4D;
+always @(posedge clk) pcoeffSum <= sum01D + sum234;
 
-assign full = |fullWires;
-assign almostFull = |almostFullWires;
+reg[`PCOEFF_COUNT_BITWIDTH+3-1:0] count01; always @(posedge clk) count01 <= counts[0] + counts[1];
+reg[`PCOEFF_COUNT_BITWIDTH+3-1:0] count23; always @(posedge clk) count23 <= counts[2] + counts[3];
+reg[`PCOEFF_COUNT_BITWIDTH+2-1:0] count4D; always @(posedge clk) count4D <= counts[4];
+reg[`PCOEFF_COUNT_BITWIDTH+3-1:0] count01D; always @(posedge clk) count01D <= count01;
+reg[`PCOEFF_COUNT_BITWIDTH+4-1:0] count234; always @(posedge clk) count234 <= count23 + count4D;
+always @(posedge clk) pcoeffCount <= count01D + count234;
 
 endmodule

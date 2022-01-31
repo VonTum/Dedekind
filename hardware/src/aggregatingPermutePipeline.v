@@ -1,23 +1,31 @@
 `timescale 1ns / 1ps
 
-module aggregatingPermutePipeline #(parameter PCOEFF_COUNT_BITWIDTH = 10) (
+`include "pipelineGlobals_header.v"
+
+module aggregatingPermutePipeline (
     input clk,
     input rst,
     input[127:0] top,
     
-    input[5:0] validBotPermutes,
+    // Input side
     input[127:0] bot,
+    input writeData,
+    input[5:0] validBotPermutes,
     input batchDone,
-    output[4:0] inputFifoUsedw,
+    output reg slowDownInput,
     
+    // Output side
     input grabResults,
-    output resultsAvaiblable,
-    output[PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
-    output[PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount
+    output resultsAvailable,
+    output[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
+    output[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
     
-    // TODO
-    //output eccStatus
+    // TODO ADD FIFOS TO THIS AS WELL
+    output eccStatus
 );
+
+wire[4:0] inputFifoUsedw;
+always @(posedge clk) slowDownInput <= inputFifoUsedw > 24;
 
 wire[8:0] outputFIFOUsedw;
 wire aggregatingPipelineSlowDownInput;
@@ -33,7 +41,7 @@ FIFO #(.WIDTH(128+6+1), .DEPTH_LOG2(5)) inputFIFO (
     .rst(rst),
      
     // input side
-    .writeEnable(|validBotPermutes),
+    .writeEnable(writeData && (|validBotPermutes || batchDone)),
     .dataIn({bot, validBotPermutes, batchDone}),
     .full(),
     .usedw(inputFifoUsedw),
@@ -69,10 +77,9 @@ botPermuter #(.EXTRA_DATA_WIDTH(0)) permuter6 (
 wire botAvailableForAggregatingPipeline = grabNew6Pack && batchDonePostFIFO;
 
 wire aggregateFinished;
-wire[PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSumFromPipeline;
-wire[PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCountFromPipeline;
-wire aggrPipelineECC;
-aggregatingPipeline #(.PCOEFF_COUNT_BITWIDTH(PCOEFF_COUNT_BITWIDTH)) computePipe (
+wire[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSumFromPipeline;
+wire[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCountFromPipeline;
+aggregatingPipeline computePipe (
     .clk(clk),
     .rst(rst),
     .top(top),
@@ -86,12 +93,12 @@ aggregatingPipeline #(.PCOEFF_COUNT_BITWIDTH(PCOEFF_COUNT_BITWIDTH)) computePipe
     .pcoeffSum(pcoeffSumFromPipeline),
     .pcoeffCount(pcoeffCountFromPipeline),
     
-    .eccStatus(aggrPipelineECC)
+    .eccStatus(eccStatus)
 );
 
 wire resultsFIFOEmpty;
-assign resultsAvaiblable = !resultsFIFOEmpty;
-FIFO #(.WIDTH(PCOEFF_COUNT_BITWIDTH+35 + PCOEFF_COUNT_BITWIDTH), .DEPTH_LOG2(9)) resultsFIFO (
+assign resultsAvailable = !resultsFIFOEmpty;
+FIFO #(.WIDTH(`PCOEFF_COUNT_BITWIDTH+35 + `PCOEFF_COUNT_BITWIDTH), .DEPTH_LOG2(9)) resultsFIFO (
     .clk(clk),
     .rst(rst),
      

@@ -36,9 +36,10 @@ reg rstD; always @(posedge clk) rstD <= rstLocal;
 
 reg[DEPTH_LOG2-1:0] nextReadAddr;
 reg[DEPTH_LOG2-1:0] writeAddr;
+wire[DEPTH_LOG2-1:0] nextWriteAddr = writeAddr + 1;
 
 wire[DEPTH_LOG2-1:0] readsValidUpTo; 
-hyperpipe #(.CYCLES(WRITE_ADDR_STAGES+1), .WIDTH(DEPTH_LOG2)) readsValidUpToPipe(clk, writeAddr + 1, readsValidUpTo);
+hyperpipe #(.CYCLES(WRITE_ADDR_STAGES+1), .WIDTH(DEPTH_LOG2)) readsValidUpToPipe(clk, nextWriteAddr, readsValidUpTo);
 assign usedw = readsValidUpTo - nextReadAddr;
 
 assign empty = readsValidUpTo == nextReadAddr;
@@ -60,7 +61,7 @@ always @(posedge clk) begin
         end
         
         if(writeEnable) begin
-            writeAddr <= writeAddr + 1;
+            writeAddr <= nextWriteAddr;
         end
     end
 end

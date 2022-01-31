@@ -85,6 +85,12 @@ std::string pipeline24PackTestSetForOpenCLMem(unsigned int Variables) {
 std::string pipeline24PackTestSetForOpenCLCpp(unsigned int Variables) {
 	return makeBasicName(Variables, "pipeline24PackTestSetForOpenCL_generated", ".cpp");
 }
+std::string FullPermutePipelineTestSetOpenCLMem(unsigned int Variables) {
+	return makeBasicName(Variables, "FullPermutePipelineTestSetOpenCL", ".mem");
+}
+std::string FullPermutePipelineTestSetOpenCLCpp(unsigned int Variables) {
+	return makeBasicName(Variables, "FullPermutePipelineTestSetOpenCL", ".cpp");
+}
 std::string singleStreamPipelineTestSetForOpenCLMem(unsigned int Variables) {
 	return makeBasicName(Variables, "singleStreamPipelineTestSetForOpenCL", ".mem");
 }
