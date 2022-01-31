@@ -74,7 +74,12 @@ botPermuter #(.EXTRA_DATA_WIDTH(0)) permuter6 (
     .extraDataOut()
 );
 
+
 wire botAvailableForAggregatingPipeline = grabNew6Pack && batchDonePostFIFO;
+
+// Two cycles extra delay because that is the latency of the permuter
+wire botAvailableForAggregatingPipelineD;
+hyperpipe #(.CYCLES(2)) permuterDelay(clk, botAvailableForAggregatingPipeline, botAvailableForAggregatingPipelineD);
 
 wire aggregateFinished;
 wire[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSumFromPipeline;
@@ -86,7 +91,7 @@ aggregatingPipeline computePipe (
     
     .isBotValid(permutedBotValid),
     .bot(permutedBot),
-    .lastBotOfBatch(botAvailableForAggregatingPipeline),
+    .lastBotOfBatch(botAvailableForAggregatingPipelineD),
     .slowDownInput(aggregatingPipelineSlowDownInput),
     
     .resultsValid(aggregateFinished),

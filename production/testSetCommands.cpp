@@ -246,6 +246,7 @@ void pipelinePackTestSetForOpenCL(std::vector<size_t> counts, unsigned int permu
 
 void FullPermutePipelineTestSetOpenCL(std::vector<size_t> counts, std::string outFileMem, std::string outFileCpp) {
 	constexpr unsigned int Variables = 7;
+
 	std::vector<TopBots<Variables>> topBots = readTopBots<Variables>(5000);
 
 	auto seed = std::chrono::high_resolution_clock::now().time_since_epoch().count();
@@ -265,6 +266,7 @@ void FullPermutePipelineTestSetOpenCL(std::vector<size_t> counts, std::string ou
 		std::uniform_int_distribution<size_t> botSelector(0, selectedTop.bots.size() - 1);
 
 		Monotonic<Variables> top = selectedTop.top;
+
 		permuteRandom(top, generator);
 		testSet << "1_" << top.bf.bitset << '_';
 		printBits(testSet, 0, 16);

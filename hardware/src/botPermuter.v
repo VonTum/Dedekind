@@ -45,7 +45,7 @@ botPermuteSelector6 combinatorialSelector (
     permutedBotFromSelector
 );
 
-always @(posedge clk) begin
+always @(*) begin
     casez(validBotPermutes)
         6'b100000: done <= 1;
         6'b010000: done <= 1;
@@ -56,6 +56,9 @@ always @(posedge clk) begin
         6'b000000: done <= 1;
         default: done <= 0;
     endcase
+end
+
+always @(posedge clk) begin
     casez(validBotPermutes)
         6'b1?????: selectedPermutationOut <= 5;
         6'b01????: selectedPermutationOut <= 4;

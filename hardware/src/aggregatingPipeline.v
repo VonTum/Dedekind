@@ -41,7 +41,7 @@ streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1)) core (
     .eccStatus(eccFromPipeline)
 );
 
-assign eccStatus = eccFromPipeline || (connectCountFromPipeline > 35); // Connect Count should *never* be > 35
+assign eccStatus = eccFromPipeline || (connectCountFromPipelineValid && (connectCountFromPipeline > 35)); // Connect Count should *never* be > 35
 wire[35:0] pcoeff = 36'b000000000000000000000000000000000001 << connectCountFromPipeline;
 
 always @(posedge clk) begin

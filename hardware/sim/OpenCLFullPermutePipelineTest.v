@@ -58,7 +58,7 @@ end
 wire[63:0] summedDataPcoeffCountOut;
 wire eccStatus = summedDataPcoeffCountOut[63];
 wire[47:0] summedData = summedDataPcoeffCountOut[47:0];
-wire[12:0] pcoeffCount = summedDataPcoeffCountOut[12+48-1:48];
+wire[12:0] pcoeffCount = summedDataPcoeffCountOut[13+48-1:48];
 
 OpenCLFullPermutationPipeline elementUnderTest (
     .clock(clock),

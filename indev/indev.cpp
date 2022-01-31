@@ -98,6 +98,51 @@ int main(int argc, const char** argv) {
 
 		configure(parsed);
 	}
+
+
+
+
+
+
+	constexpr size_t Variables = 7;
+	Monotonic<Variables> t = Monotonic<Variables>(
+		BooleanFunction<Variables>::layerMask(0) | 
+		BooleanFunction<Variables>::layerMask(1) | 
+		BooleanFunction<Variables>::layerMask(2) |
+		BooleanFunction<Variables>::layerMask(3) |
+		BooleanFunction<Variables>::layerMask(4)
+	);
+	Monotonic<Variables> b = Monotonic<Variables>(
+		BooleanFunction<Variables>::layerMask(0) | 
+		BooleanFunction<Variables>::layerMask(1) | 
+		BooleanFunction<Variables>::layerMask(2) |
+		BooleanFunction<Variables>::layerMask(3)
+	);
+	
+	std::cout << "Top: " << t.bf.bitset << std::endl;
+	std::cout << "Bot: " << b.bf.bitset << std::endl;
+
+	BooleanFunction<Variables> tempGraphsBuf[factorial(Variables)];
+
+	ProcessedPCoeffSum countConnectedSum = processPCoeffSum<Variables>(t, b, tempGraphsBuf);
+
+	std::cout << b.bf.bitset << '_';
+	printBits(std::cout, countConnectedSum.pcoeffCount, 16);
+	std::cout << '_';
+	printBits(std::cout, countConnectedSum.pcoeffSum, 48);
+	std::cout << std::endl;
+
+	std::cout << "Pcoeff Count: " << countConnectedSum.pcoeffCount << std::endl;
+	std::cout << "Pcoeff Sum: " << countConnectedSum.pcoeffSum << std::endl;
+
+	return 0;
+
+
+
+
+
+
+
 	//sjomnumbertablesymmetric<2>([]() {});
 	//printAllMBFs<4>();
 	//countAverageACSize<7>();

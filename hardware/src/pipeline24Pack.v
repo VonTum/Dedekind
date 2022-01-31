@@ -94,7 +94,7 @@ wire[23:0] validBotPermutationsFromFIFO;
 wire batchDoneFromFIFO;
 
 wire[8:0] inputFIFOUsedW;
-assign slowDownInput = inputFIFOUsedW > 450;
+assign slowDownInput = inputFIFOUsedW > 400;
 wire inputFIFOEmpty;
 wire pipelinesRequestSlowDown;
 wire isReadingFromInputFIFO = !inputFIFOEmpty && !pipelinesRequestSlowDown;

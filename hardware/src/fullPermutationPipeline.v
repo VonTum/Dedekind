@@ -25,13 +25,17 @@ wire[127:0] permutedBot;
 wire permutedBotValid;
 wire batchDone;
 wire pipelineRequestsSlowdown;
+wire permutationGeneratorRequestsInputBot;
+
+assign readyForInputBot = permutationGeneratorRequestsInputBot && !pipelineRequestsSlowdown;
+
 permutationGenerator67 permutationGen (
     .clk(clk),
     .rst(rst),
     
     .inputBot(bot),
     .writeInputBot(writeBot),
-    .hasSpaceForNextBot(readyForInputBot),
+    .hasSpaceForNextBot(permutationGeneratorRequestsInputBot),
     
     .outputBot(permutedBot),
     .outputBotValid(permutedBotValid),
