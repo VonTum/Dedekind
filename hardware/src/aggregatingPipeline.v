@@ -2,6 +2,7 @@
 
 module aggregatingPipeline (
     input clk,
+    input clk2x,
     input rst,
     input[127:0] top,
     
@@ -23,15 +24,27 @@ wire connectCountFromPipelineValid;
 wire[5:0] connectCountFromPipeline;
 
 
+// 1 PIPE STEP
+reg[127:0] graph; always @(posedge clk) graph <= top & ~bot;
+
+// 2 PIPE STEP
+wire[127:0] leafEliminatedGraph;
+leafElimination #(.DIRECTION(`DOWN)) le(clk, graph, leafEliminatedGraph);
+
+wire isBotValidD; hyperpipe #(.CYCLES(4)) isBotValidPipe(clk, isBotValid, isBotValidD);
+wire lastBotOfBatchD; hyperpipe #(.CYCLES(4)) lastBotOfBatchPipe(clk, lastBotOfBatch, lastBotOfBatchD);
+
+
+
 streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1)) core (
     .clk(clk),
+    .clk2x(clk2x),
     .rst(rst),
-    .top(top),
     
     // Input side
-    .isBotValid(isBotValid),
-    .bot(bot),
-    .extraDataIn(lastBotOfBatch),
+    .isBotValid(isBotValidD),
+    .graphIn(leafEliminatedGraph),
+    .extraDataIn(lastBotOfBatchD),
     .slowDownInput(slowDownInput),
     
     // Output side

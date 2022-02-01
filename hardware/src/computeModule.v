@@ -48,6 +48,59 @@ shiftRegister #(.CYCLES(`PIPE_STEPS), .WIDTH(EXTRA_DATA_WIDTH)) extraDataPipe (c
 
 endmodule
 
+
+module pipelinedCountConnectedCoreWithSingletonElimination #(parameter EXTRA_DATA_WIDTH = 14, parameter REQUEST_LATENCY = 3) (
+    input clk,
+    input rst,
+    
+    // input side
+    input[127:0] leafEliminatedGraph,
+    input start,
+    input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
+    output requestGraph,
+    
+    // output side
+    output done,
+    output[5:0] resultCount,
+    output[EXTRA_DATA_WIDTH-1:0] extraDataOut
+);
+
+`define SE_PIPE_STEPS 2
+wire startPostDelay;
+hyperpipe #(.CYCLES(`SE_PIPE_STEPS), .WIDTH(1)) startPipe(clk,
+    start, startPostDelay
+);
+
+wire[EXTRA_DATA_WIDTH-1:0] extraDataPostDelay;
+shiftRegister #(.CYCLES(`SE_PIPE_STEPS), .WIDTH(EXTRA_DATA_WIDTH)) extraDataPipe (clk, 
+    extraDataIn, 
+    extraDataPostDelay
+);
+
+// 2 PIPE STEPS
+wire[127:0] singletonEliminatedGraph;
+wire[5:0] startingConnectCount_DELAYED;
+singletonElimination se(clk, leafEliminatedGraph, singletonEliminatedGraph, startingConnectCount_DELAYED);
+
+pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATENCY(`SE_PIPE_STEPS + REQUEST_LATENCY), .STARTING_CONNECT_COUNT_LAG(`STARTING_CONNECT_COUNT_LAG)) core(
+    .clk(clk), 
+    .rst(rst),
+    
+    // input side
+    .request(requestGraph), 
+    .graphIn(singletonEliminatedGraph), 
+    .start(startPostDelay), 
+    .startingConnectCountIn_DELAYED(startingConnectCount_DELAYED), 
+    .extraDataIn(extraDataPostDelay),
+    
+    // output side
+    .done(done),
+    .connectCount(resultCount),
+    .extraDataOut(extraDataOut)
+);
+endmodule
+
+
 module computeModule #(parameter EXTRA_DATA_WIDTH = 14, parameter REQUEST_LATENCY = 3) (
     input clk,
     input rst,

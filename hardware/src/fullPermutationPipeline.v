@@ -2,6 +2,7 @@
 
 module fullPermutationPipeline(
     input clk,
+    input clk2x,
     input rst,
     
     input[127:0] top,
@@ -50,6 +51,7 @@ wire[12:0] pcoeffCountFromPipeline;
 // sums all 120 permutations of variables 2,3,4,5,6.
 pipeline120Pack computePipe (
     .clk(clk),
+    .clk2x(clk2x),
     .rst(rst),
     
     .top(top),
@@ -81,7 +83,7 @@ always @(posedge clk) begin
 end
 
 wire grabNewResultArrived;
-hyperpipe #(.CYCLES(5)) writePipeToRegister(clk, grabNewResult, grabNewResultArrived);
+hyperpipe #(.CYCLES(6)) writePipeToRegister(clk, grabNewResult, grabNewResultArrived);
 
 pipelineRegister #(.WIDTH(48+13)) outputReg(
     .clk(clk),

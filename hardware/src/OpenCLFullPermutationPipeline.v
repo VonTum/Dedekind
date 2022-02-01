@@ -66,6 +66,7 @@ assign summedDataPcoeffCountOut = {eccStatus, 2'b00, pcoeffCountOut, summedDataO
 
 fullPermutationPipeline permutationPipeline (
     .clk(clock),
+    .clk2x(clock2x),
     .rst(rst),
     
     .top(top),

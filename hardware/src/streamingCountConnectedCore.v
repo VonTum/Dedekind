@@ -4,12 +4,12 @@
 
 module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     input clk,
+    input clk2x,
     input rst,
-    input[127:0] top,
     
     // Input side
     input isBotValid,
-    input[127:0] bot,
+    input[127:0] graphIn,
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
     output slowDownInput,
     
@@ -35,7 +35,7 @@ reg[`ADDR_WIDTH-1:0] curBotIndex = 0;
 always @(posedge clk) curBotIndex <= curBotIndex + 1;
 
 wire readRequestFromComputeModule;
-wire[127:0] botToComputeModule;
+wire[127:0] graphToComputeModule;
 wire[`ADDR_WIDTH-1:0] botToComputeModuleAddr;
 wire dataValidToComputeModule;
 
@@ -52,12 +52,12 @@ FastFIFO #(
      
     // input side
     .writeEnable(isBotValid),
-    .dataIn({bot, curBotIndex}),
+    .dataIn({graphIn, curBotIndex}),
     .usedw(usedw),
     
     // output side
     .readRequest(readRequestFromComputeModule), // FIFO2 has read protection, no need to check empty
-    .dataOut({botToComputeModule, botToComputeModuleAddr}),
+    .dataOut({graphToComputeModule, botToComputeModuleAddr}),
     .dataOutValid(dataValidToComputeModule),
     .empty(),
     .eccStatus(inputFifoECC)
@@ -67,13 +67,13 @@ wire writeToCollector;
 wire[5:0] connectCountToCollector;
 wire[`ADDR_WIDTH-1:0] addrToCollector;
 
-computeModule #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH), .REQUEST_LATENCY(`FIFO_READ_LATENCY)) core (
+pipelinedCountConnectedCoreWithSingletonElimination #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH), .REQUEST_LATENCY(`FIFO_READ_LATENCY)) countConnectedCore (
     .clk(clk),
     .rst(rst),
-    .top(top),
     
     // input side
-    .botIn(botToComputeModule),
+    
+    .leafEliminatedGraph(graphToComputeModule),
     .start(dataValidToComputeModule),
     .extraDataIn(botToComputeModuleAddr),
     .requestGraph(readRequestFromComputeModule),

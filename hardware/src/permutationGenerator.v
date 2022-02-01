@@ -12,7 +12,7 @@ module permutationGenerator67 (
     
     output[127:0] outputBot,
     output outputBotValid,
-    output reg botSeriesFinished
+    output botSeriesFinished
 );
 
 `include "inlineVarSwap_header.v"
@@ -26,6 +26,8 @@ reg[2:0] permutState6;
 
 reg[127:0] currentlyPermuting;
 reg currentlyPermutingValid;
+
+reg botSeriesFinishedReg;
 
 always @(posedge clk) begin
     if(rst) begin
@@ -41,14 +43,14 @@ always @(posedge clk) begin
                     
                     currentlyPermutingValid <= 0;
                     
-                    botSeriesFinished <= 1;
+                    botSeriesFinishedReg <= 1;
                 end else begin
                     permutState6 <= permutState6 + 1;
-                    botSeriesFinished <= 0;
+                    botSeriesFinishedReg <= 0;
                 end
             end else begin
                 permutState7 <= permutState7 + 1;
-                botSeriesFinished <= 0;
+                botSeriesFinishedReg <= 0;
             end
         end else begin
             if(nextBotValid) begin
@@ -56,7 +58,7 @@ always @(posedge clk) begin
                 currentlyPermuting <= nextBot;
                 nextBotValid <= 0;
             end
-            botSeriesFinished <= 0;
+            botSeriesFinishedReg <= 0;
         end
         if(!nextBotValid && writeInputBot) begin
             nextBotValid <= 1;
@@ -74,7 +76,8 @@ wire[127:0] firstStagePermutWires[6:0];
 `VAR_SWAP_INLINE(0, 5, currentlyPermuting, firstStagePermutWires[5])
 `VAR_SWAP_INLINE(0, 6, currentlyPermuting, firstStagePermutWires[6])
 
-wire[127:0] selectedFirstStagePermut = firstStagePermutWires[permutState7];
+reg[127:0] selectedFirstStagePermut; always @(posedge clk) selectedFirstStagePermut <= firstStagePermutWires[permutState7];
+reg[2:0] permutState6D; always @(posedge clk) permutState6D <= permutState6;
 
 wire[127:0] secondStagePermutWires[5:0];
 
@@ -85,7 +88,9 @@ wire[127:0] secondStagePermutWires[5:0];
 `VAR_SWAP_INLINE(1, 5, selectedFirstStagePermut, secondStagePermutWires[4])
 `VAR_SWAP_INLINE(1, 6, selectedFirstStagePermut, secondStagePermutWires[5])
 
-assign outputBot = secondStagePermutWires[permutState6];
-assign outputBotValid = currentlyPermutingValid;
+reg[127:0] selectedSecondStagePermut; always @(posedge clk) selectedSecondStagePermut <= secondStagePermutWires[permutState6D];
+assign outputBot = selectedSecondStagePermut;
+hyperpipe #(.CYCLES(2)) outputBotValidPipe(clk, currentlyPermutingValid, outputBotValid);
+hyperpipe #(.CYCLES(2)) botSeriesFinishedPipe(clk, botSeriesFinishedReg, botSeriesFinished);
 
 endmodule

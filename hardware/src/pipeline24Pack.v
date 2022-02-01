@@ -62,6 +62,7 @@ endmodule
 // sums all 24 permutations of variables 3,4,5,6.
 module pipeline24PackV2WithFIFO (
     input clk,
+    input clk2x,
     input rst,
     
     // Input side
@@ -80,21 +81,19 @@ module pipeline24PackV2WithFIFO (
     output eccStatus
 );
 
-wire[5:0] permutesABCD;
-wire[5:0] permutesBACD;
-wire[5:0] permutesCBAD;
-wire[5:0] permutesDBCA;
-
 wire[23:0] validBotPermutations;
 permuteCheck24 permuteChecker (top, bot, isBotValid, validBotPermutations);
-assign {permutesABCD, permutesBACD, permutesCBAD, permutesDBCA} = validBotPermutations;
+
+reg[128+24+1-1:0] dataToFIFO24; always @(posedge clk) dataToFIFO24 <= {bot, validBotPermutations, batchDone};
+reg writeToFIFO24; always @(posedge clk) writeToFIFO24 <= |validBotPermutations || batchDone;
+
 
 wire[127:0] botFromFIFO;
 wire[23:0] validBotPermutationsFromFIFO;
 wire batchDoneFromFIFO;
 
 wire[8:0] inputFIFOUsedW;
-assign slowDownInput = inputFIFOUsedW > 400;
+hyperpipe #(.CYCLES(5)) slowDownInputPipe(clk, inputFIFOUsedW > 400, slowDownInput);
 wire inputFIFOEmpty;
 wire pipelinesRequestSlowDown;
 wire isReadingFromInputFIFO = !inputFIFOEmpty && !pipelinesRequestSlowDown;
@@ -102,8 +101,8 @@ FIFO #(.WIDTH(128+24+1), .DEPTH_LOG2(9)) fifo24 (
     .clk(clk),
     .rst(rst),
     
-    .writeEnable(|validBotPermutations || batchDone),
-    .dataIn({bot, validBotPermutations, batchDone}),
+    .writeEnable(writeToFIFO24),
+    .dataIn(dataToFIFO24),
     .full(),
     .usedw(inputFIFOUsedW),
     
@@ -114,6 +113,7 @@ FIFO #(.WIDTH(128+24+1), .DEPTH_LOG2(9)) fifo24 (
 
 pipeline24PackV2 pipeline (
     .clk(clk),
+    .clk2x(clk2x),
     .rst(rst),
     
     .top(top),
@@ -137,6 +137,7 @@ endmodule
 // sums all 24 permutations of variables 3,4,5,6.
 module pipeline24PackV2 (
     input clk,
+    input clk2x,
     input rst,
     
     // Input side
@@ -145,15 +146,15 @@ module pipeline24PackV2 (
     input writeData,
     input[23:0] validBotPermutations,
     input batchDone,
-    output wor slowDownInput,
+    output reg slowDownInput,
     
     // Output side
     input grabResults,
-    output wand resultsAvailable,
-    output[`PCOEFF_COUNT_BITWIDTH+2+35-1:0] pcoeffSum,
-    output[`PCOEFF_COUNT_BITWIDTH+2-1:0] pcoeffCount,
+    output reg resultsAvailable,
+    output reg[`PCOEFF_COUNT_BITWIDTH+2+35-1:0] pcoeffSum,
+    output reg[`PCOEFF_COUNT_BITWIDTH+2-1:0] pcoeffCount,
     
-    output wor eccStatus
+    output reg eccStatus
 );
 
 `include "inlineVarSwap_header.v"
@@ -173,21 +174,25 @@ assign {permutesABCD, permutesBACD, permutesCBAD, permutesDBCA} = validBotPermut
 wire[`PCOEFF_COUNT_BITWIDTH+35-1:0] sums[3:0];
 wire[`PCOEFF_COUNT_BITWIDTH-1:0] counts[3:0];
 
-aggregatingPermutePipeline p0(clk, rst, top, botABCD, writeData, permutesABCD, batchDone, slowDownInput, grabResults, resultsAvailable, sums[0], counts[0], eccStatus);
-aggregatingPermutePipeline p1(clk, rst, top, botBACD, writeData, permutesBACD, batchDone, slowDownInput, grabResults, resultsAvailable, sums[1], counts[1], eccStatus);
-aggregatingPermutePipeline p2(clk, rst, top, botCBAD, writeData, permutesCBAD, batchDone, slowDownInput, grabResults, resultsAvailable, sums[2], counts[2], eccStatus);
-aggregatingPermutePipeline p3(clk, rst, top, botDBCA, writeData, permutesDBCA, batchDone, slowDownInput, grabResults, resultsAvailable, sums[3], counts[3], eccStatus);
+wand resultsAvailableWAND;
+always @(posedge clk) resultsAvailable <= resultsAvailableWAND;
+(* dont_merge *) reg grabResultsD; always @(posedge clk) grabResultsD <= grabResults;
+
+wor slowDownInputWOR; always @(posedge clk) slowDownInput <= slowDownInputWOR;
+wor eccStatusWOR; always @(posedge clk) eccStatus <= eccStatusWOR;
+
+aggregatingPermutePipeline p0(clk, clk2x, rst, top, botABCD, writeData, permutesABCD, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[0], counts[0], eccStatusWOR);
+aggregatingPermutePipeline p1(clk, clk2x, rst, top, botBACD, writeData, permutesBACD, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[1], counts[1], eccStatusWOR);
+aggregatingPermutePipeline p2(clk, clk2x, rst, top, botCBAD, writeData, permutesCBAD, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[2], counts[2], eccStatusWOR);
+aggregatingPermutePipeline p3(clk, clk2x, rst, top, botDBCA, writeData, permutesDBCA, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[3], counts[3], eccStatusWOR);
 
 // combine outputs
 reg[`PCOEFF_COUNT_BITWIDTH+35+1-1:0] sum01; always @(posedge clk) sum01 <= sums[0] + sums[1];
 reg[`PCOEFF_COUNT_BITWIDTH+35+1-1:0] sum23; always @(posedge clk) sum23 <= sums[2] + sums[3];
-reg[`PCOEFF_COUNT_BITWIDTH+35+2-1:0] fullSum; always @(posedge clk) fullSum <= sum01 + sum23;
+always @(posedge clk) pcoeffSum <= sum01 + sum23;
 reg[`PCOEFF_COUNT_BITWIDTH+1-1:0] count01; always @(posedge clk) count01 <= counts[0] + counts[1];
 reg[`PCOEFF_COUNT_BITWIDTH+1-1:0] count23; always @(posedge clk) count23 <= counts[2] + counts[3];
-reg[`PCOEFF_COUNT_BITWIDTH+2-1:0] fullCount; always @(posedge clk) fullCount <= count01 + count23;
-
-assign pcoeffSum = fullSum;
-assign pcoeffCount = fullCount;
+always @(posedge clk) pcoeffCount <= count01 + count23;
 
 endmodule
 

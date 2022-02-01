@@ -4,6 +4,7 @@
 
 module aggregatingPermutePipeline (
     input clk,
+    input clk2x,
     input rst,
     input[127:0] top,
     
@@ -21,7 +22,7 @@ module aggregatingPermutePipeline (
     output[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
     
     // TODO ADD FIFOS TO THIS AS WELL
-    output eccStatus
+    output wor eccStatus
 );
 
 wire[4:0] inputFifoUsedw;
@@ -86,6 +87,7 @@ wire[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSumFromPipeline;
 wire[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCountFromPipeline;
 aggregatingPipeline computePipe (
     .clk(clk),
+    .clk2x(clk2x),
     .rst(rst),
     .top(top),
     
