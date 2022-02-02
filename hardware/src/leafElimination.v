@@ -8,21 +8,9 @@ module leafEliminationElement #(parameter COUNT = 3) (
     output nonLeafOut
 );
 
-/*wire hasExactlyOneWireD;
-wire hasNoOrWiresD;
-reg mainWireD; always @(posedge clk) mainWireD <= mainWire;
-
-generate
-    if(COUNT >= 4) begin
-        
-    end else begin
-        
-    end
-endgenerate*/
-
 wire hasExactlyOneWire;
 exactlyOne #(COUNT) hasExactlyOne(oneWires, hasExactlyOneWire);
-assign hasNoOrWires = !(|orWires);
+wire hasNoOrWires = !(|orWires);
 
 assign nonLeafOut = mainWire & !(hasExactlyOneWire & hasNoOrWires);
 
@@ -30,9 +18,8 @@ endmodule
 
 
 module leafElimination #(parameter DIRECTION = `DOWN) (
-    input clk,
-    input [127:0] graphIn,
-    output reg [127:0] graphOut
+    input[127:0] graphIn,
+    output[127:0] graphOut
 );
 
 function integer popcntStatic;
@@ -71,39 +58,34 @@ function integer getNthBit;
 
 endfunction
 
-reg[127:0] graphInD; always @(posedge clk) graphInD <= graphIn;
-
-wire[127:0] graphPreOut;
-assign graphPreOut[0] = graphInD[0];
-assign graphPreOut[127] = graphInD[127];
-reg[127:0] graphPreOutD; always @(posedge clk) graphPreOutD <= graphPreOut;
-always @(posedge clk) graphOut <= graphPreOutD;
+assign graphOut[0] = graphIn[0];
+assign graphOut[127] = graphIn[127];
 generate
     for(genvar outI = 1; outI < 127; outI = outI + 1) begin
         wire[popcntStatic(outI, 7)-1:0] wiresBelow;
         wire[6-popcntStatic(outI, 7):0] wiresAbove;
         
         for(genvar wireI = 0; wireI < popcntStatic(outI, 7); wireI = wireI + 1) begin
-            assign wiresBelow[wireI] = graphInD[outI & ~(1 << getNthBit(outI, wireI, 1))];
+            assign wiresBelow[wireI] = graphIn[outI & ~(1 << getNthBit(outI, wireI, 1))];
         end
         
         for(genvar wireI = 0; wireI < 7-popcntStatic(outI, 7); wireI = wireI + 1) begin
-            assign wiresAbove[wireI] = graphInD[outI | (1 << getNthBit(outI, wireI, 0))];
+            assign wiresAbove[wireI] = graphIn[outI | (1 << getNthBit(outI, wireI, 0))];
         end
         
         if(DIRECTION == `UP) begin
             leafEliminationElement #(popcntStatic(outI, 7)) elem(
-                .mainWire(graphInD[outI]), 
+                .mainWire(graphIn[outI]), 
                 .oneWires(wiresBelow), 
                 .orWires(wiresAbove), 
-                .nonLeafOut(graphPreOut[outI])
+                .nonLeafOut(graphOut[outI])
             );
         end else begin
             leafEliminationElement #(7-popcntStatic(outI, 7)) elem(
-                .mainWire(graphInD[outI]), 
+                .mainWire(graphIn[outI]), 
                 .oneWires(wiresAbove), 
                 .orWires(wiresBelow), 
-                .nonLeafOut(graphPreOut[outI])
+                .nonLeafOut(graphOut[outI])
             );
         end
     end

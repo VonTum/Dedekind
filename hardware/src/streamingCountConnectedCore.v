@@ -17,14 +17,17 @@ module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     output resultValid,
     output[5:0] connectCount,
     output[EXTRA_DATA_WIDTH-1:0] extraDataOut,
-    output eccStatus
+    output reg eccStatus
 );
 
-wire inputFifoECC;
-wire collectorECC;
-wire isBotValidECC;
+(* dont_merge *) reg inputFIFORST; always @(posedge clk) inputFIFORST <= rst;
+(* dont_merge *) reg pipelineRST; always @(posedge clk) pipelineRST <= rst;
 
-assign eccStatus = inputFifoECC || collectorECC || isBotValidECC;
+wire inputFifoECC; reg inputFifoECC_D; always @(posedge clk) inputFifoECC_D <= inputFifoECC;
+wire collectorECC; reg collectorECC_D; always @(posedge clk) collectorECC_D <= collectorECC;
+wire isBotValidECC; reg isBotValidECC_D; always @(posedge clk) isBotValidECC_D <= isBotValidECC;
+
+always @(posedge clk) eccStatus <= inputFifoECC_D || collectorECC_D || isBotValidECC_D;
 
 `define PIPELINE_FIFO_DEPTH_LOG2 9
 
@@ -48,7 +51,7 @@ FastFIFO #(
     .READ_ADDR_STAGES(1)
 ) inputFIFO (
     .clk(clk),
-    .rst(rst),
+    .rst(inputFIFORST),
      
     // input side
     .writeEnable(isBotValid),
@@ -69,7 +72,7 @@ wire[`ADDR_WIDTH-1:0] addrToCollector;
 
 pipelinedCountConnectedCoreWithSingletonElimination #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH), .REQUEST_LATENCY(`FIFO_READ_LATENCY)) countConnectedCore (
     .clk(clk),
-    .rst(rst),
+    .rst(pipelineRST),
     
     // input side
     

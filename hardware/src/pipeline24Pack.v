@@ -81,11 +81,13 @@ module pipeline24PackV2WithFIFO (
     output eccStatus
 );
 
-wire[23:0] validBotPermutations;
-permuteCheck24 permuteChecker (top, bot, isBotValid, validBotPermutations);
+wire[23:0] validBotPermutationsD;
+permuteCheck24Pipelined permuteChecker(clk, top, bot, isBotValid, validBotPermutationsD);
+reg[127:0] botD; always @(posedge clk) botD <= bot;
+reg batchDoneD; always @(posedge clk) batchDoneD <= batchDone;
 
-reg[128+24+1-1:0] dataToFIFO24; always @(posedge clk) dataToFIFO24 <= {bot, validBotPermutations, batchDone};
-reg writeToFIFO24; always @(posedge clk) writeToFIFO24 <= |validBotPermutations || batchDone;
+reg[128+24+1-1:0] dataToFIFO24; always @(posedge clk) dataToFIFO24 <= {botD, validBotPermutationsD, batchDoneD};
+reg writeToFIFO24; always @(posedge clk) writeToFIFO24 <= |validBotPermutationsD || batchDoneD;
 
 
 wire[127:0] botFromFIFO;
@@ -97,9 +99,11 @@ hyperpipe #(.CYCLES(5)) slowDownInputPipe(clk, inputFIFOUsedW > 400, slowDownInp
 wire inputFIFOEmpty;
 wire pipelinesRequestSlowDown;
 wire isReadingFromInputFIFO = !inputFIFOEmpty && !pipelinesRequestSlowDown;
+
+(* dont_merge *) reg inputFifoRST; always @(posedge clk) inputFifoRST <= rst;
 FIFO #(.WIDTH(128+24+1), .DEPTH_LOG2(9)) fifo24 (
     .clk(clk),
-    .rst(rst),
+    .rst(inputFifoRST),
     
     .writeEnable(writeToFIFO24),
     .dataIn(dataToFIFO24),
@@ -111,10 +115,11 @@ FIFO #(.WIDTH(128+24+1), .DEPTH_LOG2(9)) fifo24 (
     .empty(inputFIFOEmpty)
 );
 
+(* dont_merge *) reg pipelineRST; always @(posedge clk) pipelineRST <= rst;
 pipeline24PackV2 pipeline (
     .clk(clk),
     .clk2x(clk2x),
-    .rst(rst),
+    .rst(pipelineRST),
     
     .top(top),
     .bot(botFromFIFO),

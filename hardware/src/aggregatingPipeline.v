@@ -1,5 +1,7 @@
 `timescale 1ns / 1ps
 
+`include "leafElimination_header.v"
+
 module aggregatingPipeline (
     input clk,
     input clk2x,
@@ -24,17 +26,14 @@ wire connectCountFromPipelineValid;
 wire[5:0] connectCountFromPipeline;
 
 
-// 1 PIPE STEP
-reg[127:0] graph; always @(posedge clk) graph <= top & ~bot;
+wire[127:0] graph = top & ~bot;
 
-// 2 PIPE STEP
 wire[127:0] leafEliminatedGraph;
-leafElimination #(.DIRECTION(`DOWN)) le(clk, graph, leafEliminatedGraph);
+leafElimination #(.DIRECTION(`DOWN)) le(graph, leafEliminatedGraph);
 
-wire isBotValidD; hyperpipe #(.CYCLES(4)) isBotValidPipe(clk, isBotValid, isBotValidD);
-wire lastBotOfBatchD; hyperpipe #(.CYCLES(4)) lastBotOfBatchPipe(clk, lastBotOfBatch, lastBotOfBatchD);
-
-
+reg[127:0] leafEliminatedGraphD; always @(posedge clk) leafEliminatedGraphD <= leafEliminatedGraph;
+reg isBotValidD; always @(posedge clk) isBotValidD <= isBotValid;
+reg lastBotOfBatchD; always @(posedge clk) lastBotOfBatchD <= lastBotOfBatch;
 
 streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1)) core (
     .clk(clk),
@@ -43,7 +42,7 @@ streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1)) core (
     
     // Input side
     .isBotValid(isBotValidD),
-    .graphIn(leafEliminatedGraph),
+    .graphIn(leafEliminatedGraphD),
     .extraDataIn(lastBotOfBatchD),
     .slowDownInput(slowDownInput),
     

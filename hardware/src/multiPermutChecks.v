@@ -344,5 +344,25 @@ permutCheckProduceResults24 resultsProducer(sharedAll & isBotValid, oneThreeVarO
 
 endmodule
 
+module permuteCheck24Pipelined (
+    input clk,
+    input[127:0] top,
+    input[127:0] bot,
+    input isBotValid,
+    output[23:0] validBotPermutations
+);
 
+wire sharedAll;
+wire[15:0] oneThreeVarOverlaps;
+wire[17:0] twoTwoVarOverlaps;
+permuteProduceIntermediaries24 intermediaryProducer(top, bot, sharedAll, oneThreeVarOverlaps, twoTwoVarOverlaps);
+
+reg sharedAllD; always @(posedge clk) sharedAllD <= sharedAll;
+reg[15:0] oneThreeVarOverlapsD; always @(posedge clk) oneThreeVarOverlapsD <= oneThreeVarOverlaps;
+reg[17:0] twoTwoVarOverlapsD; always @(posedge clk) twoTwoVarOverlapsD <= twoTwoVarOverlaps;
+reg isBotValidD; always @(posedge clk) isBotValidD <= isBotValid;
+
+permutCheckProduceResults24 resultsProducer(sharedAllD & isBotValidD, oneThreeVarOverlapsD, twoTwoVarOverlapsD, validBotPermutations);
+
+endmodule
 

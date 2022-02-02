@@ -25,6 +25,11 @@ module aggregatingPermutePipeline (
     output wor eccStatus
 );
 
+(* dont_merge *) reg inputFIFORST; always @(posedge clk) inputFIFORST <= rst;
+(* dont_merge *) reg permuter6RST; always @(posedge clk) permuter6RST <= rst;
+(* dont_merge *) reg computePipeRST; always @(posedge clk) computePipeRST <= rst;
+(* dont_merge *) reg resultsFIFORST; always @(posedge clk) resultsFIFORST <= rst;
+
 wire[4:0] inputFifoUsedw;
 always @(posedge clk) slowDownInput <= inputFifoUsedw > 24;
 
@@ -37,10 +42,12 @@ wire[127:0] botToPermute;
 wire[5:0] botToPermuteValidPermutations;
 wire batchDonePostFIFO;
 
+
+
 FIFO #(.WIDTH(128+6+1), .DEPTH_LOG2(5)) inputFIFO (
     .clk(clk),
-    .rst(rst),
-     
+    .rst(inputFIFORST),
+    
     // input side
     .writeEnable(writeData && (|validBotPermutes || batchDone)),
     .dataIn({bot, validBotPermutes, batchDone}),
@@ -59,7 +66,7 @@ wire[127:0] permutedBot;
 // permutes the last 3 variables
 botPermuter #(.EXTRA_DATA_WIDTH(0)) permuter6 (
     .clk(clk),
-    .rst(rst),
+    .rst(permuter6RST),
     
     // input side
     .startNewBurst(grabNew6Pack),
@@ -88,7 +95,7 @@ wire[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCountFromPipeline;
 aggregatingPipeline computePipe (
     .clk(clk),
     .clk2x(clk2x),
-    .rst(rst),
+    .rst(computePipeRST),
     .top(top),
     
     .isBotValid(permutedBotValid),
@@ -107,8 +114,8 @@ wire resultsFIFOEmpty;
 assign resultsAvailable = !resultsFIFOEmpty;
 FIFO #(.WIDTH(`PCOEFF_COUNT_BITWIDTH+35 + `PCOEFF_COUNT_BITWIDTH), .DEPTH_LOG2(9)) resultsFIFO (
     .clk(clk),
-    .rst(rst),
-     
+    .rst(resultsFIFORST),
+    
     // input side
     .writeEnable(aggregateFinished),
     .dataIn({pcoeffSumFromPipeline, pcoeffCountFromPipeline}),
