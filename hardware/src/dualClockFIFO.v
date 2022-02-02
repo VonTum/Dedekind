@@ -72,10 +72,15 @@ module dualClockFIFO #(parameter WIDTH = 60, parameter DEPTH_LOG2 = 5, parameter
     input readEnable,
     output rdempty,
     output[WIDTH-1:0] dataOut,
-    output[DEPTH_LOG2-1:0] rdusedw
+    output[DEPTH_LOG2-1:0] rdusedw,
+    output eccStatus
 );
 
 `ifdef USE_DC_FIFO_IP
+
+wire[(IS_MLAB ? -1 : 1):0] eccStatusWire;
+assign eccStatus = eccStatusWire[1];
+
 dcfifo  dcfifo_component (
     .aclr(rdclr),
     .data(dataIn),
@@ -88,14 +93,13 @@ dcfifo  dcfifo_component (
     .wrfull(wrfull),
     .wrusedw(wrusedw),
     .rdusedw(rdusedw),
-    .eccstatus(),
+    .eccstatus(eccStatusWire),
     .rdfull(),
     .wrempty()
 );
 defparam
-    dcfifo_component.enable_ecc  = "FALSE",
     dcfifo_component.intended_device_family  = "Stratix 10",
-    dcfifo_component.lpm_hint  = "RAM_BLOCK_TYPE=MLAB,DISABLE_DCFIFO_EMBEDDED_TIMING_CONSTRAINT=FALSE",
+    dcfifo_component.lpm_hint  = "RAM_BLOCK_TYPE=M20K,DISABLE_DCFIFO_EMBEDDED_TIMING_CONSTRAINT=FALSE",
     dcfifo_component.lpm_numwords  = (1 << DEPTH_LOG2),
     dcfifo_component.lpm_showahead  = "OFF",
     dcfifo_component.lpm_type  = "dcfifo",
@@ -107,9 +111,15 @@ defparam
     dcfifo_component.read_aclr_synch  = "OFF",
     dcfifo_component.write_aclr_synch  = "ON",
     dcfifo_component.rdsync_delaypipe  = SYNC_STAGES,
-    dcfifo_component.wrsync_delaypipe  = SYNC_STAGES;
+    dcfifo_component.wrsync_delaypipe  = SYNC_STAGES,
+    altera_syncram_component.enable_ecc  = "TRUE",
+    //altera_syncram_component.ecc_pipeline_stage_enabled  = "TRUE",
+    altera_syncram_component.enable_ecc_encoder_bypass  = "FALSE",
+    altera_syncram_component.width_eccstatus  = 2;
     
 `else
+
+assign eccStatus = 0;
 
 // Used for simulation only, definitely not good for synthesis!
 
@@ -131,7 +141,7 @@ reg[WIDTH-1:0] dataOutReg;
 assign dataOut = dataOutReg;
 
 wire isReading = readEnable & !rdempty;
-always @(posedge rdclk or posedge rdclr) begin
+always @(posedge rdclk) begin
     if(rdclr) begin
         readHead <= 0;
         dataOutReg <= {WIDTH{1'bX}};
@@ -143,8 +153,10 @@ always @(posedge rdclk or posedge rdclr) begin
     end
 end
 
-always @(posedge wrclk or posedge rdclr) begin
-    if(rdclr) begin
+wire wrclr;
+synchronizer clrSync(rdclk, rdclr, wrclk, wrclr);
+always @(posedge wrclk) begin
+    if(wrclr) begin
         writeHead <= 0;
     end else begin
         if(writeEnable) begin
@@ -169,7 +181,8 @@ module dualClockFIFOWithDataValid #(parameter WIDTH = 160, parameter DEPTH_LOG2 
     input rdclr,
     input readEnable,
     output reg dataOutValid,
-    output[WIDTH-1:0] dataOut
+    output[WIDTH-1:0] dataOut,
+    output eccStatus
 );
 
 wire rdclrLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
@@ -180,9 +193,7 @@ always @(posedge rdclk) begin
     if(rdclrLocal) begin
         dataOutValid <= 1'b0;
     end else begin
-        if(readEnable) begin
-            dataOutValid <= !rdempty;
-        end
+        dataOutValid <= readEnable && !rdempty;
     end
 end
 
@@ -198,7 +209,8 @@ dualClockFIFO #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .SYNC_STAGES(SYNC_STAGES
     .readEnable(readEnable),
     .rdempty(rdempty),
     .dataOut(dataOut),
-    .rdusedw() // unused, reads should poll the dataOutValid flag
+    .rdusedw(), // unused, reads should poll the dataOutValid flag
+    .eccStatus(eccStatus)
 );
 
 endmodule
