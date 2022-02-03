@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module resetNormalizer #(parameter RESET_CYCLES = 30, parameter INITIALIZE_CYCLES = 8000) (
+module resetNormalizer #(parameter RESET_CYCLES = 30, parameter INITIALIZE_CYCLES = 520) (
     input clk,
     input resetn,
     output reg rst,
