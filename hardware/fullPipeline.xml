@@ -1,7 +1,7 @@
 <RTL_SPEC>
   <!-- 'name' is how this function will be called from an OpenCL kernel.
        'module' is the top-level HDL module name that implements the function. -->
-  <FUNCTION name="fullPipeline" module="openCLFullPipelineClock2xAdapter">
+  <FUNCTION name="fullPipeline" module="OpenCLFullPermutationPipeline">
     <ATTRIBUTES>
       <!-- Setting IS_STALL_FREE="yes" means the function neither generates stalls internally nor can it 
            properly handle incoming stalls (because it simply ignores its stall/valid inputs). If set
@@ -22,14 +22,14 @@
            For variable latency functions, pipeline around this function will be balanced to this 
            value. Setting EXPECTED_LATENCY to a different value will still produce correct results
            but may affect number of stalls inside the pipeline. -->
-      <EXPECTED_LATENCY value="7200"/> <!-- mem size is 8192-1024, so just a bit more for stalls-->
+      <EXPECTED_LATENCY value="600"/> <!-- mem size is 512, so just a bit more for stalls-->
       
       <!-- Number of multiple inputs that can be processed simultaneously by this function.
            If IS_STALL_FREE="no" and IS_FIXED_LATENCY="no", the CAPACITY value must be specified.
            Otherwise, it is not required.
            If CAPACITY is strictly less than EXPECTED_LATENCY, the compiler will automatically 
            insert capacity-balancing FIFOs after this function when required. -->
-      <CAPACITY value="7200"/> <!-- mem size is 8192, but only ~7200 is active at a time-->
+      <CAPACITY value="600"/> <!-- mem size is 512, so just a bit more for stalls-->
       
       <!-- Set to "yes" to indicate that this function has side-effects. Calls to functions
            with side-effects will not be optimized away and only valid data will be fed
@@ -67,32 +67,36 @@
       <FILE name="src/ipSettings_header.v"/>
       
       <!-- Source Files -->
-      <FILE name="src/openCLFullPipelineClock2xAdapter.v"/>
-      <FILE name="src/topManager.v"/>
-      <FILE name="src/openCLFullPipeline.v"/>
-          <FILE name="src/pipelineManager.v"/>
-               <FILE name="src/hyperPipelining.v"/>
-          <FILE name="src/outputBuffer.v"/>
-          <FILE name="src/resetNormalizer.v"/>
-          <FILE name="src/multiPermutChecks.v"/>
-          <FILE name="src/fullPipeline.v"/>
-               <FILE name="src/inputModule.v"/>
-                    <FILE name="src/botPermuter.v"/>
-               <FILE name="src/computeModule.v"/>
-                    <FILE name="src/leafElimination.v"/>
-                         <FILE name="src/exactlyOne.v"/>
-                    <FILE name="src/singletonElimination.v"/>
-                    <FILE name="src/pipelinedCountConnectedCore.v"/>
-                         <FILE name="src/monotonize.v"/>
-               <FILE name="src/collectionModule.v"/>
-               
-      <!-- IP Blocks -->
+      <FILE name="src/OpenCLFullPermutationPipeline.v"/>
+        <FILE name="src/resetNormalizer.v"/>
+        <FILE name="src/topManager.v"/>
+        <FILE name="src/fullPermutationPipeline.v"/>
+          <FILE name="src/permutationGenerator.v"/>
+          <FILE name="src/pipeline120Pack.v"/>
+            <FILE name="src/pipeline24Pack.v"/>
+              <FILE name="src/multiPermutChecks.v"/>
+              <FILE name="src/aggregatingPermutePipeline.v"/>
+                <FILE name="src/botPermuter.v"/>
+                <FILE name="src/aggregatingPipeline.v"/>
+                  <FILE name="src/leafElimination.v"/>
+                    <FILE name="src/exactlyOne.v"/>
+                  <FILE name="src/streamingCountConnectedCore.v"/>
+                    <FILE name="src/computeModule.v"/>
+                      <FILE name="src/singletonElimination.v"/>
+                      <FILE name="src/pipelinedCountConnectedCore.v"/>
+                        <FILE name="src/monotonize.v"/>
+      
+      <!-- Utility files -->
+      <FILE name="src/hyperPipelining.v"/>
       <FILE name="src/M20K.v"/>
       <FILE name="src/FIFO.v"/>
+      <FILE name="src/FastFIFO.v"/>
+      <FILE name="src/memory.v"/>
       <FILE name="src/dualClockFIFO.v"/>
+      <FILE name="src/pipelineRegister.v"/>
       
       <!-- Constraints -->
-      <!--<FILE name="src/pipelineClock.sdc"/>-->
+      <!--<FILE name="src/pipelineClock.sdc"/>--> <!-- Can't use, damn OpenCL -->
     </REQUIREMENTS>
   </FUNCTION>
 </RTL_SPEC>
