@@ -412,7 +412,7 @@ shiftRegister #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_DOWN + DATA_IN_LATENCY 
 );
 
 // delay other wires for DATA_IN_LATENCY
-shiftRegister #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_EXPL + DATA_IN_LATENCY), .WIDTH(128+1+1+6)) loopBackPipeSelectedLeftoverGraph(clk,
+hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_EXPL + DATA_IN_LATENCY), .WIDTH(128+1+1+6)) loopBackPipeSelectedLeftoverGraph(clk,
     {selectedLeftoverGraphOut_EXPL, requestOut_EXPL, shouldGrabNewSeedOut_EXPL, connectionCountOut_EXPL},
     {selectedLeftoverGraphIn, runEndIn, shouldGrabNewSeedIn, storedConnectionCountIn}
 );

@@ -71,8 +71,8 @@ pipeline120Pack computePipe (
 );
 
 (* dont_merge *) reg outputRST; always @(posedge clk) outputRST <= rst;
-reg[2:0] cyclesSinceGrabNewResult;
-wire isReadyForNextGrab = cyclesSinceGrabNewResult == 7;
+reg[3:0] cyclesSinceGrabNewResult;
+wire isReadyForNextGrab = cyclesSinceGrabNewResult == 10;
 assign grabNewResult = !resultsAvailable && pipelineResultAvailable && isReadyForNextGrab;
 
 always @(posedge clk) begin
@@ -86,7 +86,7 @@ always @(posedge clk) begin
 end
 
 wire grabNewResultArrived;
-hyperpipe #(.CYCLES(6)) writePipeToRegister(clk, grabNewResult, grabNewResultArrived);
+hyperpipe #(.CYCLES(8)) writePipeToRegister(clk, grabNewResult, grabNewResultArrived);
 
 pipelineRegister #(.WIDTH(48+13)) outputReg(
     .clk(clk),

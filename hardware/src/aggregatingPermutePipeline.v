@@ -112,20 +112,21 @@ aggregatingPipeline computePipe (
 
 wire resultsFIFOEmpty;
 assign resultsAvailable = !resultsFIFOEmpty;
-FIFO #(.WIDTH(`PCOEFF_COUNT_BITWIDTH+35 + `PCOEFF_COUNT_BITWIDTH), .DEPTH_LOG2(9)) resultsFIFO (
+FastFIFO #(.WIDTH(`PCOEFF_COUNT_BITWIDTH+35 + `PCOEFF_COUNT_BITWIDTH), .DEPTH_LOG2(9), .IS_MLAB(0)) resultsFIFO (
     .clk(clk),
     .rst(resultsFIFORST),
     
     // input side
     .writeEnable(aggregateFinished),
     .dataIn({pcoeffSumFromPipeline, pcoeffCountFromPipeline}),
-    .full(),
     .usedw(outputFIFOUsedw),
     
     // output side
-    .readEnable(grabResults),
+    .readRequest(grabResults),
     .dataOut({pcoeffSum, pcoeffCount}),
-    .empty(resultsFIFOEmpty)
+    .dataOutValid(),
+    .empty(resultsFIFOEmpty),
+    .eccStatus(eccStatus)
 );
 
 

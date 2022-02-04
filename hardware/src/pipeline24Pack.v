@@ -78,7 +78,7 @@ module pipeline24PackV2WithFIFO (
     output[`PCOEFF_COUNT_BITWIDTH+2+35-1:0] pcoeffSum,
     output[`PCOEFF_COUNT_BITWIDTH+2-1:0] pcoeffCount,
     
-    output eccStatus
+    output wor eccStatus
 );
 
 wire[23:0] validBotPermutationsD;
@@ -96,23 +96,23 @@ wire batchDoneFromFIFO;
 
 wire[8:0] inputFIFOUsedW;
 hyperpipe #(.CYCLES(5)) slowDownInputPipe(clk, inputFIFOUsedW > 400, slowDownInput);
-wire inputFIFOEmpty;
 wire pipelinesRequestSlowDown;
-wire isReadingFromInputFIFO = !inputFIFOEmpty && !pipelinesRequestSlowDown;
+wire fifo24DataOutValid;
 
 (* dont_merge *) reg inputFifoRST; always @(posedge clk) inputFifoRST <= rst;
-FIFO #(.WIDTH(128+24+1), .DEPTH_LOG2(9)) fifo24 (
+FastFIFO #(.WIDTH(128+24+1), .DEPTH_LOG2(9), .IS_MLAB(0)) fifo24 (
     .clk(clk),
     .rst(inputFifoRST),
     
     .writeEnable(writeToFIFO24),
     .dataIn(dataToFIFO24),
-    .full(),
     .usedw(inputFIFOUsedW),
     
-    .readEnable(isReadingFromInputFIFO),
+    .readRequest(!pipelinesRequestSlowDown),
     .dataOut({botFromFIFO, validBotPermutationsFromFIFO, batchDoneFromFIFO}),
-    .empty(inputFIFOEmpty)
+    .dataOutValid(fifo24DataOutValid),
+    .empty(),
+    .eccStatus(eccStatus)
 );
 
 (* dont_merge *) reg pipelineRST; always @(posedge clk) pipelineRST <= rst;
@@ -123,7 +123,7 @@ pipeline24PackV2 pipeline (
     
     .top(top),
     .bot(botFromFIFO),
-    .writeData(isReadingFromInputFIFO),
+    .writeData(fifo24DataOutValid),
     .validBotPermutations(validBotPermutationsFromFIFO),
     .batchDone(batchDoneFromFIFO),
     .slowDownInput(pipelinesRequestSlowDown),
