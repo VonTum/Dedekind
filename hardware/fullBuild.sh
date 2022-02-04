@@ -3,8 +3,8 @@
 #SBATCH -J buildrtl
 #SBATCH -A hpc-prf-dedek
 #SBATCH -p batch
-#SBATCH -t 4:00:00
-#SBATCH --mem=60000MB
+#SBATCH -t 8:00:00
+#SBATCH --mem=100000MB
 #SBATCH --mail-type all
 #SBATCH --mail-user lennart.vanhirtum@gmail.com
 

@@ -65,6 +65,7 @@ add_executable(benchmarks
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 add_executable(fpga_production
   fpga_production/main.cpp
+  fpga_production/FullPermutePipelineTestSetOpenCL_generated7.cpp
   # fpga_production/pipeline6PackTestSetForOpenCL_generated7.cpp
   fpga_production/AOCLUtils/opencl.cpp
   fpga_production/AOCLUtils/options.cpp
@@ -79,27 +80,42 @@ target_compile_options(fpga_production PRIVATE -fstack-protector -D_FORTIFY_SOUR
 # Very hard to debug!
 target_compile_options(fpga_production PRIVATE "-fPIC")
 
+# /cm/shared/opt/intelFPGA_pro/21.4.0/hld/host/include
 execute_process(COMMAND aocl compile-config OUTPUT_VARIABLE AOCL_COMPILE_CONFIG)
+
+# -Wl,--no-as-needed -lalteracl -lbitt_s10_pcie_mmd -lelf
 execute_process(COMMAND aocl ldlibs OUTPUT_VARIABLE AOCL_LINK_LIBS)
+
+# -L/cm/shared/opt/intelFPGA_pro/20.4.0/hld/board/bittware_pcie/s10/linux64/lib -L/cm/shared/opt/intelFPGA_pro/21.4.0/hld/host/linux64/lib
 execute_process(COMMAND aocl ldflags OUTPUT_VARIABLE AOCL_LINK_FLAGS)
 
 string(REGEX REPLACE " \n$" "" AOCL_COMPILE_CONFIG "${AOCL_COMPILE_CONFIG}")
-string(REGEX REPLACE "^-I" "" AOCL_INCLUDE_DIRECTORIES "${AOCL_COMPILE_CONFIG}")
+string(REGEX REPLACE "^-I" "" AOCL_INCLUDE_DIRECTORIES "${AOCL_COMPILE_CONFIG}") 
 string(REGEX REPLACE "\n$" "" AOCL_LINK_LIBS "${AOCL_LINK_LIBS}")
 string(REGEX REPLACE "\n$" "" AOCL_LINK_FLAGS "${AOCL_LINK_FLAGS}")
 
-message(STATUS "AOCL_INCLUDE_DIRECTORIES: ${AOCL_INCLUDE_DIRECTORIES}")
-message(STATUS "AOCL_LINK_LIBS: ${AOCL_LINK_LIBS}")
-message(STATUS "AOCL_LINK_FLAGS: ${AOCL_LINK_FLAGS}")
+# Messages, these are the values these commands *should* have. If these change then manual edits are required
+message(STATUS "AOCL_INCLUDE_DIRECTORIES: ${AOCL_INCLUDE_DIRECTORIES}")   # /cm/shared/opt/intelFPGA_pro/21.4.0/hld/host/include
+message(STATUS "AOCL_LINK_LIBS: ${AOCL_LINK_LIBS}")                       # -Wl,--no-as-needed -lalteracl -lbitt_s10_pcie_mmd -lelf
+message(STATUS "AOCL_LINK_FLAGS: ${AOCL_LINK_FLAGS}")                     # -L/cm/shared/opt/intelFPGA_pro/20.4.0/hld/board/bittware_pcie/s10/linux64/lib -L/cm/shared/opt/intelFPGA_pro/21.4.0/hld/host/linux64/lib
 
 # OpenCL compile and link flags.
 target_include_directories(fpga_production PRIVATE ${AOCL_INCLUDE_DIRECTORIES})
 # Add linker flags
-target_link_options(fpga_production PRIVATE ${AOCL_LINK_FLAGS})
+
+# target_link_options(fpga_production PRIVATE ${AOCL_LINK_FLAGS})
+target_link_directories(fpga_production PRIVATE /cm/shared/opt/intelFPGA_pro/20.4.0/hld/board/bittware_pcie/s10/linux64/lib /cm/shared/opt/intelFPGA_pro/21.4.0/hld/host/linux64/lib)
+
 # Defensive linker flags
 target_link_options(fpga_production PRIVATE -z noexecstack -Wl,-z,relro,-z,now -Wl,-Bsymbolic -pie)
 # Add linker include directory
-target_link_options(fpga_production PRIVATE ${AOCL_LINK_LIBS})
+# target_link_options(fpga_production PRIVATE ${AOCL_LINK_LIBS})
+# Instead of that, which seems to be kaput, we'll have to link manually
+target_link_options(fpga_production PRIVATE -Wl,--no-as-needed)
+target_link_libraries(fpga_production alteracl)
+target_link_libraries(fpga_production bitt_s10_pcie_mmd)
+target_link_libraries(fpga_production elf)
+
 
 target_include_directories(fpga_production PRIVATE fpga_production)
 
