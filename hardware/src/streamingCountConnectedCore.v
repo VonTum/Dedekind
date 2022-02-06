@@ -50,6 +50,11 @@ hyperpipe #(.CYCLES(1), .WIDTH(128+`ADDR_WIDTH+1)) dataFromFIFOPipe(clk2x, {data
 
 wire pipelineRST2x;
 synchronizer pipelineRSTSynchronizer(clk, pipelineRST, clk2x, pipelineRST2x);
+(* dont_merge *) reg inputFIFORST2x; always @(posedge clk) inputFIFORST2x <= pipelineRST2x;
+wire inputFIFORST2x_fan;
+hyperpipe #(.CYCLES(2), .MAX_FAN(5)) inputFIFORST2x_fan_pipe(clk2x, inputFIFORST2x, inputFIFORST2x_fan);
+(* dont_merge *) reg cccRST2x; always @(posedge clk) cccRST2x <= pipelineRST2x;
+
 // request Pipe has 1 cycle, FIFO has 1 cycle read latency, dataOut pipe has 1
 `define FIFO_READ_LATENCY (1+1+1)
 FastDualClockFIFO #(
@@ -67,7 +72,7 @@ FastDualClockFIFO #(
     
     // output side
     .rdclk(clk2x),
-    .rdrst(pipelineRST2x),
+    .rdrst(inputFIFORST2x_fan),
     .readRequest(readRequestFromComputeModule2x), // FIFO2 has read protection, no need to check empty
     .dataOut(dataFromFIFO2xPreDelay),
     .dataOutValid(dataValidToComputeModule2xPreDelay),
@@ -81,7 +86,7 @@ wire[`ADDR_WIDTH-1:0] addrToCollector2x;
 
 pipelinedCountConnectedCoreWithSingletonElimination #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH), .REQUEST_LATENCY(`FIFO_READ_LATENCY)) countConnectedCore (
     .clk(clk2x),
-    .rst(pipelineRST2x),
+    .rst(cccRST2x),
     
     // input side
     .leafEliminatedGraph(graphToComputeModule2x),

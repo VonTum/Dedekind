@@ -131,10 +131,8 @@ hasFirstBitAnalysis firstBitAnalysis(
 wire[127:0] graphIn_HASBIT;
 wire shouldGrabNewSeed_HASBIT;
 
-hyperpipe #(.CYCLES(`NEW_SEED_HASBIT_DEPTH), .WIDTH(128+1)) START_TO_HASBIT_DELAY (clk,
-    {graphIn_START, shouldGrabNewSeed_START},
-    {graphIn_HASBIT, shouldGrabNewSeed_HASBIT}
-);
+hyperpipe #(.CYCLES(`NEW_SEED_HASBIT_DEPTH), .WIDTH(128)) graphIn_START_TO_HASBIT_DELAY (clk, graphIn_START, graphIn_HASBIT);
+hyperpipe #(.CYCLES(`NEW_SEED_HASBIT_DEPTH), .WIDTH(1), .MAX_FAN(5)) shouldGrabNewSeed_START_TO_HASBIT_DELAY (clk, shouldGrabNewSeed_START, shouldGrabNewSeed_HASBIT);
 
 // PIPELINE STEP 3
 newExtendingProducer resultProducer(
@@ -273,7 +271,7 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10, p
 
 
 wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
-hyperpipe #(.CYCLES(2)) rstPipe(clk, rst, rstLocal);
+hyperpipe #(.CYCLES(2), .MAX_FAN(5)) rstPipe(clk, rst, rstLocal);
 
 
 assign storedExtraDataOut = runEndIn ? extraDataIn : storedExtraDataIn;
@@ -310,7 +308,7 @@ end
 wire start_DELAYED;
 wire shouldIncrementConnectionCount_DELAYED;
 wire[5:0] storedConnectionCountIn_DELAYED;
-hyperpipe #(.CYCLES(STARTING_CONNECT_COUNT_LAG - `OFFSET_NSD), .WIDTH(1+1+6)) startingConnectCountSyncPipe(clk,
+hyperpipe #(.CYCLES(STARTING_CONNECT_COUNT_LAG - `OFFSET_NSD), .WIDTH(1+1+6), .MAX_FAN(5)) startingConnectCountSyncPipe(clk,
     {start_NSD, shouldIncrementConnectionCount_NSD, storedConnectionCountIn_NSD},
     {start_DELAYED, shouldIncrementConnectionCount_DELAYED, storedConnectionCountIn_DELAYED}
 );
@@ -364,7 +362,7 @@ wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn;
 // Some extra register slack towards the collector to improve its fitting
 hyperpipe #(.CYCLES(3), .WIDTH(1+6+EXTRA_DATA_WIDTH)) outputPipe (clk,
     {runEndIn & validIn, storedConnectionCountIn, storedExtraDataIn},
-	 {done, connectCount, extraDataOut}
+    {done, connectCount, extraDataOut}
 );
 
 wire requestOut_EXPL;

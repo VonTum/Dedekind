@@ -13,7 +13,7 @@ initial begin
     forever #1 clock2x = ~clock2x;
 end
 reg rst;
-reg inputBotValid;
+reg inputBotValid = 0;
 initial begin
     rst = 0;
     #31

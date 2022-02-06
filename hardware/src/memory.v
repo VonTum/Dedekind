@@ -232,7 +232,7 @@ if(IS_MLAB) begin
 /* MLAB */
 altera_syncram  altera_syncram_component (
     .clock0 (wrclk),
-    .clock1 (rdclk),
+    .clock1 (1'b1), // no output register
     .address_a (writeAddr),
     .address_b (readAddr),
     .data_a (dataInWide),
