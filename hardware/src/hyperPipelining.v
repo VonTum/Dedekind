@@ -4,29 +4,71 @@
 
 (* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION off; -name SYNCHRONIZER_IDENTIFICATION off" *)
 module hyperpipe 
-#(parameter CYCLES = 1, parameter WIDTH = 1) 
+#(parameter CYCLES = 1, parameter WIDTH = 1, parameter MAX_FAN = 80) 
 (
     input clk,
     input [WIDTH-1:0] din,
     output [WIDTH-1:0] dout
 );
 
-    generate if (CYCLES==0) begin : GEN_COMB_INPUT
-        assign dout = din;
-    end else
-    begin : GEN_REG_INPUT  
-        integer i;
-        (* maxfan = 3 *) (* dont_merge *) reg [WIDTH-1:0] R_data [CYCLES-1:0];
-        
-        always @ (posedge clk) 
-        begin   
-            R_data[0] <= din;      
-            for(i = 1; i < CYCLES; i = i + 1) 
-                R_data[i] <= R_data[i-1];
-        end
-        assign dout = R_data[CYCLES-1];
+generate
+if (CYCLES == 0) begin : GEN_COMB_INPUT
+    assign dout = din;
+end else
+begin : GEN_REG_INPUT
+    integer i;
+    (* maxfan = MAX_FAN *) reg[WIDTH-1:0] R_data [CYCLES-1:0];
+    
+    always @(posedge clk) begin
+        R_data[0] <= din;
+        for(i = 1; i < CYCLES; i = i + 1) R_data[i] <= R_data[i-1];
     end
-    endgenerate  
+    assign dout = R_data[CYCLES-1];
+end
+endgenerate
+
+endmodule
+
+(* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION off; -name SYNCHRONIZER_IDENTIFICATION auto" *)
+module hyperpipeDualClock 
+#(parameter CYCLES_A = 1, parameter CYCLES_B = 1, parameter WIDTH = 1) 
+(
+    input clkA,
+    input clkB,
+    input [WIDTH-1:0] din,
+    output [WIDTH-1:0] dout
+);
+
+wire[WIDTH-1:0] dIntermediate;
+generate
+if (CYCLES_A == 0) begin : GEN_COMB_INPUT_A
+    assign dIntermediate = din;
+end else
+begin : GEN_REG_INPUT_A
+    integer i;
+    reg[WIDTH-1:0] R_data_A [CYCLES_A-1:0];
+    
+    always @(posedge clkA) begin
+        R_data_A[0] <= din;
+        for(i = 1; i < CYCLES_A; i = i + 1) R_data_A[i] <= R_data_A[i-1];
+    end
+    assign dIntermediate = R_data_A[CYCLES_A-1];
+end
+if (CYCLES_B == 0) begin : GEN_COMB_INPUT_B
+    assign dout = dIntermediate;
+end else
+begin : GEN_REG_INPUT_B
+    integer i;
+    reg[WIDTH-1:0] R_data_B [CYCLES_B-1:0];
+    
+    always @(posedge clkB) begin   
+        R_data_B[0] <= dIntermediate;
+        for(i = 1; i < CYCLES_B; i = i + 1) R_data_B[i] <= R_data_B[i-1];
+    end
+    assign dout = R_data_B[CYCLES_B-1];
+end
+endgenerate
+
 
 endmodule
 

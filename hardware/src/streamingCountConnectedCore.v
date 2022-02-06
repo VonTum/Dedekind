@@ -52,22 +52,27 @@ wire pipelineRST2x;
 synchronizer pipelineRSTSynchronizer(clk, pipelineRST, clk2x, pipelineRST2x);
 // request Pipe has 1 cycle, FIFO has 1 cycle read latency, dataOut pipe has 1
 `define FIFO_READ_LATENCY (1+1+1)
-dualClockFIFOWithDataValid #(
+FastDualClockFIFO #(
     .WIDTH(128+`ADDR_WIDTH),
-    .DEPTH_LOG2(`INPUT_FIFO_DEPTH_LOG2)
+    .DEPTH_LOG2(`INPUT_FIFO_DEPTH_LOG2),
+    .IS_MLAB(1),
+    .READ_ADDR_STAGES(1)
 ) inputFIFO (
     // input side
     .wrclk(clk),
+    .wrrst(pipelineRST),
     .writeEnable(isBotValid),
     .dataIn({graphIn, curBotIndex}),
-    .wrusedw(usedw),
+    .usedw(usedw),
     
     // output side
     .rdclk(clk2x),
-    .rdclr(pipelineRST2x),
-    .readEnable(readRequestFromComputeModule2x), // FIFO2 has read protection, no need to check empty
+    .rdrst(pipelineRST2x),
+    .readRequest(readRequestFromComputeModule2x), // FIFO2 has read protection, no need to check empty
     .dataOut(dataFromFIFO2xPreDelay),
-    .dataOutValid(dataValidToComputeModule2xPreDelay)
+    .dataOutValid(dataValidToComputeModule2xPreDelay),
+    .empty(),
+    .eccStatus()
 );
 
 wire writeToCollector2x;
@@ -99,6 +104,7 @@ DUAL_CLOCK_MEMORY_BLOCK #(.WIDTH(6), .DEPTH_LOG2(`ADDR_WIDTH), .IS_MLAB(0)) coll
     
     // Read Side
     .rdclk(clk),
+    .readAddressStall(1'b0),
     .readAddr(curBotIndex),
     .dataOut(connectCount),
     .eccStatus(collectorECC)

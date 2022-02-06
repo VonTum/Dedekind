@@ -207,6 +207,7 @@ module DUAL_CLOCK_MEMORY_BLOCK #(
     
     // Read Side
     input rdclk,
+    input readAddressStall,
     input[DEPTH_LOG2-1:0] readAddr,
     output[WIDTH-1:0] dataOut,
     output eccStatus
@@ -242,7 +243,7 @@ altera_syncram  altera_syncram_component (
     .address2_a (1'b1),
     .address2_b (1'b1),
     .addressstall_a (1'b0),
-    .addressstall_b (1'b0),
+    .addressstall_b (readAddressStall),
     .byteena_a (1'b1),
     .byteena_b (1'b1),
     .clocken0 (1'b1),
@@ -303,7 +304,7 @@ altera_syncram  altera_syncram_component (
     .address2_a (1'b1),
     .address2_b (1'b1),
     .addressstall_a (1'b0),
-    .addressstall_b (1'b0),
+    .addressstall_b (readAddressStall),
     .byteena_a (1'b1),
     .byteena_b (1'b1),
     .clocken0 (1'b1),
@@ -370,7 +371,7 @@ end
 
 reg[DEPTH_LOG2-1:0] readAddrReg;
 always @(posedge rdclk) begin
-    readAddrReg <= readAddr;
+    if(!readAddressStall) readAddrReg <= readAddr;
 end
 
 wire[WIDTH-1:0] dataFromMem = memory[readAddrReg];
