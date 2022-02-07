@@ -270,8 +270,9 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10, p
 );
 
 
-wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
-hyperpipe #(.CYCLES(2), .MAX_FAN(5)) rstPipe(clk, rst, rstLocal);
+wire rstLocalWire; // Manual reset tree, can't use constraints to have it generate it for me. 
+hyperpipe #(.CYCLES(2), .MAX_FAN(20)) rstPipe(clk, rst, rstLocalWire);
+(* max_fan = 1 *) reg rstLocal; always @(posedge clk) rstLocal <= rstLocalWire;
 
 
 assign storedExtraDataOut = runEndIn ? extraDataIn : storedExtraDataIn;

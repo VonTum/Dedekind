@@ -49,7 +49,7 @@ wire[127:0] bot;
 wire startNewTop;
 wire isReadyForInput;
 wire validOutput;
-reg isReadyForOutput = 1; // controller is always ready for output
+reg isReadyForOutput = 0; // controller is always ready for output
 
 initial begin
     forever #10000 isReadyForOutput = !isReadyForOutput;

@@ -9,46 +9,35 @@ module topManager(
     
     output[127:0] topOut,
     
-    // Input queue side
-    input botWentIn,
     output stallInput,
-    
-    // Output queue side
-    input botWentOut,
-    input iready,
-    output ovalidOverride
+    input pipelineIsEmpty
 );
 
-
-reg[31:0] inputBotCount;
-reg[31:0] outputBotCount;
-reg pipelineIsEmpty; always @(posedge clk) pipelineIsEmpty <= (inputBotCount == outputBotCount);
 
 reg[127:0] topInWaiting;
 reg isTopInWaiting;
 assign stallInput = isTopInWaiting;
 
-reg readyToInstallNewTop; always @(posedge clk) readyToInstallNewTop <= pipelineIsEmpty & isTopInWaiting;
-reg readyToLoadNewTop; always @(posedge clk) readyToLoadNewTop <= readyToInstallNewTop & iready;
+// A bit of delay after a new top to make sure that pipelineIsEmpty reaches stability
+reg[2:0] cylcesSinceTopStart;
+wire isReadyForTopStart = cylcesSinceTopStart == 7;
+always @(posedge clk) begin
+    if(rst || topInValid) begin
+        cylcesSinceTopStart <= 0;
+    end else begin
+        if(!isReadyForTopStart) cylcesSinceTopStart <= cylcesSinceTopStart + 1;
+    end
+end
+
+reg readyToInstallNewTop; always @(posedge clk) readyToInstallNewTop <= pipelineIsEmpty && isTopInWaiting && isReadyForTopStart;
+reg readyToLoadNewTop; always @(posedge clk) readyToLoadNewTop <= readyToInstallNewTop;
 reg readyToLoadNewTopD; always @(posedge clk) readyToLoadNewTopD <= readyToLoadNewTop;
 reg loadNewTop; always @(posedge clk) loadNewTop <= readyToLoadNewTop && !readyToLoadNewTopD; // Create top loading pulse
-assign ovalidOverride = loadNewTop;
 
 // Makes all paths starting at topReg false paths. This is possible because top is a de-facto global constant. 
 // Data delay is allowed to go up to `OUTPUT_INDEX_OFFSET = 1024 cycles, which I assume will be plenty
 (* altera_attribute = "-name CUT ON -to *" *) reg[127:0] topReg;
 assign topOut = topReg;
-
-always @(posedge clk) begin
-    if(rst || loadNewTop) begin
-        inputBotCount <= 0;
-        outputBotCount <= 0;
-    end else begin
-        if(botWentIn) inputBotCount <= inputBotCount + 1;
-        if(botWentOut) outputBotCount <= outputBotCount + 1;
-    end
-end
-
 
 always @(posedge clk) begin
     if(rst) begin
