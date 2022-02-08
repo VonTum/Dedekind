@@ -2,6 +2,7 @@
 
 `include "ipSettings_header.v"
 
+// Has 1 cycle read latency for MLAB, and 3 cycles read latency for M20K
 module MEMORY_BLOCK #(
     parameter WIDTH = 20,
     parameter DEPTH_LOG2 = 5,
@@ -9,6 +10,7 @@ module MEMORY_BLOCK #(
     parameter READ_DURING_WRITE = "DONT_CARE" // Options are "DONT_CARE", "OLD_DATA" and "NEW_DATA"
 ) (
     input clk,
+    input rst,
     
     // Write Side
     input writeEnable,
@@ -41,13 +43,13 @@ if(IS_MLAB) begin
 /* MLAB */
 altera_syncram  altera_syncram_component (
     .clock0 (clk),
+    .aclr0 (rst),
     .address_a (writeAddr),
     .address_b (readAddr),
     .addressstall_b (readAddressStall),
     .data_a (dataInWide),
     .wren_a (writeEnable),
     .q_b (dataOutWide),
-    .aclr0 (1'b0),
     .aclr1 (1'b0),
     .address2_a (1'b1),
     .address2_b (1'b1),
@@ -69,7 +71,7 @@ altera_syncram  altera_syncram_component (
     .sclr (1'b0),
     .wren_b (1'b0));
 defparam
-    altera_syncram_component.address_aclr_b  = "NONE",
+    altera_syncram_component.address_aclr_b  = "CLEAR0",
     altera_syncram_component.address_reg_b  = "CLOCK0",
     altera_syncram_component.clock_enable_input_a  = "BYPASS",
     altera_syncram_component.clock_enable_input_b  = "BYPASS",
@@ -102,13 +104,13 @@ assign eccStatus = eccStatusWire[1];
 
 altera_syncram  altera_syncram_component (
     .clock0 (clk),
+    .aclr0 (rst),
     .address_a (writeAddr),
     .address_b (readAddr),
     .addressstall_b (readAddressStall),
     .data_a (dataInWide),
     .wren_a (writeEnable),
     .q_b (dataOutWide),
-    .aclr0 (1'b0),
     .aclr1 (1'b0),
     .address2_a (1'b1),
     .address2_b (1'b1),
@@ -130,7 +132,7 @@ altera_syncram  altera_syncram_component (
     .sclr (1'b0),
     .wren_b (1'b0));
 defparam
-    altera_syncram_component.address_aclr_b  = "NONE",
+    altera_syncram_component.address_aclr_b  = "CLEAR0",
     altera_syncram_component.address_reg_b  = "CLOCK0",
     altera_syncram_component.clock_enable_input_a  = "BYPASS",
     altera_syncram_component.clock_enable_input_b  = "BYPASS",
@@ -170,9 +172,12 @@ reg writeEnableReg;
 
 reg[DEPTH_LOG2-1:0] readAddrReg;
 
+always @(posedge clk or posedge rst) begin
+    if(rst) readAddrReg <= 0;
+    else if(!readAddressStall) readAddrReg <= readAddr;
+end
+
 always @(posedge clk) begin
-    if(!readAddressStall) readAddrReg <= readAddr;
-    
     if(writeEnableReg) begin
         memory[writeAddrReg] <= writeDataReg;
     end
@@ -193,7 +198,7 @@ endmodule
 
 
 
-
+// Has 2 cycles read latency for MLAB, output registers are required for well-defined reading in dual-clock environment, and 3 cycles read latency for M20K
 module DUAL_CLOCK_MEMORY_BLOCK #(
     parameter WIDTH = 20,
     parameter DEPTH_LOG2 = 5,
@@ -207,6 +212,7 @@ module DUAL_CLOCK_MEMORY_BLOCK #(
     
     // Read Side
     input rdclk,
+    input rdrst,
     input readAddressStall,
     input[DEPTH_LOG2-1:0] readAddr,
     output[WIDTH-1:0] dataOut,
@@ -232,14 +238,14 @@ if(IS_MLAB) begin
 /* MLAB */
 altera_syncram  altera_syncram_component (
     .clock0 (wrclk),
-    .clock1 (1'b1), // no output register
+    .clock1 (rdclk),
+    .aclr1 (rdrst),
     .address_a (writeAddr),
     .address_b (readAddr),
     .data_a (dataInWide),
     .wren_a (writeEnable),
     .q_b (dataOutWide),
     .aclr0 (1'b0),
-    .aclr1 (1'b0),
     .address2_a (1'b1),
     .address2_b (1'b1),
     .addressstall_a (1'b0),
@@ -260,8 +266,9 @@ altera_syncram  altera_syncram_component (
     .sclr (1'b0),
     .wren_b (1'b0));
 defparam
-    altera_syncram_component.address_aclr_b  = "NONE",
     altera_syncram_component.address_reg_b  = "CLOCK0",
+    altera_syncram_component.outdata_reg_b  = "CLOCK1",
+    altera_syncram_component.address_aclr_b  = "CLEAR1",
     altera_syncram_component.clock_enable_input_a  = "BYPASS",
     altera_syncram_component.clock_enable_input_b  = "BYPASS",
     altera_syncram_component.clock_enable_output_b  = "BYPASS",
@@ -272,7 +279,6 @@ defparam
     altera_syncram_component.operation_mode  = "DUAL_PORT",
     altera_syncram_component.outdata_aclr_b  = "NONE",
     altera_syncram_component.outdata_sclr_b  = "NONE",
-    altera_syncram_component.outdata_reg_b  = "UNREGISTERED",
     altera_syncram_component.power_up_uninitialized  = "FALSE",
     altera_syncram_component.ram_block_type  = "MLAB",
     altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
@@ -294,13 +300,13 @@ assign eccStatus = eccStatusWire[1];
 altera_syncram  altera_syncram_component (
     .clock0 (wrclk),
     .clock1 (rdclk),
+    .aclr1 (rdrst),
     .address_a (writeAddr),
     .address_b (readAddr),
     .data_a (dataInWide),
     .wren_a (writeEnable),
     .q_b (dataOutWide),
     .aclr0 (1'b0),
-    .aclr1 (1'b0),
     .address2_a (1'b1),
     .address2_b (1'b1),
     .addressstall_a (1'b0),
@@ -321,8 +327,9 @@ altera_syncram  altera_syncram_component (
     .sclr (1'b0),
     .wren_b (1'b0));
 defparam
-    altera_syncram_component.address_aclr_b  = "NONE",
+    altera_syncram_component.address_aclr_b  = "CLEAR",
     altera_syncram_component.address_reg_b  = "CLOCK0",
+    altera_syncram_component.outdata_reg_b  = "CLOCK1",
     altera_syncram_component.clock_enable_input_a  = "BYPASS",
     altera_syncram_component.clock_enable_input_b  = "BYPASS",
     altera_syncram_component.clock_enable_output_b  = "BYPASS",
@@ -333,7 +340,6 @@ defparam
     altera_syncram_component.operation_mode  = "DUAL_PORT",
     altera_syncram_component.outdata_aclr_b  = "NONE",
     altera_syncram_component.outdata_sclr_b  = "NONE",
-    altera_syncram_component.outdata_reg_b  = "CLOCK1",
     altera_syncram_component.power_up_uninitialized  = "FALSE",
     altera_syncram_component.ram_block_type  = "M20K",
     altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
@@ -370,12 +376,13 @@ always @(posedge wrclk) begin
 end
 
 reg[DEPTH_LOG2-1:0] readAddrReg;
-always @(posedge rdclk) begin
-    if(!readAddressStall) readAddrReg <= readAddr;
+always @(posedge rdclk or posedge rdrst) begin
+    if(rdrst) readAddrReg <= 0;
+    else if(!readAddressStall) readAddrReg <= readAddr;
 end
 
 wire[WIDTH-1:0] dataFromMem = memory[readAddrReg];
-hyperpipe #(.CYCLES(IS_MLAB ? 0 : 2), .WIDTH(WIDTH)) dataOutPipe(rdclk, dataFromMem, dataOut);
+hyperpipe #(.CYCLES(IS_MLAB ? 1 : 2), .WIDTH(WIDTH)) dataOutPipe(rdclk, dataFromMem, dataOut);
 
 assign eccStatus = 1'b0;
 
