@@ -87,32 +87,28 @@ module shiftRegister
     end else
 `ifdef USE_SHIFTREG_IP
     if(CYCLES >= 5 && CYCLES * WIDTH >= 41) begin
-        reg[WIDTH-1:0] dataInD; always @(posedge clk) dataInD <= dataIn;
-        wire[WIDTH-1:0] unusedTap;
-        wire[WIDTH-1:0] dataOutDirectlyFromMemory;
-        altshift_taps  ALTSHIFT_TAPS_component (
-            .clock (clk),
-            .shiftin (dataInD),
-            .shiftout (dataOutDirectlyFromMemory),
-            .taps (unusedTap)
-            // synopsys translate_off
-                , // These ports may not be generated in some situations, due to the above directive. Store comma with them to not cause an error
-            .aclr (),
-            .clken (),
-            .sclr ()
-            // synopsys translate_on
+        reg[4:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex == CYCLES-2 ? 0 : curIndex + 1;
+        (* max_fan = 1 *) reg[4:0] curIndexD; always @(posedge clk) curIndexD <= curIndex;
+        
+        MEMORY_MLAB #(
+            .WIDTH(WIDTH),
+            .DEPTH_LOG2 = 5,
+            .READ_DURING_WRITE("OLD_DATA"), // Options are "DONT_CARE", "OLD_DATA" and "NEW_DATA",
+            .OUTPUT_REGISTER(1)
+        ) mem (
+            .clk(clk),
+            .rstReadAddr(1'b0),
+            
+            // Write Side
+            .writeEnable(1'b1),
+            .writeAddr(curIndexD),
+            .dataIn(dataIn),
+            
+            // Read Side
+            .readAddressStall(1'b0),
+            .readAddr(curIndexD),
+            .dataOut(dataOut)
         );
-        // Separate out one of the stages into a register at the end to improve timing
-        reg[WIDTH-1:0] dataOutReg; always @(posedge clk) dataOutReg <= dataOutDirectlyFromMemory;
-        reg[WIDTH-1:0] dataOutRegD; always @(posedge clk) dataOutRegD <= dataOutReg;
-        assign dataOut = dataOutRegD;
-defparam
-        ALTSHIFT_TAPS_component.intended_device_family  = "Stratix 10",
-        ALTSHIFT_TAPS_component.lpm_hint  = CYCLES <= 32 ? "RAM_BLOCK_TYPE=MLAB" : "RAM_BLOCK_TYPE=M20K",
-        ALTSHIFT_TAPS_component.lpm_type  = "altshift_taps",
-        ALTSHIFT_TAPS_component.number_of_taps  = 1,
-        ALTSHIFT_TAPS_component.tap_distance  = CYCLES-3,
-        ALTSHIFT_TAPS_component.width  = WIDTH;
     end else
 `endif
     begin : GEN_REG_INPUT  

@@ -5,7 +5,8 @@
 module MEMORY_MLAB #(
     parameter WIDTH = 20,
     parameter DEPTH_LOG2 = 5,
-    parameter READ_DURING_WRITE = "DONT_CARE" // Options are "DONT_CARE", "OLD_DATA" and "NEW_DATA"
+    parameter READ_DURING_WRITE = "DONT_CARE", // Options are "DONT_CARE", "OLD_DATA" and "NEW_DATA",
+    parameter OUTPUT_REGISTER = 0
 ) (
     input clk,
     input rstReadAddr,
@@ -55,7 +56,7 @@ altera_syncram  altera_syncram_component (
 defparam
     altera_syncram_component.address_aclr_b  = "CLEAR0",
     altera_syncram_component.address_reg_b  = "CLOCK0",
-    altera_syncram_component.outdata_reg_b  = "UNREGISTERED",
+    altera_syncram_component.outdata_reg_b  = OUTPUT_REGISTER ? "CLOCK0" : "UNREGISTERED",
     altera_syncram_component.clock_enable_input_a  = "BYPASS",
     altera_syncram_component.clock_enable_input_b  = "BYPASS",
     altera_syncram_component.clock_enable_output_b  = "BYPASS",
