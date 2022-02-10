@@ -55,8 +55,8 @@ wire inputFIFORST2x_fan;
 hyperpipe #(.CYCLES(2), .MAX_FAN(5)) inputFIFORST2x_fan_pipe(clk2x, inputFIFORST2x, inputFIFORST2x_fan);
 (* dont_merge *) reg cccRST2x; always @(posedge clk) cccRST2x <= pipelineRST2x;
 
-// request Pipe has 1 cycle, FIFO has 2 cycle read latency, dataOut pipe has 1
-`define FIFO_READ_LATENCY (1+2+1)
+// request Pipe has 1 cycle, FIFO has 1 cycle read latency, dataOut pipe has 1
+`define FIFO_READ_LATENCY (1+1+1)
 FastDualClockFIFO #(
     .WIDTH(128+`ADDR_WIDTH),
     .DEPTH_LOG2(`INPUT_FIFO_DEPTH_LOG2),
@@ -109,7 +109,6 @@ DUAL_CLOCK_MEMORY_BLOCK #(.WIDTH(6), .DEPTH_LOG2(`ADDR_WIDTH), .IS_MLAB(0)) coll
     
     // Read Side
     .rdclk(clk),
-    .rdrst(1'b0),
     .readAddressStall(1'b0),
     .readAddr(curBotIndex),
     .dataOut(connectCount),
@@ -118,7 +117,6 @@ DUAL_CLOCK_MEMORY_BLOCK #(.WIDTH(6), .DEPTH_LOG2(`ADDR_WIDTH), .IS_MLAB(0)) coll
 
 MEMORY_BLOCK #(.WIDTH(1+EXTRA_DATA_WIDTH), .DEPTH_LOG2(`ADDR_WIDTH), .IS_MLAB(0), .READ_DURING_WRITE("OLD_DATA")) isValidMemory (
     .clk(clk),
-    .rst(1'b0),
     
     // Write Side
     .writeEnable(1'b1),

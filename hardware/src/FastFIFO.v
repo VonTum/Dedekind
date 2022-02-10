@@ -42,17 +42,19 @@ assign usedw = nextWriteAddr - writesValidUpTo;
 
 assign empty = readsValidUpTo == nextReadAddr;
 
-assign isReading = readRequest && !empty;
+reg rdrstD; always @(posedge rdclk) rdrstD <= rdrst;
+
+assign isReading = readRequest && !empty && !rdrstD;
 
 // Also unstalling on reset is a clever trick to properly set the rdaddr register of the memory block
-assign readAddressStall = !isReading;
+assign readAddressStall = !(isReading || rdrstD);
 
 always @(posedge rdclk) begin
     if(rdrst) begin
         // also resets readAddr field within the MLAB to 0
-        nextReadAddr <= 1;
+        nextReadAddr <= 0;
     end else begin
-        if(isReading) begin
+        if(!readAddressStall) begin
             nextReadAddr <= nextReadAddr + 1;
         end
     end
@@ -160,7 +162,6 @@ hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(WIDTH)) writeDataPipe(clk,
 
 MEMORY_BLOCK #(WIDTH, DEPTH_LOG2, IS_MLAB) fifoMemory (
     .clk(clk),
-    .rst(rst),
     
     // Write Side
     .writeEnable(writeEnableD),
@@ -268,12 +269,12 @@ hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(WIDTH)) writeDataPipe(wrclk,
 );
 
 wire dataValidFromMem;
-hyperpipe #(.CYCLES((IS_MLAB ? 1 : 2) + READ_ADDR_STAGES)) isReadingPipe(rdclk, isReading, dataValidFromMem);
+hyperpipe #(.CYCLES((IS_MLAB ? 0 : 2) + READ_ADDR_STAGES)) isReadingPipe(rdclk, isReading, dataValidFromMem);
 wire[WIDTH-1:0] dataFromMem;
 generate
 if(IS_MLAB) begin
     wire readRequestShouldBeAvailable;
-    hyperpipe #(.CYCLES((IS_MLAB ? 1 : 2) + READ_ADDR_STAGES), .MAX_FAN(MAXFAN_BLOCKSIZE)) readRequestPipe(rdclk, readRequest, readRequestShouldBeAvailable);
+    hyperpipe #(.CYCLES((IS_MLAB ? 0 : 2) + READ_ADDR_STAGES), .MAX_FAN(MAXFAN_BLOCKSIZE)) readRequestPipe(rdclk, readRequest, readRequestShouldBeAvailable);
     
     // Extra register to combat metastability from an unregistered write into the memory. 
     reg[WIDTH-1:0] storedDataOut;
@@ -306,7 +307,6 @@ DUAL_CLOCK_MEMORY_BLOCK #(WIDTH, DEPTH_LOG2, IS_MLAB) fifoMemory (
     
     // Read Side
     .rdclk(rdclk),
-    .rdrst(rdrst),
     .readAddressStall(readAddressStallD),
     .readAddr(nextReadAddrD),
     .dataOut(dataFromMem),
