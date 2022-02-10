@@ -55,8 +55,8 @@ wire inputFIFORST2x_fan;
 hyperpipe #(.CYCLES(2), .MAX_FAN(5)) inputFIFORST2x_fan_pipe(clk2x, inputFIFORST2x, inputFIFORST2x_fan);
 (* dont_merge *) reg cccRST2x; always @(posedge clk) cccRST2x <= pipelineRST2x;
 
-// request Pipe has 1 cycle, FIFO has 1 cycle read latency, dataOut pipe has 1
-`define FIFO_READ_LATENCY (1+1+1)
+// request Pipe has 1 cycle, FIFO has 2 cycles read latency, dataOut pipe has 1
+`define FIFO_READ_LATENCY (1+2+1)
 FastDualClockFIFO #(
     .WIDTH(128+`ADDR_WIDTH),
     .DEPTH_LOG2(`INPUT_FIFO_DEPTH_LOG2),

@@ -269,12 +269,12 @@ hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(WIDTH)) writeDataPipe(wrclk,
 );
 
 wire dataValidFromMem;
-hyperpipe #(.CYCLES((IS_MLAB ? 0 : 2) + READ_ADDR_STAGES)) isReadingPipe(rdclk, isReading, dataValidFromMem);
+hyperpipe #(.CYCLES((IS_MLAB ? 1 : 2) + READ_ADDR_STAGES)) isReadingPipe(rdclk, isReading, dataValidFromMem);
 wire[WIDTH-1:0] dataFromMem;
 generate
 if(IS_MLAB) begin
     wire readRequestShouldBeAvailable;
-    hyperpipe #(.CYCLES((IS_MLAB ? 0 : 2) + READ_ADDR_STAGES), .MAX_FAN(MAXFAN_BLOCKSIZE)) readRequestPipe(rdclk, readRequest, readRequestShouldBeAvailable);
+    hyperpipe #(.CYCLES((IS_MLAB ? 1 : 2) + READ_ADDR_STAGES), .MAX_FAN(MAXFAN_BLOCKSIZE)) readRequestPipe(rdclk, readRequest, readRequestShouldBeAvailable);
     
     // Extra register to combat metastability from an unregistered write into the memory. 
     reg[WIDTH-1:0] storedDataOut;

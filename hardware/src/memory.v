@@ -232,7 +232,7 @@ if(IS_MLAB) begin
 /* MLAB */
 altera_syncram  altera_syncram_component (
     .clock0 (wrclk),
-    .clock1 (1'b1), // no output register
+    .clock1 (rdclk),
     .address_a (writeAddr),
     .address_b (readAddr),
     .data_a (dataInWide),
@@ -272,7 +272,7 @@ defparam
     altera_syncram_component.operation_mode  = "DUAL_PORT",
     altera_syncram_component.outdata_aclr_b  = "NONE",
     altera_syncram_component.outdata_sclr_b  = "NONE",
-    altera_syncram_component.outdata_reg_b  = "UNREGISTERED",
+    altera_syncram_component.outdata_reg_b  = "CLOCK1",
     altera_syncram_component.power_up_uninitialized  = "FALSE",
     altera_syncram_component.ram_block_type  = "MLAB",
     altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
@@ -375,7 +375,7 @@ always @(posedge rdclk) begin
 end
 
 wire[WIDTH-1:0] dataFromMem = memory[readAddrReg];
-hyperpipe #(.CYCLES(IS_MLAB ? 0 : 2), .WIDTH(WIDTH)) dataOutPipe(rdclk, dataFromMem, dataOut);
+hyperpipe #(.CYCLES(IS_MLAB ? 1 : 2), .WIDTH(WIDTH)) dataOutPipe(rdclk, dataFromMem, dataOut);
 
 assign eccStatus = 1'b0;
 
