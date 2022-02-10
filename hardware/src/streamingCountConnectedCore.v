@@ -100,7 +100,7 @@ pipelinedCountConnectedCoreWithSingletonElimination #(.EXTRA_DATA_WIDTH(`ADDR_WI
     .extraDataOut(addrToCollector2x)
 );
 
-DUAL_CLOCK_MEMORY_BLOCK #(.WIDTH(6), .DEPTH_LOG2(`ADDR_WIDTH), .IS_MLAB(0)) collectorMemory (
+DUAL_CLOCK_MEMORY_M20K #(.WIDTH(6), .DEPTH_LOG2(`ADDR_WIDTH)) collectorMemory (
     // Write Side
     .wrclk(clk2x),
     .writeEnable(writeToCollector2x),
@@ -115,7 +115,7 @@ DUAL_CLOCK_MEMORY_BLOCK #(.WIDTH(6), .DEPTH_LOG2(`ADDR_WIDTH), .IS_MLAB(0)) coll
     .eccStatus(collectorECC)
 );
 
-MEMORY_BLOCK #(.WIDTH(1+EXTRA_DATA_WIDTH), .DEPTH_LOG2(`ADDR_WIDTH), .IS_MLAB(0), .READ_DURING_WRITE("OLD_DATA")) isValidMemory (
+MEMORY_M20K #(.WIDTH(1+EXTRA_DATA_WIDTH), .DEPTH_LOG2(`ADDR_WIDTH), .READ_DURING_WRITE("OLD_DATA")) isValidMemory (
     .clk(clk),
     
     // Write Side

@@ -7,7 +7,8 @@ module FastFIFOController #(
     parameter READ_ADDR_STAGES = 0,
     parameter WRITE_ADDR_STAGES = 2,
     parameter WRITE_TO_READ_SYNC_STAGES = 0,
-    parameter READ_TO_WRITE_SYNC_STAGES = 0
+    parameter READ_TO_WRITE_SYNC_STAGES = 0,
+    parameter MEMORY_HAS_RESET = 0 // This is a little dance that M20K FIFOs have to do, because M20K blocks don't support asynchronous reset of the read address register
 ) (
     // input side
     input wrclk,
@@ -42,17 +43,25 @@ assign usedw = nextWriteAddr - writesValidUpTo;
 
 assign empty = readsValidUpTo == nextReadAddr;
 
-reg rdrstD; always @(posedge rdclk) rdrstD <= rdrst;
-
-assign isReading = readRequest && !empty && !rdrstD;
-
-// Also unstalling on reset is a clever trick to properly set the rdaddr register of the memory block
-assign readAddressStall = !(isReading || rdrstD);
+generate if(MEMORY_HAS_RESET) begin
+    assign isReading = readRequest && !empty;
+    assign readAddressStall = !isReading;
+    
+end else begin
+    // Little dance to set the memory's read addr register to 0
+    reg rdrstD; always @(posedge rdclk) rdrstD <= rdrst;
+    
+    assign isReading = readRequest && !empty && !rdrstD;
+    
+    // Also unstalling on reset is a clever trick to properly set the rdaddr register of the memory block
+    assign readAddressStall = !(isReading || rdrstD);
+    
+end endgenerate
 
 always @(posedge rdclk) begin
     if(rdrst) begin
         // also resets readAddr field within the MLAB to 0
-        nextReadAddr <= 0;
+        nextReadAddr <= MEMORY_HAS_RESET; // 0 or 1
     end else begin
         if(!readAddressStall) begin
             nextReadAddr <= nextReadAddr + 1;
@@ -111,7 +120,8 @@ FastFIFOController #(
     .WRITE_ADDR_STAGES(WRITE_ADDR_STAGES+1),
     .READ_ADDR_STAGES(READ_ADDR_STAGES+1),
     .WRITE_TO_READ_SYNC_STAGES(0),
-    .READ_TO_WRITE_SYNC_STAGES(0)
+    .READ_TO_WRITE_SYNC_STAGES(0),
+    .MEMORY_HAS_RESET(IS_MLAB)
 ) controller (
     // input side
     clk,
@@ -159,8 +169,24 @@ hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(WIDTH)) writeDataPipe(clk,
     dataInD
 );
 
-
-MEMORY_BLOCK #(WIDTH, DEPTH_LOG2, IS_MLAB) fifoMemory (
+generate if(IS_MLAB) begin
+MEMORY_MLAB #(WIDTH, DEPTH_LOG2) fifoMemory (
+    .clk(clk),
+    .rstReadAddr(rst),
+    
+    // Write Side
+    .writeEnable(writeEnableD),
+    .writeAddr(writeAddrD),
+    .dataIn(dataInD),
+    
+    // Read Side
+    .readAddressStall(readAddressStallD),
+    .readAddr(nextReadAddrD),
+    .dataOut(dataOut)
+);
+assign eccStatus = 0;
+end else begin
+MEMORY_M20K #(WIDTH, DEPTH_LOG2) fifoMemory (
     .clk(clk),
     
     // Write Side
@@ -174,6 +200,7 @@ MEMORY_BLOCK #(WIDTH, DEPTH_LOG2, IS_MLAB) fifoMemory (
     .dataOut(dataOut),
     .eccStatus(eccStatus)
 );
+end endgenerate
 
 endmodule
 
@@ -219,7 +246,8 @@ FastFIFOController #(
     .WRITE_ADDR_STAGES(WRITE_ADDR_STAGES+1),
     .READ_ADDR_STAGES(READ_ADDR_STAGES+1),
     .WRITE_TO_READ_SYNC_STAGES(2),
-    .READ_TO_WRITE_SYNC_STAGES(2)
+    .READ_TO_WRITE_SYNC_STAGES(2),
+    .MEMORY_HAS_RESET(IS_MLAB)
 ) controller (
     // input side
     wrclk,
@@ -298,7 +326,24 @@ end else begin
 end
 endgenerate
 
-DUAL_CLOCK_MEMORY_BLOCK #(WIDTH, DEPTH_LOG2, IS_MLAB) fifoMemory (
+generate if(IS_MLAB) begin
+DUAL_CLOCK_MEMORY_MLAB #(WIDTH, DEPTH_LOG2) fifoMemory (
+    // Write Side
+    .wrclk(wrclk),
+    .writeEnable(writeEnableD),
+    .writeAddr(writeAddrD),
+    .dataIn(dataInD),
+    
+    // Read Side
+    .rdclk(rdclk),
+    .rstReadAddr(rdrst),
+    .readAddressStall(readAddressStallD),
+    .readAddr(nextReadAddrD),
+    .dataOut(dataFromMem)
+);
+assign eccStatus = 0;
+end else begin
+DUAL_CLOCK_MEMORY_M20K #(WIDTH, DEPTH_LOG2) fifoMemory (
     // Write Side
     .wrclk(wrclk),
     .writeEnable(writeEnableD),
@@ -312,6 +357,7 @@ DUAL_CLOCK_MEMORY_BLOCK #(WIDTH, DEPTH_LOG2, IS_MLAB) fifoMemory (
     .dataOut(dataFromMem),
     .eccStatus(eccStatus)
 );
+end endgenerate
 
 endmodule
 
