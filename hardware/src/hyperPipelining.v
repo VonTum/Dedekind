@@ -83,9 +83,9 @@ module shiftRegister
     generate if (CYCLES==0) begin : GEN_COMB_INPUT
         assign dataOut = dataIn;
     end else if(CYCLES >= 5 && CYCLES * WIDTH >= 41) begin
-        reg[4:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex == CYCLES-1 ? 0 : curIndex + 1;
+        reg[4:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex == CYCLES-2 ? 0 : curIndex + 1;
         (* max_fan = 1 *) reg[4:0] curIndexD; always @(posedge clk) curIndexD <= curIndex;
-		  (* max_fan = 1 *) reg[4:0] curIndexDD; always @(posedge clk) curIndexDD <= curIndexD;
+        (* max_fan = 1 *) reg[4:0] curIndexDD; always @(posedge clk) curIndexDD <= curIndexD;
         
         MEMORY_MLAB #(
             .WIDTH(WIDTH),

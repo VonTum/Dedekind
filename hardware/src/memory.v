@@ -108,7 +108,7 @@ always @(posedge clk or posedge rstReadAddr) begin // Asynchronous to correctly 
 end
 
 wire[WIDTH-1:0] dataFromMem = (writeEnableReg && READ_DURING_WRITE == "DONT_CARE" && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
-hyperpipe #(.CYCLES(0), .WIDTH(WIDTH)) dataOutPipe(clk, dataFromMem, dataOut);
+hyperpipe #(.CYCLES(OUTPUT_REGISTER), .WIDTH(WIDTH)) dataOutPipe(clk, dataFromMem, dataOut);
 
 `endif
 
