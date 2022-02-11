@@ -59,7 +59,7 @@ altera_syncram  altera_syncram_component (
     .sclr (1'b0),
     .wren_b (1'b0));
 defparam
-    altera_syncram_component.address_aclr_b  = OUTPUT_REGISTER ? "CLEAR0" : "NONE",
+    altera_syncram_component.address_aclr_b  = "CLEAR0",
     altera_syncram_component.address_reg_b  = "CLOCK0",
     altera_syncram_component.outdata_reg_b  = OUTPUT_REGISTER ? "CLOCK0" : "UNREGISTERED",
     altera_syncram_component.clock_enable_input_a  = "BYPASS",
@@ -286,7 +286,7 @@ altera_syncram  altera_syncram_component (
     .wren_b (1'b0));
 defparam
     altera_syncram_component.address_aclr_b  = "CLEAR1",
-    altera_syncram_component.address_reg_b  = "CLOCK0",
+    altera_syncram_component.address_reg_b  = "CLOCK1",
     altera_syncram_component.outdata_reg_b  = "CLOCK1",
     altera_syncram_component.clock_enable_input_a  = "BYPASS",
     altera_syncram_component.clock_enable_input_b  = "BYPASS",
@@ -396,7 +396,7 @@ altera_syncram  altera_syncram_component (
     .wren_b (1'b0));
 defparam
     altera_syncram_component.address_aclr_b  = "NONE",
-    altera_syncram_component.address_reg_b  = "CLOCK0",
+    altera_syncram_component.address_reg_b  = "CLOCK1",
     altera_syncram_component.outdata_reg_b  = "CLOCK1",
     altera_syncram_component.clock_enable_input_a  = "BYPASS",
     altera_syncram_component.clock_enable_input_b  = "BYPASS",
@@ -453,3 +453,4 @@ assign eccStatus = 1'b0;
 `endif
 
 endmodule
+
