@@ -1,6 +1,7 @@
 `timescale 1ns / 1ps
 
 `include "leafElimination_header.v"
+`include "pipelineGlobals_header.v"
 
 module aggregatingPipeline (
     input clk,

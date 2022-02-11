@@ -22,7 +22,7 @@ module MEMORY_MLAB #(
     output[WIDTH-1:0] dataOut
 );
 
-`ifdef USE_FIFO_MEMORY_IP
+`ifdef USE_MLAB_IP
 
 altera_syncram  altera_syncram_component (
     .clock0 (clk),
@@ -54,7 +54,7 @@ altera_syncram  altera_syncram_component (
     .sclr (1'b0),
     .wren_b (1'b0));
 defparam
-    altera_syncram_component.address_aclr_b  = "CLEAR0",
+    altera_syncram_component.address_aclr_b  = OUTPUT_REGISTER ? "CLEAR0" : "NONE",
     altera_syncram_component.address_reg_b  = "CLOCK0",
     altera_syncram_component.outdata_reg_b  = OUTPUT_REGISTER ? "CLOCK0" : "UNREGISTERED",
     altera_syncram_component.clock_enable_input_a  = "BYPASS",
@@ -128,7 +128,7 @@ module MEMORY_M20K #(
     output eccStatus
 );
 
-`ifdef USE_FIFO_MEMORY_IP
+`ifdef USE_M20K_IP
 
 wire[1:0] eccStatusWire;
 assign eccStatus = eccStatusWire[1];
@@ -242,7 +242,7 @@ module DUAL_CLOCK_MEMORY_MLAB #(
     output[WIDTH-1:0] dataOut
 );
 
-`ifdef USE_FIFO_MEMORY_IP
+`ifdef USE_MLAB_IP
 
 altera_syncram  altera_syncram_component (
     .clock0 (wrclk),
@@ -349,7 +349,7 @@ module DUAL_CLOCK_MEMORY_M20K #(
     output eccStatus
 );
 
-`ifdef USE_FIFO_MEMORY_IP
+`ifdef USE_M20K_IP
 
 wire[1:0] eccStatusWire;
 assign eccStatus = eccStatusWire[1];

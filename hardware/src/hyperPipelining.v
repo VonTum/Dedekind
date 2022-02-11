@@ -1,7 +1,5 @@
 `timescale 1ns / 1ps
 
-`include "ipSettings_header.v"
-
 (* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION off; -name SYNCHRONIZER_IDENTIFICATION off" *)
 module hyperpipe 
 #(parameter CYCLES = 1, parameter WIDTH = 1, parameter MAX_FAN = 80) 
@@ -84,16 +82,15 @@ module shiftRegister
 
     generate if (CYCLES==0) begin : GEN_COMB_INPUT
         assign dataOut = dataIn;
-    end else
-`ifdef USE_SHIFTREG_IP
-    if(CYCLES >= 5 && CYCLES * WIDTH >= 41) begin
-        reg[4:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex == CYCLES-2 ? 0 : curIndex + 1;
+    end else if(CYCLES >= 5 && CYCLES * WIDTH >= 41) begin
+        reg[4:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex == CYCLES-1 ? 0 : curIndex + 1;
         (* max_fan = 1 *) reg[4:0] curIndexD; always @(posedge clk) curIndexD <= curIndex;
+		  (* max_fan = 1 *) reg[4:0] curIndexDD; always @(posedge clk) curIndexDD <= curIndexD;
         
         MEMORY_MLAB #(
             .WIDTH(WIDTH),
-            .DEPTH_LOG2 = 5,
-            .READ_DURING_WRITE("OLD_DATA"), // Options are "DONT_CARE", "OLD_DATA" and "NEW_DATA",
+            .DEPTH_LOG2(5),
+            .READ_DURING_WRITE("DONT_CARE"), // Options are "DONT_CARE", "OLD_DATA" and "NEW_DATA",
             .OUTPUT_REGISTER(1)
         ) mem (
             .clk(clk),
@@ -101,7 +98,7 @@ module shiftRegister
             
             // Write Side
             .writeEnable(1'b1),
-            .writeAddr(curIndexD),
+            .writeAddr(curIndexDD),
             .dataIn(dataIn),
             
             // Read Side
@@ -109,9 +106,7 @@ module shiftRegister
             .readAddr(curIndexD),
             .dataOut(dataOut)
         );
-    end else
-`endif
-    begin : GEN_REG_INPUT  
+    end else begin : GEN_REG_INPUT  
         integer i;
         reg [WIDTH-1:0] R_data [CYCLES-1:0];
         

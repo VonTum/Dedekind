@@ -1,5 +1,7 @@
 `timescale 1ns / 1ps
 
+`include "pipelineGlobals_header.v"
+
 // sums all 120 permutations of variables 2,3,4,5,6.
 module pipeline120Pack(
     input clk,

@@ -54,8 +54,8 @@ static cl_kernel fullPipelineKernel = NULL;
 static cl_program program = NULL;
 static cl_mem lowerBotsMem = NULL;
 static cl_mem upperBotsMem = NULL;
-#define RESULTS_BUFFER_COUNT 4
-static cl_mem resultsMem[RESULTS_BUFFER_COUNT]{NULL, NULL, NULL, NULL};
+#define RESULTS_BUFFER_COUNT 1
+static cl_mem resultsMem[RESULTS_BUFFER_COUNT]{NULL};
 static cl_int N = 1;
 
 // Control whether the emulator should be used.
