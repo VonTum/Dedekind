@@ -22,7 +22,12 @@ module MEMORY_MLAB #(
     output[WIDTH-1:0] dataOut
 );
 
-`ifdef USE_MLAB_IP
+`ifdef USE_FIFO_MEMORY_IP
+
+genvar START_INDEX;
+generate for(START_INDEX = 0; START_INDEX < WIDTH; START_INDEX = START_INDEX + 20) begin
+// Stupid hack to get a constant value intermediate
+`define BLOCK_WIDTH (WIDTH - START_INDEX >= 20 ? 20 : WIDTH - START_INDEX)
 
 altera_syncram  altera_syncram_component (
     .clock0 (clk),
@@ -30,9 +35,9 @@ altera_syncram  altera_syncram_component (
     .address_a (writeAddr),
     .address_b (readAddr),
     .addressstall_b (readAddressStall),
-    .data_a (dataIn),
+    .data_a (dataIn[START_INDEX +: `BLOCK_WIDTH]),
     .wren_a (writeEnable),
-    .q_b (dataOut),
+    .q_b (dataOut[START_INDEX +: `BLOCK_WIDTH]),
     .aclr1 (1'b0),
     .address2_a (1'b1),
     .address2_b (1'b1),
@@ -44,7 +49,7 @@ altera_syncram  altera_syncram_component (
     .clocken1 (1'b1),
     .clocken2 (1'b1),
     .clocken3 (1'b1),
-    .data_b ({WIDTH{1'b1}}),
+    .data_b ({`BLOCK_WIDTH{1'b1}}),
     .eccencbypass (1'b0),
     .eccencparity (8'b0),
     .eccstatus (),
@@ -72,11 +77,12 @@ defparam
     altera_syncram_component.read_during_write_mode_mixed_ports  = READ_DURING_WRITE,
     altera_syncram_component.widthad_a  = DEPTH_LOG2,
     altera_syncram_component.widthad_b  = DEPTH_LOG2,
-    altera_syncram_component.width_a  = WIDTH,
-    altera_syncram_component.width_b  = WIDTH,
+    altera_syncram_component.width_a  = `BLOCK_WIDTH,
+    altera_syncram_component.width_b  = `BLOCK_WIDTH,
     altera_syncram_component.width_byteena_a  = 1,
     altera_syncram_component.enable_force_to_zero  = "FALSE",
     altera_syncram_component.enable_ecc  = "FALSE";
+end endgenerate
 `else
 
 reg[WIDTH-1:0] memory[(1 << DEPTH_LOG2) - 1:0];
@@ -128,7 +134,7 @@ module MEMORY_M20K #(
     output eccStatus
 );
 
-`ifdef USE_M20K_IP
+`ifdef USE_FIFO_MEMORY_IP
 
 wire[1:0] eccStatusWire;
 assign eccStatus = eccStatusWire[1];
@@ -242,7 +248,12 @@ module DUAL_CLOCK_MEMORY_MLAB #(
     output[WIDTH-1:0] dataOut
 );
 
-`ifdef USE_MLAB_IP
+`ifdef USE_FIFO_MEMORY_IP
+
+genvar START_INDEX;
+generate for(START_INDEX = 0; START_INDEX < WIDTH; START_INDEX = START_INDEX + 20) begin
+// Reuse previous define
+//BLOCK_WIDTH = WIDTH - START_INDEX >= 20 ? 20 : WIDTH - START_INDEX;
 
 altera_syncram  altera_syncram_component (
     .clock0 (wrclk),
@@ -250,9 +261,9 @@ altera_syncram  altera_syncram_component (
     .aclr1 (rstReadAddr),
     .address_a (writeAddr),
     .address_b (readAddr),
-    .data_a (dataIn),
+    .data_a (dataIn[START_INDEX +: `BLOCK_WIDTH]),
     .wren_a (writeEnable),
-    .q_b (dataOut),
+    .q_b (dataOut[START_INDEX +: `BLOCK_WIDTH]),
     .aclr0 (1'b0),
     .address2_a (1'b1),
     .address2_b (1'b1),
@@ -264,7 +275,7 @@ altera_syncram  altera_syncram_component (
     .clocken1 (1'b1),
     .clocken2 (1'b1),
     .clocken3 (1'b1),
-    .data_b ({WIDTH{1'b1}}),
+    .data_b ({`BLOCK_WIDTH{1'b1}}),
     .eccencbypass (1'b0),
     .eccencparity (8'b0),
     .eccstatus (),
@@ -292,12 +303,12 @@ defparam
     altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
     altera_syncram_component.widthad_a  = DEPTH_LOG2,
     altera_syncram_component.widthad_b  = DEPTH_LOG2,
-    altera_syncram_component.width_a  = WIDTH,
-    altera_syncram_component.width_b  = WIDTH,
+    altera_syncram_component.width_a  = `BLOCK_WIDTH,
+    altera_syncram_component.width_b  = `BLOCK_WIDTH,
     altera_syncram_component.width_byteena_a  = 1,
     altera_syncram_component.enable_force_to_zero  = "FALSE",
     altera_syncram_component.enable_ecc  = "FALSE";
-
+end endgenerate
 `else
 
 reg[WIDTH-1:0] memory[(1 << DEPTH_LOG2) - 1:0];
@@ -349,7 +360,7 @@ module DUAL_CLOCK_MEMORY_M20K #(
     output eccStatus
 );
 
-`ifdef USE_M20K_IP
+`ifdef USE_FIFO_MEMORY_IP
 
 wire[1:0] eccStatusWire;
 assign eccStatus = eccStatusWire[1];
@@ -442,4 +453,3 @@ assign eccStatus = 1'b0;
 `endif
 
 endmodule
-

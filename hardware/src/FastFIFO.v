@@ -170,7 +170,7 @@ hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(WIDTH)) writeDataPipe(clk,
 );
 
 generate if(IS_MLAB) begin
-MEMORY_MLAB #(WIDTH, DEPTH_LOG2) fifoMemory (
+MEMORY_MLAB #(WIDTH, DEPTH_LOG2) mlabMemory (
     .clk(clk),
     .rstReadAddr(rst),
     
@@ -186,7 +186,7 @@ MEMORY_MLAB #(WIDTH, DEPTH_LOG2) fifoMemory (
 );
 assign eccStatus = 0;
 end else begin
-MEMORY_M20K #(WIDTH, DEPTH_LOG2) fifoMemory (
+MEMORY_M20K #(WIDTH, DEPTH_LOG2) m20kMemory (
     .clk(clk),
     
     // Write Side
@@ -279,13 +279,11 @@ hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(1+DEPTH_LOG2)) writePipe(wrclk,
     {writeEnableD, writeAddrD}
 );
 
-localparam MAXFAN_BLOCKSIZE = IS_MLAB ? 20 : 32;
-
 // Memory read side
 wire readAddressStallD;
 wire[DEPTH_LOG2-1:0] nextReadAddrD;
 
-hyperpipe #(.CYCLES(READ_ADDR_STAGES), .WIDTH(1+DEPTH_LOG2), .MAX_FAN(MAXFAN_BLOCKSIZE)) readAddressStallPipe(rdclk, 
+hyperpipe #(.CYCLES(READ_ADDR_STAGES), .WIDTH(1+DEPTH_LOG2), .MAX_FAN(1)) readAddressStallPipe(rdclk, 
     {readAddressStall,  nextReadAddr}, 
     {readAddressStallD, nextReadAddrD}
 );
@@ -296,38 +294,10 @@ hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(WIDTH)) writeDataPipe(wrclk,
     dataInD
 );
 
-wire dataValidFromMem;
-hyperpipe #(.CYCLES((IS_MLAB ? 1 : 2) + READ_ADDR_STAGES)) isReadingPipe(rdclk, isReading, dataValidFromMem);
-wire[WIDTH-1:0] dataFromMem;
-generate
-if(IS_MLAB) begin
-    wire readRequestShouldBeAvailable;
-    hyperpipe #(.CYCLES((IS_MLAB ? 1 : 2) + READ_ADDR_STAGES), .MAX_FAN(MAXFAN_BLOCKSIZE)) readRequestPipe(rdclk, readRequest, readRequestShouldBeAvailable);
-    
-    // Extra register to combat metastability from an unregistered write into the memory. 
-    reg[WIDTH-1:0] storedDataOut;
-    reg storedDataOutValid;
-    
-    always @(posedge rdclk) begin
-        if(rdrst) begin
-            storedDataOutValid <= 0;
-        end else begin
-            if(readRequestShouldBeAvailable) begin
-                storedDataOutValid <= dataValidFromMem;
-                storedDataOut <= dataFromMem;
-            end
-        end
-    end
-    assign dataOutValid = storedDataOutValid && readRequestShouldBeAvailable;
-    assign dataOut = storedDataOut;
-end else begin
-    assign dataOutValid = dataValidFromMem;
-    assign dataOut = dataFromMem;
-end
-endgenerate
+hyperpipe #(.CYCLES((IS_MLAB ? 1 : 2) + READ_ADDR_STAGES)) isReadingPipe(rdclk, isReading, dataOutValid);
 
 generate if(IS_MLAB) begin
-DUAL_CLOCK_MEMORY_MLAB #(WIDTH, DEPTH_LOG2) fifoMemory (
+DUAL_CLOCK_MEMORY_MLAB #(WIDTH, DEPTH_LOG2) mlabMemory_DC (
     // Write Side
     .wrclk(wrclk),
     .writeEnable(writeEnableD),
@@ -339,11 +309,11 @@ DUAL_CLOCK_MEMORY_MLAB #(WIDTH, DEPTH_LOG2) fifoMemory (
     .rstReadAddr(rdrst),
     .readAddressStall(readAddressStallD),
     .readAddr(nextReadAddrD),
-    .dataOut(dataFromMem)
+    .dataOut(dataOut)
 );
 assign eccStatus = 0;
 end else begin
-DUAL_CLOCK_MEMORY_M20K #(WIDTH, DEPTH_LOG2) fifoMemory (
+DUAL_CLOCK_MEMORY_M20K #(WIDTH, DEPTH_LOG2) m20kMemory_DC (
     // Write Side
     .wrclk(wrclk),
     .writeEnable(writeEnableD),
@@ -354,7 +324,7 @@ DUAL_CLOCK_MEMORY_M20K #(WIDTH, DEPTH_LOG2) fifoMemory (
     .rdclk(rdclk),
     .readAddressStall(readAddressStallD),
     .readAddr(nextReadAddrD),
-    .dataOut(dataFromMem),
+    .dataOut(dataOut),
     .eccStatus(eccStatus)
 );
 end endgenerate
