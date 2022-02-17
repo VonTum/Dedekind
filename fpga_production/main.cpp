@@ -89,7 +89,7 @@ void summarizeResultsBuffer(uint64_t* resultsOut, cl_int bufSize) {
 
   for(size_t i = 0; i < bufSize; i++) {
     uint64_t resultConnectCount = getBitRange(resultsOut[i], 47, 0);
-    uint64_t resultNumTerms = getBitRange(resultsOut[i], 12+48-1, 48);
+    uint64_t resultNumTerms = getBitRange(resultsOut[i], 13+48-1, 48);
 
     if(SHOW_ALL || allData[i].connectCount != 0 || resultConnectCount != 0) {
       if(SHOW_NONZEROS) {
@@ -117,35 +117,35 @@ void summarizeResultsBuffer(uint64_t* resultsOut, cl_int bufSize) {
 
 // Entry point.
 int main(int argc, char** argv) {
-   Options options(argc, argv);
+  Options options(argc, argv);
 
-   bool reduce_data = false;
-   
-   // Optional argument to specify whether the emulator should be used.
-   if(options.has("emulator")) {
-     use_emulator = options.get<bool>("emulator");
-   }
+  bool reduce_data = false;
 
-   if(options.has("bufsize")) {
-     BUFSIZE = options.get<cl_int>("bufsize");
-   }
+  // Optional argument to specify whether the emulator should be used.
+  if(options.has("emulator")) {
+    use_emulator = options.get<bool>("emulator");
+  }
 
-   if(options.has("iters")) {
-     NUM_ITERATIONS = options.get<cl_int>("iters");
-   }
+  if(options.has("bufsize")) {
+    BUFSIZE = options.get<cl_int>("bufsize");
+  }
 
-   if(options.has("show")) {
-     SHOW_NONZEROS = true;
-   }
+  if(options.has("iters")) {
+    NUM_ITERATIONS = options.get<cl_int>("iters");
+  }
 
-   if(options.has("showall")) {
-     SHOW_ALL = true;
-     SHOW_NONZEROS = true;
-   }
+  if(options.has("show")) {
+    SHOW_NONZEROS = true;
+  }
 
-   if(options.has("profile")) {
-     ENABLE_PROFILING = true;
-   }
+  if(options.has("showall")) {
+    SHOW_ALL = true;
+    SHOW_NONZEROS = true;
+  }
+
+  if(options.has("profile")) {
+    ENABLE_PROFILING = true;
+  }
 
   cl_int status;
 
