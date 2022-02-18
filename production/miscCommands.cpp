@@ -433,22 +433,31 @@ void countValidPermutationSetFraction(std::vector<size_t> counts, unsigned int g
 			size_t validPermutationSets = 0;
 			size_t totalPermutationSets = 0;
 			
-			bot.forEachPermutation(0, Variables, [&](Monotonic<Variables> permutedBot){
-				size_t permutationsInThisPermutationThatAreValid = 0;
-				permutedBot.forEachPermutation(groupVarIndex, Variables, [&](Monotonic<Variables> subPermutedBot){
-					if(subPermutedBot <= selectedTop.top) {
-						permutationsInThisPermutationThatAreValid++;
-					}
-					totalPermutationsTestedTotal++;
-				});
-				/*if(hasPermutationBelow(selectedTop.top, permutedBot, groupVarIndex, Variables)) {*/
-				if(permutationsInThisPermutationThatAreValid > 0) {
-					validPermutationSets++;
-				}
-				totalValidPermutations += permutationsInThisPermutationThatAreValid;
-				totalPermutationSets++;
+			bool permutationsThatAreValid[factorial(Variables)];
+			size_t permutationValidIndex = 0;
+
+			bot.forEachPermutation([&](const Monotonic<Variables>& permutedBot){
+				permutationsThatAreValid[permutationValidIndex++] = (permutedBot <= selectedTop.top);
 			});
 
+			assert(permutationValidIndex == factorial(Variables));
+
+			for(size_t i = 0; i < factorial(Variables); i += factorial(groupVarIndex)) {
+				totalPermutationSets++;
+				size_t numberValidInThisGroup = 0;
+				for(size_t j = 0; j < factorial(groupVarIndex); j++) {
+					totalPermutationsTestedTotal++;
+					if(permutationsThatAreValid[i + j]) {
+						numberValidInThisGroup++;
+						totalValidPermutations++;
+					}
+				}
+				if(numberValidInThisGroup != 0) {
+					validPermutationSets++;
+				}
+			}
+
+			
 			// Has at least one valid permutation. This is necessary because these are already filitered out by the FlatMBFStructure
 			if(validPermutationSets > 0) {
 				validPermutationSetsTotal += validPermutationSets;
@@ -574,14 +583,14 @@ CommandSet miscCommands{"Misc", {
 	{"computeIntervalSizesFast6", []() {computeIntervalSizesFast<6>(); }},
 	{"computeIntervalSizesFast7", []() {computeIntervalSizesFast<7>(); }},
 
-	{"countValidPermutationSetFraction7_0", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 0); }},
-	{"countValidPermutationSetFraction7_1", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 1); }},
-	{"countValidPermutationSetFraction7_2", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 2); }},
-	{"countValidPermutationSetFraction7_3", []() {countValidPermutationSetFraction(std::vector<size_t>{100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100}, 3); }},
-	{"countValidPermutationSetFraction7_4", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 4); }},
-	{"countValidPermutationSetFraction7_5", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 5); }},
-	{"countValidPermutationSetFraction7_6", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 6); }},
-	{"countValidPermutationSetFraction7_7", []() {countValidPermutationSetFraction(std::vector<size_t>{100}, 7); }}
+	{"countValidPermutationSetFraction7_0", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 0); }},
+	{"countValidPermutationSetFraction7_1", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 1); }},
+	{"countValidPermutationSetFraction7_2", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 2); }},
+	{"countValidPermutationSetFraction7_3", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 3); }},
+	{"countValidPermutationSetFraction7_4", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 4); }},
+	{"countValidPermutationSetFraction7_5", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 5); }},
+	{"countValidPermutationSetFraction7_6", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 6); }},
+	{"countValidPermutationSetFraction7_7", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 7); }}
 }, {
 	{"checkIntervalLayers1", [](const std::string& size) {checkIntervalLayers<1>(std::stoi(size)); }},
 	{"checkIntervalLayers2", [](const std::string& size) {checkIntervalLayers<2>(std::stoi(size)); }},

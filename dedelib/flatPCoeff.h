@@ -13,6 +13,15 @@
 #define PCOEFF_MULTITHREAD
 #define PCOEFF_DEDUPLICATE
 
+#ifdef PCOEFF_DEDUPLICATE
+constexpr size_t MAX_BUFSIZE(unsigned int Variables) {
+	return mbfCounts[Variables] / 2 + 2;
+}
+#else
+constexpr size_t MAX_BUFSIZE(unsigned int Variables) {
+	return mbfCounts[Variables] + 1;
+}
+#endif
 
 template<unsigned int Variables>
 void flatDPlus1() {
@@ -45,89 +54,40 @@ void followNextLayerLinks(const FlatMBFStructure<Variables>& downLinkStructure, 
 	swapper.pushNext();
 }
 
-
-
-struct NodeIndexBuffer {
-	NodeIndex* bufStart;
-	NodeIndex* bufEnd;
-	
-	NodeIndexBuffer() : bufStart(nullptr), bufEnd(nullptr) {}
-	NodeIndexBuffer(size_t size) : bufStart((NodeIndex*) malloc(sizeof(NodeIndex) * size)), bufEnd(bufStart) {}
-	~NodeIndexBuffer() {if(bufStart) free(bufStart);}
-	NodeIndexBuffer(const NodeIndexBuffer&) = delete;
-	NodeIndexBuffer& operator=(const NodeIndexBuffer&) = delete;
-	NodeIndexBuffer(NodeIndexBuffer&& other) noexcept : 
-		bufStart(other.bufStart), bufEnd(other.bufEnd) {
-		other.bufStart = nullptr;
-		other.bufEnd = nullptr;
-	}
-	NodeIndexBuffer& operator=(NodeIndexBuffer&& other) noexcept {
-		std::swap(this->bufStart, other.bufStart);
-		std::swap(this->bufEnd, other.bufEnd);
-		return *this;
-	}
-
-	void add(NodeIndex idx) {
-		*bufEnd = idx;
-		bufEnd++;
-	}
-	void clear() {
-		bufEnd = bufStart;
-	}
-	size_t size() const {
-		return bufEnd - bufStart;
-	}
-};
-
-template<unsigned int Variables>
 struct JobInfo {
 	NodeIndex top;
 	NodeIndex topDual;
 	int topLayer;
-	NodeIndexBuffer indexBuffer;
+	NodeIndex* bufStart;
+	NodeIndex* bufEnd;
 
-	JobInfo() : indexBuffer(mbfCounts[Variables]) {}
-
-	void initialize(NodeIndex top, NodeIndex topDual, int topLayer) {
-		this->top = top;
-		this->topDual = topDual;
-		this->topLayer = topLayer;
-		indexBuffer.clear();
+	void add(NodeIndex newBot) {
+		*bufEnd++ = newBot;
 	}
 };
 
 template<unsigned int Variables, size_t BatchSize>
 struct JobBatch {
-	JobInfo<Variables> jobs[BatchSize];
+	JobInfo jobs[BatchSize];
 	size_t jobCount;
 
 	void initialize(const FlatMBFStructure<Variables>& downLinkStructure, NodeIndex* tops, size_t jobCount = BatchSize) {
 		assert(jobCount <= BatchSize);
 		for(size_t i = 0; i < jobCount; i++) {
-			NodeIndex top = tops[i];
-			JobInfo<Variables>& job = jobs[i];
+			JobInfo& job = jobs[i];
 
-			NodeIndex topDual = downLinkStructure.allNodes[top].dual;
-			int topLayer = FlatMBFStructure<Variables>::getLayer(top);
-
-			job.initialize(top, topDual, topLayer);
+			job.top = tops[i];
+			job.topDual = downLinkStructure.allNodes[job.top].dual;
+			job.topLayer = FlatMBFStructure<Variables>::getLayer(job.top);
+			job.bufEnd = job.bufStart;
 		}
 		this->jobCount = jobCount;
 	}
 
-	void initializeFromTo(const FlatMBFStructure<Variables>& downLinkStructure, NodeIndex topsFrom, size_t jobCount = BatchSize) {
-		assert(jobCount <= BatchSize);
-		NodeIndex indexBuf[BatchSize];
-		for(size_t i = 0; i < jobCount; i++) {
-			indexBuf[i] = topsFrom + i;
-		}
-		this->initialize(downLinkStructure, indexBuf, jobCount);
-	}
-	
 	int getHighestLayer() const {
 		int highestLayer = jobs[0].topLayer;
 		for(size_t i = 1; i < jobCount; i++){
-			const JobInfo<Variables>& j = jobs[i];
+			const JobInfo& j = jobs[i];
 			if(j.topLayer > highestLayer) highestLayer = j.topLayer;
 		}
 		return highestLayer;
@@ -136,7 +96,7 @@ struct JobBatch {
 	int getLowestLayer() const {
 		int lowestLayer = jobs[0].topLayer;
 		for(size_t i = 1; i < jobCount; i++){
-			const JobInfo<Variables>& j = jobs[i];
+			const JobInfo& j = jobs[i];
 			if(j.topLayer < lowestLayer) lowestLayer = j.topLayer;
 		}
 		return lowestLayer;
@@ -154,8 +114,8 @@ void addSourceElementsToJobs(const SwapperLayers<Variables, BitSet<BatchSize>>& 
 
 		for(size_t jobIdx = 0; jobIdx < BatchSize; jobIdx++) {
 			if(includedBits.get(jobIdx)) {
-				JobInfo<Variables>& job = jobBatch.jobs[jobIdx];
-				job.indexBuffer.add(curNodeIndex);
+				JobInfo& job = jobBatch.jobs[jobIdx];
+				job.add(curNodeIndex);
 			}
 		}
 	}
@@ -172,9 +132,9 @@ void addSourceElementsToJobsWithDeDuplication(const SwapperLayers<Variables, Bit
 
 		for(size_t jobIdx = 0; jobIdx < BatchSize; jobIdx++) {
 			if(includedBits.get(jobIdx)) {
-				JobInfo<Variables>& job = jobBatch.jobs[jobIdx];
+				JobInfo& job = jobBatch.jobs[jobIdx];
 				if(job.topDual > curNodeIndex) {// Arbitrary Equivalence Class Ordering for Deduplication
-					job.indexBuffer.add(curNodeIndex);
+					job.add(curNodeIndex);
 				}
 			}
 		}
@@ -269,13 +229,53 @@ uint64_t computePCoeffSum(const BooleanFunction<Variables>* graphsBuf, const Boo
 	return totalSum;
 }
 
+template<typename TI>
+TI getBitField(TI value, int startAt, int bitWidth) {
+	return (value >> startAt) & ((static_cast<TI>(1) << bitWidth) - static_cast<TI>(1));
+}
+/*
+struct ProcessedPCoeffSum {
+	uint64_t sum : 48;
+	uint64_t count : 16;
+};
+inline ProcessedPCoeffSum produceProcessedPcoeffSumCount(uint64_t pcoeffSum, uint64_t pcoeffCount) {
+	ProcessedPCoeffSum result;
+	result.sum = pcoeffSum;
+	result.count = pcoeffCount;
+	return result;
+}
+
+inline uint64_t getPCoeffSum(ProcessedPCoeffSum input) {
+	return input.sum;
+}
+
+inline uint64_t getPCoeffCount(ProcessedPCoeffSum input) {
+	return input.count;
+}*/
+
+typedef uint64_t ProcessedPCoeffSum;
+
+inline ProcessedPCoeffSum produceProcessedPcoeffSumCount(uint64_t pcoeffSum, uint64_t pcoeffCount) {
+	assert(pcoeffSum < (uint64_t(1) << 48));
+	assert(pcoeffCount < (uint64_t(1) << 13));
+
+	return (pcoeffCount << 48) | pcoeffSum;
+}
+
+inline uint64_t getPCoeffSum(ProcessedPCoeffSum input) {
+	return input & 0x0000FFFFFFFFFFFF;
+}
+
+inline uint64_t getPCoeffCount(ProcessedPCoeffSum input) {
+	return input >> 48;
+}
+
 template<unsigned int Variables>
 ProcessedPCoeffSum processPCoeffSum(Monotonic<Variables> top, Monotonic<Variables> bot, BooleanFunction<Variables> graphsBuf[factorial(Variables)]) {
 	BooleanFunction<Variables>* graphsBufEnd = listPermutationsBelow<Variables>(top, bot, graphsBuf);
-	ProcessedPCoeffSum result;
-	result.pcoeffCount = graphsBufEnd - graphsBuf;
-	result.pcoeffSum = computePCoeffSum(graphsBuf, graphsBufEnd);
-	return result;
+	uint64_t pcoeffCount = graphsBufEnd - graphsBuf;
+	uint64_t pcoeffSum = computePCoeffSum(graphsBuf, graphsBufEnd);
+	return produceProcessedPcoeffSumCount(pcoeffSum, pcoeffCount);
 }
 
 template<unsigned int Variables>
@@ -341,20 +341,24 @@ template<unsigned int Variables>
 BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff) {
 	constexpr unsigned int VAR_FACTORIAL = factorial(Variables);
 
+	uint64_t pcoeffSum = getPCoeffSum(processedPCoeff);
+	uint64_t pcoeffCount = getPCoeffCount(processedPCoeff);
+	bool eccErrorDetected = (pcoeffCount & 0x8000) != 0;
+	if(eccErrorDetected != 0) throw "ECC ERROR DETECTED!";
+
 	// the multiply is max log2(2^35 * 5040 * 5040) = 59.5984160368 bits long, fits in 64 bits
 	// Compiler optimizes the divide by compile-time constant VAR_FACTORIAL to an imul, much faster!
-	uint64_t deduplicatedTotalPCoeffSum = (processedPCoeff.pcoeffSum * info.classSize) / VAR_FACTORIAL; 
+	uint64_t deduplicatedTotalPCoeffSum = (pcoeffSum * info.classSize) / VAR_FACTORIAL; 
 	u128 betaTerm = umul128(deduplicatedTotalPCoeffSum, info.intervalSizeDown); // no overflow data loss 64x64->128 bits
 
 	// validation data
-	uint64_t deduplicatedCountedPermutes = (processedPCoeff.pcoeffCount * info.classSize) / VAR_FACTORIAL;
+	uint64_t deduplicatedCountedPermutes = (pcoeffCount * info.classSize) / VAR_FACTORIAL;
 
 	return BetaSum{betaTerm, deduplicatedCountedPermutes};
 }
 
 template<unsigned int Variables>
-BetaSum sumOverBetas(const FlatMBFStructure<Variables>& downLinkStructure, 
-const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf) {
+BetaSum sumOverBetas(const FlatMBFStructure<Variables>& downLinkStructure, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf) {
 	BetaSum total = BetaSum{0,0};
 
 	for(; idxBuf != bufEnd; idxBuf++) {
@@ -365,41 +369,52 @@ const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* coun
 	return total;
 }
 
-#define VALIDATE(topIdx, condition) if(!(condition)) throw "INVALID";
-
 template<unsigned int Variables, size_t BatchSize>
-void computeBatchBetaSums(const FlatMBFStructure<Variables>& allMBFData, JobBatch<Variables, BatchSize>& jobBatch, SwapperLayers<Variables, BitSet<BatchSize>>& swapper, ProcessedPCoeffSum* pcoeffSumBuf, BetaSum* results) {
-	
-#ifdef PCOEFF_MULTITHREAD
-	ThreadPool threadPool;
-#endif
+void buildJobBatch(const FlatMBFStructure<Variables>& allMBFData, NodeIndex* tops, size_t numberOfTops, JobBatch<Variables, BatchSize>& jobBatch, SwapperLayers<Variables, BitSet<BatchSize>>& swapper) {
+	jobBatch.initialize(allMBFData, tops, numberOfTops);
 
 #ifdef PCOEFF_DEDUPLICATE
 	computeBuffersDeduplicate(allMBFData, jobBatch, swapper);
 #else
 	computeBuffers(allMBFData, jobBatch, swapper);
 #endif
+}
 
-	for(size_t i = 0; i < jobBatch.jobCount; i++) {
-		const JobInfo<Variables>& curJob = jobBatch.jobs[i];
-		#ifdef PCOEFF_MULTITHREAD
-		processBetasCPU_MultiThread(allMBFData, curJob.top, curJob.indexBuffer.bufStart, curJob.indexBuffer.bufEnd, pcoeffSumBuf, threadPool);
-		#else
-		processBetasCPU_SingleThread(allMBFData, curJob.top, curJob.indexBuffer.bufStart, curJob.indexBuffer.bufEnd, pcoeffSumBuf);
-		#endif
-		BetaSum jobSum = sumOverBetas(allMBFData, curJob.indexBuffer.bufStart, curJob.indexBuffer.bufEnd, pcoeffSumBuf);
+template<unsigned int Variables>
+BetaSum produceBetaResult(const FlatMBFStructure<Variables>& allMBFData, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf) {
+	BetaSum jobSum = sumOverBetas(allMBFData, curJob.bufStart, curJob.bufEnd, pcoeffSumBuf);
 
 #ifdef PCOEFF_DEDUPLICATE
-		ProcessedPCoeffSum nonDuplicateTopDual = processOneBeta(allMBFData, curJob.top, curJob.topDual);
-		
-		ClassInfo info = allMBFData.allClassInfos[curJob.topDual];
+	ProcessedPCoeffSum nonDuplicateTopDual = processOneBeta(allMBFData, curJob.top, curJob.topDual);
 
-		BetaSum nonDuplicateTopDualResult = produceBetaTerm<Variables>(info, nonDuplicateTopDual);
+	ClassInfo info = allMBFData.allClassInfos[curJob.topDual];
 
-		results[i] = jobSum + jobSum + nonDuplicateTopDualResult;
+	BetaSum nonDuplicateTopDualResult = produceBetaTerm<Variables>(info, nonDuplicateTopDual);
+
+	return jobSum + jobSum + nonDuplicateTopDualResult;
 #else
-		results[i] = jobSum;
+	return jobSum;
 #endif
+}
+
+#define VALIDATE(topIdx, condition) if(!(condition)) throw "INVALID";
+
+template<unsigned int Variables, size_t BatchSize>
+void computeBatchBetaSums(const FlatMBFStructure<Variables>& allMBFData, JobBatch<Variables, BatchSize>& jobBatch, ProcessedPCoeffSum* pcoeffSumBuf, BetaSum* results) {
+	
+#ifdef PCOEFF_MULTITHREAD
+	ThreadPool threadPool;
+#endif
+
+	for(size_t i = 0; i < jobBatch.jobCount; i++) {
+		const JobInfo& curJob = jobBatch.jobs[i];
+		#ifdef PCOEFF_MULTITHREAD
+		processBetasCPU_MultiThread(allMBFData, curJob.top, curJob.bufStart, curJob.bufEnd, pcoeffSumBuf, threadPool);
+		#else
+		processBetasCPU_SingleThread(allMBFData, curJob.top, curJob.bufStart, curJob.bufEnd, pcoeffSumBuf);
+		#endif
+
+		results[i] = produceBetaResult(allMBFData, curJob, pcoeffSumBuf);
 	}
 }
 
@@ -408,6 +423,10 @@ u192 flatDPlus2() {
 	FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
 	SwapperLayers<Variables, BitSet<BatchSize>> swapper;
 	JobBatch<Variables, BatchSize> jobBatch;
+
+	for(size_t i = 0; i < BatchSize; i++) {
+		jobBatch.jobs[i].bufStart = static_cast<NodeIndex*>(malloc(sizeof(NodeIndex) * MAX_BUFSIZE(Variables)));
+	}
 
 	u192 total = 0;
 	NodeIndex curIndex = 0;
@@ -418,11 +437,16 @@ u192 flatDPlus2() {
 		std::cout << '.' << std::flush;
 
 		NodeOffset numberToProcess = static_cast<NodeOffset>(std::min(mbfCounts[Variables] - curIndex, BatchSize));
+		
+		NodeIndex indexBuf[BatchSize];
+		for(size_t i = 0; i < numberToProcess; i++) {
+			indexBuf[i] = curIndex + i;
+		}
 
-		jobBatch.initializeFromTo(allMBFData, curIndex, numberToProcess);
+		buildJobBatch(allMBFData, indexBuf, numberToProcess, jobBatch, swapper);
 
 		BetaSum resultingBetaSums[BatchSize];
-		computeBatchBetaSums(allMBFData, jobBatch, swapper, pcoeffSumBuf, resultingBetaSums);
+		computeBatchBetaSums(allMBFData, jobBatch, pcoeffSumBuf, resultingBetaSums);
 
 		for(size_t i = 0; i < numberToProcess; i++) {
 			NodeIndex curJobTop = jobBatch.jobs[i].top;
@@ -440,6 +464,11 @@ u192 flatDPlus2() {
 	}
 	
 	std::cout << "D(" << (Variables + 2) << ") = " << total << std::endl;
+
+	for(size_t i = 0; i < BatchSize; i++) {
+		free(jobBatch.jobs[i].bufStart);
+	}
+
 	return total;
 }
 

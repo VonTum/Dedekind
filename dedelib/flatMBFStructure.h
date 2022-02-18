@@ -26,11 +26,6 @@ struct FlatNode {
 	// this second downLinks index marks a list going from this->downLinks to (this+1)->downLinks
 };
 
-struct ProcessedPCoeffSum {
-	uint64_t pcoeffSum : 48; // log2(2^35 * 5040) = 47.2992080184 bits
-	uint64_t pcoeffCount : 16; // log2(5040) = 12.2992080184 bits
-};
-
 template<unsigned int Variables>
 class FlatMBFStructure {
 public:
@@ -67,10 +62,11 @@ public:
 				return layer;
 			}
 		}
-		assert(false);
 		// unreachable
 		#ifdef __GNUC__
 		__builtin_unreachable();
+		#else
+		assert(false);
 		#endif
 	}
 

@@ -286,16 +286,19 @@ void FullPermutePipelineTestSetOpenCL(std::vector<size_t> counts, std::string ou
 
 			ProcessedPCoeffSum countConnectedSum = processPCoeffSum<Variables>(top, bot, tempGraphsBuf);
 
+			uint64_t pcoeffSum = getPCoeffSum(countConnectedSum);
+			uint64_t pcoeffCount = getPCoeffCount(countConnectedSum);
+
 			testSet << "0_";
 			testSet << bot.bf.bitset << '_';
-			printBits(testSet, countConnectedSum.pcoeffCount, 16);
+			printBits(testSet, pcoeffCount, 16);
 			testSet << '_';
-			printBits(testSet, countConnectedSum.pcoeffSum, 48);
+			printBits(testSet, pcoeffSum, 48);
 			testSet << std::endl;
 
 			testSetCpp << "{false, 0b"; printBits(testSetCpp, _mm_extract_epi64(bot.bf.bitset.data, 1), 64);
 			testSetCpp << ", 0b"; printBits(testSetCpp, _mm_extract_epi64(bot.bf.bitset.data, 0), 64);
-			testSetCpp << ", " << countConnectedSum.pcoeffSum << ", " << countConnectedSum.pcoeffCount << "}," << std::endl;
+			testSetCpp << ", " << pcoeffSum << ", " << pcoeffCount << "}," << std::endl;
 		}
 	}
 

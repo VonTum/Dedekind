@@ -957,9 +957,14 @@ public:
 						goto foundTheV;
 					}
 				}
-				throw "unreachable";
-				foundTheV:;
+				// unreachable
+				#ifdef __GNUC__
+				__builtin_unreachable();
+				#else
+				assert(false);
+				#endif
 			}
+			foundTheV:;
 		}
 	
 		unsigned int groupCount = groupsEnd - groups;
