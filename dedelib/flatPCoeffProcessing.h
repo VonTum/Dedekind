@@ -43,8 +43,9 @@ public:
 
 	SynchronizedQueue<OutputBuffer> outputQueue;
 
-	SynchronizedQueue<NodeIndex*> inputBufferReturnQueue;
-	SynchronizedQueue<ProcessedPCoeffSum*> outputBufferReturnQueue;
+	// Return queues are implemented as stacks, to try and reuse recently retired buffers more often, to improve cache coherency. 
+	SynchronizedStack<NodeIndex*> inputBufferReturnQueue;
+	SynchronizedStack<ProcessedPCoeffSum*> outputBufferReturnQueue;
 
 	PCoeffProcessingContext(unsigned int Variables, size_t numberOfInputBuffers, size_t numberOfOutputBuffers);
 	~PCoeffProcessingContext();
@@ -60,7 +61,7 @@ void inputProducer(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessi
 		size_t numberInThisBatch = std::min(topsToProcess.size() - i, BatchSize);
 
 		NodeIndex* poppedBuffers[BatchSize];
-		processingContext.inputBufferReturnQueue.popN_wait_forever(poppedBuffers, numberInThisBatch);
+		processingContext.inputBufferReturnQueue.popN_wait(poppedBuffers, numberInThisBatch);
 
 		for(size_t j = 0; j < numberInThisBatch; j++) {
 			jobBatch.jobs[j].bufStart = poppedBuffers[j];
@@ -83,7 +84,7 @@ void resultProcessor(const FlatMBFStructure<Variables>& allMBFData, PCoeffProces
 		OutputBuffer outBuf = outputBuffer.value();
 
 		BetaResult curBetaResult;
-		curBetaResult.topIndex = outBuf.originalInputData.top;
+		curBetaResult.topIndex = outBuf.originalInputData.getTop();
 		curBetaResult.betaSum = produceBetaResult(allMBFData, outBuf.originalInputData, outBuf.outputBuf);
 
 		processingContext.inputBufferReturnQueue.push(outBuf.originalInputData.bufStart);
@@ -100,8 +101,8 @@ void cpuProcessor_SingleThread(const FlatMBFStructure<Variables>& allMBFData, PC
 	std::cout << "SingleThread CPU Processor started." << std::endl;
 	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
 		JobInfo& job = jobOpt.value();
-		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait().value();
-		processBetasCPU_SingleThread(allMBFData, job.top, job.bufStart, job.bufEnd, countConnectedSumBuf);
+		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
+		processBetasCPU_SingleThread(allMBFData, job.bufStart, job.bufEnd, countConnectedSumBuf);
 		OutputBuffer result;
 		result.originalInputData = job;
 		result.outputBuf = countConnectedSumBuf;
@@ -112,10 +113,26 @@ void cpuProcessor_SingleThread(const FlatMBFStructure<Variables>& allMBFData, PC
 
 template<unsigned int Variables>
 void cpuProcessor_CoarseMultiThread(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context) {
-	std::cout << "CoarseMultiThread CPU Processor started." << std::endl;
+	std::cout << "Coarse MultiThread CPU Processor started." << std::endl;
 	ThreadPool pool;
 	pool.doInParallel([&]() {cpuProcessor_SingleThread(allMBFData, context);});
-	std::cout << "CoarseMultiThread CPU Processor finished." << std::endl;
+	std::cout << "Coarse MultiThread CPU Processor finished." << std::endl;
+}
+
+template<unsigned int Variables>
+void cpuProcessor_FineMultiThread(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context) {
+	std::cout << "Fine MultiThread CPU Processor started." << std::endl;
+	ThreadPool pool;
+	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
+		JobInfo& job = jobOpt.value();
+		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
+		processBetasCPU_MultiThread(allMBFData, job.bufStart, job.bufEnd, countConnectedSumBuf, pool);
+		OutputBuffer result;
+		result.originalInputData = job;
+		result.outputBuf = countConnectedSumBuf;
+		context.outputQueue.push(result);
+	}
+	std::cout << "Fine MultiThread CPU Processor finished." << std::endl;
 }
 
 // Requires a Processor function of type void(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context)
@@ -137,8 +154,6 @@ std::vector<BetaResult> pcoeffPipeline(const FlatMBFStructure<Variables>& allMBF
 	context.outputQueue.close();
 
 	resultProcessingThread.join();
-	context.inputBufferReturnQueue.close();
-	context.outputBufferReturnQueue.close();
 
 	return results;
 }

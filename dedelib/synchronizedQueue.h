@@ -6,6 +6,8 @@
 #include <cassert>
 #include <optional>
 #include <memory>
+#include <stack>
+#include <vector>
 
 template<typename T>
 class RingQueue {
@@ -172,6 +174,67 @@ public:
 		}
 		for(size_t i = 0; i < numberToPop; i++) {
 			buffer[i] = this->queue.pop();
+		}
+	}
+};
+
+template<typename T>
+class SynchronizedStack {
+	std::stack<T, std::vector<T>> stack;
+	std::mutex mutex;
+	std::condition_variable readyForPop;
+public:
+
+	// Unprotected. Only use in single-thread context
+	std::stack<T, std::vector<T>>& get() {return stack;}
+	const std::stack<T, std::vector<T>>& get() const {return stack;}
+
+	// Write side
+	void push(T&& item) {
+		{std::lock_guard<std::mutex> lock(mutex);
+			stack.push(std::move(item));
+		}
+		readyForPop.notify_one();
+	}
+
+	void push(const T& item) {
+		{std::lock_guard<std::mutex> lock(mutex);
+			stack.push(item);
+		}
+		readyForPop.notify_one();
+	}
+
+	void pushN(const T* values, size_t count) {
+		{std::lock_guard<std::mutex> lock(mutex);
+			for(size_t i = 0; i < count; i++) {
+				stack.push(values[i]);
+			}
+		}
+		readyForPop.notify_all();
+	}
+
+	// Read side
+	// May wait forever
+	T pop_wait() {
+		std::unique_lock<std::mutex> lock(mutex);
+		while(this->stack.empty()) {
+			readyForPop.wait(lock);
+		}
+		T result = this->stack.top();
+		this->stack.pop();
+		return result;
+	}
+
+	// Pops a number of elements into the provided buffer. 
+	// May wait forever
+	void popN_wait(T* buffer, size_t numberToPop) {
+		std::unique_lock<std::mutex> lock(mutex);
+		while(this->stack.size() < numberToPop) {
+			readyForPop.wait(lock);
+		}
+		for(size_t i = 0; i < numberToPop; i++) {
+			buffer[i] = this->stack.top();
+			this->stack.pop();
 		}
 	}
 };
