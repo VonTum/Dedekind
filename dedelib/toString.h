@@ -196,10 +196,6 @@ inline std::ostream& operator<<(std::ostream& os, const EquivalenceClass& eq) {
 	return os;
 }
 
-inline std::ostream& operator<<(std::ostream& os, const TempEquivClassInfo& item) {
-	return os;
-}
-
 template<typename Key, typename Value>
 inline std::ostream& operator<<(std::ostream& os, const BufferedMap<Key, Value>& eqMap) {
 	bool isFirst = true;

@@ -5,6 +5,7 @@
 #include <vector>
 #include <thread>
 #include <queue>
+#include <optional>
 
 #include "knownData.h"
 #include "flatMBFStructure.h"
@@ -18,16 +19,13 @@
 
 #include "synchronizedQueue.h"
 
-struct ResultBuffer {
+struct OutputBuffer {
 	JobInfo originalInputData;
-	ProcessedPCoeffSum* resultsBuf;
+	ProcessedPCoeffSum* outputBuf;
 };
 
-template<unsigned int Variables>
 class PCoeffProcessingContext {
 public:
-	FlatMBFStructure<Variables> allMBFData;
-
 	/*
 		This is a closed-loop buffer circulation system. 
 		Buffers are allocated once at the start of the program, 
@@ -43,98 +41,120 @@ public:
 	*/
 	SynchronizedQueue<JobInfo> inputQueue;
 
-	SynchronizedQueue<ResultBuffer> resultsQueue;
+	SynchronizedQueue<OutputBuffer> outputQueue;
 
 	SynchronizedQueue<NodeIndex*> inputBufferReturnQueue;
-	SynchronizedQueue<ProcessedPCoeffSum*> resultBufferReturnQueue;
+	SynchronizedQueue<ProcessedPCoeffSum*> outputBufferReturnQueue;
 
-
-
-	PCoeffProcessingContext() : allMBFData(readFlatMBFStructure<Variables>()) {}
-	
-
+	PCoeffProcessingContext(unsigned int Variables, size_t numberOfInputBuffers, size_t numberOfOutputBuffers);
+	~PCoeffProcessingContext();
 };
 
 template<unsigned int Variables, size_t BatchSize>
-class InputProducer {
-	std::thread productionThread;
+void inputProducer(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& processingContext, const std::vector<NodeIndex>& topsToProcess) {
+	std::cout << "Input processor started. " << topsToProcess.size() << " tops to process!" << std::endl;
+	JobBatch<Variables, BatchSize> jobBatch;
+	SwapperLayers<Variables, BitSet<BatchSize>> swapper;
 
-public:
-	InputProducer(const std::vector<NodeIndex>& topsToProcess, PCoeffProcessingContext& processingContext, size_t numberOfInputBuffers) : 
-		productionThread([this, &processingContext, &topsToProcess](){
-			JobBatch<Variables, BatchSize> jobBatch;
-			SwapperLayers<Variables, BitSet<BatchSize>> swapper;
+	for(size_t i = 0; i < topsToProcess.size(); i += BatchSize) {
+		size_t numberInThisBatch = std::min(topsToProcess.size() - i, BatchSize);
 
-			std::cout << "Allocating " << numberOfInputBuffers << " input buffers." << std::endl;
-			for(size_t i = 0; i < numberOfInputBuffers; i++) {
-				processingContext.inputBufferReturnQueue.push(static_cast<NodeIndex*>(malloc(sizeof(NodeIndex) * MAX_BUFSIZE(Variables))));
-			}
+		NodeIndex* poppedBuffers[BatchSize];
+		processingContext.inputBufferReturnQueue.popN_wait_forever(poppedBuffers, numberInThisBatch);
 
-			for(size_t i = 0; i < topsToProcess.size(); i += BatchSize) {
-				size_t numberInThisBatch = std::min(topsToProcess.size() - i, BatchSize);
-
-				for(size_t j = 0; j < numberInThisBatch; j++) {
-					std::optional<NodeIndex*> inputBuffer = this->processingContext.inputBufferReturnQueue.pop_wait();
-					assert(inputBuffer.has_value());
-					jobBatch.jobs[j].bufStart = inputBuffer;
-				}
-
-				NodeIndex topsForThisBatch[BatchSize];
-				for(size_t j = 0; j < numberInThisBatch; j++) topsForThisBatch[j] = topsToProcess[i + j];
-
-				buildJobBatch(processingContext.allMBFData, topsForThisBatch, numberInThisBatch, jobBatch, swapper);
-
-				for(size_t j = 0; j < numberInThisBatch; j++) {
-					processingContext.inputQueue.push(jobBatch.jobs[j]);
-				}
-			}
-			processingContext.inputQueue.close();
-		}) {}
-
-	~InputProducer() {
-		std::cout << "Closing InputProducer thread..." << std::endl;
-		productionThread.join();
-		std::cout << "InputProducer thread closed. " << std::endl;
-		std::cout << "Deleting input buffers..." << std::endl;
-		size_t numFreedBuffers = 0;
-		for(std::optional<NodeIndex*> buffer; (buffer = processingContext.pop_wait()).has_value();) {
-			free(buffer.value());
-			numFreedBuffers++;
+		for(size_t j = 0; j < numberInThisBatch; j++) {
+			jobBatch.jobs[j].bufStart = poppedBuffers[j];
 		}
-		std::cout << "Deleted " << numFreedBuffers << " input buffers. " << std::endl;
-	}
-};
 
-struct ResultCollection {
-	NodeIndex topIndex;
-	BetaSum betaSum;
-};
+		NodeIndex topsForThisBatch[BatchSize];
+		for(size_t j = 0; j < numberInThisBatch; j++) topsForThisBatch[j] = topsToProcess[i + j];
+
+		buildJobBatch(allMBFData, topsForThisBatch, numberInThisBatch, jobBatch, swapper);
+
+		processingContext.inputQueue.pushN(jobBatch.jobs, numberInThisBatch);
+	}
+	std::cout << "Input processor finished." << std::endl;
+}
 
 template<unsigned int Variables>
-class ResultProcessor {
-public:
-	std::vector<ResultCollection> finalResults;
-private:	
-	std::thread collectionThread;
-public:
-	ResultProcessor(PCoeffProcessingContext& processingContext, size_t expectedNumberOfResults) : 
-		collectionThread([this](){
-			for(std::optional<ResultBuffer> resultBuffer; (resultBuffer = processingContext.resultsQueue.pop_wait()).has_value(); ) {
-				ResultBuffer rb = resultBuffer.value();
+void resultProcessor(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& processingContext, std::vector<BetaResult>& finalResults) {
+	std::cout << "Result processor started." << std::endl;
+	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = processingContext.outputQueue.pop_wait()).has_value(); ) {
+		OutputBuffer outBuf = outputBuffer.value();
 
-				ResultCollection curBetaResult;
-				curBetaResult.topIndex = rb.originalInputData.top;
-				curBetaResult.betaSum = produceBetaResult(processingContext.allMBFData, rb.originalInputData, rb.resultsBuf);
-				finalResults.push_back(curBetaResult);
-			}
-		}) {
+		BetaResult curBetaResult;
+		curBetaResult.topIndex = outBuf.originalInputData.top;
+		curBetaResult.betaSum = produceBetaResult(allMBFData, outBuf.originalInputData, outBuf.outputBuf);
 
-		finalResults.reserve(expectedNumberOfResults);
+		processingContext.inputBufferReturnQueue.push(outBuf.originalInputData.bufStart);
+		processingContext.outputBufferReturnQueue.push(outBuf.outputBuf);
+
+		finalResults.push_back(curBetaResult);
+		if(finalResults.size() % 1000 == 0) std::cout << finalResults.size() << std::endl;
 	}
+	std::cout << "Result processor finished." << std::endl;
+}
 
-	~ResultProcessor() {
-		std::cout << "Closing ResultProcessor thread..." << std::endl;
-		collectionThread.join();
-		std::cout << "ResultProcessor thread closed. " << std::endl;
+template<unsigned int Variables>
+void cpuProcessor_SingleThread(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context) {
+	std::cout << "SingleThread CPU Processor started." << std::endl;
+	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
+		JobInfo& job = jobOpt.value();
+		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait().value();
+		processBetasCPU_SingleThread(allMBFData, job.top, job.bufStart, job.bufEnd, countConnectedSumBuf);
+		OutputBuffer result;
+		result.originalInputData = job;
+		result.outputBuf = countConnectedSumBuf;
+		context.outputQueue.push(result);
 	}
-};
+	std::cout << "SingleThread CPU Processor finished." << std::endl;
+}
+
+template<unsigned int Variables>
+void cpuProcessor_CoarseMultiThread(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context) {
+	std::cout << "CoarseMultiThread CPU Processor started." << std::endl;
+	ThreadPool pool;
+	pool.doInParallel([&]() {cpuProcessor_SingleThread(allMBFData, context);});
+	std::cout << "CoarseMultiThread CPU Processor finished." << std::endl;
+}
+
+// Requires a Processor function of type void(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context)
+template<unsigned int Variables, size_t BatchSize, typename Processor>
+std::vector<BetaResult> pcoeffPipeline(const FlatMBFStructure<Variables>& allMBFData, const std::vector<NodeIndex>& topIndices, const Processor& processorFunc, size_t numberOfInputBuffers, size_t numberOfOutputBuffers) {
+	PCoeffProcessingContext context(Variables, numberOfInputBuffers, numberOfOutputBuffers);
+
+	std::vector<BetaResult> results;
+	results.reserve(topIndices.size());
+
+	std::thread inputProducerThread([&]() {inputProducer<Variables, BatchSize>(allMBFData, context, topIndices);});
+	std::thread processorThread([&]() {processorFunc(allMBFData, context);});
+	std::thread resultProcessingThread([&]() {resultProcessor<Variables>(allMBFData, context, results);});
+
+	inputProducerThread.join();
+	context.inputQueue.close();
+
+	processorThread.join();
+	context.outputQueue.close();
+
+	resultProcessingThread.join();
+	context.inputBufferReturnQueue.close();
+	context.outputBufferReturnQueue.close();
+
+	return results;
+}
+
+// Requires a Processor function of type void(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context)
+template<unsigned int Variables, size_t BatchSize, typename Processor>
+void processDedekindNumber(const Processor& processorFunc, size_t numberOfInputBuffers = 70, size_t numberOfOutputBuffers = 20) {
+	std::vector<NodeIndex> topsToProcess;
+	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
+		topsToProcess.push_back(i);
+	}
+	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
+
+	std::vector<BetaResult> betaResults = pcoeffPipeline<Variables, BatchSize, Processor>(allMBFData, topsToProcess, processorFunc, numberOfInputBuffers, numberOfOutputBuffers);
+
+	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, betaResults);
+
+	std::cout << "D(" << (Variables + 2) << ") = " << dedekindNumber << std::endl;
+}

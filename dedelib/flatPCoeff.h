@@ -397,8 +397,6 @@ BetaSum produceBetaResult(const FlatMBFStructure<Variables>& allMBFData, const J
 #endif
 }
 
-#define VALIDATE(topIdx, condition) if(!(condition)) throw "INVALID";
-
 template<unsigned int Variables, size_t BatchSize>
 void computeBatchBetaSums(const FlatMBFStructure<Variables>& allMBFData, JobBatch<Variables, BatchSize>& jobBatch, ProcessedPCoeffSum* pcoeffSumBuf, BetaSum* results) {
 	
@@ -418,6 +416,30 @@ void computeBatchBetaSums(const FlatMBFStructure<Variables>& allMBFData, JobBatc
 	}
 }
 
+
+struct BetaResult {
+	NodeIndex topIndex;
+	BetaSum betaSum;
+};
+
+template<unsigned int Variables>
+u192 computeDedekindNumberFromBetaSums(const FlatMBFStructure<Variables>& allMBFData, const std::vector<BetaResult>& betaResults) {
+	assert(betaResults.size() == mbfCounts[Variables]);
+	u192 total = 0;
+	for(const BetaResult& betaResult : betaResults) {
+		ClassInfo topInfo = allMBFData.allClassInfos[betaResult.topIndex];
+		
+		// invalid for DEDUPLICATION
+#ifndef PCOEFF_DEDUPLICATE
+		if(betaResult.betaSum.countedIntervalSizeDown != topInfo.intervalSizeDown) throw "INVALID!";
+#endif
+		uint64_t topIntervalSizeUp = allMBFData.allClassInfos[allMBFData.allNodes[betaResult.topIndex].dual].intervalSizeDown;
+		uint64_t topFactor = topIntervalSizeUp * topInfo.classSize; // max log2(2414682040998*5040) = 53.4341783883
+		total += umul192(betaResult.betaSum.betaSum, topFactor);
+	}
+	return total;
+}
+
 template<unsigned int Variables, size_t BatchSize>
 u192 flatDPlus2() {
 	FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
@@ -428,12 +450,12 @@ u192 flatDPlus2() {
 		jobBatch.jobs[i].bufStart = static_cast<NodeIndex*>(malloc(sizeof(NodeIndex) * MAX_BUFSIZE(Variables)));
 	}
 
-	u192 total = 0;
-	NodeIndex curIndex = 0;
+	std::vector<BetaResult> betaResults;
+	betaResults.reserve(mbfCounts[Variables]);
 
 	ProcessedPCoeffSum* pcoeffSumBuf = new ProcessedPCoeffSum[mbfCounts[Variables]];
 
-	while(curIndex < mbfCounts[Variables]) {
+	for(NodeIndex curIndex = 0; curIndex < mbfCounts[Variables]; curIndex += BatchSize) {
 		std::cout << '.' << std::flush;
 
 		NodeOffset numberToProcess = static_cast<NodeOffset>(std::min(mbfCounts[Variables] - curIndex, BatchSize));
@@ -449,28 +471,44 @@ u192 flatDPlus2() {
 		computeBatchBetaSums(allMBFData, jobBatch, pcoeffSumBuf, resultingBetaSums);
 
 		for(size_t i = 0; i < numberToProcess; i++) {
-			NodeIndex curJobTop = jobBatch.jobs[i].top;
-			ClassInfo topInfo = allMBFData.allClassInfos[curJobTop];
-			
-			// invalid for DEDUPLICATION
-			// VALIDATE(curJobTop, jobSum.countedIntervalSizeDown == topInfo.intervalSizeDown);
-
-			uint64_t topIntervalSizeUp = allMBFData.allClassInfos[allMBFData.allNodes[curJobTop].dual].intervalSizeDown;
-			uint64_t topFactor = topIntervalSizeUp * topInfo.classSize; // max log2(2414682040998*5040) = 53.4341783883
-			total += umul192(resultingBetaSums[i].betaSum, topFactor);
+			BetaResult newResult;
+			newResult.betaSum = resultingBetaSums[i];
+			newResult.topIndex = jobBatch.jobs[i].top;
+			betaResults.push_back(newResult);
 		}
-
-		curIndex += numberToProcess;
 	}
 	
-	std::cout << "D(" << (Variables + 2) << ") = " << total << std::endl;
+	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, betaResults);
+	std::cout << "D(" << (Variables + 2) << ") = " << dedekindNumber << std::endl;
 
 	for(size_t i = 0; i < BatchSize; i++) {
 		free(jobBatch.jobs[i].bufStart);
 	}
 
-	return total;
+	return dedekindNumber;
 }
 
 
+template<unsigned int Variables>
+void isEvenPlus2() {
+	FlatMBFStructure<Variables> allMBFs = readFlatMBFStructure<Variables>(false, true, true, false);
+
+	bool isEven = true; // 0 is even
+	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
+		uint64_t classSize = allMBFs.allClassInfos[i].classSize;
+
+		if(classSize % 2 == 0) continue;
+
+		uint64_t intervalSizeDown = allMBFs.allClassInfos[i].intervalSizeDown;
+		if(intervalSizeDown % 2 == 0) continue;
+
+		NodeIndex dualI = allMBFs.allNodes[i].dual;
+		uint64_t intervalSizeUp = allMBFs.allClassInfos[dualI].intervalSizeDown;
+		if(intervalSizeUp % 2 == 0) continue;
+
+		isEven = !isEven;
+	}
+
+	std::cout << "D(" << (Variables + 2) << ") is " << (isEven ? "even" : "odd") << std::endl;
+}
 

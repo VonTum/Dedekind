@@ -73,6 +73,6 @@ public:
 
 struct NoExtraData {
 	// for ExtraInfo implementations
-	static void populate(DedekindDecomposition<NoExtraData>& decomp) {}
-	static valueInt getDedekind(const DedekindDecomposition<NoExtraData>& decomp) { throw "Not implemented!"; }
+	static void populate(DedekindDecomposition<NoExtraData>&) {}
+	static valueInt getDedekind(const DedekindDecomposition<NoExtraData>&) { throw "Not implemented!"; }
 };

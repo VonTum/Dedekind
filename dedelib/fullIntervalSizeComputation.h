@@ -32,7 +32,7 @@ void computeIntervalSizesNaive() {
 		iterCollectionInParallel(allMBFs.layers[layer], [&](KeyValue<MBF, uint64_t>& cur) {
 			uint64_t total = 0;
 
-			forEachMonotonicFunctionUpTo<Variables>(cur.key, [&total](const Monotonic<Variables>& bf) {
+			forEachMonotonicFunctionUpTo<Variables>(cur.key, [&total](const Monotonic<Variables>&) {
 				total++;
 			});
 

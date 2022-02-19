@@ -13,7 +13,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 
   add_compile_options("$<$<CONFIG:RELEASE>:/O2 /Oi /ot /GL>")
 else()
-  add_compile_options(-Wall -march=native)
+  add_compile_options(-Wall -Wextra -march=native)
   
   # profiling
   # add_compile_options(-g -fno-omit-frame-pointer -fno-inline-small-functions)
@@ -34,6 +34,7 @@ add_library(dedelib
   dedelib/flatBufferManagement.cpp
   dedelib/configure.cpp
   dedelib/terminalColor.cpp
+  dedelib/flatPCoeffProcessing.cpp
 
   dedelib/bigint/uint128_t.cpp
   dedelib/bigint/uint256_t.cpp
@@ -43,6 +44,7 @@ add_executable(production
   production/main.cpp
   production/miscCommands.cpp
   production/flatCommands.cpp
+  production/processingCommands.cpp
   production/dataGenerationCommands.cpp
   production/testSetCommands.cpp
 )

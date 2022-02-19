@@ -62,6 +62,9 @@ static void printHistogramAndPCoeffs(unsigned int Variables, bool verbose = fals
 	if(reset) successfulBots = 0;
 	if(reset) failedBots = 0;
 #else
+	(void) Variables;
+	(void) verbose;
+	(void) reset;
 	std::cout << "Statistics not enabled!" << std::endl;
 #endif
 }
