@@ -127,13 +127,13 @@ int main(int argc, const char** argv) {
 	ProcessedPCoeffSum countConnectedSum = processPCoeffSum<Variables>(t, b, tempGraphsBuf);
 
 	std::cout << b.bf.bitset << '_';
-	printBits(std::cout, countConnectedSum.pcoeffCount, 16);
+	printBits(std::cout, getPCoeffCount(countConnectedSum), 16);
 	std::cout << '_';
-	printBits(std::cout, countConnectedSum.pcoeffSum, 48);
+	printBits(std::cout, getPCoeffSum(countConnectedSum), 48);
 	std::cout << std::endl;
 
-	std::cout << "Pcoeff Count: " << countConnectedSum.pcoeffCount << std::endl;
-	std::cout << "Pcoeff Sum: " << countConnectedSum.pcoeffSum << std::endl;
+	std::cout << "Pcoeff Count: " << getPCoeffCount(countConnectedSum) << std::endl;
+	std::cout << "Pcoeff Sum: " << getPCoeffSum(countConnectedSum) << std::endl;
 
 	return 0;
 

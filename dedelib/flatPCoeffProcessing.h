@@ -53,7 +53,7 @@ public:
 
 template<unsigned int Variables, size_t BatchSize>
 void inputProducer(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& processingContext, const std::vector<NodeIndex>& topsToProcess) {
-	std::cout << "Input processor started. " << topsToProcess.size() << " tops to process!" << std::endl;
+	std::cout << "Input processor started. " << topsToProcess.size() << " tops to process!\n" << std::flush;
 	JobBatch<Variables, BatchSize> jobBatch;
 	SwapperLayers<Variables, BitSet<BatchSize>> swapper;
 
@@ -74,12 +74,12 @@ void inputProducer(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessi
 
 		processingContext.inputQueue.pushN(jobBatch.jobs, numberInThisBatch);
 	}
-	std::cout << "Input processor finished." << std::endl;
+	std::cout << "Input processor finished.\n" << std::flush;
 }
 
 template<unsigned int Variables>
 void resultProcessor(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& processingContext, std::vector<BetaResult>& finalResults) {
-	std::cout << "Result processor started." << std::endl;
+	std::cout << "Result processor started.\n" << std::flush;
 	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = processingContext.outputQueue.pop_wait()).has_value(); ) {
 		OutputBuffer outBuf = outputBuffer.value();
 
@@ -91,14 +91,15 @@ void resultProcessor(const FlatMBFStructure<Variables>& allMBFData, PCoeffProces
 		processingContext.outputBufferReturnQueue.push(outBuf.outputBuf);
 
 		finalResults.push_back(curBetaResult);
-		if(finalResults.size() % 1000 == 0) std::cout << finalResults.size() << std::endl;
+		if constexpr(Variables == 7) std::cout << '.' << std::flush;
+		if(finalResults.size() % 1000 == 0) std::cout << std::endl << finalResults.size() << std::endl;
 	}
-	std::cout << "Result processor finished." << std::endl;
+	std::cout << "Result processor finished.\n" << std::flush;
 }
 
 template<unsigned int Variables>
 void cpuProcessor_SingleThread(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context) {
-	std::cout << "SingleThread CPU Processor started." << std::endl;
+	std::cout << "SingleThread CPU Processor started.\n" << std::flush;
 	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
 		JobInfo& job = jobOpt.value();
 		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
@@ -108,20 +109,20 @@ void cpuProcessor_SingleThread(const FlatMBFStructure<Variables>& allMBFData, PC
 		result.outputBuf = countConnectedSumBuf;
 		context.outputQueue.push(result);
 	}
-	std::cout << "SingleThread CPU Processor finished." << std::endl;
+	std::cout << "SingleThread CPU Processor finished.\n" << std::flush;
 }
 
 template<unsigned int Variables>
 void cpuProcessor_CoarseMultiThread(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context) {
-	std::cout << "Coarse MultiThread CPU Processor started." << std::endl;
+	std::cout << "Coarse MultiThread CPU Processor started.\n" << std::flush;
 	ThreadPool pool;
 	pool.doInParallel([&]() {cpuProcessor_SingleThread(allMBFData, context);});
-	std::cout << "Coarse MultiThread CPU Processor finished." << std::endl;
+	std::cout << "Coarse MultiThread CPU Processor finished.\n" << std::flush;
 }
 
 template<unsigned int Variables>
 void cpuProcessor_FineMultiThread(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context) {
-	std::cout << "Fine MultiThread CPU Processor started." << std::endl;
+	std::cout << "Fine MultiThread CPU Processor started.\n" << std::flush;
 	ThreadPool pool;
 	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
 		JobInfo& job = jobOpt.value();
@@ -132,7 +133,7 @@ void cpuProcessor_FineMultiThread(const FlatMBFStructure<Variables>& allMBFData,
 		result.outputBuf = countConnectedSumBuf;
 		context.outputQueue.push(result);
 	}
-	std::cout << "Fine MultiThread CPU Processor finished." << std::endl;
+	std::cout << "Fine MultiThread CPU Processor finished.\n" << std::flush;
 }
 
 // Requires a Processor function of type void(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context)
@@ -165,10 +166,15 @@ void processDedekindNumber(const Processor& processorFunc, size_t numberOfInputB
 	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
 		topsToProcess.push_back(i);
 	}
-	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
 
+	std::cout << "Reading FlatMBFStructure..." << std::endl;
+	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
+	std::cout << "FlatMBFStructure initialized." << std::endl;
+
+	std::cout << "Starting Computation..." << std::endl;
 	std::vector<BetaResult> betaResults = pcoeffPipeline<Variables, BatchSize, Processor>(allMBFData, topsToProcess, processorFunc, numberOfInputBuffers, numberOfOutputBuffers);
 
+	std::cout << "Computation finished." << std::endl;
 	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, betaResults);
 
 	std::cout << "D(" << (Variables + 2) << ") = " << dedekindNumber << std::endl;
