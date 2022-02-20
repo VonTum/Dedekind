@@ -135,10 +135,28 @@ always @(*) begin
     end
 end
 
+// Performance profiling with a measure of how many pipelines are working at any given time
+wire[5:0] activityMeasure; // Instrumentation wire for profiling (0-40 activity level)
+
 assign resultsAvailable[0] = 1;
-reg[39:0] clockCounter; always @(posedge clk) clockCounter <= rst ? 0 : clockCounter + 1;
-assign dataOut[0] = {24'b0, clockCounter};
-assign dataOut[1][62:61] = 0;
+reg[47:0] activityCounter;
+reg[41:0] clockCounter;
+assign dataOut[0][63:32] = activityCounter[47:16];
+assign dataOut[0][31:0] = clockCounter[41:10];
+// The resulting occupancy is calculated as activityCounter / 40 / clockCounter
+// Also, the occupancy returned for a top is the occupancy of the PREVIOUS top
+// For an outside observer, occupancy is computed as (dataOut[63:32] << 6) / 40.0 / dataOut[31:0]
+
+always @(posedge clk) begin
+    if(rst || grabResults[0]) begin
+        clockCounter <= 0;
+        activityCounter <= 0;
+    end else begin
+        clockCounter <= clockCounter + 1;
+        activityCounter <= activityCounter + activityMeasure;
+    end
+end
+
 
 wire pipelineIsReady;
 assign readyForInput = pipelineIsReady && !stallInput;
@@ -146,6 +164,7 @@ fullPermutationPipeline permutationPipeline (
     .clk(clk),
     .clk2x(clk2x),
     .rst(rst),
+    .activityMeasure(activityMeasure),
     
     .top(top),
     .bot(botOrTop),
@@ -158,6 +177,8 @@ fullPermutationPipeline permutationPipeline (
     .pcoeffCount(dataOut[1][60:48]),
     .eccStatus(dataOut[1][63])
 );
+// define missing bits
+assign dataOut[1][62:61] = 0;
 
 endmodule
 

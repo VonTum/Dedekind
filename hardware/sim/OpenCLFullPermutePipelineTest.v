@@ -75,8 +75,12 @@ OpenCLFullPermutationPipeline elementUnderTest (
     .summedDataPcoeffCountOut(summedDataPcoeffCountOut)   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
-wire isPassingInput = inputBotValid & isReadyForInput;
-wire isPassingOutput = validOutput & isReadyForOutput;
+wire isPassingInput = inputBotValid && isReadyForInput;
+wire isPassingOutput = validOutput && isReadyForOutput;
+
+wire nextOutputIsTopOutput = dataTable[outputIndex][1+128+16+48-1];
+wire isPassingTopOutput = isPassingOutput && nextOutputIsTopOutput;
+wire isPassingBotOutput = isPassingOutput && !nextOutputIsTopOutput;
 
 always @(posedge clock) if(!rst) begin
     if(isPassingInput) begin
@@ -94,7 +98,10 @@ assign {startNewTop, bot} = dataTable[inputIndex][1+128+16+48-1 : 16+48];
 wire[47:0] offsetSum = dataTable[outputIndex][48-1 : 0];
 wire[12:0] offsetCount = dataTable[outputIndex][12+48 : 48];
 
-wire CORRECT_SUM = isPassingOutput ? (summedData == offsetSum) : 1'b1; //1'bX;
-wire CORRECT_COUNT = isPassingOutput ? (pcoeffCount == offsetCount) : 1'b1; //1'bX;
+wire CORRECT_SUM = isPassingBotOutput ? (summedData == offsetSum) : 1'b1; //1'bX;
+wire CORRECT_COUNT = isPassingBotOutput ? (pcoeffCount == offsetCount) : 1'b1; //1'bX;
+
+// 4 digit fixed-point real number
+wire[127:0] OCCUPANCY = isPassingTopOutput ? (summedDataPcoeffCountOut[63:32] << 6) * (10000 / 40) / summedDataPcoeffCountOut[31:0] : 1'bX;
 
 endmodule

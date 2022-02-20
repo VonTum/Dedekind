@@ -52,6 +52,7 @@ endmodule
 module pipelinedCountConnectedCoreWithSingletonElimination #(parameter EXTRA_DATA_WIDTH = 14, parameter REQUEST_LATENCY = 3) (
     input clk,
     input rst,
+    output isActive, // Instrumentation wire for profiling
     
     // input side
     input[127:0] leafEliminatedGraph,
@@ -85,6 +86,7 @@ singletonElimination se(clk, leafEliminatedGraph, singletonEliminatedGraph, star
 pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATENCY(`SE_PIPE_STEPS + REQUEST_LATENCY), .STARTING_CONNECT_COUNT_LAG(`STARTING_CONNECT_COUNT_LAG)) core(
     .clk(clk), 
     .rst(rst),
+    .isActive(isActive),
     
     // input side
     .request(requestGraph), 

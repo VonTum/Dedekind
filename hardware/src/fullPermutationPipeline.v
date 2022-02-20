@@ -4,6 +4,7 @@ module fullPermutationPipeline(
     input clk,
     input clk2x,
     input rst,
+    output[5:0] activityMeasure, // Instrumentation wire for profiling (0-40 activity level)
     
     input[127:0] top,
     
@@ -55,6 +56,7 @@ pipeline120Pack computePipe (
     .clk(clk),
     .clk2x(clk2x),
     .rst(computePipeRST),
+    .activityMeasure(activityMeasure),
     
     .top(top),
     .bot(permutedBot),

@@ -64,6 +64,7 @@ module pipeline24PackV2WithFIFO (
     input clk,
     input clk2x,
     input rst,
+    output[3:0] activityMeasure, // Instrumentation wire for profiling (0-8 activity level)
     
     // Input side
     input[127:0] top,
@@ -120,8 +121,9 @@ pipeline24PackV2 pipeline (
     .clk(clk),
     .clk2x(clk2x),
     .rst(pipelineRST),
-    
+    .activityMeasure(activityMeasure),
     .top(top),
+    
     .bot(botFromFIFO),
     .writeData(fifo24DataOutValid),
     .validBotPermutations(validBotPermutationsFromFIFO),
@@ -144,9 +146,10 @@ module pipeline24PackV2 (
     input clk,
     input clk2x,
     input rst,
+    output[3:0] activityMeasure, // Instrumentation wire for profiling (0-8 activity level)
+    input[127:0] top,
     
     // Input side
-    input[127:0] top,
     input[127:0] bot,
     input writeData,
     input[23:0] validBotPermutations,
@@ -186,10 +189,17 @@ always @(posedge clk) resultsAvailable <= resultsAvailableWAND;
 wor slowDownInputWOR; always @(posedge clk) slowDownInput <= slowDownInputWOR;
 wor eccStatusWOR; always @(posedge clk) eccStatus <= eccStatusWOR;
 
-aggregatingPermutePipeline p0(clk, clk2x, rst, top, botABCD, writeData, permutesABCD, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[0], counts[0], eccStatusWOR);
-aggregatingPermutePipeline p1(clk, clk2x, rst, top, botBACD, writeData, permutesBACD, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[1], counts[1], eccStatusWOR);
-aggregatingPermutePipeline p2(clk, clk2x, rst, top, botCBAD, writeData, permutesCBAD, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[2], counts[2], eccStatusWOR);
-aggregatingPermutePipeline p3(clk, clk2x, rst, top, botDBCA, writeData, permutesDBCA, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[3], counts[3], eccStatusWOR);
+// Profiling wires
+wire[1:0] activityMeasures[3:0];
+reg[2:0] activityMeasure01; always @(posedge clk) activityMeasure01 <= activityMeasures[0] + activityMeasures[1];
+reg[2:0] activityMeasure23; always @(posedge clk) activityMeasure23 <= activityMeasures[2] + activityMeasures[3];
+reg[3:0] activityMeasureSum; always @(posedge clk) activityMeasureSum <= activityMeasure01 + activityMeasure23;
+hyperpipe #(.CYCLES(3), .WIDTH(4)) activityPipe(clk, activityMeasureSum, activityMeasure);
+
+aggregatingPermutePipeline p0(clk, clk2x, rst, activityMeasures[0], top, botABCD, writeData, permutesABCD, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[0], counts[0], eccStatusWOR);
+aggregatingPermutePipeline p1(clk, clk2x, rst, activityMeasures[1], top, botBACD, writeData, permutesBACD, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[1], counts[1], eccStatusWOR);
+aggregatingPermutePipeline p2(clk, clk2x, rst, activityMeasures[2], top, botCBAD, writeData, permutesCBAD, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[2], counts[2], eccStatusWOR);
+aggregatingPermutePipeline p3(clk, clk2x, rst, activityMeasures[3], top, botDBCA, writeData, permutesDBCA, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[3], counts[3], eccStatusWOR);
 
 // combine outputs
 reg[`PCOEFF_COUNT_BITWIDTH+35+1-1:0] sum01; always @(posedge clk) sum01 <= sums[0] + sums[1];

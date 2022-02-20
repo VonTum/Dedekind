@@ -10,6 +10,7 @@ module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     input clk,
     input clk2x,
     input rst,
+    output reg[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
     
     // Input side
     input isBotValid,
@@ -84,9 +85,19 @@ wire writeToCollector2x;
 wire[5:0] connectCountToCollector2x;
 wire[`ADDR_WIDTH-1:0] addrToCollector2x;
 
+
+// Instrumentation for profiling
+wire isActive2x;
+reg isActive2xD; always @(posedge clk2x) isActive2xD <= isActive2x;// Sample the second tick too, to avoid bias from clk-clk2x synchronization
+wire isActiveA; synchronizer isActiveASync(clk2x, isActive2x, clk, isActiveA);
+wire isActiveB; synchronizer isActiveBSync(clk2x, isActive2xD, clk, isActiveB);
+always @(posedge clk) activityMeasure = isActiveA + isActiveB;
+
+
 pipelinedCountConnectedCoreWithSingletonElimination #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH), .REQUEST_LATENCY(`FIFO_READ_LATENCY)) countConnectedCore (
     .clk(clk2x),
     .rst(cccRST2x),
+    .isActive(isActive2x),
     
     // input side
     .leafEliminatedGraph(graphToComputeModule2x),

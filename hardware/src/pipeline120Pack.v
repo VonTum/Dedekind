@@ -7,6 +7,7 @@ module pipeline120Pack(
     input clk,
     input clk2x,
     input rst,
+    output[5:0] activityMeasure, // Instrumentation wire for profiling (0-40 activity level)
     
     // Input side
     input[127:0] top,
@@ -35,11 +36,20 @@ wire[127:0] botEBCDA; `VAR_SWAP_INLINE(2,6,botABCDE, botEBCDA)
 wire[`PCOEFF_COUNT_BITWIDTH+2+35-1:0] sums[4:0];
 wire[`PCOEFF_COUNT_BITWIDTH+2-1:0] counts[4:0];
 
-pipeline24PackV2WithFIFO p1(clk, clk2x, rst, top, botABCDE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[0], counts[0], eccStatus);
-pipeline24PackV2WithFIFO p2(clk, clk2x, rst, top, botBACDE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[1], counts[1], eccStatus);
-pipeline24PackV2WithFIFO p3(clk, clk2x, rst, top, botCBADE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[2], counts[2], eccStatus);
-pipeline24PackV2WithFIFO p4(clk, clk2x, rst, top, botDBCAE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[3], counts[3], eccStatus);
-pipeline24PackV2WithFIFO p5(clk, clk2x, rst, top, botEBCDA, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[4], counts[4], eccStatus);
+// Profiling instrumentation
+wire[3:0] activitySubMeasures[4:0];
+reg[4:0] activityMeasure01; always @(posedge clk) activityMeasure01 <= activitySubMeasures[0] + activitySubMeasures[1];
+reg[4:0] activityMeasure23; always @(posedge clk) activityMeasure23 <= activitySubMeasures[2] + activitySubMeasures[3];
+reg[3:0] activityMeasure4D; always @(posedge clk) activityMeasure4D <= activitySubMeasures[4];
+reg[4:0] activityMeasure01D; always @(posedge clk) activityMeasure01D <= activityMeasure01;
+reg[5:0] activityMeasure234; always @(posedge clk) activityMeasure234 <= activityMeasure23 + activityMeasure4D;
+hyperpipe #(.CYCLES(3), .WIDTH(6)) activityPipe(clk, activityMeasure01D + activityMeasure234, activityMeasure);
+
+pipeline24PackV2WithFIFO p1(clk, clk2x, rst, activitySubMeasures[0], top, botABCDE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[0], counts[0], eccStatus);
+pipeline24PackV2WithFIFO p2(clk, clk2x, rst, activitySubMeasures[1], top, botBACDE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[1], counts[1], eccStatus);
+pipeline24PackV2WithFIFO p3(clk, clk2x, rst, activitySubMeasures[2], top, botCBADE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[2], counts[2], eccStatus);
+pipeline24PackV2WithFIFO p4(clk, clk2x, rst, activitySubMeasures[3], top, botDBCAE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[3], counts[3], eccStatus);
+pipeline24PackV2WithFIFO p5(clk, clk2x, rst, activitySubMeasures[4], top, botEBCDA, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[4], counts[4], eccStatus);
 
 reg[`PCOEFF_COUNT_BITWIDTH+3+35-1:0] sum01; always @(posedge clk) sum01 <= sums[0] + sums[1];
 reg[`PCOEFF_COUNT_BITWIDTH+3+35-1:0] sum23; always @(posedge clk) sum23 <= sums[2] + sums[3];

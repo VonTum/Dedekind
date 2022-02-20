@@ -338,6 +338,7 @@ endmodule
 module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter DATA_IN_LATENCY = 4, parameter STARTING_CONNECT_COUNT_LAG = 3) (
     input clk,
     input rst,
+    output isActive, // Instrumentation wire for profiling
     
     // input side
     output request,
@@ -421,5 +422,8 @@ shiftRegister #(.CYCLES(`TOTAL_PIPELINE_STAGES + DATA_IN_LATENCY), .WIDTH(1+EXTR
     {validOut, storedExtraDataOut},
     {validIn, storedExtraDataIn}
 );
+
+// Lots of slack, latency isn't important and we want minimal influence on the resulting hardware
+hyperpipe #(.CYCLES(7)) activityMonitorPipe(clk, validIn, isActive);
 
 endmodule
