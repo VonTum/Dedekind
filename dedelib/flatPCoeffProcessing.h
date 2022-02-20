@@ -84,6 +84,7 @@ void resultProcessor(const FlatMBFStructure<Variables>& allMBFData, PCoeffProces
 		OutputBuffer outBuf = outputBuffer.value();
 
 		BetaResult curBetaResult;
+		std::cout << "Results for job " << outBuf.originalInputData.getTop() << std::endl;
 		curBetaResult.topIndex = outBuf.originalInputData.getTop();
 		curBetaResult.betaSum = produceBetaResult(allMBFData, outBuf.originalInputData, outBuf.outputBuf);
 

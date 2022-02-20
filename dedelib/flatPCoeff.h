@@ -65,7 +65,11 @@ struct JobInfo {
 	}
 
 	NodeIndex getTop() const {
-		return *bufStart;
+		return (*bufStart) & 0x7FFFFFFF;
+	}
+
+	size_t size() const {
+		return bufEnd - bufStart;
 	}
 };
 
@@ -293,7 +297,8 @@ ProcessedPCoeffSum processOneBeta(const FlatMBFStructure<Variables>& downLinkStr
 
 template<unsigned int Variables>
 void processBetasCPU_SingleThread(const FlatMBFStructure<Variables>& downLinkStructure, const NodeIndex* idxBuf, const NodeIndex* bufEnd, ProcessedPCoeffSum* countConnectedSumBuf) {
-	NodeIndex topIdx = idxBuf[0];
+	NodeIndex topIdx = idxBuf[0] & 0x7FFFFFFF; // Remove top bit
+	assert(idxBuf[0] & 0x80000000); // Assert that it is set for the top
 	Monotonic<Variables> top = downLinkStructure.mbfs[topIdx];
 
 	BooleanFunction<Variables> graphsBuf[factorial(Variables)];
@@ -307,7 +312,8 @@ void processBetasCPU_SingleThread(const FlatMBFStructure<Variables>& downLinkStr
 
 template<unsigned int Variables>
 void processBetasCPU_MultiThread(const FlatMBFStructure<Variables>& downLinkStructure, const NodeIndex* idxBuf, const NodeIndex* bufEnd, ProcessedPCoeffSum* countConnectedSumBuf, ThreadPool& threadPool) {
-	NodeIndex topIdx = idxBuf[0];
+	NodeIndex topIdx = idxBuf[0] & 0x7FFFFFFF; // Remove top bit
+	assert(idxBuf[0] & 0x80000000); // Assert that it is set for the top
 	Monotonic<Variables> top = downLinkStructure.mbfs[topIdx];
 
 	size_t idxBufSize = bufEnd - idxBuf;

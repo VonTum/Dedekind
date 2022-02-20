@@ -13,7 +13,7 @@ class ParsedArgs {
 	std::vector<OptionalArg> optionals;
 public:
 
-	ParsedArgs(int argc, const char** argv) {
+	ParsedArgs(int argc, const char* const * argv) {
 		for(int i = 1; i < argc; i++) {
 			const char* item = argv[i];
 			if(item[0] == '-') {

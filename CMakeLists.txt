@@ -40,6 +40,9 @@ add_library(dedelib
   dedelib/bigint/uint256_t.cpp
 )
 
+# Must also enable Position Independent Code, or fpga_production gets angry
+target_compile_options(dedelib PRIVATE -fPIC)
+
 add_executable(production
   production/main.cpp
   production/miscCommands.cpp
