@@ -142,7 +142,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		if(ENABLE_SHUFFLE) shuffleBots(botIndices + 1, botIndices + jobSize);
 		botIndices[jobSize++] = 0x80000000; // Dummy top, to get a good occupation reading
 		
-		status = clEnqueueWriteBuffer(queue,inputMem[0],0,0,jobSize*sizeof(uint64_t),botIndices,0,0,0);
+		status = clEnqueueWriteBuffer(queue,inputMem[0],0,0,jobSize*sizeof(uint32_t),botIndices,0,0,0);
 		checkError(status, "Failed to enqueue writing to inputMem buffer");
 
 		status = clFinish(queue);
@@ -176,8 +176,9 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		std::cout << "Finished job " << botIndices[0] << " of size " << jobSize << " in " << runtimeSeconds << "s, at " << (double(jobSize)/runtimeSeconds) << "bots/s" << std::endl;
 
 		// Use final dummy top to get proper occupation reading
-		uint64_t activityCounter = (countConnectedSumBuf[jobSize-1] & 0xFFFFFFFF00000000) >> 32;
-		uint64_t cycleCounter = countConnectedSumBuf[jobSize-1] & 0x00000000FFFFFFFF;
+		uint64_t analysisBot = countConnectedSumBuf[jobSize-1];
+		uint64_t activityCounter = (analysisBot & 0xFFFFFFFF00000000) >> 32;
+		uint64_t cycleCounter = analysisBot & 0x00000000FFFFFFFF;
 
 		std::cout << "Previous top took " << (cycleCounter) << "<<10 cycles" << std::endl;
 		std::cout << "Previous top had " << (activityCounter) << "<<16 activity" << std::endl;
@@ -209,6 +210,7 @@ std::vector<IntT> parseIntList(const std::string& strList) {
 
 // Entry point.
 int main(int argc, char** argv) {
+	try {
 	ParsedArgs parsed(argc, argv);
 	configure(parsed); // Configures memory mapping, and other settings
 	const std::vector<std::string>& argsFromParsedArgs = parsed.args();
@@ -323,7 +325,9 @@ int main(int argc, char** argv) {
 	cleanup();
 	std::cout << "Cleanup finished" << std::endl;
 
-
+	}catch(const char* text) {
+		std::cerr << "ERROR:" << text << std::endl;
+	}
 	return 0;
 }
 
