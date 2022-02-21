@@ -98,11 +98,15 @@ void resultProcessor(const FlatMBFStructure<Variables>& allMBFData, PCoeffProces
 	std::cout << "Result processor finished.\n" << std::flush;
 }
 
+// Deterministically shuffles the input bots to get a more uniform mix of bot difficulty
+void shuffleBots(NodeIndex* bots, NodeIndex* botsEnd);
+
 template<unsigned int Variables>
 void cpuProcessor_SingleThread(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context) {
 	std::cout << "SingleThread CPU Processor started.\n" << std::flush;
 	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
 		JobInfo& job = jobOpt.value();
+		shuffleBots(job.bufStart + 1, job.bufEnd);
 		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
 		processBetasCPU_SingleThread(allMBFData, job.bufStart, job.bufEnd, countConnectedSumBuf);
 		OutputBuffer result;
@@ -128,6 +132,7 @@ void cpuProcessor_FineMultiThread(const FlatMBFStructure<Variables>& allMBFData,
 	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
 		JobInfo& job = jobOpt.value();
 		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
+		shuffleBots(job.bufStart + 1, job.bufEnd);
 		processBetasCPU_MultiThread(allMBFData, job.bufStart, job.bufEnd, countConnectedSumBuf, pool);
 		OutputBuffer result;
 		result.originalInputData = job;

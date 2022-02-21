@@ -139,7 +139,9 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 
 		cl_int status;
 
-		if(ENABLE_SHUFFLE) std::shuffle(botIndices + 1, botIndices + jobSize, std::default_random_engine(38138138183));
+		if(ENABLE_SHUFFLE) shuffleBots(botIndices + 1, botIndices + jobSize);
+		botIndices[jobSize++] = 0x80000000; // Dummy top, to get a good occupation reading
+		
 		status = clEnqueueWriteBuffer(queue,inputMem[0],0,0,jobSize*sizeof(uint64_t),botIndices,0,0,0);
 		checkError(status, "Failed to enqueue writing to inputMem buffer");
 
@@ -173,8 +175,9 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		checkError(status, "Failed to Finish reading output buffer");
 		std::cout << "Finished job " << botIndices[0] << " of size " << jobSize << " in " << runtimeSeconds << "s, at " << (double(jobSize)/runtimeSeconds) << "bots/s" << std::endl;
 
-		uint64_t activityCounter = (countConnectedSumBuf[0] & 0xFFFFFFFF00000000) >> 32;
-		uint64_t cycleCounter = countConnectedSumBuf[0] & 0x00000000FFFFFFFF;
+		// Use final dummy top to get proper occupation reading
+		uint64_t activityCounter = (countConnectedSumBuf[jobSize-1] & 0xFFFFFFFF00000000) >> 32;
+		uint64_t cycleCounter = countConnectedSumBuf[jobSize-1] & 0x00000000FFFFFFFF;
 
 		std::cout << "Previous top took " << (cycleCounter) << "<<10 cycles" << std::endl;
 		std::cout << "Previous top had " << (activityCounter) << "<<16 activity" << std::endl;

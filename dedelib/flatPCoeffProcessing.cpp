@@ -42,3 +42,31 @@ PCoeffProcessingContext::~PCoeffProcessingContext() {
 	}
 	std::cout << "Deleted " << numFreedOutputBuffers << " output buffers. " << std::endl;
 }
+
+uint8_t reverseBits(uint8_t index) {
+	index = ((index & 0b00001111) << 4) | ((index & 0b11110000) >> 4); // swap 4,4
+	index = ((index & 0b00110011) << 2) | ((index & 0b11001100) >> 2); // swap 2,2
+	index = ((index & 0b01010101) << 1) | ((index & 0b10101010) >> 1); // swap 1,1
+	return index;
+}
+
+// Deterministically shuffles the input bots to get a more uniform mix of bot difficulty
+void shuffleBots(NodeIndex* bots, NodeIndex* botsEnd) {
+	constexpr size_t CLUSTER_SIZE = 256;
+	using IndexType = uint8_t;
+	size_t numBots = botsEnd - bots;
+
+	size_t numGroups = numBots / CLUSTER_SIZE;
+
+	for(size_t groupI = 0; groupI < numGroups; groupI++) {
+		NodeIndex itemsFromCluster[CLUSTER_SIZE];
+		for(size_t itemWithinCluster = 0; itemWithinCluster < CLUSTER_SIZE; itemWithinCluster++) {
+			itemsFromCluster[itemWithinCluster] = bots[numGroups * itemWithinCluster + groupI];
+		}
+		for(size_t itemWithinCluster = 0; itemWithinCluster < CLUSTER_SIZE; itemWithinCluster++) {
+			IndexType sourceIndex = reverseBits(static_cast<IndexType>((itemWithinCluster + groupI) % CLUSTER_SIZE));
+			bots[numGroups * itemWithinCluster + groupI] = itemsFromCluster[sourceIndex];
+		}
+	}
+} 
+
