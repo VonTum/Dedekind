@@ -73,33 +73,36 @@ pipeline120Pack computePipe (
 );
 
 (* dont_merge *) reg outputRST; always @(posedge clk) outputRST <= rst;
-reg[3:0] cyclesSinceGrabNewResult;
-wire isReadyForNextGrab = cyclesSinceGrabNewResult == 10;
-assign grabNewResult = !resultsAvailable && pipelineResultAvailable && isReadyForNextGrab;
+// Extra delay needed to properly reset this fifo after other fifos in the system. Otherwise it gets messed up
+wire outputRST_Delayed;
+hyperpipe #(.CYCLES(10)) outputRSTPipe(clk, outputRST, outputRST_Delayed);
 
-always @(posedge clk) begin
-    if(outputRST || grabNewResult) begin
-        cyclesSinceGrabNewResult <= 0;
-    end else begin
-        if(!isReadyForNextGrab) begin
-            cyclesSinceGrabNewResult <= cyclesSinceGrabNewResult + 1;
-        end
-    end
-end
+// Small stalling machine, to allow for propagation delay in grabNewResult and pipelineResultAvailable
+reg[2:0] cyclesTillNextResultsGrabTry = 0; always @(posedge clk) cyclesTillNextResultsGrabTry <= cyclesTillNextResultsGrabTry + 1;
+wire outputFIFOReadyForResults;
+assign grabNewResult = outputFIFOReadyForResults && pipelineResultAvailable && (cyclesTillNextResultsGrabTry == 0);
+
 
 wire grabNewResultArrived;
 hyperpipe #(.CYCLES(8)) writePipeToRegister(clk, grabNewResult, grabNewResultArrived);
 
-pipelineRegister #(.WIDTH(48+13)) outputReg(
+wire[4:0] outputFIFOUsedw;
+// Expect output fifo to be far away from pipelines
+hyperpipe #(.CYCLES(5)) outputFIFOReadyForResultsPipe(clk, outputFIFOUsedw < 20, outputFIFOReadyForResults);
+wire outputFIFOEmpty; assign resultsAvailable = !outputFIFOEmpty;
+FIFO #(.WIDTH(48+13), .DEPTH_LOG2(5)) outputFIFO (
     .clk(clk),
-    .rst(outputRST),
+    .rst(outputRST_Delayed),
     
-    .write(grabNewResultArrived),
+    // input side
+    .writeEnable(grabNewResultArrived),
     .dataIn({pcoeffSumFromPipeline, pcoeffCountFromPipeline}),
+    .usedw(outputFIFOUsedw),
     
-    .grab(grabResults),
-    .hasData(resultsAvailable),
-    .data({pcoeffSum, pcoeffCount})
+    // output side
+    .readEnable(grabResults),
+    .dataOut({pcoeffSum, pcoeffCount}),
+    .empty(outputFIFOEmpty)
 );
 
 endmodule

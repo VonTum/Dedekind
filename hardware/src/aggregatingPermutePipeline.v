@@ -34,11 +34,11 @@ module aggregatingPermutePipeline (
 wire[4:0] inputFifoUsedw;
 always @(posedge clk) slowDownInput <= inputFifoUsedw > 24;
 
-wire[8:0] outputFIFOUsedw;
+reg outputFIFORequestsSlowdown;
 wire aggregatingPipelineSlowDownInput;
 wire inputBotQueueEmpty;
 wire botPermuterRequestsNewBot;
-wire grabNew6Pack = botPermuterRequestsNewBot && !inputBotQueueEmpty && !aggregatingPipelineSlowDownInput && !(outputFIFOUsedw > 200); // TODO see if this is enough?
+wire grabNew6Pack = botPermuterRequestsNewBot && !inputBotQueueEmpty && !aggregatingPipelineSlowDownInput && !outputFIFORequestsSlowdown;
 wire[127:0] botToPermute;
 wire[5:0] botToPermuteValidPermutations;
 wire batchDonePostFIFO;
@@ -112,6 +112,16 @@ aggregatingPipeline computePipe (
     .eccStatus(eccStatus)
 );
 
+wire[8:0] outputFIFOUsedw;
+// Some registers for extra slack on this connection
+reg outputFIFORequestsSlowdownPreReg; always @(posedge clk) outputFIFORequestsSlowdownPreReg <= outputFIFOUsedw > 200; // TODO see if this is enough?
+always @(posedge clk) outputFIFORequestsSlowdown <= outputFIFORequestsSlowdownPreReg;
+
+// Some registers for extra slack on this connection
+reg aggregateFinishedD; always @(posedge clk) aggregateFinishedD <= aggregateFinished;
+reg[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSumFromPipelineD; always @(posedge clk) pcoeffSumFromPipelineD <= pcoeffSumFromPipeline;
+reg[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCountFromPipelineD; always @(posedge clk) pcoeffCountFromPipelineD <= pcoeffCountFromPipeline;
+
 wire resultsFIFOEmpty;
 assign resultsAvailable = !resultsFIFOEmpty;
 FastFIFO #(.WIDTH(`PCOEFF_COUNT_BITWIDTH+35 + `PCOEFF_COUNT_BITWIDTH), .DEPTH_LOG2(9), .IS_MLAB(0)) resultsFIFO (
@@ -119,8 +129,8 @@ FastFIFO #(.WIDTH(`PCOEFF_COUNT_BITWIDTH+35 + `PCOEFF_COUNT_BITWIDTH), .DEPTH_LO
     .rst(resultsFIFORST),
     
     // input side
-    .writeEnable(aggregateFinished),
-    .dataIn({pcoeffSumFromPipeline, pcoeffCountFromPipeline}),
+    .writeEnable(aggregateFinishedD),
+    .dataIn({pcoeffSumFromPipelineD, pcoeffCountFromPipelineD}),
     .usedw(outputFIFOUsedw),
     
     // output side

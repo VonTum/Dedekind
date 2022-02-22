@@ -83,10 +83,14 @@ module shiftRegister
     generate if (CYCLES==0) begin : GEN_COMB_INPUT
         assign dataOut = dataIn;
     end else if(CYCLES >= 5 && CYCLES * WIDTH >= 41) begin
-        reg[4:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex == CYCLES-2 ? 0 : curIndex + 1;
+        reg[4:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex == CYCLES-3 ? 0 : curIndex + 1;
         (* max_fan = 1 *) reg[4:0] curIndexD; always @(posedge clk) curIndexD <= curIndex;
         (* max_fan = 1 *) reg[4:0] curIndexDD; always @(posedge clk) curIndexDD <= curIndexD;
         
+		  wire[WIDTH-1:0] dataOutWire;
+		  reg[WIDTH-1:0] dataOutReg; always @(posedge clk) dataOutReg <= dataOutWire;
+		  assign dataOut = dataOutReg;
+		  
         MEMORY_MLAB #(
             .WIDTH(WIDTH),
             .DEPTH_LOG2(5),
@@ -104,7 +108,7 @@ module shiftRegister
             // Read Side
             .readAddressStall(1'b0),
             .readAddr(curIndexD),
-            .dataOut(dataOut)
+            .dataOut(dataOutWire)
         );
     end else begin : GEN_REG_INPUT  
         integer i;
