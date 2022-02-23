@@ -150,9 +150,27 @@ std::vector<BetaResult> pcoeffPipeline(const FlatMBFStructure<Variables>& allMBF
 	std::vector<BetaResult> results;
 	results.reserve(topIndices.size());
 
-	std::thread inputProducerThread([&]() {inputProducer<Variables, BatchSize>(allMBFData, context, topIndices);});
-	std::thread processorThread([&]() {processorFunc(allMBFData, context);});
-	std::thread resultProcessingThread([&]() {resultProcessor<Variables>(allMBFData, context, results);});
+	std::thread inputProducerThread([&]() {
+		try {
+			inputProducer<Variables, BatchSize>(allMBFData, context, topIndices);
+		} catch(const char* errText) {
+			std::cerr << "Error thrown in inputProducerThread: " << errText;
+		}
+	});
+	std::thread processorThread([&]() {
+		try {
+			processorFunc(allMBFData, context);
+		} catch(const char* errText) {
+			std::cerr << "Error thrown in processorThread: " << errText;
+		}
+	});
+	std::thread resultProcessingThread([&]() {
+		try {
+			resultProcessor<Variables>(allMBFData, context, results);
+		} catch(const char* errText) {
+			std::cerr << "Error thrown in resultProcessingThread: " << errText;
+		}
+	});
 
 	inputProducerThread.join();
 	context.inputQueue.close();

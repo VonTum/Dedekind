@@ -351,13 +351,8 @@ inline BetaSum& operator+=(BetaSum& a, BetaSum b) {
 
 // does the necessary math with annotated number of bits, no overflows possible for D(9). 
 template<unsigned int Variables>
-BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff) {
+BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount) {
 	constexpr unsigned int VAR_FACTORIAL = factorial(Variables);
-
-	uint64_t pcoeffSum = getPCoeffSum(processedPCoeff);
-	uint64_t pcoeffCount = getPCoeffCount(processedPCoeff);
-	bool eccErrorDetected = (pcoeffCount & 0x8000) != 0;
-	if(eccErrorDetected != 0) throw "ECC ERROR DETECTED!";
 
 	// the multiply is max log2(2^35 * 5040 * 5040) = 59.5984160368 bits long, fits in 64 bits
 	// Compiler optimizes the divide by compile-time constant VAR_FACTORIAL to an imul, much faster!
@@ -374,11 +369,19 @@ template<unsigned int Variables>
 BetaSum sumOverBetas(const FlatMBFStructure<Variables>& downLinkStructure, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf) {
 	BetaSum total = BetaSum{0,0};
 
-	// Skip first, first bot is actually the top, for compatibility with FPGA
-	countConnectedSumBuf++;
-	for(const NodeIndex* cur = idxBuf + 1; cur != bufEnd; cur++) {
+	for(const NodeIndex* cur = idxBuf; cur != bufEnd; cur++) {
 		ClassInfo info = downLinkStructure.allClassInfos[*cur];
-		total += produceBetaTerm<Variables>(info, *countConnectedSumBuf++);
+
+		ProcessedPCoeffSum processedPCoeff = *countConnectedSumBuf++;
+
+		if((processedPCoeff & 0x8000000000000000) != uint64_t(0)) {
+			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - idxBuf) << ", value was: " << processedPCoeff << std::endl;
+			throw "ECC ERROR DETECTED!";
+		}
+		uint64_t pcoeffSum = getPCoeffSum(processedPCoeff);
+		uint64_t pcoeffCount = getPCoeffCount(processedPCoeff);
+
+		total += produceBetaTerm<Variables>(info, pcoeffSum, pcoeffCount);
 	}
 	return total;
 }
@@ -396,14 +399,15 @@ void buildJobBatch(const FlatMBFStructure<Variables>& allMBFData, NodeIndex* top
 
 template<unsigned int Variables>
 BetaSum produceBetaResult(const FlatMBFStructure<Variables>& allMBFData, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf) {
-	BetaSum jobSum = sumOverBetas(allMBFData, curJob.bufStart, curJob.bufEnd, pcoeffSumBuf);
+	// Skip the first element, as it is the top
+	BetaSum jobSum = sumOverBetas(allMBFData, curJob.bufStart + 1, curJob.bufEnd, pcoeffSumBuf + 1);
 
 #ifdef PCOEFF_DEDUPLICATE
 	ProcessedPCoeffSum nonDuplicateTopDual = processOneBeta(allMBFData, curJob.getTop(), curJob.topDual);
 
 	ClassInfo info = allMBFData.allClassInfos[curJob.topDual];
 
-	BetaSum nonDuplicateTopDualResult = produceBetaTerm<Variables>(info, nonDuplicateTopDual);
+	BetaSum nonDuplicateTopDualResult = produceBetaTerm<Variables>(info, getPCoeffSum(nonDuplicateTopDual), getPCoeffCount(nonDuplicateTopDual));
 
 	return jobSum + jobSum + nonDuplicateTopDualResult;
 #else

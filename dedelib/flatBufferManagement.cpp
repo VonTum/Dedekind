@@ -1,5 +1,7 @@
 #include "flatBufferManagement.h"
 
+#include "aligned_alloc.h"
+
 #include <fstream>
 #include <iostream>
 #ifdef __linux__
@@ -56,7 +58,7 @@ const void* readFlatVoidBuffer(const std::string& fileName, size_t size) {
 			std::cout << "Could not open file '" << fileName << "'!" << std::endl;
 			exit(1);
 		}
-		void* buffer = malloc(size);
+		void* buffer = aligned_malloc(size, 4096); // Strong alignment is required for DMA access with OpenCL
 		file.read(static_cast<char*>(buffer), size);
 		file.close();
 		return buffer;
@@ -77,6 +79,6 @@ void freeFlatVoidBuffer(const void* buffer, size_t size) {
 		throw "MMAP Not Supported on Non-Linux platforms!";
 		#endif
 	} else {
-		free(const_cast<void*>(buffer));
+		aligned_free(const_cast<void*>(buffer));
 	}
 }

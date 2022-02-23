@@ -62,8 +62,7 @@ static cl_context context = NULL;
 static cl_command_queue queue = NULL;
 static cl_kernel fullPipelineKernel = NULL;
 static cl_program program = NULL;
-static cl_mem mbfLUTLowerMem = NULL;
-static cl_mem mbfLUTUpperMem = NULL;
+static cl_mem mbfLUTMem = NULL;
 static cl_mem inputMem[INPUT_BUFFER_COUNT]{NULL};
 static cl_mem resultMem[RESULT_BUFFER_COUNT]{NULL};
 static cl_int N = 1;
@@ -134,7 +133,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		cl_int jobSize = static_cast<cl_int>(job.size());
 		NodeIndex* botIndices = job.bufStart;
 		std::cout << "Grabbed job " << botIndices[0] << " of size " << jobSize << std::endl;
-		botIndices[0] &= 0x8000000; // Mark top
+		botIndices[0] |= 0x80000000; // Mark top
 		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
 
 		cl_int status;
@@ -149,12 +148,12 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		checkError(status, "Failed to Finish writing inputMem buffer");
 
 		// Set the kernel arguments for kernel
-		// Arguments 0 and 1, the mbfLUTUpper and mbfLUTLower constant LUT buffers are preset before this. 
-		status = clSetKernelArg(fullPipelineKernel,2,sizeof(cl_mem),&inputMem[0]);
+		// The 0th argument, mbfLUTMem is a constant buffer and remains unchanged throughout a run. 
+		status = clSetKernelArg(fullPipelineKernel,1,sizeof(cl_mem),&inputMem[0]);
 		checkError(status, "Failed to set fullPipelineKernel arg 2:inputMem");
-		status = clSetKernelArg(fullPipelineKernel,3,sizeof(cl_mem),&resultMem[0]);
+		status = clSetKernelArg(fullPipelineKernel,2,sizeof(cl_mem),&resultMem[0]);
 		checkError(status, "Failed to set fullPipelineKernel arg 3:resultMem");
-		status = clSetKernelArg(fullPipelineKernel,4,sizeof(cl_int),&jobSize);
+		status = clSetKernelArg(fullPipelineKernel,3,sizeof(cl_int),&jobSize);
 		checkError(status, "Failed to set fullPipelineKernel arg 4:job size");
 
 		auto kernelStart = std::chrono::system_clock::now();
@@ -180,8 +179,8 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		uint64_t activityCounter = (analysisBot & 0xFFFFFFFF00000000) >> 32;
 		uint64_t cycleCounter = analysisBot & 0x00000000FFFFFFFF;
 
-		std::cout << "Previous top took " << (cycleCounter) << "<<10 cycles" << std::endl;
-		std::cout << "Previous top had " << (activityCounter) << "<<16 activity" << std::endl;
+		std::cout << "Previous top took " << (cycleCounter<<10) << " cycles" << std::endl;
+		std::cout << "Previous top had " << (activityCounter<<16) << " activity" << std::endl;
 		std::cout << "Previous top occupation: " << (activityCounter << 6) / (40.0 * cycleCounter) * 100.0 << "%" << std::endl;
 
 		OutputBuffer result;
@@ -271,44 +270,28 @@ int main(int argc, char** argv) {
 	auto flatMBFLoadDone = std::chrono::system_clock::now();
 	std::cout << "Took " << std::chrono::duration<double>(flatMBFLoadDone - flatMBFLoadStart).count() << "s" << std::endl;
 
-	std::cout << "Loading mbfLUT into CPU buffers..." << std::endl;
-	uint64_t* mbfLUTUpper = (uint64_t*) aocl_utils::alignedMalloc(mbfCounts[Variables]*sizeof(uint64_t));
-	uint64_t* mbfLUTLower = (uint64_t*) aocl_utils::alignedMalloc(mbfCounts[Variables]*sizeof(uint64_t));
-	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
-		static_assert(Variables == 7);
-		Monotonic<Variables> mbf = allMBFData.mbfs[i];
-		mbfLUTUpper[i] = _mm_extract_epi64(mbf.bf.bitset.data, 1);
-		mbfLUTLower[i] = _mm_extract_epi64(mbf.bf.bitset.data, 0);
-	}
-	std::cout << "mbfLUT CPU buffer ready. ";
-	auto mbfLutCPUDone = std::chrono::system_clock::now();
-	std::cout << "Took " << std::chrono::duration<double>(mbfLutCPUDone - flatMBFLoadDone).count() << "s" << std::endl;
-
 	std::cout << "Initializing kernel..." << std::endl;
 	if(!init(kernelFile.c_str())) {
 		return -1;
 	}
 	std::cout << "Kernel initialized successfully! ";
 	auto kernelInitializedDone = std::chrono::system_clock::now();
-	std::cout << "Took " << std::chrono::duration<double>(kernelInitializedDone - mbfLutCPUDone).count() << "s" << std::endl;
+	std::cout << "Took " << std::chrono::duration<double>(kernelInitializedDone - flatMBFLoadDone).count() << "s" << std::endl;
 
-	std::cout << "Uploading mbfLUT buffers..." << std::endl;
-	status = clEnqueueWriteBuffer(queue,mbfLUTUpperMem,0,0,mbfCounts[7]*sizeof(uint64_t),mbfLUTUpper,0,0,0);
-	checkError(status, "Failed to enqueue writing to mbfLUTUpper buffer");
-	status = clEnqueueWriteBuffer(queue,mbfLUTLowerMem,0,0,mbfCounts[7]*sizeof(uint64_t),mbfLUTLower,0,0,0);
-	checkError(status, "Failed to enqueue writing to mbfLUTLower buffer");
+	std::cout << "Uploading mbfLUT buffer..." << std::endl;
+	 // This is allowed, mmap aligns buffers to the nearest page boundary. Usually something like 1024 or 4096 byte alignment > 64
+	status = clEnqueueWriteBuffer(queue,mbfLUTMem,0,0,mbfCounts[7]*sizeof(cl_ulong2),allMBFData.mbfs,0,0,0);
+	checkError(status, "Failed to enqueue writing to mbfLUTMem buffer");
 
 	// Preset the kernel arguments to these constant buffers
-	status = clSetKernelArg(fullPipelineKernel,0,sizeof(cl_mem),&mbfLUTUpperMem);
-	checkError(status, "Failed to set fullPipelineKernel mbfLUTUpperMem");
-	status = clSetKernelArg(fullPipelineKernel,1,sizeof(cl_mem),&mbfLUTLowerMem);
-	checkError(status, "Failed to set fullPipelineKernel mbfLUTLowerMem");
-
+	status = clSetKernelArg(fullPipelineKernel,0,sizeof(cl_mem),&mbfLUTMem);
+	checkError(status, "Failed to set fullPipelineKernel mbfLUTMem");
 	status = clFinish(queue);
-	checkError(status, "Error while uploading mbfLUT buffers!");
-	std::cout << "mbfLUT buffers uploaded! ";
-	auto mbfLutBufsUploadDone = std::chrono::system_clock::now();
-	std::cout << "Took " << std::chrono::duration<double>(mbfLutBufsUploadDone - kernelInitializedDone).count() << "s" << std::endl;
+	checkError(status, "Error while uploading mbfLUT buffer!");
+
+	std::cout << "mbfLUT buffer uploaded! ";
+	auto mbfLutBufUploadDone = std::chrono::system_clock::now();
+	std::cout << "Took " << std::chrono::duration<double>(mbfLutBufUploadDone - kernelInitializedDone).count() << "s" << std::endl;
 
 	std::cout << "Pipelining computation for " << topsToProcess.size() << " tops..." << std::endl;
 	std::vector<BetaResult> result = pcoeffPipeline<7, 32>(allMBFData, topsToProcess, fpgaProcessor_FullySerial, 70, 10);
@@ -403,13 +386,11 @@ bool init(const char* kernelFile) {
 	fullPipelineKernel = clCreateKernel(program, "fullPipelineKernel", &status);
 	checkError(status, "Failed to create fullPipelineKernel");
 
-	// Create constant mbf Look Up Table data buffers
-	mbfLUTLowerMem = clCreateBuffer(context, CL_MEM_READ_ONLY, mbfCounts[7]*sizeof(uint64_t), 0, &status);
-	checkError(status, "Failed to create the mbfLUTLowerMem buffer");
-	mbfLUTUpperMem = clCreateBuffer(context, CL_MEM_READ_ONLY, mbfCounts[7]*sizeof(uint64_t), 0, &status);
-	checkError(status, "Failed to create the mbfLUTUpperMem buffer");
-	// Create the input and output buffers
+	// Create constant mbf Look Up Table data buffer
+	mbfLUTMem = clCreateBuffer(context, CL_MEM_READ_ONLY, mbfCounts[7]*sizeof(cl_ulong2), 0, &status);
+	checkError(status, "Failed to create the mbfLUTMem buffer");
 
+	// Create the input and output buffers
 	for(size_t i = 0; i < INPUT_BUFFER_COUNT; i++) {
 		inputMem[i] = clCreateBuffer(context, CL_MEM_READ_ONLY, MAX_BUFSIZE(7)*sizeof(uint32_t), 0, &status);
 		checkError(status, "Failed to create the inputMem buffer");
@@ -435,8 +416,9 @@ void cleanup() {
 	if(context) {
 		clReleaseContext(context);
 	}
-	if(mbfLUTLowerMem) clReleaseMemObject(mbfLUTLowerMem);
-	if(mbfLUTUpperMem) clReleaseMemObject(mbfLUTUpperMem);
+	if(mbfLUTMem) {
+		clReleaseMemObject(mbfLUTMem);
+	}
 
 	for(size_t i = 0; i < INPUT_BUFFER_COUNT; i++) {
 		if(inputMem[i]){
