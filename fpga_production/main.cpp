@@ -130,7 +130,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 	std::cout << "FPGA Processor started.\n" << std::flush;
 	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
 		JobInfo& job = jobOpt.value();
-		cl_int jobSize = static_cast<cl_int>(job.size());
+		cl_uint jobSize = static_cast<cl_int>(job.size());
 		NodeIndex* botIndices = job.bufStart;
 		std::cout << "Grabbed job " << botIndices[0] << " of size " << jobSize << std::endl;
 		botIndices[0] |= 0x80000000; // Mark top
@@ -153,7 +153,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		checkError(status, "Failed to set fullPipelineKernel arg 2:inputMem");
 		status = clSetKernelArg(fullPipelineKernel,2,sizeof(cl_mem),&resultMem[0]);
 		checkError(status, "Failed to set fullPipelineKernel arg 3:resultMem");
-		status = clSetKernelArg(fullPipelineKernel,3,sizeof(cl_int),&jobSize);
+		status = clSetKernelArg(fullPipelineKernel,3,sizeof(cl_uint),&jobSize);
 		checkError(status, "Failed to set fullPipelineKernel arg 4:job size");
 
 		auto kernelStart = std::chrono::system_clock::now();
@@ -170,8 +170,8 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		checkError(status, "Failed to enqueue read buffer resultMem to countConnectedSumBuf");
 
 		status = clFinish(queue);
-
 		checkError(status, "Failed to Finish reading output buffer");
+
 		std::cout << "Finished job " << botIndices[0] << " of size " << jobSize << " in " << runtimeSeconds << "s, at " << (double(jobSize)/runtimeSeconds) << "bots/s" << std::endl;
 
 		// Use final dummy top to get proper occupation reading
@@ -279,8 +279,19 @@ int main(int argc, char** argv) {
 	std::cout << "Took " << std::chrono::duration<double>(kernelInitializedDone - flatMBFLoadDone).count() << "s" << std::endl;
 
 	std::cout << "Uploading mbfLUT buffer..." << std::endl;
+
+	// Quick fix, apparently __m128 isn't stored as previously thought. Fix better later
+	uint64_t* mbfsUINT64 = (uint64_t*) aligned_malloc(mbfCounts[7]*sizeof(Monotonic<7>), 4096);
+	for(size_t i = 0; i < mbfCounts[7]; i++) {
+		Monotonic<7> mbf = allMBFData.mbfs[i];
+		uint64_t upper = _mm_extract_epi64(mbf.bf.bitset.data, 1);
+		uint64_t lower = _mm_extract_epi64(mbf.bf.bitset.data, 0);
+		mbfsUINT64[i*2] = upper;
+		mbfsUINT64[i*2+1] = lower;
+	}
+
 	 // This is allowed, mmap aligns buffers to the nearest page boundary. Usually something like 1024 or 4096 byte alignment > 64
-	status = clEnqueueWriteBuffer(queue,mbfLUTMem,0,0,mbfCounts[7]*sizeof(cl_ulong2),allMBFData.mbfs,0,0,0);
+	status = clEnqueueWriteBuffer(queue,mbfLUTMem,0,0,mbfCounts[7]*sizeof(cl_ulong2),mbfsUINT64,0,0,0);
 	checkError(status, "Failed to enqueue writing to mbfLUTMem buffer");
 
 	// Preset the kernel arguments to these constant buffers
@@ -288,6 +299,8 @@ int main(int argc, char** argv) {
 	checkError(status, "Failed to set fullPipelineKernel mbfLUTMem");
 	status = clFinish(queue);
 	checkError(status, "Error while uploading mbfLUT buffer!");
+
+	aligned_free(mbfsUINT64);
 
 	std::cout << "mbfLUT buffer uploaded! ";
 	auto mbfLutBufUploadDone = std::chrono::system_clock::now();

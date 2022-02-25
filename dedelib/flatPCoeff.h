@@ -275,7 +275,7 @@ inline uint64_t getPCoeffSum(ProcessedPCoeffSum input) {
 }
 
 inline uint64_t getPCoeffCount(ProcessedPCoeffSum input) {
-	return input >> 48;
+	return (input & 0x1FFF000000000000) >> 48;
 }
 
 template<unsigned int Variables>
