@@ -195,6 +195,7 @@ MEMORY_M20K #(WIDTH, DEPTH_LOG2) m20kMemory (
     .dataIn(dataInD),
     
     // Read Side
+    .readEnable(1'b1),
     .readAddressStall(readAddressStallD),
     .readAddr(nextReadAddrD),
     .dataOut(dataOut),
@@ -322,6 +323,7 @@ DUAL_CLOCK_MEMORY_M20K #(WIDTH, DEPTH_LOG2) m20kMemory_DC (
     
     // Read Side
     .rdclk(rdclk),
+    .readEnable(1'b1),
     .readAddressStall(readAddressStallD),
     .readAddr(nextReadAddrD),
     .dataOut(dataOut),
@@ -331,5 +333,39 @@ end endgenerate
 
 endmodule
 
+/*
+Output register to be placed after fifo. This allows for zero-latency access, but dramatically reduces the throughput of the output port!
+Only use with low-throughput reading where lookahead reading is required
+*/
+module FastFIFOOutputReg #(parameter WIDTH = 8) (
+    input clk,
+    input rst,
+    
+    // To Read side of Fifo
+    input fifoEmpty,
+    input[WIDTH-1:0] dataFromFIFO,
+    input dataFromFIFOValid,
+    output readFromFIFO,
+    
+    // Output interface
+    input grab,
+    output reg dataAvailable,
+    output reg[WIDTH-1:0] dataOut
+);
 
+reg fifoWasEmpty; always @(posedge clk) fifoWasEmpty <= fifoEmpty;
+assign readFromFIFO = !fifoEmpty && (grab || (!dataAvailable && fifoWasEmpty));
 
+always @(posedge clk) begin
+    if(rst) begin
+        dataAvailable <= 0;
+    end else begin
+        if(grab) dataAvailable <= 0;
+        else if(dataFromFIFOValid) begin
+            dataAvailable <= 1;
+            dataOut <= dataFromFIFO;
+        end
+    end
+end
+
+endmodule

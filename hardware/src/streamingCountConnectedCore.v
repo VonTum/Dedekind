@@ -120,6 +120,7 @@ DUAL_CLOCK_MEMORY_M20K #(.WIDTH(6), .DEPTH_LOG2(`ADDR_WIDTH)) collectorMemory (
     
     // Read Side
     .rdclk(clk),
+    .readEnable(1'b1),
     .readAddressStall(1'b0),
     .readAddr(curBotIndex),
     .dataOut(connectCount),
@@ -135,6 +136,7 @@ MEMORY_M20K #(.WIDTH(1+EXTRA_DATA_WIDTH), .DEPTH_LOG2(`ADDR_WIDTH), .READ_DURING
     .dataIn({isBotValid, extraDataIn}),
     
     // Read Side
+    .readEnable(1'b1),
     .readAddressStall(1'b0),
     .readAddr(curBotIndex),
     .dataOut({resultValid, extraDataOut}),

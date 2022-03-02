@@ -14,7 +14,7 @@ module aggregatingPermutePipeline (
     input writeData,
     input[5:0] validBotPermutes,
     input batchDone,
-    output reg slowDownInput,
+    output slowDownInput,
     
     // Output side
     input grabResults,
@@ -26,69 +26,32 @@ module aggregatingPermutePipeline (
     output wor eccStatus
 );
 
-(* dont_merge *) reg inputFIFORST; always @(posedge clk) inputFIFORST <= rst;
-(* dont_merge *) reg permuter6RST; always @(posedge clk) permuter6RST <= rst;
 (* dont_merge *) reg computePipeRST; always @(posedge clk) computePipeRST <= rst;
 (* dont_merge *) reg resultsFIFORST; always @(posedge clk) resultsFIFORST <= rst;
 
-wire[4:0] inputFifoUsedw;
-always @(posedge clk) slowDownInput <= inputFifoUsedw > 24;
-
 reg outputFIFORequestsSlowdown;
 wire aggregatingPipelineSlowDownInput;
-wire inputBotQueueEmpty;
-wire botPermuterRequestsNewBot;
-wire grabNew6Pack = botPermuterRequestsNewBot && !inputBotQueueEmpty && !aggregatingPipelineSlowDownInput && !outputFIFORequestsSlowdown;
-wire[127:0] botToPermute;
-wire[5:0] botToPermuteValidPermutations;
-wire batchDonePostFIFO;
-
-
-
-FIFO #(.WIDTH(128+6+1), .DEPTH_LOG2(5)) inputFIFO (
-    .clk(clk),
-    .rst(inputFIFORST),
-    
-    // input side
-    .writeEnable(writeData && (|validBotPermutes || batchDone)),
-    .dataIn({bot, validBotPermutes, batchDone}),
-    .full(),
-    .usedw(inputFifoUsedw),
-    
-    // output side
-    .readEnable(grabNew6Pack),
-    .dataOut({botToPermute, botToPermuteValidPermutations, batchDonePostFIFO}),
-    .empty(inputBotQueueEmpty)
-);
 
 wire permutedBotValid;
 wire[127:0] permutedBot;
-
-// permutes the last 3 variables
-botPermuter #(.EXTRA_DATA_WIDTH(0)) permuter6 (
+wire batchFinished;
+botPermuterWithFIFO permuter (
     .clk(clk),
-    .rst(permuter6RST),
+    .rst(rst),
     
-    // input side
-    .startNewBurst(grabNew6Pack),
-    .botIn(botToPermute),
-    .validBotPermutesIn(botToPermuteValidPermutations), // == {vABCin, vACBin, vBACin, vBCAin, vCABin, vCBAin}
-    .extraDataIn(),
-    .done(botPermuterRequestsNewBot),
+    // Input side
+    .bot(bot),
+    .writeData(writeData),
+    .validBotPermutes(validBotPermutes),
+    .batchDone(batchDone),
+    .slowDownInput(slowDownInput),
     
-    // output side
-    .permutedBotValid(permutedBotValid),
+    // Output side
     .permutedBot(permutedBot),
-    .selectedPermutationOut(),
-    .extraDataOut()
+    .permutedBotValid(permutedBotValid),
+    .batchFinished(batchFinished),
+    .requestSlowDown(aggregatingPipelineSlowDownInput || outputFIFORequestsSlowdown)
 );
-
-
-wire botAvailableForAggregatingPipeline = grabNew6Pack && batchDonePostFIFO;
-
-// Two cycles extra delay because that is the latency of the permuter
-wire botAvailableForAggregatingPipelineD;
-hyperpipe #(.CYCLES(2)) permuterDelay(clk, botAvailableForAggregatingPipeline, botAvailableForAggregatingPipelineD);
 
 wire aggregateFinished;
 wire[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSumFromPipeline;
@@ -102,7 +65,7 @@ aggregatingPipeline computePipe (
     
     .isBotValid(permutedBotValid),
     .bot(permutedBot),
-    .lastBotOfBatch(botAvailableForAggregatingPipelineD),
+    .lastBotOfBatch(batchFinished),
     .slowDownInput(aggregatingPipelineSlowDownInput),
     
     .resultsValid(aggregateFinished),

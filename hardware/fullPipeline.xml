@@ -76,7 +76,8 @@
             <FILE name="src/pipeline24Pack.v"/>
               <FILE name="src/multiPermutChecks.v"/>
               <FILE name="src/aggregatingPermutePipeline.v"/>
-                <FILE name="src/botPermuter.v"/>
+                <FILE name="src/botPermuterWithFIFO.v"/>
+                  <FILE name="src/botPermuter.v"/>
                 <FILE name="src/aggregatingPipeline.v"/>
                   <FILE name="src/leafElimination.v"/>
                     <FILE name="src/exactlyOne.v"/>
