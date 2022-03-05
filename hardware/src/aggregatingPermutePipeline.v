@@ -11,7 +11,6 @@ module aggregatingPermutePipeline (
     
     // Input side
     input[127:0] bot,
-    input writeData,
     input[5:0] validBotPermutes,
     input batchDone,
     output slowDownInput,
@@ -35,13 +34,12 @@ wire aggregatingPipelineSlowDownInput;
 wire permutedBotValid;
 wire[127:0] permutedBot;
 wire batchFinished;
-botPermuterWithFIFO permuter (
+botPermuterWithMultiFIFO multiFIFOPermuter (
     .clk(clk),
     .rst(rst),
     
     // Input side
     .bot(bot),
-    .writeData(writeData),
     .validBotPermutes(validBotPermutes),
     .batchDone(batchDone),
     .slowDownInput(slowDownInput),

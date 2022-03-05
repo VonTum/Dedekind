@@ -19,7 +19,7 @@ module botPermuterWithFIFO(
 );
 
 wire[4:0] inputFifoUsedw;
-always @(posedge clk) slowDownInput <= inputFifoUsedw > 24;
+always @(posedge clk) slowDownInput <= inputFifoUsedw > 16;
 
 wire inputBotQueueEmpty;
 wire botPermuterReadyForBot;
@@ -81,7 +81,7 @@ module BatchBotFIFO_M20K (
     // Input side
     input[127:0] botIn,
     input[5:0] validBotPermutesIn,
-    output reg readyForNewBatch,
+    output reg slowDownInput,
     
     // Batch Control
     input endBatch,
@@ -91,7 +91,6 @@ module BatchBotFIFO_M20K (
     input read, // 4 cycle latency
     output[127:0] botOut, 
     output[5:0] validBotPermutesOut,
-    output botOutValid,
     output eccStatus
 );
 
@@ -105,7 +104,7 @@ reg[8:0] readAddr;
 
 wire[8:0] leftoverWords = readAddr - writeAddr;
 
-always @(posedge clk) readyForNewBatch <= leftoverWords >= 64;
+always @(posedge clk) slowDownInput <= leftoverWords < 100;
 
 always @(posedge clk) begin
     if(rst) begin
@@ -113,7 +112,7 @@ always @(posedge clk) begin
         batchSizeReg <= 0;
     end else begin
         writeAddr <= writeAddr + write;
-        batchSizeReg <= batchSize;
+        batchSizeReg <= endBatch ? 0 : batchSize;
     end
 end
 
@@ -157,7 +156,7 @@ module botPermuterWithMultiFIFO(
     input[127:0] bot,
     input[5:0] validBotPermutes,
     input batchDone,
-    output readyForNextBatch,
+    output slowDownInput,
     
     // Output side
     output[127:0] permutedBot,
@@ -166,17 +165,13 @@ module botPermuterWithMultiFIFO(
     input requestSlowDown
 );
 
-wire[127:0] botFromFIFO;
-wire[5:0] validBotPermutationsFromFIFO;
-wire batchDoneFromFIFO;
-wire dataOutValidFromFIFO;
-
 wire[5:0] batchSizeOut;
 
 wire pushPermutation;
 wor[127:0] botOutFromBatchFIFOs;
 wor[5:0] botPermutesFromBatchFIFOs;
 wor eccStatusFromBatchPseudoFIFOs;
+wire batchFIFOSlowdown;
 
 (* dont_merge *) reg batchPseudoFIFORST; always @(posedge clk) batchPseudoFIFORST <= rst;
 BatchBotFIFO_M20K botAndPermutesFIFO (
@@ -186,7 +181,7 @@ BatchBotFIFO_M20K botAndPermutesFIFO (
     // Input side
     .botIn(bot),
     .validBotPermutesIn(validBotPermutes),
-    .readyForNewBatch(readyForNextBatch),
+    .slowDownInput(batchFIFOSlowdown),
     
     // Batch Control
     .endBatch(batchDone),
@@ -201,6 +196,8 @@ BatchBotFIFO_M20K botAndPermutesFIFO (
 
 (* dont_merge *) reg batchSizeFIFORST; always @(posedge clk) batchSizeFIFORST <= rst;
 wire[8:0] batchSizeFIFOUsedW;
+reg batchSizeFIFOAlmostFull; always @(posedge clk) batchSizeFIFOAlmostFull <= batchSizeFIFOUsedW >= 450;
+assign slowDownInput = batchSizeFIFOAlmostFull || batchFIFOSlowdown;
 
 // Communication with fifo
 wire batchSizeFIFOEmpty;
@@ -230,8 +227,8 @@ reg[5:0] leftoverItemsInThisBatch;
 reg batchSizeECC;
 wire thisBatchIsDone = leftoverItemsInThisBatch == 0;
 
-wire grabNextBatchSize = thisBatchIsDone && nextBatchSizeAvailable;
 wire nextBatchSizeAvailable;
+wire grabNextBatchSize = thisBatchIsDone && nextBatchSizeAvailable;
 wire[5:0] nextBatchSize;
 wire nextBatchSizeECC;
 
@@ -241,11 +238,14 @@ FastFIFOOutputReg #(6+1) nextBatchSizeReg(clk, batchSizeFIFORegRST,
     grabNextBatchSize, nextBatchSizeAvailable, {nextBatchSize, nextBatchSizeECC} // Output side
 );
 
+wire permuterRequestSlowDown;
 assign pushPermutation = !thisBatchIsDone && !permuterRequestSlowDown;
 wire botDataArrives;
 hyperpipe #(.CYCLES(4)) dataArrivesPipe(clk, pushPermutation, botDataArrives);
+reg batchWasNotDone; always @(posedge clk) batchWasNotDone <= !thisBatchIsDone || grabNextBatchSize;
+wire batchDoneArrives;
+hyperpipe #(.CYCLES(4)) batchDoneArrivesPipe(clk, batchWasNotDone && thisBatchIsDone, batchDoneArrives);
 
-wire permuterRequestSlowDown;
 always @(posedge clk) begin
     if(batchSizeFIFORegRST) begin
         leftoverItemsInThisBatch <= 0;
@@ -260,16 +260,15 @@ always @(posedge clk) begin
     end
 end
 
-reg batchWasNotDone; always @(posedge clk) batchWasNotDone <= thisBatchIsDone || grabNextBatchSize;
 botPermuterWithFIFO permuter (
     .clk(clk),
     .rst(rst),
     
     // Input side
-    .writeData(botDataArrives),
+    .writeData(botDataArrives || batchDoneArrives),
     .bot(botOutFromBatchFIFOs),
     .validBotPermutes(botPermutesFromBatchFIFOs),
-    .batchDone(grabNextBatchSize),
+    .batchDone(batchDoneArrives),
     .slowDownInput(permuterRequestSlowDown),
     
     // Output side

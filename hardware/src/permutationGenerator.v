@@ -21,49 +21,36 @@ reg[127:0] nextBot;
 reg nextBotValid;
 assign hasSpaceForNextBot = !nextBotValid;
 
-reg[2:0] permutState7;
-reg[2:0] permutState6;
+reg[2:0] permutState7 = 0;
+reg[2:0] permutState6 = 0;
 
 reg[127:0] currentlyPermuting;
 reg currentlyPermutingValid;
 
-reg botSeriesFinishedReg;
+wire endOfPermutation = permutState6 >= 5 && permutState7 >= 6;
+
+always @(posedge clk) begin
+    if(permutState6 >= 5) begin
+        permutState6 <= 0;
+        if(permutState7 >= 6) begin
+            permutState7 <= 0;
+        end else permutState7 <= permutState7 + 1;
+    end else permutState6 <= permutState6 + 1;
+end
 
 always @(posedge clk) begin
     if(rst) begin
-        permutState7 <= 0;
-        permutState6 <= 0;
+        currentlyPermutingValid <= 0;
         nextBotValid <= 0;
     end else begin
-        if(currentlyPermutingValid) begin
-            if(permutState7 >= 6) begin
-                permutState7 <= 0;
-                if(permutState6 >= 5) begin
-                    permutState6 <= 0;
-                    
-                    currentlyPermutingValid <= 0;
-                    
-                    botSeriesFinishedReg <= 1;
-                end else begin
-                    permutState6 <= permutState6 + 1;
-                    botSeriesFinishedReg <= 0;
-                end
-            end else begin
-                permutState7 <= permutState7 + 1;
-                botSeriesFinishedReg <= 0;
-            end
-        end else begin
-            if(nextBotValid) begin
-                currentlyPermutingValid <= 1;
-                currentlyPermuting <= nextBot;
-                nextBotValid <= 0;
-            end
-            botSeriesFinishedReg <= 0;
+        if(endOfPermutation) begin
+            currentlyPermuting <= nextBot;
+            currentlyPermutingValid <= nextBotValid;
         end
-        if(!nextBotValid && writeInputBot) begin
-            nextBotValid <= 1;
+        if(writeInputBot) begin
             nextBot <= inputBot;
-        end
+            nextBotValid <= 1;
+        end else if(endOfPermutation) nextBotValid <= 0;
     end
 end
 
@@ -91,6 +78,6 @@ wire[127:0] secondStagePermutWires[5:0];
 reg[127:0] selectedSecondStagePermut; always @(posedge clk) selectedSecondStagePermut <= secondStagePermutWires[permutState6D];
 assign outputBot = selectedSecondStagePermut;
 hyperpipe #(.CYCLES(2)) outputBotValidPipe(clk, currentlyPermutingValid, outputBotValid);
-hyperpipe #(.CYCLES(2)) botSeriesFinishedPipe(clk, botSeriesFinishedReg, botSeriesFinished);
+hyperpipe #(.CYCLES(2)) botSeriesFinishedPipe(clk, endOfPermutation & currentlyPermutingValid, botSeriesFinished);
 
 endmodule

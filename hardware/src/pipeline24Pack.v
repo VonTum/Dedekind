@@ -147,14 +147,13 @@ module pipeline24PackV2 (
     input clk2x,
     input rst,
     output[3:0] activityMeasure, // Instrumentation wire for profiling (0-8 activity level)
-    input[127:0] top,
     
     // Input side
+    input[127:0] top,
     input[127:0] bot,
-    input writeData,
-    input[23:0] validBotPermutations,
+    input botValid,
     input batchDone,
-    output reg slowDownInput,
+    output slowDownInput,
     
     // Output side
     input grabResults,
@@ -167,18 +166,25 @@ module pipeline24PackV2 (
 
 `include "inlineVarSwap_header.v"
 
+// Input side
+
 // generate the permuted bots
-wire[127:0] botABCD = bot;       // vs33 (no swap)
+reg[127:0] botD; always @(posedge clk) botD <= bot;
+reg batchDoneD; always @(posedge clk) batchDoneD <= batchDone;
+
+wire[127:0] botABCD = botD;       // vs33 (no swap)
 wire[127:0] botBACD; `VAR_SWAP_INLINE(3,4,botABCD, botBACD)// varSwap #(3,4) vs34 (botABCD, botBACD);
 wire[127:0] botCBAD; `VAR_SWAP_INLINE(3,5,botABCD, botCBAD)// varSwap #(3,5) vs35 (botABCD, botCBAD);
 wire[127:0] botDBCA; `VAR_SWAP_INLINE(3,6,botABCD, botDBCA)// varSwap #(3,6) vs36 (botABCD, botDBCA);
 
-wire[5:0] permutesABCD;
+wire[5:0] permutesABCD; // All delayed by 1 clock cycle
 wire[5:0] permutesBACD;
 wire[5:0] permutesCBAD;
 wire[5:0] permutesDBCA;
-assign {permutesABCD, permutesBACD, permutesCBAD, permutesDBCA} = validBotPermutations;
+permuteCheck24Pipelined permuteChecker(clk, top, bot, botValid, {permutesABCD, permutesBACD, permutesCBAD, permutesDBCA});
 
+
+// Output side
 wire[`PCOEFF_COUNT_BITWIDTH+35-1:0] sums[3:0];
 wire[`PCOEFF_COUNT_BITWIDTH-1:0] counts[3:0];
 
@@ -186,7 +192,8 @@ wand resultsAvailableWAND;
 always @(posedge clk) resultsAvailable <= resultsAvailableWAND;
 (* dont_merge *) reg grabResultsD; always @(posedge clk) grabResultsD <= grabResults;
 
-wor slowDownInputWOR; always @(posedge clk) slowDownInput <= slowDownInputWOR;
+wor slowDownInputWOR;
+hyperpipe #(.CYCLES(5)) slowDownInputPipe(clk, slowDownInputWOR, slowDownInput);
 wor eccStatusWOR; always @(posedge clk) eccStatus <= eccStatusWOR;
 
 // Profiling wires
@@ -196,10 +203,10 @@ reg[2:0] activityMeasure23; always @(posedge clk) activityMeasure23 <= activityM
 reg[3:0] activityMeasureSum; always @(posedge clk) activityMeasureSum <= activityMeasure01 + activityMeasure23;
 hyperpipe #(.CYCLES(3), .WIDTH(4)) activityPipe(clk, activityMeasureSum, activityMeasure);
 
-aggregatingPermutePipeline p0(clk, clk2x, rst, activityMeasures[0], top, botABCD, writeData, permutesABCD, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[0], counts[0], eccStatusWOR);
-aggregatingPermutePipeline p1(clk, clk2x, rst, activityMeasures[1], top, botBACD, writeData, permutesBACD, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[1], counts[1], eccStatusWOR);
-aggregatingPermutePipeline p2(clk, clk2x, rst, activityMeasures[2], top, botCBAD, writeData, permutesCBAD, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[2], counts[2], eccStatusWOR);
-aggregatingPermutePipeline p3(clk, clk2x, rst, activityMeasures[3], top, botDBCA, writeData, permutesDBCA, batchDone, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[3], counts[3], eccStatusWOR);
+aggregatingPermutePipeline p1_4(clk, clk2x, rst, activityMeasures[0], top, botABCD, permutesABCD, batchDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[0], counts[0], eccStatusWOR);
+aggregatingPermutePipeline p2_4(clk, clk2x, rst, activityMeasures[1], top, botBACD, permutesBACD, batchDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[1], counts[1], eccStatusWOR);
+aggregatingPermutePipeline p3_4(clk, clk2x, rst, activityMeasures[2], top, botCBAD, permutesCBAD, batchDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[2], counts[2], eccStatusWOR);
+aggregatingPermutePipeline p4_4(clk, clk2x, rst, activityMeasures[3], top, botDBCA, permutesDBCA, batchDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[3], counts[3], eccStatusWOR);
 
 // combine outputs
 reg[`PCOEFF_COUNT_BITWIDTH+35+1-1:0] sum01; always @(posedge clk) sum01 <= sums[0] + sums[1];
