@@ -153,10 +153,10 @@ module botPermuterWithMultiFIFO(
     input rst,
     
     // Input side
-    input[127:0] bot,
-    input[5:0] validBotPermutes,
-    input batchDone,
-    output slowDownInput,
+    input[128*`NUMBER_OF_PERMUTATORS-1:0] bots,
+    input[6*`NUMBER_OF_PERMUTATORS-1:0] validBotsPermutes,
+    input[`NUMBER_OF_PERMUTATORS-1:0] batchesDone,
+    output[`NUMBER_OF_PERMUTATORS-1:0] slowDownInputs,
     
     // Output side
     output[127:0] permutedBot,
@@ -165,65 +165,83 @@ module botPermuterWithMultiFIFO(
     input requestSlowDown
 );
 
-wire[5:0] batchSizeOut;
+wire[5:0] batchSizesOut[`NUMBER_OF_PERMUTATORS-1:0];
 
-wire pushPermutation;
 wor[127:0] botOutFromBatchFIFOs;
 wor[5:0] botPermutesFromBatchFIFOs;
 wor eccStatusFromBatchPseudoFIFOs;
-wire batchFIFOSlowdown;
+wire[`NUMBER_OF_PERMUTATORS-1:0] batchFIFOSlowdown;
+wire[`NUMBER_OF_PERMUTATORS-1:0] readFromFIFO;
 
-(* dont_merge *) reg batchPseudoFIFORST; always @(posedge clk) batchPseudoFIFORST <= rst;
-BatchBotFIFO_M20K botAndPermutesFIFO (
-    .clk(clk),
-    .rst(batchPseudoFIFORST),
-    
-    // Input side
-    .botIn(bot),
-    .validBotPermutesIn(validBotPermutes),
-    .slowDownInput(batchFIFOSlowdown),
-    
-    // Batch Control
-    .endBatch(batchDone),
-    .batchSize(batchSizeOut),
-    
-    // Output Side
-    .read(pushPermutation), // 4 cycle latency
-    .botOut(botOutFromBatchFIFOs), 
-    .validBotPermutesOut(botPermutesFromBatchFIFOs),
-    .eccStatus(eccStatusFromBatchPseudoFIFOs)
-);
+genvar i;
+generate
+for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
+    (* dont_merge *) reg batchPseudoFIFORST; always @(posedge clk) batchPseudoFIFORST <= rst;
+    BatchBotFIFO_M20K botAndPermutesFIFO (
+        .clk(clk),
+        .rst(batchPseudoFIFORST),
+        
+        // Input side
+        .botIn(bots[128*i +: 128]),
+        .validBotPermutesIn(validBotsPermutes[6*i +: 6]),
+        .slowDownInput(batchFIFOSlowdown[i]),
+        
+        // Batch Control
+        .endBatch(batchesDone[i]),
+        .batchSize(batchSizesOut[i]),
+        
+        // Output Side
+        .read(readFromFIFO[i]), // 4 cycle latency
+        .botOut(botOutFromBatchFIFOs), 
+        .validBotPermutesOut(botPermutesFromBatchFIFOs),
+        .eccStatus(eccStatusFromBatchPseudoFIFOs)
+    );
+end
+endgenerate
 
 (* dont_merge *) reg batchSizeFIFORST; always @(posedge clk) batchSizeFIFORST <= rst;
 wire[8:0] batchSizeFIFOUsedW;
 reg batchSizeFIFOAlmostFull; always @(posedge clk) batchSizeFIFOAlmostFull <= batchSizeFIFOUsedW >= 450;
-assign slowDownInput = batchSizeFIFOAlmostFull || batchFIFOSlowdown;
+assign slowDownInputs = batchSizeFIFOAlmostFull ? {`NUMBER_OF_PERMUTATORS{1'b1}} : batchFIFOSlowdown;
 
 // Communication with fifo
 wire batchSizeFIFOEmpty;
-wire[5:0] batchSizeFromBatchFIFO;
+wire[6+`NUMBER_OF_PERMUTATORS-1:0] dataFromBatchFIFO;
 wire eccFromBatchFIFO;
 wire dataFromBatchFIFOValid;
 wire readFromBatchFIFO;
 
-FastFIFO #(.WIDTH(6), .DEPTH_LOG2(9), .IS_MLAB(0)) batchSizeFIFO (
+reg[$clog2(`NUMBER_OF_PERMUTATORS) - 1: 0] batchOriginIndex;
+
+integer idx;
+always @(*) begin
+    batchOriginIndex = 0;
+    for(idx = 0; idx < `NUMBER_OF_PERMUTATORS; idx = idx + 1) begin
+        if((batchesDone & ({`NUMBER_OF_PERMUTATORS{1'b1}} << idx)) != {`NUMBER_OF_PERMUTATORS{1'b0}}) batchOriginIndex = idx;
+    end
+end
+
+wire[5:0] batchSizeToBatchSizeFIFO = batchSizesOut[batchOriginIndex];
+
+FastFIFO #(.WIDTH(6 + `NUMBER_OF_PERMUTATORS), .DEPTH_LOG2(9), .IS_MLAB(0)) batchSizeFIFO (
     .clk(clk),
     .rst(batchSizeFIFORST),
     
     // input side
-    .writeEnable(batchDone),
-    .dataIn(batchSizeOut),
+    .writeEnable(|batchesDone),
+    .dataIn({batchSizeToBatchSizeFIFO, batchesDone}),
     .usedw(batchSizeFIFOUsedW),
     
     // output side
     .readRequest(readFromBatchFIFO),
-    .dataOut(batchSizeFromBatchFIFO),
+    .dataOut(dataFromBatchFIFO),
     .dataOutValid(dataFromBatchFIFOValid),
     .empty(batchSizeFIFOEmpty),
     .eccStatus(eccFromBatchFIFO)
 );
 
 reg[5:0] leftoverItemsInThisBatch;
+reg[`NUMBER_OF_PERMUTATORS-1:0] selectedFIFO1Hot;
 reg batchSizeECC;
 wire thisBatchIsDone = leftoverItemsInThisBatch == 0;
 
@@ -231,15 +249,18 @@ wire nextBatchSizeAvailable;
 wire grabNextBatchSize = thisBatchIsDone && nextBatchSizeAvailable;
 wire[5:0] nextBatchSize;
 wire nextBatchSizeECC;
+wire[`NUMBER_OF_PERMUTATORS-1:0] nextSelectedFIFO1Hot;
 
 (* dont_merge *) reg batchSizeFIFORegRST; always @(posedge clk) batchSizeFIFORegRST <= rst;
-FastFIFOOutputReg #(6+1) nextBatchSizeReg(clk, batchSizeFIFORegRST, 
-    batchSizeFIFOEmpty, {batchSizeFromBatchFIFO, eccFromBatchFIFO}, dataFromBatchFIFOValid, readFromBatchFIFO, // From FIFO
-    grabNextBatchSize, nextBatchSizeAvailable, {nextBatchSize, nextBatchSizeECC} // Output side
+FastFIFOOutputReg #(6+`NUMBER_OF_PERMUTATORS+1) nextBatchSizeReg(clk, batchSizeFIFORegRST, 
+    batchSizeFIFOEmpty, {dataFromBatchFIFO, eccFromBatchFIFO}, dataFromBatchFIFOValid, readFromBatchFIFO, // From FIFO
+    grabNextBatchSize, nextBatchSizeAvailable, {{nextBatchSize, nextSelectedFIFO1Hot}, nextBatchSizeECC} // Output side
 );
 
 wire permuterRequestSlowDown;
-assign pushPermutation = !thisBatchIsDone && !permuterRequestSlowDown;
+wire pushPermutation = !thisBatchIsDone && !permuterRequestSlowDown;
+assign readFromFIFO = pushPermutation ? selectedFIFO1Hot : 0;
+
 wire botDataArrives;
 hyperpipe #(.CYCLES(4)) dataArrivesPipe(clk, pushPermutation, botDataArrives);
 reg batchWasNotDone; always @(posedge clk) batchWasNotDone <= !thisBatchIsDone || grabNextBatchSize;
@@ -252,6 +273,7 @@ always @(posedge clk) begin
     end else begin
         if(grabNextBatchSize) begin
             leftoverItemsInThisBatch <= nextBatchSize;
+            selectedFIFO1Hot <= nextSelectedFIFO1Hot;
             batchSizeECC <= nextBatchSizeECC;
         end
         if(pushPermutation) begin

@@ -1,5 +1,7 @@
 `timescale 1ns / 1ps
 
+`include "pipelineGlobals_header.v"
+
 module fullPermutationPipeline(
     input clk,
     input clk2x,
@@ -23,27 +25,61 @@ module fullPermutationPipeline(
 
 
 
-wire[127:0] permutedBot;
-wire permutedBotValid;
-wire batchDone;
-wire pipelineRequestsSlowdown;
-wire permutationGeneratorRequestsInputBot;
-
-assign readyForInputBot = permutationGeneratorRequestsInputBot && !pipelineRequestsSlowdown;
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] permutedBots;
+wire[`NUMBER_OF_PERMUTATORS-1:0] permutedBotsValid;
+wire[`NUMBER_OF_PERMUTATORS-1:0] batchesDone;
+wire[`NUMBER_OF_PERMUTATORS-1:0] pipelineRequestsSlowdown;
 
 (* dont_merge *) reg permutationGeneratorRST; always @(posedge clk) permutationGeneratorRST <= rst;
-permutationGenerator67 permutationGen (
+/*oldPermutationGenerator67 permutationGen (
     .clk(clk),
     .rst(permutationGeneratorRST),
     
     .inputBot(bot),
     .writeInputBot(writeBot),
-    .hasSpaceForNextBot(permutationGeneratorRequestsInputBot),
+    .hasSpaceForNextBot(readyForInputBot),
     
-    .outputBot(permutedBot),
-    .outputBotValid(permutedBotValid),
-    .botSeriesFinished(batchDone)
+    .outputBot(permutedBots),
+    .outputBotValid(permutedBotsValid),
+    .botSeriesFinished(batchesDone)
+    //,.slowDownPermutationProduction(pipelineRequestsSlowdown)
 );
+
+wire readyForInputBotMULTI;
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] permutedBotsMULTI;
+wire[`NUMBER_OF_PERMUTATORS-1:0] permutedBotsValidMULTI;
+wire[`NUMBER_OF_PERMUTATORS-1:0] batchesDoneMULTI;
+
+
+multiPermutationGenerator67 permutationGenMULTI (
+    .clk(clk),
+    .rst(permutationGeneratorRST),
+    
+    .inputBot(bot),
+    .writeInputBot(writeBot),
+    .hasSpaceForNextBot(readyForInputBotMULTI),
+    
+    .outputBots(permutedBotsMULTI),
+    .outputBotsValid(permutedBotsValidMULTI),
+    .botSeriesFinished(batchesDoneMULTI),
+    .slowDownPermutationProduction(pipelineRequestsSlowdown)
+);
+*/
+
+multiPermutationGenerator67 permutationGenMULTI (
+    .clk(clk),
+    .rst(permutationGeneratorRST),
+    
+    .inputBot(bot),
+    .writeInputBot(writeBot),
+    .hasSpaceForNextBot(readyForInputBot),
+    
+    .outputBots(permutedBots),
+    .outputBotsValid(permutedBotsValid),
+    .botSeriesFinished(batchesDone),
+    .slowDownPermutationProduction(pipelineRequestsSlowdown)
+);
+
 
 wire grabNewResult;
 wire pipelineResultAvailable;
@@ -52,16 +88,16 @@ wire[12:0] pcoeffCountFromPipeline;
 
 (* dont_merge *) reg computePipeRST; always @(posedge clk) computePipeRST <= rst;
 // sums all 120 permutations of variables 2,3,4,5,6.
-pipeline120Pack computePipe (
+pipeline120Pack pipeline120 (
     .clk(clk),
     .clk2x(clk2x),
     .rst(computePipeRST),
     .activityMeasure(activityMeasure),
     
     .top(top),
-    .bot(permutedBot),
-    .isBotValid(permutedBotValid),
-    .batchDone(batchDone),
+    .bots(permutedBots),
+    .isBotsValid(permutedBotsValid),
+    .batchesDone(batchesDone),
     .slowDownInput(pipelineRequestsSlowdown),
     
     // Output side

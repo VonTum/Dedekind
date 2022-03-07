@@ -74,6 +74,13 @@ always @(posedge wrclk) begin
         writeAddr <= 0;
     end else begin
         if(writeEnable) begin
+            `ifndef ALTERA_RESERVED_QIS
+                // Hard failure when writing past full fifo
+                if(nextWriteAddr == nextReadAddr - 2) begin
+                    nextReadAddr <= {DEPTH_LOG2{1'bX}};
+                    writeAddr <= {DEPTH_LOG2{1'bX}};
+                end else
+            `endif
             writeAddr <= nextWriteAddr;
         end
     end
@@ -169,6 +176,14 @@ hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(WIDTH)) writeDataPipe(clk,
     dataInD
 );
 
+wire[WIDTH-1:0] dataFromMem;
+`ifdef ALTERA_RESERVED_QIS
+assign dataOut = dataFromMem;
+`else
+// Ensure data is only valid when dataOutValid is asserted to ease debugging
+assign dataOut = dataOutValid ? dataFromMem : {WIDTH{1'bX}};
+`endif
+
 generate if(IS_MLAB) begin
 MEMORY_MLAB #(WIDTH, DEPTH_LOG2) mlabMemory (
     .clk(clk),
@@ -182,7 +197,7 @@ MEMORY_MLAB #(WIDTH, DEPTH_LOG2) mlabMemory (
     // Read Side
     .readAddressStall(readAddressStallD),
     .readAddr(nextReadAddrD),
-    .dataOut(dataOut)
+    .dataOut(dataFromMem)
 );
 assign eccStatus = 0;
 end else begin
@@ -198,7 +213,7 @@ MEMORY_M20K #(WIDTH, DEPTH_LOG2) m20kMemory (
     .readEnable(1'b1),
     .readAddressStall(readAddressStallD),
     .readAddr(nextReadAddrD),
-    .dataOut(dataOut),
+    .dataOut(dataFromMem),
     .eccStatus(eccStatus)
 );
 end endgenerate
@@ -297,6 +312,15 @@ hyperpipe #(.CYCLES(WRITE_ADDR_STAGES), .WIDTH(WIDTH)) writeDataPipe(wrclk,
 
 hyperpipe #(.CYCLES((IS_MLAB ? 1 : 2) + READ_ADDR_STAGES)) isReadingPipe(rdclk, isReading, dataOutValid);
 
+
+wire[WIDTH-1:0] dataFromMem;
+`ifdef ALTERA_RESERVED_QIS
+assign dataOut = dataFromMem;
+`else
+// Ensure data is only valid when dataOutValid is asserted to ease debugging
+assign dataOut = dataOutValid ? dataFromMem : {WIDTH{1'bX}};
+`endif
+
 generate if(IS_MLAB) begin
 DUAL_CLOCK_MEMORY_MLAB #(WIDTH, DEPTH_LOG2) mlabMemory_DC (
     // Write Side
@@ -310,7 +334,7 @@ DUAL_CLOCK_MEMORY_MLAB #(WIDTH, DEPTH_LOG2) mlabMemory_DC (
     .rstReadAddr(rdrst),
     .readAddressStall(readAddressStallD),
     .readAddr(nextReadAddrD),
-    .dataOut(dataOut)
+    .dataOut(dataFromMem)
 );
 assign eccStatus = 0;
 end else begin
@@ -326,7 +350,7 @@ DUAL_CLOCK_MEMORY_M20K #(WIDTH, DEPTH_LOG2) m20kMemory_DC (
     .readEnable(1'b1),
     .readAddressStall(readAddressStallD),
     .readAddr(nextReadAddrD),
-    .dataOut(dataOut),
+    .dataOut(dataFromMem),
     .eccStatus(eccStatus)
 );
 end endgenerate

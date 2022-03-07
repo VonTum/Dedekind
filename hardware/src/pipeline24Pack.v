@@ -150,10 +150,11 @@ module pipeline24PackV2 (
     
     // Input side
     input[127:0] top,
-    input[127:0] bot,
-    input botValid,
-    input batchDone,
-    output slowDownInput,
+    
+    input[128*`NUMBER_OF_PERMUTATORS-1:0] bots,
+    input[`NUMBER_OF_PERMUTATORS-1:0] botsValid,
+    input[`NUMBER_OF_PERMUTATORS-1:0] batchesDone,
+    output[`NUMBER_OF_PERMUTATORS-1:0] slowDownInput,
     
     // Output side
     input grabResults,
@@ -169,20 +170,33 @@ module pipeline24PackV2 (
 // Input side
 
 // generate the permuted bots
-reg[127:0] botD; always @(posedge clk) botD <= bot;
-reg batchDoneD; always @(posedge clk) batchDoneD <= batchDone;
+reg[128*`NUMBER_OF_PERMUTATORS-1:0] botsD; always @(posedge clk) botsD <= bots;
+reg[`NUMBER_OF_PERMUTATORS-1:0] batchesDoneD; always @(posedge clk) batchesDoneD <= batchesDone;
 
-wire[127:0] botABCD = botD;       // vs33 (no swap)
-wire[127:0] botBACD; `VAR_SWAP_INLINE(3,4,botABCD, botBACD)// varSwap #(3,4) vs34 (botABCD, botBACD);
-wire[127:0] botCBAD; `VAR_SWAP_INLINE(3,5,botABCD, botCBAD)// varSwap #(3,5) vs35 (botABCD, botCBAD);
-wire[127:0] botDBCA; `VAR_SWAP_INLINE(3,6,botABCD, botDBCA)// varSwap #(3,6) vs36 (botABCD, botDBCA);
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsABCD = botsD;       // vs33 (no swap)
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsBACD;
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsCBAD;
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsDBCA;
 
-wire[5:0] permutesABCD; // All delayed by 1 clock cycle
-wire[5:0] permutesBACD;
-wire[5:0] permutesCBAD;
-wire[5:0] permutesDBCA;
-permuteCheck24Pipelined permuteChecker(clk, top, bot, botValid, {permutesABCD, permutesBACD, permutesCBAD, permutesDBCA});
+genvar i;
+generate
+for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
+    varSwap #(3, 4) vs34 (botsABCD[128*i +: 128], botsBACD[128*i +: 128]);// varSwap #(3,4) vs34 (botsABCD, botsBACD);
+    varSwap #(3, 5) vs35 (botsABCD[128*i +: 128], botsCBAD[128*i +: 128]);// varSwap #(3,5) vs35 (botsABCD, botsCBAD);
+    varSwap #(3, 6) vs36 (botsABCD[128*i +: 128], botsDBCA[128*i +: 128]);// varSwap #(3,6) vs36 (botsABCD, botsDBCA);
+end
+endgenerate
 
+wire[6*`NUMBER_OF_PERMUTATORS-1:0] permutesABCD; // All delayed by 1 clock cycle
+wire[6*`NUMBER_OF_PERMUTATORS-1:0] permutesBACD;
+wire[6*`NUMBER_OF_PERMUTATORS-1:0] permutesCBAD;
+wire[6*`NUMBER_OF_PERMUTATORS-1:0] permutesDBCA;
+
+generate
+for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
+    permuteCheck24Pipelined permuteChecker(clk, top, bots[i*128 +: 128], botsValid[i], {permutesABCD[i*6 +: 6], permutesBACD[i*6 +: 6], permutesCBAD[i*6 +: 6], permutesDBCA[i*6 +: 6]});
+end
+endgenerate
 
 // Output side
 wire[`PCOEFF_COUNT_BITWIDTH+35-1:0] sums[3:0];
@@ -192,8 +206,8 @@ wand resultsAvailableWAND;
 always @(posedge clk) resultsAvailable <= resultsAvailableWAND;
 (* dont_merge *) reg grabResultsD; always @(posedge clk) grabResultsD <= grabResults;
 
-wor slowDownInputWOR;
-hyperpipe #(.CYCLES(5)) slowDownInputPipe(clk, slowDownInputWOR, slowDownInput);
+wor[`NUMBER_OF_PERMUTATORS-1:0] slowDownInputWOR;
+hyperpipe #(.CYCLES(5), .WIDTH(`NUMBER_OF_PERMUTATORS)) slowDownInputPipe(clk, slowDownInputWOR, slowDownInput);
 wor eccStatusWOR; always @(posedge clk) eccStatus <= eccStatusWOR;
 
 // Profiling wires
@@ -203,10 +217,10 @@ reg[2:0] activityMeasure23; always @(posedge clk) activityMeasure23 <= activityM
 reg[3:0] activityMeasureSum; always @(posedge clk) activityMeasureSum <= activityMeasure01 + activityMeasure23;
 hyperpipe #(.CYCLES(3), .WIDTH(4)) activityPipe(clk, activityMeasureSum, activityMeasure);
 
-aggregatingPermutePipeline p1_4(clk, clk2x, rst, activityMeasures[0], top, botABCD, permutesABCD, batchDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[0], counts[0], eccStatusWOR);
-aggregatingPermutePipeline p2_4(clk, clk2x, rst, activityMeasures[1], top, botBACD, permutesBACD, batchDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[1], counts[1], eccStatusWOR);
-aggregatingPermutePipeline p3_4(clk, clk2x, rst, activityMeasures[2], top, botCBAD, permutesCBAD, batchDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[2], counts[2], eccStatusWOR);
-aggregatingPermutePipeline p4_4(clk, clk2x, rst, activityMeasures[3], top, botDBCA, permutesDBCA, batchDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[3], counts[3], eccStatusWOR);
+aggregatingPermutePipeline p1_4(clk, clk2x, rst, activityMeasures[0], top, botsABCD, permutesABCD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[0], counts[0], eccStatusWOR);
+aggregatingPermutePipeline p2_4(clk, clk2x, rst, activityMeasures[1], top, botsBACD, permutesBACD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[1], counts[1], eccStatusWOR);
+aggregatingPermutePipeline p3_4(clk, clk2x, rst, activityMeasures[2], top, botsCBAD, permutesCBAD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[2], counts[2], eccStatusWOR);
+aggregatingPermutePipeline p4_4(clk, clk2x, rst, activityMeasures[3], top, botsDBCA, permutesDBCA, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[3], counts[3], eccStatusWOR);
 
 // combine outputs
 reg[`PCOEFF_COUNT_BITWIDTH+35+1-1:0] sum01; always @(posedge clk) sum01 <= sums[0] + sums[1];

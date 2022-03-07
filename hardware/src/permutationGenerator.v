@@ -2,7 +2,206 @@
 
 `include "pipelineGlobals_header.v"
 
+
+module permute67 (
+    input clk,
+    
+    input[2:0] permut6,
+    input[2:0] permut7,
+
+    input[127:0] mbfIn,
+    output reg[127:0] mbfOut,
+    
+    input currentlyPermutingValidIn,
+    output reg currentlyPermutingValid,
+    
+    input botSeriesFinishedIn,
+    output reg botSeriesFinished
+);
+
+`include "inlineVarSwap_header.v"
+
+wire[127:0] firstStagePermutWires[6:0];
+`VAR_SWAP_INLINE(0, 0, mbfIn, firstStagePermutWires[0])
+`VAR_SWAP_INLINE(0, 1, mbfIn, firstStagePermutWires[1])
+`VAR_SWAP_INLINE(0, 2, mbfIn, firstStagePermutWires[2])
+`VAR_SWAP_INLINE(0, 3, mbfIn, firstStagePermutWires[3])
+`VAR_SWAP_INLINE(0, 4, mbfIn, firstStagePermutWires[4])
+`VAR_SWAP_INLINE(0, 5, mbfIn, firstStagePermutWires[5])
+`VAR_SWAP_INLINE(0, 6, mbfIn, firstStagePermutWires[6])
+
+reg[127:0] selectedFirstStagePermut; always @(posedge clk) selectedFirstStagePermut <= firstStagePermutWires[permut7];
+reg[2:0] permut6D; always @(posedge clk) permut6D <= permut6;
+reg botSeriesFinishedInD; always @(posedge clk) botSeriesFinishedInD <= botSeriesFinishedIn;
+reg currentlyPermutingValidInD; always @(posedge clk) currentlyPermutingValidInD <= currentlyPermutingValidIn;
+
+wire[127:0] secondStagePermutWires[5:0];
+
+`VAR_SWAP_INLINE(1, 1, selectedFirstStagePermut, secondStagePermutWires[0])
+`VAR_SWAP_INLINE(1, 2, selectedFirstStagePermut, secondStagePermutWires[1])
+`VAR_SWAP_INLINE(1, 3, selectedFirstStagePermut, secondStagePermutWires[2])
+`VAR_SWAP_INLINE(1, 4, selectedFirstStagePermut, secondStagePermutWires[3])
+`VAR_SWAP_INLINE(1, 5, selectedFirstStagePermut, secondStagePermutWires[4])
+`VAR_SWAP_INLINE(1, 6, selectedFirstStagePermut, secondStagePermutWires[5])
+
+always @(posedge clk) mbfOut <= secondStagePermutWires[permut6D];
+always @(posedge clk) botSeriesFinished <= botSeriesFinishedInD;
+always @(posedge clk) currentlyPermutingValid <= currentlyPermutingValidInD;
+
+endmodule
+
+module permutationIterator67 (
+    input clk,
+    
+    output reg[2:0] permut6,
+    output reg[2:0] permut7
+);
+
+initial permut6 = 0;
+initial permut7 = 0;
+
+wire zero6 = permut6 == 0;
+wire zero7 = permut7 == 0;
+
+// A very strange bug occurs for some orders of these permutation indices. Further investigation is required. 
+always @(posedge clk) begin
+    permut7 <= zero7 ? 6 : permut7 - 1;
+    if(zero7) begin
+        permut6 <= zero6 ? 5 : permut6 - 1;
+    end
+end
+
+endmodule
+
+
 module permutationGenerator67 (
+    input clk,
+    input rst,
+    
+    input[2:0] permut7,
+    input[2:0] permut6,
+    
+    input[127:0] nextBot,
+    input nextBotValid,
+    output requestNextBot,
+    
+    output[127:0] outputBot,
+    output outputBotValid,
+    output botSeriesFinished,
+    input slowDown
+);
+
+
+reg[127:0] currentlyPermuting;
+reg currentlyPermutingValid;
+
+assign requestNextBot = (permut6 == 0) && (permut7 == 0) && !slowDown;
+wire endOfPermutation;
+
+`define INPUT_FIFO_REQUEST_LATENCY 1
+hyperpipe #(.CYCLES(`INPUT_FIFO_REQUEST_LATENCY)) requestLatency(clk, requestNextBot, endOfPermutation);
+
+always @(posedge clk) begin
+    if(rst) begin
+        currentlyPermutingValid <= 0;
+    end else begin
+        if(endOfPermutation) begin
+            currentlyPermuting <= nextBot;
+            currentlyPermutingValid <= nextBotValid;
+        end
+    end
+end
+
+permute67 permut67(
+    clk, permut6, permut7,
+    currentlyPermuting, outputBot, 
+    currentlyPermutingValid, outputBotValid, 
+    currentlyPermutingValid && endOfPermutation, botSeriesFinished
+);
+
+endmodule
+
+module multiPermutationGenerator67 (
+    input clk,
+    input rst,
+    
+    input[127:0] inputBot,
+    input writeInputBot,
+    output hasSpaceForNextBot,
+    
+    output[128*`NUMBER_OF_PERMUTATORS-1:0] outputBots,
+    output[`NUMBER_OF_PERMUTATORS-1:0] outputBotsValid,
+    output[`NUMBER_OF_PERMUTATORS-1:0] botSeriesFinished,
+    input[`NUMBER_OF_PERMUTATORS-1:0] slowDownPermutationProduction
+);
+
+wire[2:0] permut7;
+wire[2:0] permut6;
+permutationIterator67 iter67(clk, permut6, permut7);
+
+wire[2:0] permut6Divider[`NUMBER_OF_PERMUTATORS-1:0];
+
+generate
+assign permut6Divider[0] = permut6;
+if(`NUMBER_OF_PERMUTATORS >= 2) assign permut6Divider[1] = permut6 < 3 ? permut6 + 3 : permut6 - 3; // (permut6 + 3) % 6
+if(`NUMBER_OF_PERMUTATORS >= 3) assign permut6Divider[2] = permut6 < 5 ? permut6 + 1 : 0; // (permut6 + 1) % 6
+if(`NUMBER_OF_PERMUTATORS >= 4) assign permut6Divider[3] = permut6 < 2 ? permut6 + 4 : permut6 - 2; // (permut6 + 4) % 6
+if(`NUMBER_OF_PERMUTATORS >= 5) assign permut6Divider[4] = permut6 < 1 ? 5 : permut6 - 1; // (permut6 + 5) % 6
+if(`NUMBER_OF_PERMUTATORS >= 6) assign permut6Divider[5] = permut6 < 4 ? permut6 + 2 : permut6 - 4; // (permut6 + 2) % 6
+endgenerate
+
+
+wire[4:0] permutationGeneratorInputFIFOUsedW;
+assign hasSpaceForNextBot = permutationGeneratorInputFIFOUsedW < 25;
+
+wire[`NUMBER_OF_PERMUTATORS-1:0] newBotRequests;
+wire[127:0] botFromInputFIFO;
+wire botFromInputFIFOValid;
+
+FastFIFO #(.WIDTH(128), .DEPTH_LOG2(5), .IS_MLAB(1), .READ_ADDR_STAGES(1)) permutationGeneratorInputFIFO(
+    .clk(clk),
+    .rst(rst),
+    
+    // input side
+    .writeEnable(writeInputBot),
+    .dataIn(inputBot),
+    .usedw(permutationGeneratorInputFIFOUsedW),
+    
+    // output side
+    .readRequest(|newBotRequests),
+    .dataOut(botFromInputFIFO),
+    .dataOutValid(botFromInputFIFOValid),
+    .empty(), // unused
+    .eccStatus() // unused
+);
+
+generate
+
+genvar i;
+for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
+    permutationGenerator67 subGenerator67 (
+        .clk(clk),
+        .rst(rst),
+        
+        .permut7(permut7),
+        .permut6(permut6Divider[i]),
+        
+        .nextBot(botFromInputFIFO),
+        .nextBotValid(botFromInputFIFOValid),
+        .requestNextBot(newBotRequests[i]),
+        
+        .outputBot(outputBots[128*i +: 128]),
+        .outputBotValid(outputBotsValid[i]),
+        .botSeriesFinished(botSeriesFinished[i]),
+        .slowDown(slowDownPermutationProduction[i])
+    );
+end
+
+endgenerate
+
+endmodule
+
+module oldPermutationGenerator67 (
     input clk,
     input rst,
     
@@ -15,28 +214,18 @@ module permutationGenerator67 (
     output botSeriesFinished
 );
 
-`include "inlineVarSwap_header.v"
-
 reg[127:0] nextBot;
 reg nextBotValid;
 assign hasSpaceForNextBot = !nextBotValid;
 
-reg[2:0] permutState7 = 0;
-reg[2:0] permutState6 = 0;
+wire[2:0] permut6;
+wire[2:0] permut7;
+permutationIterator67 iter67 (clk, permut6, permut7);
+
+wire endOfPermutation = permut6 == 0 && permut7 == 0;
 
 reg[127:0] currentlyPermuting;
 reg currentlyPermutingValid;
-
-wire endOfPermutation = permutState6 >= 5 && permutState7 >= 6;
-
-always @(posedge clk) begin
-    if(permutState6 >= 5) begin
-        permutState6 <= 0;
-        if(permutState7 >= 6) begin
-            permutState7 <= 0;
-        end else permutState7 <= permutState7 + 1;
-    end else permutState6 <= permutState6 + 1;
-end
 
 always @(posedge clk) begin
     if(rst) begin
@@ -54,30 +243,11 @@ always @(posedge clk) begin
     end
 end
 
-wire[127:0] firstStagePermutWires[6:0];
-`VAR_SWAP_INLINE(0, 0, currentlyPermuting, firstStagePermutWires[0])
-`VAR_SWAP_INLINE(0, 1, currentlyPermuting, firstStagePermutWires[1])
-`VAR_SWAP_INLINE(0, 2, currentlyPermuting, firstStagePermutWires[2])
-`VAR_SWAP_INLINE(0, 3, currentlyPermuting, firstStagePermutWires[3])
-`VAR_SWAP_INLINE(0, 4, currentlyPermuting, firstStagePermutWires[4])
-`VAR_SWAP_INLINE(0, 5, currentlyPermuting, firstStagePermutWires[5])
-`VAR_SWAP_INLINE(0, 6, currentlyPermuting, firstStagePermutWires[6])
-
-reg[127:0] selectedFirstStagePermut; always @(posedge clk) selectedFirstStagePermut <= firstStagePermutWires[permutState7];
-reg[2:0] permutState6D; always @(posedge clk) permutState6D <= permutState6;
-
-wire[127:0] secondStagePermutWires[5:0];
-
-`VAR_SWAP_INLINE(1, 1, selectedFirstStagePermut, secondStagePermutWires[0])
-`VAR_SWAP_INLINE(1, 2, selectedFirstStagePermut, secondStagePermutWires[1])
-`VAR_SWAP_INLINE(1, 3, selectedFirstStagePermut, secondStagePermutWires[2])
-`VAR_SWAP_INLINE(1, 4, selectedFirstStagePermut, secondStagePermutWires[3])
-`VAR_SWAP_INLINE(1, 5, selectedFirstStagePermut, secondStagePermutWires[4])
-`VAR_SWAP_INLINE(1, 6, selectedFirstStagePermut, secondStagePermutWires[5])
-
-reg[127:0] selectedSecondStagePermut; always @(posedge clk) selectedSecondStagePermut <= secondStagePermutWires[permutState6D];
-assign outputBot = selectedSecondStagePermut;
-hyperpipe #(.CYCLES(2)) outputBotValidPipe(clk, currentlyPermutingValid, outputBotValid);
-hyperpipe #(.CYCLES(2)) botSeriesFinishedPipe(clk, endOfPermutation & currentlyPermutingValid, botSeriesFinished);
+permute67 permut67 (
+    clk, permut6, permut7, 
+    currentlyPermuting, outputBot, 
+    currentlyPermutingValid, outputBotValid, 
+    currentlyPermutingValid && endOfPermutation, botSeriesFinished
+);
 
 endmodule

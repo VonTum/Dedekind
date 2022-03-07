@@ -10,10 +10,10 @@ module aggregatingPermutePipeline (
     input[127:0] top,
     
     // Input side
-    input[127:0] bot,
-    input[5:0] validBotPermutes,
-    input batchDone,
-    output slowDownInput,
+    input[128*`NUMBER_OF_PERMUTATORS-1:0] botsIn,
+    input[6*`NUMBER_OF_PERMUTATORS-1:0] validBotsPermutes,
+    input[`NUMBER_OF_PERMUTATORS-1:0] batchesDone,
+    output[`NUMBER_OF_PERMUTATORS-1:0] slowDownInputs,
     
     // Output side
     input grabResults,
@@ -39,10 +39,10 @@ botPermuterWithMultiFIFO multiFIFOPermuter (
     .rst(rst),
     
     // Input side
-    .bot(bot),
-    .validBotPermutes(validBotPermutes),
-    .batchDone(batchDone),
-    .slowDownInput(slowDownInput),
+    .bots(botsIn),
+    .validBotsPermutes(validBotsPermutes),
+    .batchesDone(batchesDone),
+    .slowDownInputs(slowDownInputs),
     
     // Output side
     .permutedBot(permutedBot),

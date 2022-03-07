@@ -11,10 +11,10 @@ module pipeline120Pack(
     
     // Input side
     input[127:0] top,
-    input[127:0] bot,
-    input isBotValid,
-    input batchDone,
-    output wor slowDownInput,
+    input[128*`NUMBER_OF_PERMUTATORS-1:0] bots,
+    input[`NUMBER_OF_PERMUTATORS-1:0] isBotsValid,
+    input[`NUMBER_OF_PERMUTATORS-1:0] batchesDone,
+    output wor[`NUMBER_OF_PERMUTATORS-1:0] slowDownInput,
     
     // Output side
     input grabResults,
@@ -27,11 +27,21 @@ module pipeline120Pack(
 `include "inlineVarSwap_header.v"
 
 // generate the permuted bots
-wire[127:0] botABCDE = bot;
-wire[127:0] botBACDE; `VAR_SWAP_INLINE(2,3,botABCDE, botBACDE)
-wire[127:0] botCBADE; `VAR_SWAP_INLINE(2,4,botABCDE, botCBADE)
-wire[127:0] botDBCAE; `VAR_SWAP_INLINE(2,5,botABCDE, botDBCAE)
-wire[127:0] botEBCDA; `VAR_SWAP_INLINE(2,6,botABCDE, botEBCDA)
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsABCDE = bots;
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsBACDE;
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsCBADE;
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsDBCAE;
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsEBCDA;
+
+genvar i;
+generate
+for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
+    varSwap #(2,3) vs23 (botsABCDE[128*i +: 128], botsBACDE[128*i +: 128]);
+    varSwap #(2,4) vs24 (botsABCDE[128*i +: 128], botsCBADE[128*i +: 128]);
+    varSwap #(2,5) vs25 (botsABCDE[128*i +: 128], botsDBCAE[128*i +: 128]);
+    varSwap #(2,6) vs26 (botsABCDE[128*i +: 128], botsEBCDA[128*i +: 128]);
+end
+endgenerate
 
 wire[`PCOEFF_COUNT_BITWIDTH+2+35-1:0] sums[4:0];
 wire[`PCOEFF_COUNT_BITWIDTH+2-1:0] counts[4:0];
@@ -45,11 +55,11 @@ reg[4:0] activityMeasure01D; always @(posedge clk) activityMeasure01D <= activit
 reg[5:0] activityMeasure234; always @(posedge clk) activityMeasure234 <= activityMeasure23 + activityMeasure4D;
 hyperpipe #(.CYCLES(3), .WIDTH(6)) activityPipe(clk, activityMeasure01D + activityMeasure234, activityMeasure);
 
-pipeline24PackV2 p1_5(clk, clk2x, rst, activitySubMeasures[0], top, botABCDE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[0], counts[0], eccStatus);
-pipeline24PackV2 p2_5(clk, clk2x, rst, activitySubMeasures[1], top, botBACDE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[1], counts[1], eccStatus);
-pipeline24PackV2 p3_5(clk, clk2x, rst, activitySubMeasures[2], top, botCBADE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[2], counts[2], eccStatus);
-pipeline24PackV2 p4_5(clk, clk2x, rst, activitySubMeasures[3], top, botDBCAE, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[3], counts[3], eccStatus);
-pipeline24PackV2 p5_5(clk, clk2x, rst, activitySubMeasures[4], top, botEBCDA, isBotValid, batchDone, slowDownInput, grabResults, resultsAvailable, sums[4], counts[4], eccStatus);
+pipeline24PackV2 p1_5(clk, clk2x, rst, activitySubMeasures[0], top, botsABCDE, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[0], counts[0], eccStatus);
+pipeline24PackV2 p2_5(clk, clk2x, rst, activitySubMeasures[1], top, botsBACDE, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[1], counts[1], eccStatus);
+pipeline24PackV2 p3_5(clk, clk2x, rst, activitySubMeasures[2], top, botsCBADE, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[2], counts[2], eccStatus);
+pipeline24PackV2 p4_5(clk, clk2x, rst, activitySubMeasures[3], top, botsDBCAE, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[3], counts[3], eccStatus);
+pipeline24PackV2 p5_5(clk, clk2x, rst, activitySubMeasures[4], top, botsEBCDA, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[4], counts[4], eccStatus);
 
 reg[`PCOEFF_COUNT_BITWIDTH+3+35-1:0] sum01; always @(posedge clk) sum01 <= sums[0] + sums[1];
 reg[`PCOEFF_COUNT_BITWIDTH+3+35-1:0] sum23; always @(posedge clk) sum23 <= sums[2] + sums[3];
