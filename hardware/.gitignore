@@ -14,13 +14,11 @@ dedekind.xpr
 *.aocr
 *.aocx
 *.aocx.tmp
-*.qsf
 *.qws
 *.history
 output_files/
 qdb/
 tmp-clearbox/
-dedekind.qpf
 *_report/
 
 fullPipelineKernel/

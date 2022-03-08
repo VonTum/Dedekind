@@ -101,7 +101,7 @@ endmodule
 
 
 
-
+// 1 Cycle latency
 module pipelinedMonotonizeUp (
     input clk,
     input[127:0] vIn,
@@ -152,7 +152,7 @@ assign vOut = addG;
 
 endmodule
 
-
+// 2 Cycles of latency
 module pipelinedMonotonizeDown (
     input clk,
     input[127:0] vIn,
@@ -164,7 +164,7 @@ wire[127:0] removeF;
 wire[127:0] removeE;
 reg[127:0] removeD;
 wire[127:0] removeC;
-wire[127:0] removeB;
+reg[127:0] removeB;
 wire[127:0] removeA;
 
 genvar i;
@@ -191,7 +191,7 @@ generate
     end
     // remove B
     for(i = 0; i < 128; i = i + 1) begin
-        assign removeB[i] = (i % 4 < 2) ? removeC[i] | removeC[i+2] : removeC[i];
+        always @(posedge clk) removeB[i] <= (i % 4 < 2) ? removeC[i] | removeC[i+2] : removeC[i];
     end
     // remove A
     for(i = 0; i < 128; i = i + 1) begin

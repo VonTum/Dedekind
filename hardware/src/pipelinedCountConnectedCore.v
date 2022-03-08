@@ -1,10 +1,10 @@
 `timescale 1ns / 1ps
 
 `define NEW_SEED_HASBIT_DEPTH 3
-`define NEW_SEED_HASBIT_OFFSET 1+`NEW_SEED_HASBIT_DEPTH
+`define NEW_SEED_HASBIT_OFFSET (1+`NEW_SEED_HASBIT_DEPTH)
 `define NEW_SEED_DEPTH 4
-`define EXPLORATION_DOWN_OFFSET 4
-`define EXPLORATION_DEPTH 6
+`define EXPLORATION_DOWN_OFFSET 5
+`define EXPLORATION_DEPTH 7
 
 `define OFFSET_NSD `NEW_SEED_DEPTH
 `define OFFSET_MID (`OFFSET_NSD+1)
@@ -179,11 +179,15 @@ end
 
 // PIPELINE STEP 3, 4
 wire[127:0] monotonizedDown_POST_MID; pipelinedMonotonizeDown mDown(clk, midPoint_MID, monotonizedDown_POST_MID);
+reg[127:0] midPoint_PRE_POST_MID;
+reg[127:0] leftoverGraphIn_PRE_POST_MID;
 reg[127:0] midPoint_POST_MID;
 reg[127:0] leftoverGraphIn_POST_MID;
 always @(posedge clk) begin
-    midPoint_POST_MID <= midPoint_MID;
-    leftoverGraphIn_POST_MID <= leftoverGraphIn_MID;
+    midPoint_PRE_POST_MID <= midPoint_MID;
+    midPoint_POST_MID <= midPoint_PRE_POST_MID;
+    leftoverGraphIn_PRE_POST_MID <= leftoverGraphIn_MID;
+    leftoverGraphIn_POST_MID <= leftoverGraphIn_PRE_POST_MID;
 end
 
 reg[127:0] midPoint_DOWN;
@@ -196,11 +200,9 @@ always @(posedge clk) begin
     leftoverGraphIn_DOWN <= leftoverGraphIn_POST_MID;
 end
 
-reg[127:0] midPoint_SUMMARIZE;
 reg[127:0] reducedGraph_SUMMARIZE;
 reg[127:0] leftoverGraphIn_SUMMARIZE;
 always @(posedge clk) begin
-    midPoint_SUMMARIZE <= midPoint_DOWN;
     reducedGraph_SUMMARIZE <= reducedGraph_DOWN;
     leftoverGraphIn_SUMMARIZE <= leftoverGraphIn_DOWN;
 end

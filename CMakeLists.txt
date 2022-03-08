@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18.4)
+cmake_minimum_required(VERSION 3.16.3)
 
 project(Dedekind VERSION 1.0)
 
@@ -21,6 +21,7 @@ else()
 
   # add_compile_options("$<$<CONFIG:DEBUG>:-g -lasan -fsanitize=address>")
   add_compile_options("$<$<CONFIG:RELEASE>:-Wno-unused-variable>")
+  add_compile_options("$<$<CONFIG:RELEASE>:-O3>")
 endif()
 
 add_library(dedelib
@@ -70,7 +71,7 @@ add_executable(benchmarks
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 add_executable(fpga_production
   fpga_production/main.cpp
-  fpga_production/FullPermutePipelineTestSetOpenCL_generated7.cpp
+  # fpga_production/FullPermutePipelineTestSetOpenCL_generated7.cpp
   # fpga_production/pipeline6PackTestSetForOpenCL_generated7.cpp
   fpga_production/AOCLUtils/opencl.cpp
   fpga_production/AOCLUtils/options.cpp
