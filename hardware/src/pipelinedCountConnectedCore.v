@@ -7,7 +7,7 @@
 `define EXPLORATION_DEPTH 7
 
 `define OFFSET_NSD `NEW_SEED_DEPTH
-`define OFFSET_MID (`OFFSET_NSD+1)
+`define OFFSET_MID (`OFFSET_NSD+2)
 `define OFFSET_DOWN (`OFFSET_MID+`EXPLORATION_DOWN_OFFSET)
 `define OFFSET_EXPL (`OFFSET_MID+`EXPLORATION_DEPTH)
 `define TOTAL_PIPELINE_STAGES `OFFSET_EXPL
@@ -162,12 +162,14 @@ module explorationPipeline(
     output reg shouldGrabNewSeedOut
 );
 
+reg[127:0] leftoverGraphIn_PRE_PRE_MID;
 reg[127:0] leftoverGraphIn_PRE_MID;
 always @(posedge clk) begin
-    leftoverGraphIn_PRE_MID <= leftoverGraphIn;
+    leftoverGraphIn_PRE_PRE_MID <= leftoverGraphIn;
+    leftoverGraphIn_PRE_MID <= leftoverGraphIn_PRE_PRE_MID;
 end
 
-// PIPELINE STEP 1, 2
+// PIPELINE STEP 1, 2, 3
 wire[127:0] monotonizedUp_PRE_MID; pipelinedMonotonizeUp mUp(clk, curExtendingIn, monotonizedUp_PRE_MID);
 reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_PRE_MID & leftoverGraphIn_PRE_MID;
 

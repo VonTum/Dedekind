@@ -101,7 +101,7 @@ endmodule
 
 
 
-// 1 Cycle latency
+// 2 Cycles latency
 module pipelinedMonotonizeUp (
     input clk,
     input[127:0] vIn,
@@ -109,7 +109,7 @@ module pipelinedMonotonizeUp (
 );
 
 wire[127:0] addA;
-wire[127:0] addB;
+reg[127:0] addB;
 wire[127:0] addC;
 reg[127:0] addD;
 wire[127:0] addE;
@@ -124,7 +124,7 @@ generate
     end
     // add B
     for(i = 0; i < 128; i = i + 1) begin
-        assign addB[i] = (i % 4 >= 2) ? addA[i] | addA[i-2] : addA[i];
+        always @(posedge clk) addB[i] <= (i % 4 >= 2) ? addA[i] | addA[i-2] : addA[i];
     end
     // add C
     for(i = 0; i < 128; i = i + 1) begin
