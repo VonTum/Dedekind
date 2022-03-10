@@ -39,17 +39,19 @@ hyperpipeDualClock #(.CYCLES_A(WRITE_ADDR_STAGES), .CYCLES_B(WRITE_TO_READ_SYNC_
 
 wire[DEPTH_LOG2-1:0] writesValidUpTo;
 hyperpipeDualClock #(.CYCLES_A(READ_ADDR_STAGES), .CYCLES_B(READ_TO_WRITE_SYNC_STAGES), .WIDTH(DEPTH_LOG2)) writesValidUpToPipe(rdclk, wrclk, nextReadAddr, writesValidUpTo);
+
 assign usedw = nextWriteAddr - writesValidUpTo;
 
-assign empty = readsValidUpTo == nextReadAddr;
-
 generate if(MEMORY_HAS_RESET) begin
+    assign empty = readsValidUpTo == nextReadAddr;
+    
     assign isReading = readRequest && !empty;
     assign readAddressStall = !isReading;
     
 end else begin
-    // Little dance to set the memory's read addr register to 0
     reg rdrstD; always @(posedge rdclk) rdrstD <= rdrst;
+    assign empty = readsValidUpTo == nextReadAddr || rdrstD; // Have to add check on rst to prevent transient reset issues
+    // Little dance to set the memory's read addr register to 0
     
     assign isReading = readRequest && !empty && !rdrstD;
     
@@ -377,18 +379,35 @@ module FastFIFOOutputReg #(parameter WIDTH = 8) (
     output reg[WIDTH-1:0] dataOut
 );
 
-reg fifoWasEmpty; always @(posedge clk) fifoWasEmpty <= fifoEmpty;
-assign readFromFIFO = !fifoEmpty && (grab || (!dataAvailable && fifoWasEmpty));
+/*
+Fix for a HORRIBLE bug. For FIFOs with long read latency, a very rare event may occur where the FIFO is read twice, and the first read is lost:
+
+Timeline:
+- FIFO is empty, dataAvailable = 0.  
+- item arrives in FIFO, readFromFIFO is called, and the fifo becomes empty again. 
+- First data element is now in flight. 
+- An element arrives in the fifo, and yet again a positive edge on !fifoEmpty triggers readFromFIFO. 
+- Second data element now also in flight. 
+- First arrives
+- Second arrives, overwriting the first. BUG
+
+I spent weeks on this. WEEKS!
+*/
+reg dataFromFIFOIsInFlight;
+assign readFromFIFO = !fifoEmpty && (grab || (!dataAvailable && !dataFromFIFOIsInFlight));
 
 always @(posedge clk) begin
     if(rst) begin
         dataAvailable <= 0;
+        dataFromFIFOIsInFlight <= 0;
     end else begin
         if(grab) dataAvailable <= 0;
         else if(dataFromFIFOValid) begin
             dataAvailable <= 1;
+            dataFromFIFOIsInFlight <= 0;
             dataOut <= dataFromFIFO;
         end
+        if(readFromFIFO) dataFromFIFOIsInFlight <= 1; // Cannot happen together with dataFromFIFOValid
     end
 end
 
