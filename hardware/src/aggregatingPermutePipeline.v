@@ -36,6 +36,7 @@ wire[127:0] permutedBot;
 wire batchFinished;
 botPermuterWithMultiFIFO multiFIFOPermuter (
     .clk(clk),
+    .clk2x(clk2x),
     .rst(rst),
     
     // Input side

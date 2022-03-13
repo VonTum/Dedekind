@@ -95,11 +95,12 @@ module permutationGenerator67 (
 reg[127:0] currentlyPermuting;
 reg currentlyPermutingValid;
 
-assign requestNextBot = (permut6 == 0) && (permut7 == 0) && !slowDown;
+wire permutationWillEnd = (permut6 == 0) && (permut7 == 0);
+assign requestNextBot = permutationWillEnd && !slowDown;
 wire endOfPermutation;
 
-`define INPUT_FIFO_REQUEST_LATENCY 1
-hyperpipe #(.CYCLES(`INPUT_FIFO_REQUEST_LATENCY)) requestLatency(clk, requestNextBot, endOfPermutation);
+`define INPUT_FIFO_REQUEST_LATENCY 2
+hyperpipe #(.CYCLES(`INPUT_FIFO_REQUEST_LATENCY)) requestLatency(clk, permutationWillEnd, endOfPermutation);
 
 always @(posedge clk) begin
     if(rst) begin
@@ -123,12 +124,15 @@ endmodule
 
 module multiPermutationGenerator67 (
     input clk,
+    input clk2x,
     input rst,
     
+    // Input side, clocked at clk
     input[127:0] inputBot,
     input writeInputBot,
     output hasSpaceForNextBot,
     
+    // Output side, clocked at clk2x
     output[128*`NUMBER_OF_PERMUTATORS-1:0] outputBots,
     output[`NUMBER_OF_PERMUTATORS-1:0] outputBotsValid,
     output[`NUMBER_OF_PERMUTATORS-1:0] botSeriesFinished,
@@ -137,7 +141,7 @@ module multiPermutationGenerator67 (
 
 wire[2:0] permut7;
 wire[2:0] permut6;
-permutationIterator67 iter67(clk, permut6, permut7);
+permutationIterator67 iter67(clk2x, permut6, permut7);
 
 wire[2:0] permut6Divider[`NUMBER_OF_PERMUTATORS-1:0];
 
@@ -158,16 +162,20 @@ wire[`NUMBER_OF_PERMUTATORS-1:0] newBotRequests;
 wire[127:0] botFromInputFIFO;
 wire botFromInputFIFOValid;
 
-FastFIFO #(.WIDTH(128), .DEPTH_LOG2(5), .IS_MLAB(1), .READ_ADDR_STAGES(1)) permutationGeneratorInputFIFO(
-    .clk(clk),
-    .rst(rst),
-    
+wire rst2x;
+synchronizer rstSync(clk, rst, clk2x, rst2x);
+
+FastDualClockFIFO #(.WIDTH(128), .DEPTH_LOG2(5), .IS_MLAB(1), .READ_ADDR_STAGES(1)) permutationGeneratorInputFIFO(
     // input side
+    .wrclk(clk),
+    .wrrst(rst),
     .writeEnable(writeInputBot),
     .dataIn(inputBot),
     .usedw(permutationGeneratorInputFIFOUsedW),
     
     // output side
+    .rdclk(clk2x),
+    .rdrst(rst2x),
     .readRequest(|newBotRequests),
     .dataOut(botFromInputFIFO),
     .dataOutValid(botFromInputFIFOValid),
@@ -180,8 +188,8 @@ generate
 genvar i;
 for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
     permutationGenerator67 subGenerator67 (
-        .clk(clk),
-        .rst(rst),
+        .clk(clk2x),
+        .rst(rst2x),
         
         .permut7(permut7),
         .permut6(permut6Divider[i]),

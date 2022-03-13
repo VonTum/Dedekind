@@ -68,6 +68,7 @@ multiPermutationGenerator67 permutationGenMULTI (
 
 multiPermutationGenerator67 permutationGenMULTI (
     .clk(clk),
+    .clk2x(clk2x),
     .rst(permutationGeneratorRST),
     
     .inputBot(bot),

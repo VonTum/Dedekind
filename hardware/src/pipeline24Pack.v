@@ -112,8 +112,8 @@ module pipeline24PackV2 (
 // Input side
 
 // generate the permuted bots
-reg[128*`NUMBER_OF_PERMUTATORS-1:0] botsD; always @(posedge clk) botsD <= bots;
-reg[`NUMBER_OF_PERMUTATORS-1:0] batchesDoneD; always @(posedge clk) batchesDoneD <= batchesDone;
+reg[128*`NUMBER_OF_PERMUTATORS-1:0] botsD; always @(posedge clk2x) botsD <= bots;
+reg[`NUMBER_OF_PERMUTATORS-1:0] batchesDoneD; always @(posedge clk2x) batchesDoneD <= batchesDone;
 
 wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsABCD = botsD;       // vs33 (no swap)
 wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsBACD;
@@ -136,7 +136,7 @@ wire[6*`NUMBER_OF_PERMUTATORS-1:0] permutesDBCA;
 
 generate
 for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
-    permuteCheck24Pipelined permuteChecker(clk, top, bots[i*128 +: 128], botsValid[i], {permutesABCD[i*6 +: 6], permutesBACD[i*6 +: 6], permutesCBAD[i*6 +: 6], permutesDBCA[i*6 +: 6]});
+    permuteCheck24Pipelined permuteChecker(clk2x, top, bots[i*128 +: 128], botsValid[i], {permutesABCD[i*6 +: 6], permutesBACD[i*6 +: 6], permutesCBAD[i*6 +: 6], permutesDBCA[i*6 +: 6]});
 end
 endgenerate
 
@@ -149,7 +149,7 @@ always @(posedge clk) resultsAvailable <= resultsAvailableWAND;
 (* dont_merge *) reg grabResultsD; always @(posedge clk) grabResultsD <= grabResults;
 
 wor[`NUMBER_OF_PERMUTATORS-1:0] slowDownInputWOR;
-hyperpipe #(.CYCLES(5), .WIDTH(`NUMBER_OF_PERMUTATORS)) slowDownInputPipe(clk, slowDownInputWOR, slowDownInput);
+hyperpipe #(.CYCLES(5), .WIDTH(`NUMBER_OF_PERMUTATORS)) slowDownInputPipe(clk2x, slowDownInputWOR, slowDownInput);
 wor eccStatusWOR; always @(posedge clk) eccStatus <= eccStatusWOR;
 
 // Profiling wires

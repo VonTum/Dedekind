@@ -77,10 +77,9 @@ endmodule
 
 
 module BatchBotFIFO_M20K (
-    input clk,
-    input rst,
-    
     // Input side
+    input wrclk,
+    input wrrst,
     input[127:0] botIn,
     input[5:0] validBotPermutesIn,
     output reg slowDownInput,
@@ -90,6 +89,8 @@ module BatchBotFIFO_M20K (
     output[5:0] batchSize,
     
     // Output Side
+    input rdclk,
+    input rdrst,
     input read, // 4 cycle latency
     output[127:0] botOut, 
     output[5:0] validBotPermutesOut,
@@ -106,10 +107,10 @@ reg[8:0] readAddr;
 
 wire[8:0] leftoverWords = readAddr - writeAddr;
 
-always @(posedge clk) slowDownInput <= leftoverWords < 100;
+always @(posedge wrclk) slowDownInput <= leftoverWords < 160;
 
-always @(posedge clk) begin
-    if(rst) begin
+always @(posedge wrclk) begin
+    if(wrrst) begin
         writeAddr <= 0;
         batchSizeReg <= 0;
     end else begin
@@ -118,30 +119,32 @@ always @(posedge clk) begin
     end
 end
 
-always @(posedge clk) begin
-    if(rst) begin
+always @(posedge rdclk) begin
+    if(rdrst) begin
         readAddr <= 9'b111111111;
     end else begin
         readAddr <= readAddr + read;
     end
 end
 
-reg readD; always @(posedge clk) readD <= read;
+// read enable is once cycle later because we read after incrementing the read addr, 
+// that way we don't have metastability on the memory contents, 
+// Since we only ever increase the read addr when we read valid data
+reg readD; always @(posedge rdclk) readD <= read;
 
-MEMORY_M20K #(
+DUAL_CLOCK_MEMORY_M20K #(
     .WIDTH(128+6), 
-    .DEPTH_LOG2(9), 
-    .READ_DURING_WRITE("DONT_CARE")
+    .DEPTH_LOG2(9)
 ) memory (
-    .clk(clk),
-    
     // Write Side
+    .wrclk(wrclk),
     .writeEnable(write),
     .writeAddr(writeAddr),
     .dataIn({botIn, validBotPermutesIn}),
     
     // Read Side
-    .readEnable(readD), // read enable is once cycle later for 
+    .rdclk(rdclk),
+    .readEnable(readD),
     .readAddressStall(1'b0),
     .readAddr(readAddr),
     .dataOut({botOut, validBotPermutesOut}),
@@ -152,15 +155,16 @@ endmodule
 
 module botPermuterWithMultiFIFO(
     input clk,
+    input clk2x,
     input rst,
     
-    // Input side
+    // Input side, clocked at clk2x
     input[128*`NUMBER_OF_PERMUTATORS-1:0] bots,
     input[6*`NUMBER_OF_PERMUTATORS-1:0] validBotsPermutes,
     input[`NUMBER_OF_PERMUTATORS-1:0] batchesDone,
     output[`NUMBER_OF_PERMUTATORS-1:0] slowDownInputs,
     
-    // Output side
+    // Output side, clocked at clk
     output[127:0] permutedBot,
     output permutedBotValid,
     output batchFinished,
@@ -175,15 +179,18 @@ wor eccStatusFromBatchPseudoFIFOs;
 wire[`NUMBER_OF_PERMUTATORS-1:0] batchFIFOSlowdown;
 wire[`NUMBER_OF_PERMUTATORS-1:0] readFromFIFO;
 
+wire rst2x;
+synchronizer rst2xSync(clk, rst, clk2x, rst2x);
+
 genvar i;
 generate
 for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
     (* dont_merge *) reg batchPseudoFIFORST; always @(posedge clk) batchPseudoFIFORST <= rst;
+    (* dont_merge *) reg batchPseudoFIFORST2x; always @(posedge clk2x) batchPseudoFIFORST2x <= rst2x;
     BatchBotFIFO_M20K botAndPermutesFIFO (
-        .clk(clk),
-        .rst(batchPseudoFIFORST),
-        
         // Input side
+        .wrclk(clk2x),
+        .wrrst(batchPseudoFIFORST2x),
         .botIn(bots[128*i +: 128]),
         .validBotPermutesIn(validBotsPermutes[6*i +: 6]),
         .slowDownInput(batchFIFOSlowdown[i]),
@@ -193,6 +200,8 @@ for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
         .batchSize(batchSizesOut[i]),
         
         // Output Side
+        .rdclk(clk),
+        .rdrst(batchPseudoFIFORST2x),
         .read(readFromFIFO[i]), // 4 cycle latency
         .botOut(botOutFromBatchFIFOs), 
         .validBotPermutesOut(botPermutesFromBatchFIFOs),
@@ -201,9 +210,8 @@ for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
 end
 endgenerate
 
-(* dont_merge *) reg batchSizeFIFORST; always @(posedge clk) batchSizeFIFORST <= rst;
 wire[8:0] batchSizeFIFOUsedW;
-reg batchSizeFIFOAlmostFull; always @(posedge clk) batchSizeFIFOAlmostFull <= batchSizeFIFOUsedW >= 450;
+reg batchSizeFIFOAlmostFull; always @(posedge clk2x) batchSizeFIFOAlmostFull <= batchSizeFIFOUsedW >= 450;
 assign slowDownInputs = batchSizeFIFOAlmostFull ? {`NUMBER_OF_PERMUTATORS{1'b1}} : batchFIFOSlowdown;
 
 // Communication with fifo
@@ -225,16 +233,19 @@ end
 
 wire[5:0] batchSizeToBatchSizeFIFO = batchSizesOut[batchOriginIndex];
 
-FastFIFO #(.WIDTH(6 + `NUMBER_OF_PERMUTATORS), .DEPTH_LOG2(9), .IS_MLAB(0)) batchSizeFIFO (
-    .clk(clk),
-    .rst(batchSizeFIFORST),
-    
+(* dont_merge *) reg batchSizeFIFORST; always @(posedge clk) batchSizeFIFORST <= rst;
+(* dont_merge *) reg batchSizeFIFORST2x; always @(posedge clk2x) batchSizeFIFORST2x <= rst2x;
+FastDualClockFIFO #(.WIDTH(6 + `NUMBER_OF_PERMUTATORS), .DEPTH_LOG2(9), .IS_MLAB(0)) batchSizeFIFO (
     // input side
+    .wrclk(clk2x),
+    .wrrst(batchSizeFIFORST2x),
     .writeEnable(|batchesDone),
     .dataIn({batchSizeToBatchSizeFIFO, batchesDone}),
     .usedw(batchSizeFIFOUsedW),
     
     // output side
+    .rdclk(clk),
+    .rdrst(batchSizeFIFORST),
     .readRequest(readFromBatchFIFO),
     .dataOut(dataFromBatchFIFO),
     .dataOutValid(dataFromBatchFIFOValid),

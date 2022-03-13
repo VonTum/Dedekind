@@ -33,7 +33,7 @@ initial begin
     inputBotValid = 1;
 end
 
-parameter MEMSIZE = 3000;
+parameter MEMSIZE = 99000;
 reg[1+128+16+48-1:0] dataTable[MEMSIZE-1:0];
 initial $readmemb("FullPermutePipelineTestSetOpenCL7.mem", dataTable);
 
