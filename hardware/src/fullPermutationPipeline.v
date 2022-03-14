@@ -115,7 +115,7 @@ wire outputRST_Delayed;
 hyperpipe #(.CYCLES(10)) outputRSTPipe(clk, outputRST, outputRST_Delayed);
 
 // Small stalling machine, to allow for propagation delay in grabNewResult and pipelineResultAvailable
-reg[2:0] cyclesTillNextResultsGrabTry = 0; always @(posedge clk) cyclesTillNextResultsGrabTry <= cyclesTillNextResultsGrabTry + 1;
+reg[1:0] cyclesTillNextResultsGrabTry = 0; always @(posedge clk) cyclesTillNextResultsGrabTry <= cyclesTillNextResultsGrabTry + 1;
 wire outputFIFOReadyForResults;
 assign grabNewResult = outputFIFOReadyForResults && pipelineResultAvailable && (cyclesTillNextResultsGrabTry == 0);
 

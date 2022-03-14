@@ -37,7 +37,7 @@ FIFO #(.WIDTH(128+6+1), .DEPTH_LOG2(5)) inputFIFO (
     .rst(inputFIFORST),
     
     // input side
-    .writeEnable(writeData && (|validBotPermutes || batchDone)),
+    .writeEnable(writeData),
     .dataIn({bot, validBotPermutes, batchDone}),
     .full(),
     .usedw(inputFifoUsedw),
@@ -71,6 +71,9 @@ botPermuter #(.EXTRA_DATA_WIDTH(0)) permuter6 (
     .selectedPermutationOut(),
     .extraDataOut()
 );
+
+reg[31:0] batchFinishedPreDelayCount = 0; always @(posedge clk) if(rst) batchFinishedPreDelayCount <= 0; else if(batchFinishedPreDelay) batchFinishedPreDelayCount <= batchFinishedPreDelayCount + 1;
+
 
 endmodule
 
@@ -258,27 +261,20 @@ reg[`NUMBER_OF_PERMUTATORS-1:0] selectedFIFO1Hot;
 reg batchSizeECC;
 wire thisBatchIsDone = leftoverItemsInThisBatch == 0;
 
+wire permuterRequestSlowDown;
+wire pushPermutation = !thisBatchIsDone && !permuterRequestSlowDown;
+assign readFromFIFO = pushPermutation ? selectedFIFO1Hot : 0;
 wire nextBatchSizeAvailable;
-wire grabNextBatchSize = thisBatchIsDone && nextBatchSizeAvailable;
+wire grabNextBatchSize = thisBatchIsDone && nextBatchSizeAvailable && !permuterRequestSlowDown;
 wire[5:0] nextBatchSize;
 wire nextBatchSizeECC;
 wire[`NUMBER_OF_PERMUTATORS-1:0] nextSelectedFIFO1Hot;
-
 (* dont_merge *) reg batchSizeFIFORegRST; always @(posedge clk) batchSizeFIFORegRST <= rst;
 FastFIFOOutputReg #(6+`NUMBER_OF_PERMUTATORS+1) nextBatchSizeReg(clk, batchSizeFIFORegRST, 
     batchSizeFIFOEmpty, {dataFromBatchFIFO, eccFromBatchFIFO}, dataFromBatchFIFOValid, readFromBatchFIFO, // From FIFO
     grabNextBatchSize, nextBatchSizeAvailable, {{nextBatchSize, nextSelectedFIFO1Hot}, nextBatchSizeECC} // Output side
 );
 
-wire permuterRequestSlowDown;
-wire pushPermutation = !thisBatchIsDone && !permuterRequestSlowDown;
-assign readFromFIFO = pushPermutation ? selectedFIFO1Hot : 0;
-
-wire botDataArrives;
-hyperpipe #(.CYCLES(4)) dataArrivesPipe(clk, pushPermutation, botDataArrives);
-reg batchWasNotDone; always @(posedge clk) batchWasNotDone <= !thisBatchIsDone || grabNextBatchSize;
-wire batchDoneArrives;
-hyperpipe #(.CYCLES(4)) batchDoneArrivesPipe(clk, batchWasNotDone && thisBatchIsDone, batchDoneArrives);
 
 always @(posedge clk) begin
     if(batchSizeFIFORegRST) begin
@@ -294,6 +290,14 @@ always @(posedge clk) begin
         end
     end
 end
+
+
+
+wire botDataArrives;
+hyperpipe #(.CYCLES(4)) dataArrivesPipe(clk, pushPermutation, botDataArrives);
+reg batchWasNotDone; always @(posedge clk) batchWasNotDone <= !thisBatchIsDone || grabNextBatchSize;
+wire batchDoneArrives;
+hyperpipe #(.CYCLES(4)) batchDoneArrivesPipe(clk, batchWasNotDone && thisBatchIsDone, batchDoneArrives);
 
 botPermuterWithFIFO permuter (
     .clk(clk),
@@ -312,5 +316,11 @@ botPermuterWithFIFO permuter (
     .batchFinished(batchFinished),
     .requestSlowDown(requestSlowDown)
 );
+
+reg[31:0] grabNextBatchSizeCount; always @(posedge clk) if(rst) grabNextBatchSizeCount <= 0; else if(grabNextBatchSize) grabNextBatchSizeCount <= grabNextBatchSizeCount + 1;
+reg[31:0] pushPermutationCount; always @(posedge clk) if(rst) pushPermutationCount <= 0; else if(pushPermutation) pushPermutationCount <= pushPermutationCount + 1;
+reg[31:0] batchDoneArrivesCount; always @(posedge clk) if(rst) batchDoneArrivesCount <= 0; else if(batchDoneArrives) batchDoneArrivesCount <= batchDoneArrivesCount + 1;
+reg[31:0] batchFinishedCount; always @(posedge clk) if(rst) batchFinishedCount <= 0; else if(batchFinished) batchFinishedCount <= batchFinishedCount + 1;
+
 
 endmodule

@@ -52,6 +52,11 @@ botPermuterWithMultiFIFO multiFIFOPermuter (
     .requestSlowDown(aggregatingPipelineSlowDownInput || outputFIFORequestsSlowdown)
 );
 
+
+reg[31:0] batchesDoneCount = 0; always @(posedge clk2x) if(rst) batchesDoneCount <= 0; else if(|batchesDone) batchesDoneCount <= batchesDoneCount + 1;
+reg[31:0] batchesFinishedCount = 0; always @(posedge clk) if(rst) batchesFinishedCount <= 0; else if(batchFinished) batchesFinishedCount <= batchesFinishedCount + 1;
+
+
 wire aggregateFinished;
 wire[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSumFromPipeline;
 wire[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCountFromPipeline;

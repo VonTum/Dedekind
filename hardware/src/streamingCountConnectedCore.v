@@ -4,7 +4,9 @@
 `define ADDR_DEPTH 512
 
 `define INPUT_FIFO_DEPTH_LOG2 5
-`define INPUT_FIFO_ALMOST_FULL 22
+
+// Upper 6 cycles max latency for permutation generation, 4 cycles turnaround time, 2 cycles of margin
+`define INPUT_FIFO_ALMOST_FULL 20
 
 module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     input clk,
