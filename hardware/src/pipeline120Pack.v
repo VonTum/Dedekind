@@ -36,10 +36,11 @@ wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsEBCDA;
 genvar i;
 generate
 for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
-    varSwap #(2,3) vs23 (botsABCDE[128*i +: 128], botsBACDE[128*i +: 128]);
-    varSwap #(2,4) vs24 (botsABCDE[128*i +: 128], botsCBADE[128*i +: 128]);
-    varSwap #(2,5) vs25 (botsABCDE[128*i +: 128], botsDBCAE[128*i +: 128]);
-    varSwap #(2,6) vs26 (botsABCDE[128*i +: 128], botsEBCDA[128*i +: 128]);
+    wire[127:0] curInputBotToPermute = botsABCDE[128*i +: 128];
+    `VAR_SWAP_INLINE_EXTRA_WIRES_WITHIN_GENERATE(2,3, curInputBotToPermute, botsBACDE[128*i +: 128], outWireBACDE)
+    `VAR_SWAP_INLINE_EXTRA_WIRES_WITHIN_GENERATE(2,4, curInputBotToPermute, botsCBADE[128*i +: 128], outWireCBADE)
+    `VAR_SWAP_INLINE_EXTRA_WIRES_WITHIN_GENERATE(2,5, curInputBotToPermute, botsDBCAE[128*i +: 128], outWireDBCAE)
+    `VAR_SWAP_INLINE_EXTRA_WIRES_WITHIN_GENERATE(2,6, curInputBotToPermute, botsEBCDA[128*i +: 128], outWireEBCDA)
 end
 endgenerate
 

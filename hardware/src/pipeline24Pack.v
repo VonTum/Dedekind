@@ -2,88 +2,6 @@
 `include "pipelineGlobals_header.v"
 
 // sums all 24 permutations of variables 3,4,5,6.
-module pipeline24PackV2WithFIFO (
-    input clk,
-    input clk2x,
-    input rst,
-    output[3:0] activityMeasure, // Instrumentation wire for profiling (0-8 activity level)
-    
-    // Input side
-    input[127:0] top,
-    input[127:0] bot,
-    input isBotValid,
-    input batchDone,
-    output slowDownInput,
-    
-    // Output side
-    input grabResults,
-    output resultsAvailable,
-    output[`PCOEFF_COUNT_BITWIDTH+2+35-1:0] pcoeffSum,
-    output[`PCOEFF_COUNT_BITWIDTH+2-1:0] pcoeffCount,
-    
-    output wor eccStatus
-);
-
-wire[23:0] validBotPermutationsD;
-permuteCheck24Pipelined permuteChecker(clk, top, bot, isBotValid, validBotPermutationsD);
-reg[127:0] botD; always @(posedge clk) botD <= bot;
-reg batchDoneD; always @(posedge clk) batchDoneD <= batchDone;
-
-reg[128+24+1-1:0] dataToFIFO24; always @(posedge clk) dataToFIFO24 <= {botD, validBotPermutationsD, batchDoneD};
-reg writeToFIFO24; always @(posedge clk) writeToFIFO24 <= |validBotPermutationsD || batchDoneD;
-
-
-wire[127:0] botFromFIFO;
-wire[23:0] validBotPermutationsFromFIFO;
-wire batchDoneFromFIFO;
-
-wire[8:0] inputFIFOUsedW;
-hyperpipe #(.CYCLES(5)) slowDownInputPipe(clk, inputFIFOUsedW > 400, slowDownInput);
-wire pipelinesRequestSlowDown;
-wire fifo24DataOutValid;
-
-(* dont_merge *) reg inputFifoRST; always @(posedge clk) inputFifoRST <= rst;
-FastFIFO #(.WIDTH(128+24+1), .DEPTH_LOG2(9), .IS_MLAB(0)) fifo24 (
-    .clk(clk),
-    .rst(inputFifoRST),
-    
-    .writeEnable(writeToFIFO24),
-    .dataIn(dataToFIFO24),
-    .usedw(inputFIFOUsedW),
-    
-    .readRequest(!pipelinesRequestSlowDown),
-    .dataOut({botFromFIFO, validBotPermutationsFromFIFO, batchDoneFromFIFO}),
-    .dataOutValid(fifo24DataOutValid),
-    .empty(),
-    .eccStatus(eccStatus)
-);
-
-(* dont_merge *) reg pipelineRST; always @(posedge clk) pipelineRST <= rst;
-pipeline24PackV2 pipeline (
-    .clk(clk),
-    .clk2x(clk2x),
-    .rst(pipelineRST),
-    .activityMeasure(activityMeasure),
-    .top(top),
-    
-    .bot(botFromFIFO),
-    .writeData(fifo24DataOutValid),
-    .validBotPermutations(validBotPermutationsFromFIFO),
-    .batchDone(batchDoneFromFIFO),
-    .slowDownInput(pipelinesRequestSlowDown),
-    
-    // Output side
-    .grabResults(grabResults),
-    .resultsAvailable(resultsAvailable),
-    .pcoeffSum(pcoeffSum),
-    .pcoeffCount(pcoeffCount),
-    
-    .eccStatus(eccStatus)
-);
-
-endmodule
-
-// sums all 24 permutations of variables 3,4,5,6.
 module pipeline24PackV2 (
     input clk,
     input clk2x,
@@ -110,10 +28,15 @@ module pipeline24PackV2 (
 `include "inlineVarSwap_header.v"
 
 // Input side
+// Add extra stage to top to improve routing, latency is irrelevant anyway
+(* dont_merge *) reg[127:0] topD; always @(posedge clk) topD <= top;
 
 // generate the permuted bots
-reg[128*`NUMBER_OF_PERMUTATORS-1:0] botsD; always @(posedge clk2x) botsD <= bots;
-reg[`NUMBER_OF_PERMUTATORS-1:0] batchesDoneD; always @(posedge clk2x) batchesDoneD <= batchesDone;
+`define PERMUTE_CHECK_LATENCY 3
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsD;
+wire[`NUMBER_OF_PERMUTATORS-1:0] batchesDoneD;
+hyperpipe #(.CYCLES(`PERMUTE_CHECK_LATENCY), .WIDTH(128*`NUMBER_OF_PERMUTATORS)) botsPipe(clk2x, bots, botsD);
+hyperpipe #(.CYCLES(`PERMUTE_CHECK_LATENCY), .WIDTH(`NUMBER_OF_PERMUTATORS)) batchesPipe(clk2x, batchesDone, batchesDoneD);
 
 wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsABCD = botsD;       // vs33 (no swap)
 wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsBACD;
@@ -123,9 +46,10 @@ wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsDBCA;
 genvar i;
 generate
 for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
-    varSwap #(3, 4) vs34 (botsABCD[128*i +: 128], botsBACD[128*i +: 128]);// varSwap #(3,4) vs34 (botsABCD, botsBACD);
-    varSwap #(3, 5) vs35 (botsABCD[128*i +: 128], botsCBAD[128*i +: 128]);// varSwap #(3,5) vs35 (botsABCD, botsCBAD);
-    varSwap #(3, 6) vs36 (botsABCD[128*i +: 128], botsDBCA[128*i +: 128]);// varSwap #(3,6) vs36 (botsABCD, botsDBCA);
+    wire[127:0] curInputBotToPermute = botsABCD[128*i +: 128];
+    `VAR_SWAP_INLINE_EXTRA_WIRES_WITHIN_GENERATE(3, 4, curInputBotToPermute, botsBACD[128*i +: 128], outWireBACD)// varSwap #(3,4) vs34 (botsABCD, botsBACD);
+    `VAR_SWAP_INLINE_EXTRA_WIRES_WITHIN_GENERATE(3, 5, curInputBotToPermute, botsCBAD[128*i +: 128], outWireCBAD)// varSwap #(3,5) vs35 (botsABCD, botsCBAD);
+    `VAR_SWAP_INLINE_EXTRA_WIRES_WITHIN_GENERATE(3, 6, curInputBotToPermute, botsDBCA[128*i +: 128], outWireDBCA)// varSwap #(3,6) vs36 (botsABCD, botsDBCA);
 end
 endgenerate
 
@@ -136,7 +60,7 @@ wire[6*`NUMBER_OF_PERMUTATORS-1:0] permutesDBCA;
 
 generate
 for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
-    permuteCheck24Pipelined permuteChecker(clk2x, top, bots[i*128 +: 128], botsValid[i], {permutesABCD[i*6 +: 6], permutesBACD[i*6 +: 6], permutesCBAD[i*6 +: 6], permutesDBCA[i*6 +: 6]});
+    permuteCheck24Pipelined permuteChecker(clk2x, topD, bots[i*128 +: 128], botsValid[i], {permutesABCD[i*6 +: 6], permutesBACD[i*6 +: 6], permutesCBAD[i*6 +: 6], permutesDBCA[i*6 +: 6]});
 end
 endgenerate
 
@@ -159,10 +83,10 @@ reg[2:0] activityMeasure23; always @(posedge clk) activityMeasure23 <= activityM
 reg[3:0] activityMeasureSum; always @(posedge clk) activityMeasureSum <= activityMeasure01 + activityMeasure23;
 hyperpipe #(.CYCLES(3), .WIDTH(4)) activityPipe(clk, activityMeasureSum, activityMeasure);
 
-aggregatingPermutePipeline p1_4(clk, clk2x, rst, activityMeasures[0], top, botsABCD, permutesABCD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[0], counts[0], eccStatusWOR);
-aggregatingPermutePipeline p2_4(clk, clk2x, rst, activityMeasures[1], top, botsBACD, permutesBACD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[1], counts[1], eccStatusWOR);
-aggregatingPermutePipeline p3_4(clk, clk2x, rst, activityMeasures[2], top, botsCBAD, permutesCBAD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[2], counts[2], eccStatusWOR);
-aggregatingPermutePipeline p4_4(clk, clk2x, rst, activityMeasures[3], top, botsDBCA, permutesDBCA, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[3], counts[3], eccStatusWOR);
+aggregatingPermutePipeline p1_4(clk, clk2x, rst, activityMeasures[0], topD, botsABCD, permutesABCD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[0], counts[0], eccStatusWOR);
+aggregatingPermutePipeline p2_4(clk, clk2x, rst, activityMeasures[1], topD, botsBACD, permutesBACD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[1], counts[1], eccStatusWOR);
+aggregatingPermutePipeline p3_4(clk, clk2x, rst, activityMeasures[2], topD, botsCBAD, permutesCBAD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[2], counts[2], eccStatusWOR);
+aggregatingPermutePipeline p4_4(clk, clk2x, rst, activityMeasures[3], topD, botsDBCA, permutesDBCA, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[3], counts[3], eccStatusWOR);
 
 // combine outputs
 reg[`PCOEFF_COUNT_BITWIDTH+35+1-1:0] sum01; always @(posedge clk) sum01 <= sums[0] + sums[1];

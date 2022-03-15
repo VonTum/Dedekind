@@ -89,6 +89,59 @@ assign results = {aResult, bResult, cResult, dResult};
 
 endmodule
 
+module permutCheckProduceResults24Pipelined(
+    input clk,
+    input sharedAll,
+    input[15:0] oneThreeVars24, // intermediaries
+    input[17:0] twoTwoVars24,  // intermediaries
+    output[23:0] results /* {
+        abcd, abdc, acbd, acdb, adbc, adcb, 
+        bacd, badc, bcad, bcda, bdac, bdca, 
+        cbad, cbda, cabd, cadb, cdba, cdab, 
+        dbca, dbac, dcba, dcab, dabc, dacb}
+         == {permutesABCD, permutesBACD, permutesCBAD, permutesDBCA}*/
+);
+
+wire aShared;
+wire[8:0] aOneTwo6;
+wire bShared;
+wire[8:0] bOneTwo6;
+wire cShared;
+wire[8:0] cOneTwo6;
+wire dShared;
+wire[8:0] dOneTwo6;
+
+permutCvAllIntermediaries24To6 cvt(sharedAll, oneThreeVars24, twoTwoVars24, 
+    aShared, aOneTwo6,
+    bShared, bOneTwo6,
+    cShared, cOneTwo6,
+    dShared, dOneTwo6
+);
+
+reg aSharedD; always @(posedge clk) aSharedD <= aShared;
+reg[8:0] aOneTwo6D; always @(posedge clk) aOneTwo6D <= aOneTwo6;
+wire[5:0] aResult;
+permutCheckProduceResults6 aResultProd(aSharedD, aOneTwo6D, aResult);
+
+reg bSharedD; always @(posedge clk) bSharedD <= bShared;
+reg[8:0] bOneTwo6D; always @(posedge clk) bOneTwo6D <= bOneTwo6;
+wire[5:0] bResult;
+permutCheckProduceResults6 bResultProd(bSharedD, bOneTwo6D, bResult);
+
+reg cSharedD; always @(posedge clk) cSharedD <= cShared;
+reg[8:0] cOneTwo6D; always @(posedge clk) cOneTwo6D <= cOneTwo6;
+wire[5:0] cResult;
+permutCheckProduceResults6 cResultProd(cSharedD, cOneTwo6D, cResult);
+
+reg dSharedD; always @(posedge clk) dSharedD <= dShared;
+reg[8:0] dOneTwo6D; always @(posedge clk) dOneTwo6D <= dOneTwo6;
+wire[5:0] dResult;
+permutCheckProduceResults6 dResultProd(dSharedD, dOneTwo6D, dResult);
+
+assign results = {aResult, bResult, cResult, dResult};
+
+endmodule
+
 
 
 
@@ -344,12 +397,13 @@ permutCheckProduceResults24 resultsProducer(sharedAll & isBotValid, oneThreeVarO
 
 endmodule
 
+// 3 clock cycles latency
 module permuteCheck24Pipelined (
     input clk,
     input[127:0] top,
     input[127:0] bot,
     input isBotValid,
-    output[23:0] validBotPermutations
+    output reg[23:0] validBotPermutations
 );
 
 wire sharedAll;
@@ -357,12 +411,13 @@ wire[15:0] oneThreeVarOverlaps;
 wire[17:0] twoTwoVarOverlaps;
 permuteProduceIntermediaries24 intermediaryProducer(top, bot, sharedAll, oneThreeVarOverlaps, twoTwoVarOverlaps);
 
-reg sharedAllD; always @(posedge clk) sharedAllD <= sharedAll;
+reg resultValidD; always @(posedge clk) resultValidD <= sharedAll && isBotValid;
 reg[15:0] oneThreeVarOverlapsD; always @(posedge clk) oneThreeVarOverlapsD <= oneThreeVarOverlaps;
 reg[17:0] twoTwoVarOverlapsD; always @(posedge clk) twoTwoVarOverlapsD <= twoTwoVarOverlaps;
-reg isBotValidD; always @(posedge clk) isBotValidD <= isBotValid;
 
-permutCheckProduceResults24 resultsProducer(sharedAllD & isBotValidD, oneThreeVarOverlapsD, twoTwoVarOverlapsD, validBotPermutations);
+wire[23:0] validBotPermutationsWire;
+permutCheckProduceResults24Pipelined resultsProducer(clk, resultValidD, oneThreeVarOverlapsD, twoTwoVarOverlapsD, validBotPermutationsWire);
+always @(posedge clk) validBotPermutations <= validBotPermutationsWire;
 
 endmodule
 

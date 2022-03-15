@@ -36,7 +36,7 @@ reg loadNewTop; always @(posedge clk) loadNewTop <= readyToLoadNewTop && !readyT
 
 // Makes all paths starting at topReg false paths. This is possible because top is a de-facto global constant. 
 // Data delay is allowed to go up to `OUTPUT_INDEX_OFFSET = 1024 cycles, which I assume will be plenty
-(* altera_attribute = "-name CUT ON -to *" *) reg[127:0] topReg;
+/*(* altera_attribute = "-name CUT ON -to *" *) */reg[127:0] topReg;
 assign topOut = topReg;
 
 always @(posedge clk) begin
