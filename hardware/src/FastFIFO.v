@@ -1,5 +1,143 @@
 `timescale 1ns / 1ps
 
+(* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION off; -name SYNCHRONIZER_IDENTIFICATION AUTO" *) 
+module GrayCodePipe #(parameter WIDTH = 5) (
+    input clkA,
+    input[WIDTH-1:0] dataA,
+    
+    input clkB,
+    output[WIDTH-1:0] dataB
+);
+
+reg[WIDTH-1:0] grayA;
+always @(posedge clkA) begin
+    grayA <= dataA ^ (dataA >> 1);
+end
+
+reg[WIDTH-1:0] grayB1; always @(posedge clkB) grayB1 <= grayA;
+reg[WIDTH-1:0] grayB2; always @(posedge clkB) grayB2 <= grayB1;
+generate
+    assign dataB[WIDTH-1] = grayB2[WIDTH-1];
+    genvar i;
+    for(i = WIDTH-2; i >= 0; i = i - 1) begin
+        assign dataB[i] = grayB2[i] ^ dataB[i+1];
+    end
+endgenerate
+
+endmodule
+
+module AlmostFullOctants #(parameter DEPTH_LOG2 = 9) (
+    // Write clk
+    input wrclk,
+    input[DEPTH_LOG2-1:0] writeAddr,
+    
+    // Read clk
+    input rdclk,
+    input[DEPTH_LOG2-1:0] readAddr,
+    
+    // Write clk
+    output reg almostFull
+);
+
+wire[2:0] writeAddrOctant = writeAddr[DEPTH_LOG2-1:DEPTH_LOG2-3];
+wire[2:0] readAddrOctant_wr;
+GrayCodePipe #(3) rd_wr(rdclk, readAddr[DEPTH_LOG2-1:DEPTH_LOG2-3], wrclk, readAddrOctant_wr);
+
+wire[2:0] leftoverOctant = readAddrOctant_wr - writeAddrOctant;
+always @(posedge wrclk) almostFull <= leftoverOctant == 1; // At least a quarter of the FIFO is still free. Should synthesize to a single 6-1 LUT
+
+endmodule
+
+module FastDualClockFIFO_SAFE #(parameter IS_MLAB = 0, parameter WIDTH = 16, parameter DEPTH_LOG2 = 9) (
+    // Write Side
+    input wrclk,
+    input wrrst,
+    
+    input writeEnable,
+    input[WIDTH-1:0] dataIn,
+    output almostFull, // Works in octants. Activated when 75-87.5% of the fifo is used (128-64 for M20K(512), 8-4 for MLAB(32))
+    
+    // Read Side
+    input rdclk,
+    input rdrst,
+    input readRequest,
+    output[WIDTH-1:0] dataOut,
+    output empty,
+    output dataOutValid,
+    output eccStatus
+);
+
+
+reg[DEPTH_LOG2-1:0] writeAddr;
+always @(posedge wrclk) begin
+    if(wrrst) begin
+        writeAddr <= 1; // Offset of one because read head must not wait at the position of the write head
+    end else begin
+        writeAddr <= writeAddr + writeEnable;
+    end
+end
+
+wire[DEPTH_LOG2-1:0] writeAddrWire_rd;
+GrayCodePipe #(DEPTH_LOG2) wr_rd(wrclk, writeAddr, rdclk, writeAddrWire_rd);
+reg[DEPTH_LOG2-1:0] writeAddr_rd; always @(posedge rdclk) writeAddr_rd <= writeAddrWire_rd;
+
+
+reg[DEPTH_LOG2-1:0] readAddr;
+wire[DEPTH_LOG2-1:0] nextReadAddr = readAddr + 1;
+assign empty = nextReadAddr == writeAddr_rd;
+wire isReading = readRequest && !empty;
+
+always @(posedge rdclk) begin
+    if(rdrst) begin
+        readAddr <= 0;
+    end else begin
+        if(isReading) readAddr <= nextReadAddr;
+    end
+end
+
+AlmostFullOctants #(DEPTH_LOG2) almostFullComp(wrclk, writeAddr, rdclk, readAddr, almostFull);
+
+hyperpipe #(.CYCLES(IS_MLAB ? 3 : 4)) isValidPipe(rdclk, isReading, dataOutValid);
+
+generate
+if(IS_MLAB) begin
+DUAL_CLOCK_MEMORY_MLAB #(WIDTH, DEPTH_LOG2) mlabMemory (
+    // Write Side
+    .wrclk(wrclk),
+    .writeEnable(writeEnable),
+    .writeAddr(writeAddr),
+    .dataIn(dataIn),
+    
+    // Read Side
+    .rdclk(rdclk),
+    .rstReadAddr(1'b0),
+    .readAddressStall(1'b0),
+    .readAddr(readAddr),
+    .dataOut(dataOut)
+);
+assign eccStatus = 1'bZ;
+end else begin
+DUAL_CLOCK_MEMORY_M20K #(WIDTH, DEPTH_LOG2) m20kMemory (
+    // Write Side
+    .wrclk(wrclk),
+    .writeEnable(writeEnable),
+    .writeAddr(writeAddr),
+    .dataIn(dataIn),
+    
+    // Read Side
+    .rdclk(rdclk),
+    .readEnable(1'b1),
+    .readAddressStall(1'b0),
+    .readAddr(readAddr),
+    .dataOut(dataOut),
+    .eccStatus(eccStatus)
+);
+end
+endgenerate
+
+endmodule
+
+
 
 // Has a read latency of READ_ADDR_STAGES(MLAB) - READ_ADDR_STAGES+2(M20K) cycles after assertion of readRequest. (Then if the fifo had data dataOutValid should be asserted)
 module FastFIFOController #(

@@ -99,7 +99,8 @@ wire permutationWillEnd = (permut6 == 0) && (permut7 == 0);
 assign requestNextBot = permutationWillEnd && !slowDown;
 wire endOfPermutation;
 
-`define INPUT_FIFO_REQUEST_LATENCY 2
+// 3 for fifo, 1 for extra reg in readRequest path
+`define INPUT_FIFO_REQUEST_LATENCY 3+1
 hyperpipe #(.CYCLES(`INPUT_FIFO_REQUEST_LATENCY)) requestLatency(clk, permutationWillEnd, endOfPermutation);
 
 always @(posedge clk) begin
@@ -159,28 +160,30 @@ end
 endgenerate
 
 
-wire[4:0] permutationGeneratorInputFIFOUsedW;
-assign hasSpaceForNextBot = permutationGeneratorInputFIFOUsedW < 25;
+wire permutationGeneratorInputFIFOAlmostFull;
+assign hasSpaceForNextBot = !permutationGeneratorInputFIFOAlmostFull;
 
 wire[`NUMBER_OF_PERMUTATORS-1:0] newBotRequests;
+reg requestNewBot; always @(posedge clk2x) requestNewBot <= |newBotRequests;
 wire[127:0] botFromInputFIFO;
 wire botFromInputFIFOValid;
 
 wire rst2x;
 synchronizer rstSync(clk, rst, clk2x, rst2x);
 
-FastDualClockFIFO #(.WIDTH(128), .DEPTH_LOG2(5), .IS_MLAB(1), .READ_ADDR_STAGES(1)) permutationGeneratorInputFIFO(
+// 3 cycles read latency
+FastDualClockFIFO_SAFE #(.WIDTH(128), .DEPTH_LOG2(5), .IS_MLAB(1)) permutationGeneratorInputFIFO(
     // input side
     .wrclk(clk),
     .wrrst(rst),
     .writeEnable(writeInputBot),
     .dataIn(inputBot),
-    .usedw(permutationGeneratorInputFIFOUsedW),
+    .almostFull(permutationGeneratorInputFIFOAlmostFull),
     
     // output side
     .rdclk(clk2x),
     .rdrst(rst2x),
-    .readRequest(|newBotRequests),
+    .readRequest(requestNewBot),
     .dataOut(botFromInputFIFO),
     .dataOutValid(botFromInputFIFOValid),
     .empty(), // unused

@@ -85,7 +85,7 @@ module BatchBotFIFO_M20K (
     input wrrst,
     input[127:0] botIn,
     input[5:0] validBotPermutesIn,
-    output reg slowDownInput,
+    output slowDownInput,
     
     // Batch Control
     input endBatch,
@@ -108,9 +108,7 @@ assign batchSize = batchSizeReg + write;
 reg[8:0] writeAddr;
 reg[8:0] readAddr;
 
-wire[8:0] leftoverWords = readAddr - writeAddr;
-
-always @(posedge wrclk) slowDownInput <= leftoverWords < 160;
+AlmostFullOctants #(9) almostFullComp(wrclk, writeAddr, rdclk, readAddr, slowDownInput);
 
 always @(posedge wrclk) begin
     if(wrrst) begin
@@ -147,7 +145,7 @@ DUAL_CLOCK_MEMORY_M20K #(
     
     // Read Side
     .rdclk(rdclk),
-    .readEnable(readD),
+    .readEnable(readD), // We use the read enable pin to use the FORCE_TO_ZERO optimization on M20K blocks, so recombination is just an OR
     .readAddressStall(1'b0),
     .readAddr(readAddr),
     .dataOut({botOut, validBotPermutesOut}),
