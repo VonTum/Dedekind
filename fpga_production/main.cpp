@@ -176,8 +176,8 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 
 		// Use final dummy top to get proper occupation reading
 		uint64_t analysisBot = countConnectedSumBuf[jobSize-1];
-		uint64_t activityCounter = (analysisBot & 0xFFFFFFFF00000000) >> 32;
-		uint64_t cycleCounter = analysisBot & 0x00000000FFFFFFFF;
+		uint64_t activityCounter = (analysisBot & 0x1FFFFFFF80000000) >> 31;
+		uint64_t cycleCounter = analysisBot & 0x000000007FFFFFFF;
 
 		std::cout << "Previous top took " << (cycleCounter<<10) << " cycles" << std::endl;
 		std::cout << "Previous top had " << (activityCounter<<16) << " activity" << std::endl;

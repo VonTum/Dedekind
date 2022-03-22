@@ -21,7 +21,6 @@ module aggregatingPermutePipeline (
     output[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
     output[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
     
-    // TODO ADD FIFOS TO THIS AS WELL
     output wor eccStatus
 );
 
@@ -79,10 +78,9 @@ aggregatingPipeline computePipe (
     .eccStatus(eccStatus)
 );
 
-wire[8:0] outputFIFOUsedw;
 // Some registers for extra slack on this connection
-reg outputFIFORequestsSlowdownPreReg; always @(posedge clk) outputFIFORequestsSlowdownPreReg <= outputFIFOUsedw > 200; // TODO see if this is enough?
-always @(posedge clk) outputFIFORequestsSlowdown <= outputFIFORequestsSlowdownPreReg;
+wire outputFIFOSlmostFull;
+always @(posedge clk) outputFIFORequestsSlowdown <= outputFIFOSlmostFull;
 
 // Some registers for extra slack on this connection
 reg aggregateFinishedD; always @(posedge clk) aggregateFinishedD <= aggregateFinished;
@@ -91,22 +89,20 @@ reg[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCountFromPipelineD; always @(posedge clk) 
 
 wire resultsFIFOEmpty;
 assign resultsAvailable = !resultsFIFOEmpty;
-FastFIFO #(.WIDTH(`PCOEFF_COUNT_BITWIDTH+35 + `PCOEFF_COUNT_BITWIDTH), .DEPTH_LOG2(9), .IS_MLAB(0)) resultsFIFO (
+FIFO_M20K #(.WIDTH(`PCOEFF_COUNT_BITWIDTH+35 + `PCOEFF_COUNT_BITWIDTH), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(300 /*TODO See if this is enough?*/)) resultsFIFO (
     .clk(clk),
     .rst(resultsFIFORST),
     
     // input side
     .writeEnable(aggregateFinishedD),
     .dataIn({pcoeffSumFromPipelineD, pcoeffCountFromPipelineD}),
-    .usedw(outputFIFOUsedw),
+    .almostFull(outputFIFOSlmostFull),
     
     // output side
-    .readRequest(grabResults),
+    .readEnable(grabResults),
     .dataOut({pcoeffSum, pcoeffCount}),
-    .dataOutValid(),
     .empty(resultsFIFOEmpty),
     .eccStatus(eccStatus)
 );
-
 
 endmodule

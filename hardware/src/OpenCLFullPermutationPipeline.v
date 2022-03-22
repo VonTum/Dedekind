@@ -100,31 +100,33 @@ topManager topMngr (
 
 reg grabResults[`NUMBER_OF_PIPELINES+1-1:0];
 wire resultsAvailable[`NUMBER_OF_PIPELINES+1-1:0];
-wire[63:0] dataOut[`NUMBER_OF_PIPELINES+1-1:0];
+wire[60:0] dataOut[`NUMBER_OF_PIPELINES+1-1:0];
+wor eccStatus;
 
 localparam SELECTION_BITWIDTH = $clog2(`NUMBER_OF_PIPELINES+1);
 
 wire[SELECTION_BITWIDTH-1:0] selectedPipelineIn = writeTopIn ? 0 : 1; // top gets index 0
 wire[SELECTION_BITWIDTH-1:0] selectedPipeline;
 wire grabbingData = ovalid && iready;
-FIFO #(.WIDTH(SELECTION_BITWIDTH), .DEPTH_LOG2(13/*8192*/)) resultOriginQueue (
+
+FIFO_M20K #(.WIDTH(SELECTION_BITWIDTH), .DEPTH_LOG2(13/*8192*/), .ALMOST_FULL_MARGIN(128)) resultOriginQueue (
     .clk(clk),
     .rst(rst),
     
     // input side
     .writeEnable(writeTopIn || writeBotIn),
     .dataIn(selectedPipelineIn),
-    .full(),
-    .usedw(),
+    .almostFull(/*TODO*/),
     
     // output side
     .readEnable(grabbingData),
     .dataOut(selectedPipeline),
-    .empty(resultOriginQueueEmpty)
+    .empty(resultOriginQueueEmpty),
+    .eccStatus(eccStatus)
 );
 
 assign ovalid = resultsAvailable[selectedPipeline] && !resultOriginQueueEmpty;
-assign summedDataPcoeffCountOut = dataOut[selectedPipeline];
+assign summedDataPcoeffCountOut = {eccStatus, 2'b00, dataOut[selectedPipeline]};
 
 
 integer i;
@@ -139,13 +141,13 @@ end
 wire[5:0] activityMeasure; // Instrumentation wire for profiling (0-40 activity level)
 
 assign resultsAvailable[0] = 1;
-reg[47:0] activityCounter;
-reg[41:0] clockCounter;
-assign dataOut[0][63:32] = activityCounter[47:16];
-assign dataOut[0][31:0] = clockCounter[41:10];
+reg[45:0] activityCounter;
+reg[40:0] clockCounter;
+assign dataOut[0][60:31] = activityCounter[45:16];
+assign dataOut[0][30:0] = clockCounter[40:10];
 // The resulting occupancy is calculated as activityCounter / 40 / clockCounter
 // Also, the occupancy returned for a top is the occupancy of the PREVIOUS top
-// For an outside observer, occupancy is computed as (dataOut[63:32] << 6) / 40.0 / dataOut[31:0]
+// For an outside observer, occupancy is computed as (dataOut[60:31] << 6) / 40.0 / dataOut[30:0]
 
 always @(posedge clk) begin
     if(rst || grabResults[0]) begin
@@ -175,10 +177,8 @@ fullPermutationPipeline permutationPipeline (
     .resultsAvailable(resultsAvailable[1]),
     .pcoeffSum(dataOut[1][47:0]),
     .pcoeffCount(dataOut[1][60:48]),
-    .eccStatus(dataOut[1][63])
+    .eccStatus(eccStatus)
 );
-// define missing bits
-assign dataOut[1][62:61] = 0;
 
 endmodule
 

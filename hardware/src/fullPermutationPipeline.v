@@ -121,20 +121,20 @@ assign grabNewResult = outputFIFOReadyForResults && pipelineResultAvailable && (
 
 
 wire grabNewResultArrived;
-hyperpipe #(.CYCLES(8)) writePipeToRegister(clk, grabNewResult, grabNewResultArrived);
+hyperpipe #(.CYCLES(6)) writePipeToRegister(clk, grabNewResult, grabNewResultArrived);
 
-wire[4:0] outputFIFOUsedw;
+wire outputFIFOAlmostFull;
 // Expect output fifo to be far away from pipelines
-hyperpipe #(.CYCLES(5)) outputFIFOReadyForResultsPipe(clk, outputFIFOUsedw < 20, outputFIFOReadyForResults);
+hyperpipe #(.CYCLES(5)) outputFIFOReadyForResultsPipe(clk, !outputFIFOAlmostFull, outputFIFOReadyForResults);
 wire outputFIFOEmpty; assign resultsAvailable = !outputFIFOEmpty;
-FIFO #(.WIDTH(48+13), .DEPTH_LOG2(5)) outputFIFO (
+FIFO_MLAB #(.WIDTH(48+13), .ALMOST_FULL_MARGIN(12)) outputFIFO (
     .clk(clk),
     .rst(outputRST_Delayed),
     
     // input side
     .writeEnable(grabNewResultArrived),
     .dataIn({pcoeffSumFromPipeline, pcoeffCountFromPipeline}),
-    .usedw(outputFIFOUsedw),
+    .almostFull(outputFIFOAlmostFull),
     
     // output side
     .readEnable(grabResults),

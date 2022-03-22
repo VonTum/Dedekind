@@ -211,8 +211,7 @@ for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
 end
 endgenerate
 
-wire[8:0] batchSizeFIFOUsedW;
-reg batchSizeFIFOAlmostFull; always @(posedge clk2x) batchSizeFIFOAlmostFull <= batchSizeFIFOUsedW >= 450;
+wire batchSizeFIFOAlmostFull;
 assign slowDownInputs = batchSizeFIFOAlmostFull ? {`NUMBER_OF_PERMUTATORS{1'b1}} : batchFIFOSlowdown;
 
 // Communication with fifo
@@ -236,13 +235,13 @@ wire[5:0] batchSizeToBatchSizeFIFO = batchSizesOut[batchOriginIndex];
 
 (* dont_merge *) reg batchSizeFIFORST; always @(posedge clk) batchSizeFIFORST <= rst;
 (* dont_merge *) reg batchSizeFIFORST2x; always @(posedge clk2x) batchSizeFIFORST2x <= rst2x;
-FastDualClockFIFO #(.WIDTH(6 + `NUMBER_OF_PERMUTATORS), .DEPTH_LOG2(9), .IS_MLAB(0)) batchSizeFIFO (
+FastDualClockFIFO_SAFE #(.WIDTH(6 + `NUMBER_OF_PERMUTATORS), .DEPTH_LOG2(9), .IS_MLAB(0)) batchSizeFIFO (
     // input side
     .wrclk(clk2x),
     .wrrst(batchSizeFIFORST2x),
     .writeEnable(|batchesDone),
     .dataIn({batchSizeToBatchSizeFIFO, batchesDone}),
-    .usedw(batchSizeFIFOUsedW),
+    .almostFull(batchSizeFIFOAlmostFull),
     
     // output side
     .rdclk(clk),
