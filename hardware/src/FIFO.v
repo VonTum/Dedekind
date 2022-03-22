@@ -42,7 +42,7 @@ defparam
     scfifo_component.lpm_showahead  = "ON",
     scfifo_component.lpm_type  = "scfifo",
     scfifo_component.lpm_width  = WIDTH,
-    scfifo_component.lpm_widthu  = 4,
+    scfifo_component.lpm_widthu  = 5,
     scfifo_component.overflow_checking  = "OFF",
     scfifo_component.underflow_checking  = "OFF",
     scfifo_component.use_eab  = "ON";

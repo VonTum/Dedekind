@@ -11,7 +11,7 @@ module botPermuterWithFIFO(
     input writeData,
     input[5:0] validBotPermutes,
     input batchDone,
-    output reg slowDownInput,
+    output slowDownInput,
     
     // Output side
     output[127:0] permutedBot,
@@ -19,9 +19,6 @@ module botPermuterWithFIFO(
     output reg batchFinished,
     input requestSlowDown // = aggregatingPipelineSlowDownInput || outputFIFORequestsSlowdown
 );
-
-wire[4:0] inputFifoUsedw;
-always @(posedge clk) slowDownInput <= inputFifoUsedw > 16;
 
 wire inputBotQueueEmpty;
 wire botPermuterReadyForBot;
@@ -32,15 +29,14 @@ wire[5:0] botFromFIFOValidBotPermutations;
 wire batchDonePostFIFO;
 
 (* dont_merge *) reg inputFIFORST; always @(posedge clk) inputFIFORST <= rst;
-FIFO #(.WIDTH(128+6+1), .DEPTH_LOG2(5)) inputFIFO (
+FIFO_MLAB #(.WIDTH(128+6+1), .ALMOST_FULL_MARGIN(16)) inputFIFO (
     .clk(clk),
     .rst(inputFIFORST),
     
     // input side
     .writeEnable(writeData),
     .dataIn({bot, validBotPermutes, batchDone}),
-    .full(),
-    .usedw(inputFifoUsedw),
+    .almostFull(slowDownInput),
     
     // output side
     .readEnable(grabNew6Pack),
