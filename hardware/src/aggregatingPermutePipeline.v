@@ -7,7 +7,7 @@ module aggregatingPermutePipeline (
     input clk2x,
     input rst,
     output[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
-    input[127:0] top,
+    input[1:0] topChannel,
     
     // Input side
     input[128*`NUMBER_OF_PERMUTATORS-1:0] botsIn,
@@ -26,6 +26,10 @@ module aggregatingPermutePipeline (
 
 (* dont_merge *) reg computePipeRST; always @(posedge clk) computePipeRST <= rst;
 (* dont_merge *) reg resultsFIFORST; always @(posedge clk) resultsFIFORST <= rst;
+
+// Extra fitting registers
+(* dont_merge *) reg[1:0] topChannelD; always @(posedge clk) topChannelD <= topChannel;
+(* dont_merge *) reg[1:0] topChannelDD; always @(posedge clk) topChannelDD <= topChannelD;
 
 reg outputFIFORequestsSlowdown;
 wire aggregatingPipelineSlowDownInput;
@@ -64,7 +68,7 @@ aggregatingPipeline computePipe (
     .clk2x(clk2x),
     .rst(computePipeRST),
     .activityMeasure(activityMeasure),
-    .top(top),
+    .topChannel(topChannelDD),
     
     .isBotValid(permutedBotValid),
     .bot(permutedBot),

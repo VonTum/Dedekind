@@ -8,7 +8,7 @@ module aggregatingPipeline (
     input clk2x,
     input rst,
     output[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
-    input[127:0] top,
+    input[1:0] topChannel,
     
     input isBotValid,
     input[127:0] bot,
@@ -27,6 +27,12 @@ wire eccFromPipeline;
 wire connectCountFromPipelineValid;
 wire[5:0] connectCountFromPipeline;
 
+wire[127:0] top;
+topReceiver receiver(
+    clk,
+    topChannel,
+    top
+);
 
 wire[127:0] graph = top & ~bot;
 

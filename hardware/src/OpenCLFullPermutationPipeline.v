@@ -80,7 +80,7 @@ module MultiFullPermutationPipeline (
 
 wire sendingBotResult = iready && ovalid;
 
-wire[127:0] top;
+wire[1:0] topChannel;
 wire stallInput;
 wire resultOriginQueueEmpty;
 topManager topMngr (
@@ -90,11 +90,14 @@ topManager topMngr (
     .topIn(botOrTop),
     .topInValid(writeTopIn),
     
-    .topOut(top),
-    
     .stallInput(stallInput),
-    .pipelineIsEmpty(resultOriginQueueEmpty)
+    .pipelineIsEmpty(resultOriginQueueEmpty),
+    
+    .topChannel(topChannel)
 );
+
+wire[1:0] topChannelD;
+hyperpipe #(.CYCLES(5), .WIDTH(2), .MAX_FAN(1)) topChannelDivider(clk, topChannel, topChannelD);
 
 `define NUMBER_OF_PIPELINES 1
 
@@ -168,7 +171,7 @@ fullPermutationPipeline permutationPipeline (
     .rst(rst),
     .activityMeasure(activityMeasure),
     
-    .top(top),
+    .topChannel(topChannelD),
     .bot(botOrTop),
     .writeBot(writeBotIn),
     .readyForInputBot(pipelineIsReady),

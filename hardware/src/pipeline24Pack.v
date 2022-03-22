@@ -9,7 +9,7 @@ module pipeline24PackV2 (
     output[3:0] activityMeasure, // Instrumentation wire for profiling (0-8 activity level)
     
     // Input side
-    input[127:0] top,
+    input[1:0] topChannel,
     
     input[128*`NUMBER_OF_PERMUTATORS-1:0] bots,
     input[`NUMBER_OF_PERMUTATORS-1:0] botsValid,
@@ -27,9 +27,9 @@ module pipeline24PackV2 (
 
 `include "inlineVarSwap_header.v"
 
-// Input side
-// Add extra stage to top to improve routing, latency is irrelevant anyway
-(* dont_merge *) reg[127:0] topD; always @(posedge clk) topD <= top;
+// Add extra stages to top to improve routing, latency is irrelevant anyway
+(* dont_merge *) reg[1:0] topChannelD; always @(posedge clk) topChannelD <= topChannel;
+(* dont_merge *) reg[1:0] topChannelDD; always @(posedge clk) topChannelDD <= topChannelD;
 
 // generate the permuted bots
 `define PERMUTE_CHECK_LATENCY 3
@@ -60,7 +60,11 @@ wire[6*`NUMBER_OF_PERMUTATORS-1:0] permutesDBCA;
 
 generate
 for(i = 0; i < `NUMBER_OF_PERMUTATORS; i = i + 1) begin
-    permuteCheck24Pipelined permuteChecker(clk2x, topD, bots[i*128 +: 128], botsValid[i], {permutesABCD[i*6 +: 6], permutesBACD[i*6 +: 6], permutesCBAD[i*6 +: 6], permutesDBCA[i*6 +: 6]});
+    wire[1:0] topChannel2x;
+    synchronizer #(.WIDTH(2)) topChannelSync(clk, topChannelDD, clk2x, topChannel2x);
+    wire[127:0] top2x;
+    topReceiver receiver(clk2x, topChannel2x, top2x);
+    permuteCheck24Pipelined permuteChecker(clk2x, top2x, bots[i*128 +: 128], botsValid[i], {permutesABCD[i*6 +: 6], permutesBACD[i*6 +: 6], permutesCBAD[i*6 +: 6], permutesDBCA[i*6 +: 6]});
 end
 endgenerate
 
@@ -83,10 +87,10 @@ reg[2:0] activityMeasure23; always @(posedge clk) activityMeasure23 <= activityM
 reg[3:0] activityMeasureSum; always @(posedge clk) activityMeasureSum <= activityMeasure01 + activityMeasure23;
 hyperpipe #(.CYCLES(3), .WIDTH(4)) activityPipe(clk, activityMeasureSum, activityMeasure);
 
-aggregatingPermutePipeline p1_4(clk, clk2x, rst, activityMeasures[0], topD, botsABCD, permutesABCD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[0], counts[0], eccStatusWOR);
-aggregatingPermutePipeline p2_4(clk, clk2x, rst, activityMeasures[1], topD, botsBACD, permutesBACD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[1], counts[1], eccStatusWOR);
-aggregatingPermutePipeline p3_4(clk, clk2x, rst, activityMeasures[2], topD, botsCBAD, permutesCBAD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[2], counts[2], eccStatusWOR);
-aggregatingPermutePipeline p4_4(clk, clk2x, rst, activityMeasures[3], topD, botsDBCA, permutesDBCA, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[3], counts[3], eccStatusWOR);
+aggregatingPermutePipeline p1_4(clk, clk2x, rst, activityMeasures[0], topChannelDD, botsABCD, permutesABCD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[0], counts[0], eccStatusWOR);
+aggregatingPermutePipeline p2_4(clk, clk2x, rst, activityMeasures[1], topChannelDD, botsBACD, permutesBACD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[1], counts[1], eccStatusWOR);
+aggregatingPermutePipeline p3_4(clk, clk2x, rst, activityMeasures[2], topChannelDD, botsCBAD, permutesCBAD, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[2], counts[2], eccStatusWOR);
+aggregatingPermutePipeline p4_4(clk, clk2x, rst, activityMeasures[3], topChannelDD, botsDBCA, permutesDBCA, batchesDoneD, slowDownInputWOR, grabResultsD, resultsAvailableWAND, sums[3], counts[3], eccStatusWOR);
 
 // combine outputs
 reg[`PCOEFF_COUNT_BITWIDTH+35+1-1:0] sum01; always @(posedge clk) sum01 <= sums[0] + sums[1];

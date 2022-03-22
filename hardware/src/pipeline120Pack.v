@@ -10,7 +10,7 @@ module pipeline120Pack(
     output[5:0] activityMeasure, // Instrumentation wire for profiling (0-40 activity level)
     
     // Input side
-    input[127:0] top,
+    input[1:0] topChannel,
     input[128*`NUMBER_OF_PERMUTATORS-1:0] bots,
     input[`NUMBER_OF_PERMUTATORS-1:0] isBotsValid,
     input[`NUMBER_OF_PERMUTATORS-1:0] batchesDone,
@@ -56,11 +56,11 @@ reg[4:0] activityMeasure01D; always @(posedge clk) activityMeasure01D <= activit
 reg[5:0] activityMeasure234; always @(posedge clk) activityMeasure234 <= activityMeasure23 + activityMeasure4D;
 hyperpipe #(.CYCLES(3), .WIDTH(6)) activityPipe(clk, activityMeasure01D + activityMeasure234, activityMeasure);
 
-pipeline24PackV2 p1_5(clk, clk2x, rst, activitySubMeasures[0], top, botsABCDE, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[0], counts[0], eccStatus);
-pipeline24PackV2 p2_5(clk, clk2x, rst, activitySubMeasures[1], top, botsBACDE, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[1], counts[1], eccStatus);
-pipeline24PackV2 p3_5(clk, clk2x, rst, activitySubMeasures[2], top, botsCBADE, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[2], counts[2], eccStatus);
-pipeline24PackV2 p4_5(clk, clk2x, rst, activitySubMeasures[3], top, botsDBCAE, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[3], counts[3], eccStatus);
-pipeline24PackV2 p5_5(clk, clk2x, rst, activitySubMeasures[4], top, botsEBCDA, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[4], counts[4], eccStatus);
+pipeline24PackV2 p1_5(clk, clk2x, rst, activitySubMeasures[0], topChannel, botsABCDE, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[0], counts[0], eccStatus);
+pipeline24PackV2 p2_5(clk, clk2x, rst, activitySubMeasures[1], topChannel, botsBACDE, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[1], counts[1], eccStatus);
+pipeline24PackV2 p3_5(clk, clk2x, rst, activitySubMeasures[2], topChannel, botsCBADE, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[2], counts[2], eccStatus);
+pipeline24PackV2 p4_5(clk, clk2x, rst, activitySubMeasures[3], topChannel, botsDBCAE, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[3], counts[3], eccStatus);
+pipeline24PackV2 p5_5(clk, clk2x, rst, activitySubMeasures[4], topChannel, botsEBCDA, isBotsValid, batchesDone, slowDownInput, grabResults, resultsAvailable, sums[4], counts[4], eccStatus);
 
 reg[`PCOEFF_COUNT_BITWIDTH+3+35-1:0] sum01; always @(posedge clk) sum01 <= sums[0] + sums[1];
 reg[`PCOEFF_COUNT_BITWIDTH+3+35-1:0] sum23; always @(posedge clk) sum23 <= sums[2] + sums[3];

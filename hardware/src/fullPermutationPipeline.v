@@ -8,7 +8,7 @@ module fullPermutationPipeline(
     input rst,
     output[5:0] activityMeasure, // Instrumentation wire for profiling (0-40 activity level)
     
-    input[127:0] top,
+    input[1:0] topChannel,
     
     // Input side
     input[127:0] bot,
@@ -87,6 +87,8 @@ wire pipelineResultAvailable;
 wire[47:0] pcoeffSumFromPipeline;
 wire[12:0] pcoeffCountFromPipeline;
 
+(* dont_merge *) reg[1:0] topChannelD; always @(posedge clk) topChannelD <= topChannel;
+
 (* dont_merge *) reg computePipeRST; always @(posedge clk) computePipeRST <= rst;
 // sums all 120 permutations of variables 2,3,4,5,6.
 pipeline120Pack pipeline120 (
@@ -95,7 +97,7 @@ pipeline120Pack pipeline120 (
     .rst(computePipeRST),
     .activityMeasure(activityMeasure),
     
-    .top(top),
+    .topChannel(topChannelD),
     .bots(permutedBots),
     .isBotsValid(permutedBotsValid),
     .batchesDone(batchesDone),

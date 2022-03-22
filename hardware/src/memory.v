@@ -146,7 +146,7 @@ module MEMORY_M20K #(
 `ifdef USE_FIFO_MEMORY_IP
 
 wire[1:0] eccStatusWire;
-assign eccStatus = eccStatusWire[1];
+assign eccStatus = |eccStatusWire;
 
 altera_syncram  altera_syncram_component (
     .clock0 (clk),
@@ -378,7 +378,7 @@ module DUAL_CLOCK_MEMORY_M20K #(
 `ifdef USE_FIFO_MEMORY_IP
 
 wire[1:0] eccStatusWire;
-assign eccStatus = eccStatusWire[1];
+assign eccStatus = |eccStatusWire;
 
 altera_syncram  altera_syncram_component (
     .clock0 (wrclk),
