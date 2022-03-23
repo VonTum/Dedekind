@@ -38,8 +38,6 @@
 #include "../dedelib/knownData.h"
 #include "../dedelib/configure.h"
 
-#include "dataFormat.h"
-
 using namespace aocl_utils;
 
 constexpr size_t STRING_BUFFER_LEN = 1024;
@@ -54,6 +52,9 @@ static bool SHOW_NONZEROS = false;
 static bool SHOW_ALL = false;
 static bool ENABLE_PROFILING = false;
 static bool ENABLE_SHUFFLE = false;
+static bool ENABLE_COMPARE = false;
+static int MAX_UP_TO = 500000000;
+static int START_AT = 0;
 
 // OpenCL runtime configuration
 static cl_platform_id platform = NULL;
@@ -94,7 +95,7 @@ uint64_t getBitRange(uint64_t v, int highestBit, int lowestBit) {
 }
 
 
-void summarizeResultsBuffer(uint64_t* resultsOut, cl_int bufSize) {
+/*void summarizeResultsBuffer(uint64_t* resultsOut, cl_int bufSize) {
 	int corrects = 0;
 	int nonZeroCorrects = 0;
 	int totals = 0;
@@ -123,7 +124,7 @@ void summarizeResultsBuffer(uint64_t* resultsOut, cl_int bufSize) {
 
 	std::cout << "Total tally: " << corrects << "/" << totals << std::endl;
 	std::cout << "Nonzero tally: " << nonZeroCorrects << "/" << nonZeroTotals << std::endl;
-}
+}*/
 
 void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProcessingContext& context) {
 	(void) allMBFData; // unused
@@ -136,11 +137,15 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		botIndices[0] |= 0x80000000; // Mark top
 		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
 
-		cl_int status;
+		for(int i = 0; i < START_AT; i++) botIndices[i+1] = botIndices[i+1+START_AT];
+		jobSize -= START_AT;
+		if(MAX_UP_TO < jobSize) jobSize = MAX_UP_TO;
 
 		if(ENABLE_SHUFFLE) shuffleBots(botIndices + 1, botIndices + jobSize);
 		botIndices[jobSize++] = 0x80000000; // Dummy top, to get a good occupation reading
 		
+		cl_int status;
+
 		status = clEnqueueWriteBuffer(queue,inputMem[0],0,0,jobSize*sizeof(uint32_t),botIndices,0,0,0);
 		checkError(status, "Failed to enqueue writing to inputMem buffer");
 
@@ -172,7 +177,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		status = clFinish(queue);
 		checkError(status, "Failed to Finish reading output buffer");
 
-		std::cout << "Finished job " << botIndices[0] << " of size " << jobSize << " in " << runtimeSeconds << "s, at " << (double(jobSize)/runtimeSeconds) << "bots/s" << std::endl;
+		std::cout << "Finished job " << botIndices[0] << " of size " << jobSize << " in " << runtimeSeconds << "s, at " << (double(jobSize)/runtimeSeconds/1000000.0) << "Mbots/s" << std::endl;
 
 		// Use final dummy top to get proper occupation reading
 		uint64_t analysisBot = countConnectedSumBuf[jobSize-1];
@@ -182,6 +187,29 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		std::cout << "Previous top took " << (cycleCounter<<10) << " cycles" << std::endl;
 		std::cout << "Previous top had " << (activityCounter<<16) << " activity" << std::endl;
 		std::cout << "Previous top occupation: " << (activityCounter << 6) / (40.0 * cycleCounter) * 100.0 << "%" << std::endl;
+
+		if(ENABLE_COMPARE) {
+			std::cout << "Starting MultiThread CPU comparison..." << std::endl;
+			std::unique_ptr<uint64_t[]> countConnectedSumBufCPU = std::make_unique<uint64_t[]>(jobSize);
+			ThreadPool pool;
+
+			auto cpuStart = std::chrono::system_clock::now();
+			processBetasCPU_MultiThread(allMBFData, job.bufStart, job.bufEnd, countConnectedSumBufCPU.get(), pool);
+			auto cpuEnd = std::chrono::system_clock::now();
+			double cpuRuntimeSeconds = std::chrono::duration<double>(cpuEnd - cpuStart).count();
+
+			std::cout << "CPU processing completed. Took " << cpuRuntimeSeconds << "s, at " << (double(jobSize)/cpuRuntimeSeconds/1000000.0) << "Mbots/s" << std::endl;
+			std::cout << "Kernel speedup of " << (cpuRuntimeSeconds / runtimeSeconds) << "x" << std::endl;
+
+			for(size_t i = 1; i < jobSize - 1; i++) {
+				if(countConnectedSumBuf[i] != countConnectedSumBufCPU[i]) {
+					std::cout << "[!!!!!!!] Mistake found at position " << i << "/" << jobSize << ": ";
+					std::cout << "FPGA: {" << getPCoeffSum(countConnectedSumBuf[i]) << "; " << getPCoeffCount(countConnectedSumBuf[i]) << "} ";
+					std::cout << "CPU: {" << getPCoeffSum(countConnectedSumBufCPU[i]) << "; " << getPCoeffCount(countConnectedSumBufCPU[i]) << "} " << std::endl;
+				}
+			}
+			std::cout << "All " << jobSize << " elements checked!" << std::endl;
+		}
 
 		OutputBuffer result;
 		result.originalInputData = job;
@@ -235,6 +263,14 @@ int main(int argc, char** argv) {
 		NUM_ITERATIONS = options.get<cl_int>("iters");
 	}
 
+	if(options.has("MAX_UP_TO")) {
+		MAX_UP_TO = options.get<cl_int>("MAX_UP_TO");
+	}
+
+	if(options.has("START_AT")) {
+		START_AT = options.get<cl_int>("START_AT");
+	}
+
 	if(options.has("show")) {
 		SHOW_NONZEROS = true;
 	}
@@ -250,7 +286,12 @@ int main(int argc, char** argv) {
 
 	if(options.has("shuffle")) {
 		ENABLE_SHUFFLE = true;
-		std::cout << "Incorrect results for faster processing speed! Used for Benchmarking" << std::endl;
+		std::cout << "Enabled shuffling" << std::endl;
+	}
+
+	if(options.has("compare")) {
+		ENABLE_COMPARE = true;
+		std::cout << "Enabled comparing with MultiThread CPU implementation" << std::endl;
 	}
 
 	std::string kernelFile = "fullPipelineKernel";
