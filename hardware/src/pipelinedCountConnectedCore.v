@@ -132,7 +132,7 @@ wire[127:0] graphIn_HASBIT;
 wire shouldGrabNewSeed_HASBIT;
 
 hyperpipe #(.CYCLES(`NEW_SEED_HASBIT_DEPTH), .WIDTH(128)) graphIn_START_TO_HASBIT_DELAY (clk, graphIn_START, graphIn_HASBIT);
-hyperpipe #(.CYCLES(`NEW_SEED_HASBIT_DEPTH), .WIDTH(1), .MAX_FAN(5)) shouldGrabNewSeed_START_TO_HASBIT_DELAY (clk, shouldGrabNewSeed_START, shouldGrabNewSeed_HASBIT);
+hyperpipe #(.CYCLES(`NEW_SEED_HASBIT_DEPTH), .WIDTH(1), .MAX_FAN(35)) shouldGrabNewSeed_START_TO_HASBIT_DELAY (clk, shouldGrabNewSeed_START, shouldGrabNewSeed_HASBIT);
 
 // PIPELINE STEP 3
 newExtendingProducer resultProducer(
@@ -154,7 +154,7 @@ module explorationPipeline(
     input clk,
     input[1:0] topChannel,
     
-    input[127:0] leftoverGraphIn,
+    input[127:0] leftoverGraphIn_PRE_DOWN,
     input[127:0] curExtendingIn,
     
     output[127:0] selectedLeftoverGraphOut,
@@ -162,13 +162,6 @@ module explorationPipeline(
     output reg runEnd,
     output reg shouldGrabNewSeedOut
 );
-
-reg[127:0] leftoverGraphIn_PRE_PRE_MID;
-reg[127:0] leftoverGraphIn_PRE_MID;
-always @(posedge clk) begin
-    leftoverGraphIn_PRE_PRE_MID <= leftoverGraphIn;
-    leftoverGraphIn_PRE_MID <= leftoverGraphIn_PRE_PRE_MID;
-end
 
 // PIPELINE STEP 1, 2, 3
 wire[127:0] monotonizedUp_PRE_MID; pipelinedMonotonizeUp mUp(clk, curExtendingIn, monotonizedUp_PRE_MID);
@@ -180,33 +173,23 @@ wire[127:0] top;
 topReceiver receiver(clk, topChannel, top);
 reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_PRE_MID & top;
 
-// delays 
-reg[127:0] leftoverGraphIn_MID;
-always @(posedge clk) begin
-    leftoverGraphIn_MID <= leftoverGraphIn_PRE_MID;
-end
-
 // PIPELINE STEP 3, 4
-wire[127:0] monotonizedDown_POST_MID; pipelinedMonotonizeDown mDown(clk, midPoint_MID, monotonizedDown_POST_MID);
-reg[127:0] midPoint_PRE_POST_MID;
-reg[127:0] leftoverGraphIn_PRE_POST_MID;
+wire[127:0] monotonizedDown_PRE_DOWN; pipelinedMonotonizeDown mDown(clk, midPoint_MID, monotonizedDown_PRE_DOWN);
 reg[127:0] midPoint_POST_MID;
-reg[127:0] leftoverGraphIn_POST_MID;
+reg[127:0] midPoint_PRE_DOWN;
 always @(posedge clk) begin
-    midPoint_PRE_POST_MID <= midPoint_MID;
-    midPoint_POST_MID <= midPoint_PRE_POST_MID;
-    leftoverGraphIn_PRE_POST_MID <= leftoverGraphIn_MID;
-    leftoverGraphIn_POST_MID <= leftoverGraphIn_PRE_POST_MID;
+    midPoint_POST_MID <= midPoint_MID;
+    midPoint_PRE_DOWN <= midPoint_POST_MID;
 end
 
 reg[127:0] midPoint_DOWN;
 reg[127:0] reducedGraph_DOWN;
 reg[127:0] leftoverGraphIn_DOWN;
 always @(posedge clk) begin
-    midPoint_DOWN <= midPoint_POST_MID;
-    reducedGraph_DOWN <= leftoverGraphIn_POST_MID & ~monotonizedDown_POST_MID;
-    extendedOut_DOWN <= leftoverGraphIn_POST_MID & monotonizedDown_POST_MID;
-    leftoverGraphIn_DOWN <= leftoverGraphIn_POST_MID;
+    midPoint_DOWN <= midPoint_PRE_DOWN;
+    reducedGraph_DOWN <= leftoverGraphIn_PRE_DOWN & ~monotonizedDown_PRE_DOWN;
+    extendedOut_DOWN <= leftoverGraphIn_PRE_DOWN & monotonizedDown_PRE_DOWN;
+    leftoverGraphIn_DOWN <= leftoverGraphIn_PRE_DOWN;
 end
 
 reg[127:0] reducedGraph_SUMMARIZE;
@@ -278,7 +261,8 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10, p
     output shouldGrabNewSeedOut_EXPL,
     output validOut, 
     output[5:0] connectionCountOut_EXPL, 
-    output[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut
+    output[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut,
+    output reg eccStatus
 );
 
 
@@ -303,29 +287,31 @@ newSeedProductionPipeline newSeedProductionPipe(clk, leftoverGraphWire, extended
 // delays of other wires
 
 wire start_NSD;
-wire[127:0] leftoverGraphWire_NSD;
 wire[5:0] storedConnectionCountIn_NSD;
-hyperpipe #(.CYCLES(`NEW_SEED_DEPTH), .WIDTH(128)) newSeedProductionPipeBypassLeftoverGraphWireDelay(clk,
+
+wire eccStatusWire;
+always @(posedge clk) eccStatus <= eccStatusWire;
+wire[127:0] leftoverGraphIn_PRE_DOWN;
+shiftRegister_M20K #(.CYCLES(`OFFSET_DOWN - 1), .WIDTH(128)) newSeedProductionPipeBypassLeftoverGraphWireDelay(clk,
     leftoverGraphWire,
-    leftoverGraphWire_NSD
+    leftoverGraphIn_PRE_DOWN,
+    eccStatusWire
 );
 
 // PIPELINE STAGE
 reg[127:0] curExtending_MID;
-reg[127:0] leftoverGraph_MID;
 always @(posedge clk) begin
     curExtending_MID <= curExtendingWire_NSD;
-    leftoverGraph_MID <= leftoverGraphWire_NSD;
 end
 
 wire start_DELAYED;
 wire shouldIncrementConnectionCount_DELAYED;
 wire[5:0] storedConnectionCountIn_DELAYED;
-hyperpipe #(.CYCLES(STARTING_CONNECT_COUNT_LAG - `OFFSET_NSD), .WIDTH(1), .MAX_FAN(5)) shouldIncrementConnectionCountPipe(clk,
+hyperpipe #(.CYCLES(STARTING_CONNECT_COUNT_LAG - `OFFSET_NSD), .MAX_FAN(35)) shouldIncrementConnectionCountPipe(clk,
     shouldIncrementConnectionCount_NSD,
     shouldIncrementConnectionCount_DELAYED
 );
-hyperpipe #(.CYCLES(`NEW_SEED_DEPTH + STARTING_CONNECT_COUNT_LAG - `OFFSET_NSD), .WIDTH(1+6), .MAX_FAN(5)) startingConnectCountSyncPipe(clk,
+hyperpipe #(.CYCLES(STARTING_CONNECT_COUNT_LAG), .WIDTH(1+6)) startingConnectCountSyncPipe(clk,
     {start, storedConnectionCountIn},
     {start_DELAYED, storedConnectionCountIn_DELAYED}
 );
@@ -338,7 +324,7 @@ wire[5:0] connectionCountOut_DELAYED = (start_DELAYED ? startingConnectCountIn_D
 // output wire[127:0] extendedOut_DOWN;
 // output wire shouldGrabNewSeedOut_EXPL;
 // output wire request_EXPL;
-explorationPipeline explorationPipe(clk, topChannel, leftoverGraph_MID, curExtending_MID, selectedLeftoverGraphOut_EXPL, extendedOut_DOWN, request_EXPL, shouldGrabNewSeedOut_EXPL);
+explorationPipeline explorationPipe(clk, topChannel, leftoverGraphIn_PRE_DOWN, curExtending_MID, selectedLeftoverGraphOut_EXPL, extendedOut_DOWN, request_EXPL, shouldGrabNewSeedOut_EXPL);
 
 
 // delays
@@ -365,14 +351,14 @@ module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter 
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
     
     // output side
-    output reg done,
-    output reg[5:0] connectCountOut,
-    output reg[EXTRA_DATA_WIDTH-1:0] extraDataOut,
+    output done,
+    output[5:0] connectCountOut,
+    output[EXTRA_DATA_WIDTH-1:0] extraDataOut,
     output reg eccStatus
 );
 
-wor eccStatusWire;
-always @(posedge clk) eccStatus <= eccStatusWire;
+wor eccStatusWOR;
+always @(posedge clk) eccStatus <= eccStatusWOR;
 
 wire runEndIn;
 wire[127:0] extendedIn_HASBIT;
@@ -382,9 +368,9 @@ wire validIn;
 wire[5:0] storedConnectionCountIn;
 wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn;
 
-always @(posedge clk) done <= runEndIn & validIn;
-always @(posedge clk) connectCountOut <= storedConnectionCountIn;
-always @(posedge clk) extraDataOut <= storedExtraDataIn;
+hyperpipe #(.CYCLES(2)) donePipe(clk, runEndIn & validIn, done);
+hyperpipe #(.CYCLES(2), .WIDTH(6)) connectCountOutPipe(clk, storedConnectionCountIn, connectCountOut);
+hyperpipe #(.CYCLES(2), .WIDTH(EXTRA_DATA_WIDTH)) extraDataOutPipe(clk, storedExtraDataIn, extraDataOut);
 
 wire requestOut_EXPL;
 wire[127:0] extendedOut_DOWN;
@@ -422,12 +408,13 @@ pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH, STARTING_CONNECT_COUNT_
     shouldGrabNewSeedOut_EXPL,
     validOut,
     connectionCountOut_EXPL,
-    storedExtraDataOut
+    storedExtraDataOut,
+    eccStatusWOR
 );
 
 wire eccStatusLoopBackPipeExtendedECCWire;
 reg eccStatusLoopBackPipeExtendedECC; always @(posedge clk) eccStatusLoopBackPipeExtendedECC <= eccStatusLoopBackPipeExtendedECCWire;
-assign eccStatusWire = eccStatusLoopBackPipeExtendedECC;
+assign eccStatusWOR = eccStatusLoopBackPipeExtendedECC;
 
 // delay other wires for DATA_IN_LATENCY
 shiftRegister_M20K #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_DOWN + DATA_IN_LATENCY + `NEW_SEED_HASBIT_OFFSET), .WIDTH(128)) loopBackPipeExtended (clk,
@@ -442,10 +429,14 @@ hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_EXPL + DATA_IN_LATENCY), .W
     {selectedLeftoverGraphIn, runEndIn, shouldGrabNewSeedIn, storedConnectionCountIn}
 );
 
+wire loopBackPipeValidAndExtraDataECCWire;
+reg loopBackPipeValidAndExtraDataECC; always @(posedge clk) loopBackPipeValidAndExtraDataECC <= loopBackPipeValidAndExtraDataECCWire;
+assign eccStatusWOR = loopBackPipeValidAndExtraDataECC;
 // delay other wires for DATA_IN_LATENCY
-shiftRegister #(.CYCLES(`TOTAL_PIPELINE_STAGES + DATA_IN_LATENCY), .WIDTH(1+EXTRA_DATA_WIDTH)) loopBackPipeValidAndExtraData (clk,
+shiftRegister_M20K #(.CYCLES(`TOTAL_PIPELINE_STAGES + DATA_IN_LATENCY), .WIDTH(1+EXTRA_DATA_WIDTH)) loopBackPipeValidAndExtraData (clk,
     {validOut, storedExtraDataOut},
-    {validIn, storedExtraDataIn}
+    {validIn, storedExtraDataIn},
+    loopBackPipeValidAndExtraDataECCWire
 );
 
 // Lots of slack, latency isn't important and we want minimal influence on the resulting hardware
