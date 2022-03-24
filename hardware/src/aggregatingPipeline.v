@@ -7,8 +7,8 @@ module aggregatingPipeline (
     input clk,
     input clk2x,
     input rst,
-    output[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
     input[1:0] topChannel,
+    output[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
     
     input isBotValid,
     input[127:0] bot,
@@ -47,6 +47,7 @@ streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1)) core (
     .clk(clk),
     .clk2x(clk2x),
     .rst(rst),
+    .topChannel(topChannel),
     .activityMeasure(activityMeasure),
     
     // Input side

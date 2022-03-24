@@ -6,8 +6,8 @@ module aggregatingPermutePipeline (
     input clk,
     input clk2x,
     input rst,
-    output[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
     input[1:0] topChannel,
+    output[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
     
     // Input side
     input[128*`NUMBER_OF_PERMUTATORS-1:0] botsIn,
@@ -67,8 +67,8 @@ aggregatingPipeline computePipe (
     .clk(clk),
     .clk2x(clk2x),
     .rst(computePipeRST),
-    .activityMeasure(activityMeasure),
     .topChannel(topChannelDD),
+    .activityMeasure(activityMeasure),
     
     .isBotValid(permutedBotValid),
     .bot(permutedBot),

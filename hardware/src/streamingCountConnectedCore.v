@@ -12,6 +12,7 @@ module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     input clk,
     input clk2x,
     input rst,
+    input[1:0] topChannel,
     output reg[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
     
     // Input side
@@ -31,8 +32,9 @@ module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
 
 wire collectorECC; reg collectorECC_D; always @(posedge clk) collectorECC_D <= collectorECC;
 wire isBotValidECC; reg isBotValidECC_D; always @(posedge clk) isBotValidECC_D <= isBotValidECC;
+wire pipelineECC;
 
-always @(posedge clk) eccStatus <= collectorECC_D || isBotValidECC_D;
+always @(posedge clk) eccStatus <= collectorECC_D || isBotValidECC_D || pipelineECC;
 
 wire [`INPUT_FIFO_DEPTH_LOG2-1:0] usedw;
 assign slowDownInput = usedw > `INPUT_FIFO_ALMOST_FULL;
@@ -95,10 +97,19 @@ wire isActiveA; synchronizer isActiveASync(clk2x, isActive2x, clk, isActiveA);
 wire isActiveB; synchronizer isActiveBSync(clk2x, isActive2xD, clk, isActiveB);
 always @(posedge clk) activityMeasure = isActiveA + isActiveB;
 
+wire pipelineECC2x;
+reg pipelineECC2xD; always @(posedge clk2x) pipelineECC2xD <= pipelineECC2x;
+reg pipelineECC2xDD; always @(posedge clk2x) pipelineECC2xDD <= pipelineECC2xD;
+reg pipelineECC2xSLOW; always @(posedge clk2x) pipelineECC2xSLOW <= pipelineECC2x || pipelineECC2xD || pipelineECC2xDD;
+synchronizer eccSync(clk2x, pipelineECC2xSLOW, clk, pipelineECC);
+
+wire[1:0] topChannel2x;
+synchronizer #(.WIDTH(2)) topChannel2xSync(clk, topChannel, clk2x, topChannel2x);
 
 pipelinedCountConnectedCoreWithSingletonElimination #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH), .REQUEST_LATENCY(`FIFO_READ_LATENCY)) countConnectedCore (
     .clk(clk2x),
     .rst(cccRST2x),
+    .topChannel(topChannel2x),
     .isActive(isActive2x),
     
     // input side
@@ -110,7 +121,8 @@ pipelinedCountConnectedCoreWithSingletonElimination #(.EXTRA_DATA_WIDTH(`ADDR_WI
     // output side
     .done(writeToCollector2x),
     .resultCount(connectCountToCollector2x),
-    .extraDataOut(addrToCollector2x)
+    .extraDataOut(addrToCollector2x),
+    .eccStatus(pipelineECC2x)
 );
 
 DUAL_CLOCK_MEMORY_M20K #(.WIDTH(6), .DEPTH_LOG2(`ADDR_WIDTH)) collectorMemory (

@@ -152,6 +152,7 @@ endmodule
 
 module explorationPipeline(
     input clk,
+    input[1:0] topChannel,
     
     input[127:0] leftoverGraphIn,
     input[127:0] curExtendingIn,
@@ -171,7 +172,13 @@ end
 
 // PIPELINE STEP 1, 2, 3
 wire[127:0] monotonizedUp_PRE_MID; pipelinedMonotonizeUp mUp(clk, curExtendingIn, monotonizedUp_PRE_MID);
-reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_PRE_MID & leftoverGraphIn_PRE_MID;
+
+// Instead of this
+//reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_PRE_MID & leftoverGraphIn_PRE_MID;
+// Use top, that way we can reduce resource usage by moving leftoverGraphIn to a longer shift register
+wire[127:0] top;
+topReceiver receiver(clk, topChannel, top);
+reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_PRE_MID & top;
 
 // delays 
 reg[127:0] leftoverGraphIn_MID;
@@ -248,6 +255,7 @@ endmodule
 module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10, parameter STARTING_CONNECT_COUNT_LAG = 3) (
     input clk,
     input rst,
+    input[1:0] topChannel,
     
     // input side
     input[127:0] graphIn,
@@ -297,9 +305,9 @@ newSeedProductionPipeline newSeedProductionPipe(clk, leftoverGraphWire, extended
 wire start_NSD;
 wire[127:0] leftoverGraphWire_NSD;
 wire[5:0] storedConnectionCountIn_NSD;
-hyperpipe #(.CYCLES(`NEW_SEED_DEPTH), .WIDTH(1+128+6)) newSeedProductionPipeBypassDelay(clk,
-    {start, leftoverGraphWire, storedConnectionCountIn},
-    {start_NSD, leftoverGraphWire_NSD, storedConnectionCountIn_NSD}
+hyperpipe #(.CYCLES(`NEW_SEED_DEPTH), .WIDTH(128)) newSeedProductionPipeBypassLeftoverGraphWireDelay(clk,
+    leftoverGraphWire,
+    leftoverGraphWire_NSD
 );
 
 // PIPELINE STAGE
@@ -313,9 +321,13 @@ end
 wire start_DELAYED;
 wire shouldIncrementConnectionCount_DELAYED;
 wire[5:0] storedConnectionCountIn_DELAYED;
-hyperpipe #(.CYCLES(STARTING_CONNECT_COUNT_LAG - `OFFSET_NSD), .WIDTH(1+1+6), .MAX_FAN(5)) startingConnectCountSyncPipe(clk,
-    {start_NSD, shouldIncrementConnectionCount_NSD, storedConnectionCountIn_NSD},
-    {start_DELAYED, shouldIncrementConnectionCount_DELAYED, storedConnectionCountIn_DELAYED}
+hyperpipe #(.CYCLES(STARTING_CONNECT_COUNT_LAG - `OFFSET_NSD), .WIDTH(1), .MAX_FAN(5)) shouldIncrementConnectionCountPipe(clk,
+    shouldIncrementConnectionCount_NSD,
+    shouldIncrementConnectionCount_DELAYED
+);
+hyperpipe #(.CYCLES(`NEW_SEED_DEPTH + STARTING_CONNECT_COUNT_LAG - `OFFSET_NSD), .WIDTH(1+6), .MAX_FAN(5)) startingConnectCountSyncPipe(clk,
+    {start, storedConnectionCountIn},
+    {start_DELAYED, storedConnectionCountIn_DELAYED}
 );
 
 wire[5:0] connectionCountOut_DELAYED = (start_DELAYED ? startingConnectCountIn_DELAYED : storedConnectionCountIn_DELAYED) + shouldIncrementConnectionCount_DELAYED;
@@ -326,7 +338,7 @@ wire[5:0] connectionCountOut_DELAYED = (start_DELAYED ? startingConnectCountIn_D
 // output wire[127:0] extendedOut_DOWN;
 // output wire shouldGrabNewSeedOut_EXPL;
 // output wire request_EXPL;
-explorationPipeline explorationPipe(clk, leftoverGraph_MID, curExtending_MID, selectedLeftoverGraphOut_EXPL, extendedOut_DOWN, request_EXPL, shouldGrabNewSeedOut_EXPL);
+explorationPipeline explorationPipe(clk, topChannel, leftoverGraph_MID, curExtending_MID, selectedLeftoverGraphOut_EXPL, extendedOut_DOWN, request_EXPL, shouldGrabNewSeedOut_EXPL);
 
 
 // delays
@@ -342,6 +354,7 @@ endmodule
 module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter DATA_IN_LATENCY = 4, parameter STARTING_CONNECT_COUNT_LAG = 3) (
     input clk,
     input rst,
+    input[1:0] topChannel,
     output isActive, // Instrumentation wire for profiling
     
     // input side
@@ -352,10 +365,14 @@ module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter 
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
     
     // output side
-    output done,
-    output[5:0] connectCount,
-    output[EXTRA_DATA_WIDTH-1:0] extraDataOut
+    output reg done,
+    output reg[5:0] connectCountOut,
+    output reg[EXTRA_DATA_WIDTH-1:0] extraDataOut,
+    output reg eccStatus
 );
+
+wor eccStatusWire;
+always @(posedge clk) eccStatus <= eccStatusWire;
 
 wire runEndIn;
 wire[127:0] extendedIn_HASBIT;
@@ -365,11 +382,9 @@ wire validIn;
 wire[5:0] storedConnectionCountIn;
 wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn;
 
-// Some extra register slack towards the collector to improve its fitting
-hyperpipe #(.CYCLES(3), .WIDTH(1+6+EXTRA_DATA_WIDTH)) outputPipe (clk,
-    {runEndIn & validIn, storedConnectionCountIn, storedExtraDataIn},
-    {done, connectCount, extraDataOut}
-);
+always @(posedge clk) done <= runEndIn & validIn;
+always @(posedge clk) connectCountOut <= storedConnectionCountIn;
+always @(posedge clk) extraDataOut <= storedExtraDataIn;
 
 wire requestOut_EXPL;
 wire[127:0] extendedOut_DOWN;
@@ -384,6 +399,7 @@ assign request = requestOut_EXPL;
 pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH, STARTING_CONNECT_COUNT_LAG) combinatorialComponent (
     clk,
     rst,
+    topChannel,
     
     // input side
     graphIn,
@@ -409,10 +425,15 @@ pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH, STARTING_CONNECT_COUNT_
     storedExtraDataOut
 );
 
+wire eccStatusLoopBackPipeExtendedECCWire;
+reg eccStatusLoopBackPipeExtendedECC; always @(posedge clk) eccStatusLoopBackPipeExtendedECC <= eccStatusLoopBackPipeExtendedECCWire;
+assign eccStatusWire = eccStatusLoopBackPipeExtendedECC;
+
 // delay other wires for DATA_IN_LATENCY
-shiftRegister #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_DOWN + DATA_IN_LATENCY + `NEW_SEED_HASBIT_OFFSET), .WIDTH(128)) loopBackPipeExtended (clk,
+shiftRegister_M20K #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_DOWN + DATA_IN_LATENCY + `NEW_SEED_HASBIT_OFFSET), .WIDTH(128)) loopBackPipeExtended (clk,
     extendedOut_DOWN,
-    extendedIn_HASBIT
+    extendedIn_HASBIT,
+    eccStatusLoopBackPipeExtendedECCWire
 );
 
 // delay other wires for DATA_IN_LATENCY

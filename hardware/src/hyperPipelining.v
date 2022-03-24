@@ -66,64 +66,82 @@ begin : GEN_REG_INPUT_B
     assign dout = R_data_B[CYCLES_B-1];
 end
 endgenerate
-
-
 endmodule
 
-// This is for generating shift register pipes
-(* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION on; -name SYNCHRONIZER_IDENTIFICATION off" *) 
-module shiftRegister 
-#(parameter CYCLES = 1, parameter WIDTH = 1) 
-(
+module shiftRegister #(parameter CYCLES = 1, parameter WIDTH = 1) (
     input clk,
-    input [WIDTH-1:0] dataIn,
-    output [WIDTH-1:0] dataOut
+    input[WIDTH-1:0] dataIn,
+    output[WIDTH-1:0] dataOut
 );
 
-    generate if (CYCLES==0) begin : GEN_COMB_INPUT
-        assign dataOut = dataIn;
-    end else if(CYCLES >= 5 && CYCLES * WIDTH >= 41) begin
-        reg[4:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex == CYCLES-3 ? 0 : curIndex + 1;
-        (* max_fan = 1 *) reg[4:0] curIndexD; always @(posedge clk) curIndexD <= curIndex;
-        (* max_fan = 1 *) reg[4:0] curIndexDD; always @(posedge clk) curIndexDD <= curIndexD;
-        
-		  wire[WIDTH-1:0] dataOutWire;
-		  reg[WIDTH-1:0] dataOutReg; always @(posedge clk) dataOutReg <= dataOutWire;
-		  assign dataOut = dataOutReg;
-		  
-        MEMORY_MLAB #(
-            .WIDTH(WIDTH),
-            .DEPTH_LOG2(5),
-            .READ_DURING_WRITE("DONT_CARE"), // Options are "DONT_CARE", "OLD_DATA" and "NEW_DATA",
-            .OUTPUT_REGISTER(1)
-        ) mem (
-            .clk(clk),
-            .rstReadAddr(1'b0),
-            
-            // Write Side
-            .writeEnable(1'b1),
-            .writeAddr(curIndexDD),
-            .dataIn(dataIn),
-            
-            // Read Side
-            .readAddressStall(1'b0),
-            .readAddr(curIndexD),
-            .dataOut(dataOutWire)
-        );
-    end else begin : GEN_REG_INPUT  
-        integer i;
-        reg [WIDTH-1:0] R_data [CYCLES-1:0];
-        
-        always @ (posedge clk) 
-        begin   
-            R_data[0] <= dataIn;      
-            for(i = 1; i < CYCLES; i = i + 1) 
-                R_data[i] <= R_data[i-1];
-        end
-        assign dataOut = R_data[CYCLES-1];
-    end
-    endgenerate  
+generate if (CYCLES <= 2) begin : TOO_FEW_CYCLES
+    hyperpipe #(.CYCLES(CYCLES), .WIDTH(WIDTH)) pipe(clk, dataIn, dataOut);
+end else begin : MLAB_MEMORY
+    localparam ITER_UPTO_INCLUDING = CYCLES-2;
+    localparam BITWIDTH = $clog2(ITER_UPTO_INCLUDING+1);
 
+    reg[BITWIDTH-1:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex >= ITER_UPTO_INCLUDING ? 0 : curIndex + 1;
+    reg[BITWIDTH-1:0] curIndexD; always @(posedge clk) curIndexD <= curIndex;
+    
+    MEMORY_MLAB #(
+        .WIDTH(WIDTH),
+        .DEPTH_LOG2(BITWIDTH),
+        .READ_DURING_WRITE("DONT_CARE"),
+        .OUTPUT_REGISTER(1)
+    ) mem (
+        .clk(clk),
+        .rstReadAddr(1'b0),
+        
+        // Write Side
+        .writeEnable(1'b1),
+        .writeAddr(curIndexD),
+        .dataIn(dataIn),
+        
+        // Read Side
+        .readAddressStall(1'b0),
+        .readAddr(curIndex),
+        .dataOut(dataOut)
+    );
+end endgenerate
+endmodule
+
+module shiftRegister_M20K #(parameter CYCLES = 1, parameter WIDTH = 1) (
+    input clk,
+    input[WIDTH-1:0] dataIn,
+    output[WIDTH-1:0] dataOut,
+    output eccStatus
+);
+
+generate if (CYCLES <= 3) begin : TOO_FEW_CYCLES
+    hyperpipe #(.CYCLES(CYCLES), .WIDTH(WIDTH)) pipe(clk, dataIn, dataOut);
+    assign eccStatus = 1'b0;
+end else begin : MLAB_MEMORY
+    localparam ITER_UPTO_INCLUDING = CYCLES-3;
+    localparam BITWIDTH = $clog2(ITER_UPTO_INCLUDING+1);
+
+    reg[BITWIDTH-1:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex >= ITER_UPTO_INCLUDING ? 0 : curIndex + 1;
+    reg[BITWIDTH-1:0] curIndexD; always @(posedge clk) curIndexD <= curIndex;
+    
+    MEMORY_M20K #(
+        .WIDTH(WIDTH),
+        .DEPTH_LOG2(BITWIDTH),
+        .READ_DURING_WRITE("DONT_CARE")
+    ) mem (
+        .clk(clk),
+        
+        // Write Side
+        .writeEnable(1'b1),
+        .writeAddr(curIndexD),
+        .dataIn(dataIn),
+        
+        // Read Side
+        .readEnable(1'b1),
+        .readAddressStall(1'b0),
+        .readAddr(curIndex),
+        .dataOut(dataOut),
+        .eccStatus(eccStatus)
+    );
+end endgenerate
 endmodule
 
 module enabledShiftRegister

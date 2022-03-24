@@ -98,9 +98,10 @@ module topReceiver(
     output reg[127:0] top
 );
 
-wire data;
-wire control;
-assign {data, control} = topChannel;
+// Disable synchronization, these registers are for a little extra timing slack
+(* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION OFF" *) reg data;
+(* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION OFF" *) reg control;
+always @(posedge clk) {data, control} <= topChannel;
 
 reg prevControl; always @(posedge clk) prevControl <= control;
 

@@ -53,6 +53,7 @@ module pipelinedCountConnectedCoreWithSingletonElimination #(parameter EXTRA_DAT
     input clk,
     input rst,
     output isActive, // Instrumentation wire for profiling
+    input[1:0] topChannel,
     
     // input side
     input[127:0] leafEliminatedGraph,
@@ -63,20 +64,16 @@ module pipelinedCountConnectedCoreWithSingletonElimination #(parameter EXTRA_DAT
     // output side
     output done,
     output[5:0] resultCount,
-    output[EXTRA_DATA_WIDTH-1:0] extraDataOut
+    output[EXTRA_DATA_WIDTH-1:0] extraDataOut,
+    output eccStatus
 );
 
 `define SE_PIPE_STEPS 2
 wire startPostDelay;
-hyperpipe #(.CYCLES(`SE_PIPE_STEPS), .WIDTH(1)) startPipe(clk,
-    start, startPostDelay
-);
+hyperpipe #(.CYCLES(`SE_PIPE_STEPS), .WIDTH(1)) startPipe(clk, start, startPostDelay);
 
 wire[EXTRA_DATA_WIDTH-1:0] extraDataPostDelay;
-shiftRegister #(.CYCLES(`SE_PIPE_STEPS), .WIDTH(EXTRA_DATA_WIDTH)) extraDataPipe (clk, 
-    extraDataIn, 
-    extraDataPostDelay
-);
+hyperpipe #(.CYCLES(`SE_PIPE_STEPS), .WIDTH(EXTRA_DATA_WIDTH)) extraDataPipe (clk, extraDataIn, extraDataPostDelay);
 
 // 2 PIPE STEPS
 wire[127:0] singletonEliminatedGraph;
@@ -87,6 +84,7 @@ pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATE
     .clk(clk), 
     .rst(rst),
     .isActive(isActive),
+    .topChannel(topChannel),
     
     // input side
     .request(requestGraph), 
@@ -97,8 +95,9 @@ pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATE
     
     // output side
     .done(done),
-    .connectCount(resultCount),
-    .extraDataOut(extraDataOut)
+    .connectCountOut(resultCount),
+    .extraDataOut(extraDataOut),
+    .eccStatus(eccStatus)
 );
 endmodule
 
