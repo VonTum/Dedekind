@@ -6,8 +6,7 @@ module MEMORY_MLAB #(
     parameter WIDTH = 20,
     parameter DEPTH_LOG2 = 5,
     parameter READ_DURING_WRITE = "DONT_CARE", // Options are "DONT_CARE", "OLD_DATA" and "NEW_DATA",
-    parameter OUTPUT_REGISTER = 0,
-    parameter READ_ADDR_REGISTER = 1
+    parameter OUTPUT_REGISTER = 0
 ) (
     input clk,
     
@@ -23,18 +22,13 @@ module MEMORY_MLAB #(
 
 `ifdef USE_MLAB_IP
 
-genvar START_INDEX;
-generate for(START_INDEX = 0; START_INDEX < WIDTH; START_INDEX = START_INDEX + 20) begin
-// Stupid hack to get a constant value intermediate
-`define BLOCK_WIDTH (WIDTH - START_INDEX >= 20 ? 20 : WIDTH - START_INDEX)
-
 altera_syncram  altera_syncram_component (
     .clock0 (clk),
     .address_a (writeAddr),
     .address_b (readAddr),
-    .data_a (dataIn[START_INDEX +: `BLOCK_WIDTH]),
+    .data_a (dataIn),
     .wren_a (writeEnable),
-    .q_b (dataOut[START_INDEX +: `BLOCK_WIDTH]),
+    .q_b (dataOut),
     .aclr0 (1'b0),
     .aclr1 (1'b0),
     .address2_a (1'b1),
@@ -48,7 +42,7 @@ altera_syncram  altera_syncram_component (
     .clocken1 (1'b1),
     .clocken2 (1'b1),
     .clocken3 (1'b1),
-    .data_b ({`BLOCK_WIDTH{1'b1}}),
+    .data_b ({WIDTH{1'b1}}),
     .eccencbypass (1'b0),
     .eccencparity (8'b0),
     .eccstatus (),
@@ -59,13 +53,13 @@ altera_syncram  altera_syncram_component (
     .wren_b (1'b0));
 defparam
     altera_syncram_component.ram_block_type  = "MLAB",
-    altera_syncram_component.address_reg_b  = READ_ADDR_REGISTER ? "CLOCK0" : "UNREGISTERED",
+    altera_syncram_component.address_reg_b  = "CLOCK0",
     altera_syncram_component.outdata_reg_b  = OUTPUT_REGISTER ? "CLOCK0" : "UNREGISTERED",
     altera_syncram_component.address_aclr_b  = "NONE",
     altera_syncram_component.outdata_aclr_b  = "NONE",
     altera_syncram_component.outdata_sclr_b  = "NONE",
-    altera_syncram_component.width_a  = `BLOCK_WIDTH,
-    altera_syncram_component.width_b  = `BLOCK_WIDTH,
+    altera_syncram_component.width_a  = WIDTH,
+    altera_syncram_component.width_b  = WIDTH,
     altera_syncram_component.widthad_a  = DEPTH_LOG2,
     altera_syncram_component.widthad_b  = DEPTH_LOG2,
     altera_syncram_component.numwords_a  = (1 << DEPTH_LOG2),
@@ -81,20 +75,9 @@ defparam
     altera_syncram_component.width_byteena_a  = 1,
     altera_syncram_component.enable_force_to_zero  = "FALSE",
     altera_syncram_component.enable_ecc  = "FALSE";
-end endgenerate
 `else
 
 reg[WIDTH-1:0] memory[(1 << DEPTH_LOG2) - 1:0];
-
-wire[DEPTH_LOG2-1:0] readAddrToMem;
-generate
-if(READ_ADDR_REGISTER) begin
-reg[DEPTH_LOG2-1:0] readAddrReg; always @(posedge clk) readAddrReg <= readAddr;
-assign readAddrToMem = readAddrReg;
-end else begin
-assign readAddrToMem = readAddr;
-end
-endgenerate
 
 reg[DEPTH_LOG2-1:0] writeAddrReg;
 reg[WIDTH-1:0] writeDataReg;
@@ -110,9 +93,8 @@ always @(posedge clk) begin
     writeEnableReg <= writeEnable;
 end
 
-
-
-wire[WIDTH-1:0] dataFromMem = (writeEnableReg && READ_DURING_WRITE == "DONT_CARE" && writeAddrReg == readAddrToMem) ? {WIDTH{1'bX}} : memory[readAddrToMem];
+reg[DEPTH_LOG2-1:0] readAddrReg; always @(posedge clk) readAddrReg <= readAddr;
+wire[WIDTH-1:0] dataFromMem = (writeEnableReg && READ_DURING_WRITE == "DONT_CARE" && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
 
 generate
 if(OUTPUT_REGISTER) begin
@@ -251,8 +233,7 @@ endmodule
 module DUAL_CLOCK_MEMORY_MLAB #(
     parameter WIDTH = 20,
     parameter DEPTH_LOG2 = 5,
-    parameter OUTPUT_REGISTER = 1,
-    parameter READ_ADDR_REGISTER = 1
+    parameter OUTPUT_REGISTER = 1
 ) (
     // Write Side
     input wrclk,
@@ -268,19 +249,14 @@ module DUAL_CLOCK_MEMORY_MLAB #(
 
 `ifdef USE_MLAB_IP
 
-genvar START_INDEX;
-generate for(START_INDEX = 0; START_INDEX < WIDTH; START_INDEX = START_INDEX + 20) begin
-// Reuse previous define
-//BLOCK_WIDTH = WIDTH - START_INDEX >= 20 ? 20 : WIDTH - START_INDEX;
-
 altera_syncram  altera_syncram_component (
     .clock0 (wrclk),
     .clock1 (rdclk),
     .address_a (writeAddr),
     .address_b (readAddr),
-    .data_a (dataIn[START_INDEX +: `BLOCK_WIDTH]),
+    .data_a (dataIn),
     .wren_a (writeEnable),
-    .q_b (dataOut[START_INDEX +: `BLOCK_WIDTH]),
+    .q_b (dataOut),
     .aclr0 (1'b0),
     .aclr1 (1'b0),
     .address2_a (1'b1),
@@ -293,7 +269,7 @@ altera_syncram  altera_syncram_component (
     .clocken1 (1'b1),
     .clocken2 (1'b1),
     .clocken3 (1'b1),
-    .data_b ({`BLOCK_WIDTH{1'b1}}),
+    .data_b ({WIDTH{1'b1}}),
     .eccencbypass (1'b0),
     .eccencparity (8'b0),
     .eccstatus (),
@@ -304,13 +280,13 @@ altera_syncram  altera_syncram_component (
     .wren_b (1'b0));
 defparam
     altera_syncram_component.ram_block_type  = "MLAB",
-    altera_syncram_component.address_reg_b  = READ_ADDR_REGISTER ? "CLOCK1" : "UNREGISTERED",
+    altera_syncram_component.address_reg_b  = "CLOCK1",
     altera_syncram_component.outdata_reg_b  = OUTPUT_REGISTER ? "CLOCK1" : "UNREGISTERED",
     altera_syncram_component.address_aclr_b  = "NONE",
     altera_syncram_component.outdata_aclr_b  = "NONE",
     altera_syncram_component.outdata_sclr_b  = "NONE",
-    altera_syncram_component.width_a  = `BLOCK_WIDTH,
-    altera_syncram_component.width_b  = `BLOCK_WIDTH,
+    altera_syncram_component.width_a  = WIDTH,
+    altera_syncram_component.width_b  = WIDTH,
     altera_syncram_component.widthad_a  = DEPTH_LOG2,
     altera_syncram_component.widthad_b  = DEPTH_LOG2,
     altera_syncram_component.numwords_a  = (1 << DEPTH_LOG2),
@@ -326,20 +302,9 @@ defparam
     altera_syncram_component.width_byteena_a  = 1,
     altera_syncram_component.enable_force_to_zero  = "FALSE",
     altera_syncram_component.enable_ecc  = "FALSE";
-end endgenerate
 `else
 
 reg[WIDTH-1:0] memory[(1 << DEPTH_LOG2) - 1:0];
-
-wire[DEPTH_LOG2-1:0] readAddrToMem;
-generate
-if(READ_ADDR_REGISTER) begin
-reg[DEPTH_LOG2-1:0] readAddrReg; always @(posedge rdclk) readAddrReg <= readAddr;
-assign readAddrToMem = readAddrReg;
-end else begin
-assign readAddrToMem = readAddr;
-end
-endgenerate
 
 reg[DEPTH_LOG2-1:0] writeAddrReg;
 reg[WIDTH-1:0] writeDataReg;
@@ -355,7 +320,8 @@ always @(posedge wrclk) begin
     writeEnableReg <= writeEnable;
 end
 
-wire[WIDTH-1:0] dataFromMem = memory[readAddrToMem];
+reg[DEPTH_LOG2-1:0] readAddrReg; always @(posedge rdclk) readAddrReg <= readAddr;
+wire[WIDTH-1:0] dataFromMem = memory[readAddrReg];
 
 generate
 if(OUTPUT_REGISTER) begin
@@ -490,3 +456,81 @@ assign eccStatus = 1'b0;
 
 endmodule
 
+
+
+module NO_READ_CLOCK_MEMORY_MLAB #(
+    parameter WIDTH = 20,
+    parameter DEPTH_LOG2 = 5
+) (
+    // Write Side
+    input wrclk,
+    input writeEnable,
+    input[DEPTH_LOG2-1:0] writeAddr,
+    input[WIDTH-1:0] dataIn,
+    
+    // Read Side
+    input[DEPTH_LOG2-1:0] readAddr,
+    output[WIDTH-1:0] dataOut
+);
+
+`ifdef USE_MLAB_IP
+
+altdpram  altdpram_component (
+    .inclock (wrclk),
+    .data (dataIn),
+    .wraddress (writeAddr),
+    .wren (writeEnable),
+    .rdaddress (readAddr),
+    .q (dataOut),
+    .aclr (1'b0),
+    .sclr (1'b0),
+    .byteena (1'b1),
+    .inclocken (1'b1),
+    .outclock (1'b1),
+    .outclocken (1'b1),
+    .rdaddressstall (1'b0),
+    .rden (1'b1),
+    .wraddressstall (1'b0));
+defparam
+    altdpram_component.ram_block_type  = "MLAB",
+    altdpram_component.indata_reg  = "INCLOCK",
+    altdpram_component.wraddress_reg  = "INCLOCK",
+    altdpram_component.wrcontrol_reg  = "INCLOCK",
+    altdpram_component.intended_device_family  = "Stratix 10",
+    altdpram_component.lpm_type  = "altdpram",
+    altdpram_component.indata_aclr  = "OFF",
+    altdpram_component.outdata_aclr  = "OFF",
+    altdpram_component.rdaddress_aclr  = "OFF",
+    altdpram_component.rdcontrol_aclr  = "OFF",
+    altdpram_component.wraddress_aclr  = "OFF",
+    altdpram_component.wrcontrol_aclr  = "OFF",
+    altdpram_component.outdata_sclr  = "OFF",
+    altdpram_component.outdata_reg  = "UNREGISTERED",
+    altdpram_component.rdaddress_reg  = "UNREGISTERED",
+    altdpram_component.rdcontrol_reg  = "UNREGISTERED",
+    altdpram_component.width  = WIDTH,
+    altdpram_component.widthad  = DEPTH_LOG2,
+    altdpram_component.width_byteena  = 1;
+`else
+
+reg[WIDTH-1:0] memory[(1 << DEPTH_LOG2) - 1:0];
+
+reg[DEPTH_LOG2-1:0] writeAddrReg;
+reg[WIDTH-1:0] writeDataReg;
+reg writeEnableReg;
+
+always @(posedge wrclk) begin
+    if(writeEnableReg) begin
+        memory[writeAddrReg] <= writeDataReg;
+    end
+    
+    writeAddrReg <= writeAddr;
+    writeDataReg <= dataIn;
+    writeEnableReg <= writeEnable;
+end
+
+assign dataOut = memory[readAddr];
+
+`endif
+
+endmodule

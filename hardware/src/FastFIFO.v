@@ -155,7 +155,7 @@ always @(posedge rdclk) begin
 end
 
 wire[WIDTH-1:0] dataFromMLAB;
-DUAL_CLOCK_MEMORY_MLAB #(.WIDTH(WIDTH), .DEPTH_LOG2(5), .OUTPUT_REGISTER(0), .READ_ADDR_REGISTER(0)/*We use our own CE registers*/) mlabMemory (
+NO_READ_CLOCK_MEMORY_MLAB #(.WIDTH(WIDTH), .DEPTH_LOG2(5)) mlabMemory (
     // Write Side
     .wrclk(wrclk),
     .writeEnable(writeEnable),
@@ -163,7 +163,6 @@ DUAL_CLOCK_MEMORY_MLAB #(.WIDTH(WIDTH), .DEPTH_LOG2(5), .OUTPUT_REGISTER(0), .RE
     .dataIn(dataIn),
     
     // Read Side
-    .rdclk(rdclk),
     .readAddr(readAddr),
     .dataOut(dataFromMLAB)
 );

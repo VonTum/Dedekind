@@ -74,33 +74,29 @@ module shiftRegister #(parameter CYCLES = 1, parameter WIDTH = 1) (
     output[WIDTH-1:0] dataOut
 );
 
-generate if (CYCLES <= 2) begin : TOO_FEW_CYCLES
-    hyperpipe #(.CYCLES(CYCLES), .WIDTH(WIDTH)) pipe(clk, dataIn, dataOut);
-end else begin : MLAB_MEMORY
-    localparam ITER_UPTO_INCLUDING = CYCLES-1;
-    localparam BITWIDTH = $clog2(ITER_UPTO_INCLUDING+1);
+localparam ITER_UPTO_INCLUDING = CYCLES-2;
+localparam BITWIDTH = $clog2(ITER_UPTO_INCLUDING+1);
 
-    reg[BITWIDTH-1:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex >= ITER_UPTO_INCLUDING ? 0 : curIndex + 1;
-    
-    MEMORY_MLAB #(
-        .WIDTH(WIDTH),
-        .DEPTH_LOG2(BITWIDTH),
-        .READ_DURING_WRITE("DONT_CARE"),
-        .OUTPUT_REGISTER(1),
-        .READ_ADDR_REGISTER(0)
-    ) mem (
-        .clk(clk),
-        
-        // Write Side
-        .writeEnable(1'b1),
-        .writeAddr(curIndex),
-        .dataIn(dataIn),
-        
-        // Read Side
-        .readAddr(curIndex),
-        .dataOut(dataOut)
-    );
-end endgenerate
+reg[BITWIDTH-1:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex >= ITER_UPTO_INCLUDING ? 0 : curIndex + 1;
+reg[BITWIDTH-1:0] curIndexD; always @(posedge clk) curIndexD <= curIndex;
+
+MEMORY_MLAB #(
+    .WIDTH(WIDTH),
+    .DEPTH_LOG2(BITWIDTH),
+    .READ_DURING_WRITE("DONT_CARE"),
+    .OUTPUT_REGISTER(1)
+) mem (
+    .clk(clk),
+  
+    // Write Side
+    .writeEnable(1'b1),
+    .writeAddr(curIndexD),
+    .dataIn(dataIn),
+  
+    // Read Side
+    .readAddr(curIndex),
+    .dataOut(dataOut)
+);
 endmodule
 
 module shiftRegister_M20K #(parameter CYCLES = 1, parameter WIDTH = 1) (
