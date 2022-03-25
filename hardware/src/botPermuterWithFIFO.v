@@ -142,7 +142,6 @@ DUAL_CLOCK_MEMORY_M20K #(
     // Read Side
     .rdclk(rdclk),
     .readEnable(readD), // We use the read enable pin to use the FORCE_TO_ZERO optimization on M20K blocks, so recombination is just an OR
-    .readAddressStall(1'b0),
     .readAddr(readAddr),
     .dataOut({botOut, validBotPermutesOut}),
     .eccStatus(eccStatus)

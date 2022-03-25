@@ -77,28 +77,26 @@ module shiftRegister #(parameter CYCLES = 1, parameter WIDTH = 1) (
 generate if (CYCLES <= 2) begin : TOO_FEW_CYCLES
     hyperpipe #(.CYCLES(CYCLES), .WIDTH(WIDTH)) pipe(clk, dataIn, dataOut);
 end else begin : MLAB_MEMORY
-    localparam ITER_UPTO_INCLUDING = CYCLES-2;
+    localparam ITER_UPTO_INCLUDING = CYCLES-1;
     localparam BITWIDTH = $clog2(ITER_UPTO_INCLUDING+1);
 
     reg[BITWIDTH-1:0] curIndex = 0; always @(posedge clk) curIndex <= curIndex >= ITER_UPTO_INCLUDING ? 0 : curIndex + 1;
-    reg[BITWIDTH-1:0] curIndexD; always @(posedge clk) curIndexD <= curIndex;
     
     MEMORY_MLAB #(
         .WIDTH(WIDTH),
         .DEPTH_LOG2(BITWIDTH),
         .READ_DURING_WRITE("DONT_CARE"),
-        .OUTPUT_REGISTER(1)
+        .OUTPUT_REGISTER(1),
+        .READ_ADDR_REGISTER(0)
     ) mem (
         .clk(clk),
-        .rstReadAddr(1'b0),
         
         // Write Side
         .writeEnable(1'b1),
-        .writeAddr(curIndexD),
+        .writeAddr(curIndex),
         .dataIn(dataIn),
         
         // Read Side
-        .readAddressStall(1'b0),
         .readAddr(curIndex),
         .dataOut(dataOut)
     );
@@ -136,7 +134,6 @@ end else begin : MLAB_MEMORY
         
         // Read Side
         .readEnable(1'b1),
-        .readAddressStall(1'b0),
         .readAddr(curIndex),
         .dataOut(dataOut),
         .eccStatus(eccStatus)

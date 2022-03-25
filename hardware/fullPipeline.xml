@@ -89,7 +89,6 @@
       
       <!-- Utility files -->
       <FILE name="src/hyperPipelining.v"/>
-      <FILE name="src/M20K.v"/>
       <FILE name="src/FIFO.v"/>
       <FILE name="src/FastFIFO.v"/>
       <FILE name="src/memory.v"/>
