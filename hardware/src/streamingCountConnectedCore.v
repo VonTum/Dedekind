@@ -38,23 +38,20 @@ always @(posedge clk) eccStatus <= collectorECC_D || isBotValidECC_D || pipeline
 reg[`ADDR_WIDTH-1:0] curBotIndex = 0;
 always @(posedge clk) curBotIndex <= curBotIndex + 1;
 
-wire[128+`ADDR_WIDTH-1:0] dataFromInputFIFO2x;
 wire inputFifoAvailable2x;
 wire requestGraph2x;
-reg requestGraph2xD; always @(posedge clk2x) requestGraph2xD <= requestGraph2x;
+(* dont_merge *) reg requestGraph2xD; always @(posedge clk2x) requestGraph2xD <= requestGraph2x;
 
-reg[127:0] graphToComputeModule2x;
-reg[`ADDR_WIDTH-1:0] addrToComputeModule2x;
-always @(posedge clk2x) {graphToComputeModule2x, addrToComputeModule2x} <= dataFromInputFIFO2x;
-reg dataValidToComputeModule2x; always @(posedge clk2x) dataValidToComputeModule2x <= inputFifoAvailable2x && requestGraph2xD;
+wire[127:0] graphToComputeModule2x;
+wire[`ADDR_WIDTH-1:0] addrToComputeModule2x;
 
 wire pipelineRST2x;
 synchronizer pipelineRSTSynchronizer(clk, pipelineRST, clk2x, pipelineRST2x);
 (* dont_merge *) reg inputFIFORST2x; always @(posedge clk) inputFIFORST2x <= pipelineRST2x;
 (* dont_merge *) reg cccRST2x; always @(posedge clk) cccRST2x <= pipelineRST2x;
 
-// request Pipe has 1 cycle, FIFO has 0 cycles read latency, dataOut pipe has 1
-`define FIFO_READ_LATENCY (1+0+1)
+// request Pipe has 1 cycle, FIFO has 0 cycles read latency, dataOut pipe has 1 cycle
+`define FIFO_READ_LATENCY (1+0+0)
 LowLatencyFastDualClockFIFO_MLAB #(.WIDTH(128+`ADDR_WIDTH), .ALMOST_FULL_MARGIN(12)) inputFIFO (// Upper 6 cycles max latency for permutation generation, 4 cycles turnaround time, 2 cycles of margin
     // input side
     .wrclk(clk),
@@ -67,7 +64,7 @@ LowLatencyFastDualClockFIFO_MLAB #(.WIDTH(128+`ADDR_WIDTH), .ALMOST_FULL_MARGIN(
     .rdclk(clk2x),
     .rdrst(inputFIFORST2x),
     .readRequest(requestGraph2xD),
-    .dataOut(dataFromInputFIFO2x),
+    .dataOut({graphToComputeModule2x, addrToComputeModule2x}),
     .dataOutAvailable(inputFifoAvailable2x)
 );
 
@@ -97,7 +94,7 @@ pipelinedCountConnectedCoreWithSingletonElimination #(.EXTRA_DATA_WIDTH(`ADDR_WI
     
     // input side
     .leafEliminatedGraph(graphToComputeModule2x),
-    .start(dataValidToComputeModule2x),
+    .graphAvailable(inputFifoAvailable2x),
     .extraDataIn(addrToComputeModule2x),
     .requestGraph(requestGraph2x),
     

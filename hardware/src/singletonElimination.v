@@ -1,9 +1,8 @@
 `timescale 1ns / 1ps
 
 module hasNeighbor(
-    input clk,
     input[127:0] graphIn,
-    output reg[127:0] hasNeighboringD
+    output[127:0] hasNeighboring
 );
 
 generate
@@ -14,7 +13,7 @@ generate
         for(v = 0; v < 7; v = v + 1) begin
             assign inputWires[v] = graphIn[((outI & (1 << v)) != 0) ? outI - (1 << v) : outI + (1 << v)];
         end
-        always @(posedge clk) hasNeighboringD[outI] <= |inputWires;
+        assign hasNeighboring[outI] = |inputWires;
     end
 endgenerate
 
@@ -27,11 +26,11 @@ module singletonPopcnt(
 );
 
 // singletons can't be next to each other
-reg[63:0] halved;
+wire[63:0] halved;
 genvar i;
 generate
 for(i = 0; i < 64; i = i + 1) begin
-    always @(posedge clk) halved[i] <= singletons[2*i] | singletons[2*i+1];
+    assign halved[i] = singletons[2*i] | singletons[2*i+1];
 end
 endgenerate
 
@@ -62,11 +61,11 @@ end
 endgenerate
 
 // Finally crunsh all subsums down to our result
-reg[2:0] sumsB[7:0];
+wire[2:0] sumsB[7:0];
 reg[3:0] sumsC[3:0];
 reg[4:0] sumsD[1:0];
 generate
-for(i = 0; i < 8; i = i + 1) begin always @(posedge clk) sumsB[i] <= sumsA[2*i] + sumsA[2*i+1]; end
+for(i = 0; i < 8; i = i + 1) begin assign sumsB[i] = sumsA[2*i] + sumsA[2*i+1]; end
 for(i = 0; i < 4; i = i + 1) begin always @(posedge clk) sumsC[i] <= sumsB[2*i] + sumsB[2*i+1]; end
 for(i = 0; i < 2; i = i + 1) begin always @(posedge clk) sumsD[i] <= sumsC[2*i] + sumsC[2*i+1]; end
 endgenerate
@@ -78,18 +77,22 @@ endmodule
 // produces singletonCount after a delay of 5 clock cycles (see PipelinedCountConnectedCore::CONNECT_COUNT_IN_LAG)
 module singletonElimination(
     input clk,
+    input clkEn,
     input[127:0] graphIn,
     output reg[127:0] nonSingletons,
     output[5:0] singletonCount
 );
 
-wire[127:0] hasNeighboringD;
-hasNeighbor neighborChecker(clk, graphIn, hasNeighboringD);
+wire[127:0] hasNeighboring;
+hasNeighbor neighborChecker(graphIn, hasNeighboring);
 
-reg[127:0] graphInD; always @(posedge clk) graphInD <= graphIn;
-
-wire[127:0] singletons = graphInD & ~hasNeighboringD;
-always @(posedge clk) nonSingletons <= graphInD & hasNeighboringD;
+reg[127:0] singletons;
+always @(posedge clk) begin
+if(clkEn) begin
+    singletons    <= graphIn & ~hasNeighboring;
+    nonSingletons <= graphIn & hasNeighboring;
+end
+end
 
 singletonPopcnt singletonCounter(clk, singletons, singletonCount);
 

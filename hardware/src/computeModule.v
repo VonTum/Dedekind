@@ -3,7 +3,7 @@
 `include "leafElimination_header.v"
 
 `define PIPE_STEPS (1+1+3+2)
-`define STARTING_CONNECT_COUNT_LAG 5
+`define STARTING_CONNECT_COUNT_LAG 4
 
 module preprocessingModule #(parameter EXTRA_DATA_WIDTH = 8) (
     input clk,
@@ -57,7 +57,7 @@ module pipelinedCountConnectedCoreWithSingletonElimination #(parameter EXTRA_DAT
     
     // input side
     input[127:0] leafEliminatedGraph,
-    input start,
+    input graphAvailable,
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
     output requestGraph,
     
@@ -68,19 +68,25 @@ module pipelinedCountConnectedCoreWithSingletonElimination #(parameter EXTRA_DAT
     output eccStatus
 );
 
-`define SE_PIPE_STEPS 2
-wire startPostDelay;
-hyperpipe #(.CYCLES(`SE_PIPE_STEPS), .WIDTH(1)) startPipe(clk, start, startPostDelay);
+(* dont_merge *) reg requestGraphD; always @(posedge clk) requestGraphD <= requestGraph;
+(* dont_merge *) reg requestGraphDForStart; always @(posedge clk) requestGraphDForStart <= requestGraph;
+wire start = graphAvailable && requestGraphD;
 
-wire[EXTRA_DATA_WIDTH-1:0] extraDataPostDelay;
-hyperpipe #(.CYCLES(`SE_PIPE_STEPS), .WIDTH(EXTRA_DATA_WIDTH)) extraDataPipe (clk, extraDataIn, extraDataPostDelay);
+reg graphAvailableD;
+reg[EXTRA_DATA_WIDTH-1:0] extraDataInD;
 
-// 2 PIPE STEPS
+always @(posedge clk) begin
+    if(requestGraphD) begin
+        graphAvailableD <= graphAvailable;
+        extraDataInD <= extraDataIn;
+    end
+end
+
 wire[127:0] singletonEliminatedGraph;
 wire[5:0] startingConnectCount_DELAYED;
-singletonElimination se(clk, leafEliminatedGraph, singletonEliminatedGraph, startingConnectCount_DELAYED);
+singletonElimination se(clk, requestGraphD, leafEliminatedGraph, singletonEliminatedGraph, startingConnectCount_DELAYED);
 
-pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATENCY(`SE_PIPE_STEPS + REQUEST_LATENCY), .STARTING_CONNECT_COUNT_LAG(`STARTING_CONNECT_COUNT_LAG)) core(
+pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATENCY(REQUEST_LATENCY), .STARTING_CONNECT_COUNT_LAG(`STARTING_CONNECT_COUNT_LAG)) core(
     .clk(clk), 
     .rst(rst),
     .isActive(isActive),
@@ -89,9 +95,9 @@ pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATE
     // input side
     .request(requestGraph), 
     .graphIn(singletonEliminatedGraph), 
-    .start(startPostDelay), 
+    .start(graphAvailableD && requestGraphDForStart), 
     .startingConnectCountIn_DELAYED(startingConnectCount_DELAYED), 
-    .extraDataIn(extraDataPostDelay),
+    .extraDataIn(extraDataInD),
     
     // output side
     .done(done),
