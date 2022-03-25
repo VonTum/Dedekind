@@ -302,7 +302,7 @@ altera_syncram  altera_syncram_component (
 defparam
     altera_syncram_component.ram_block_type  = "MLAB",
     altera_syncram_component.address_reg_b  = "CLOCK1",
-    altera_syncram_component.outdata_reg_b  = OUTPUT_REGISTER ? "CLOCK1" : "UNREGISTERED",,
+    altera_syncram_component.outdata_reg_b  = OUTPUT_REGISTER ? "CLOCK1" : "UNREGISTERED",
     altera_syncram_component.address_aclr_b  = "CLEAR1",
     altera_syncram_component.outdata_aclr_b  = "NONE",
     altera_syncram_component.outdata_sclr_b  = "NONE",
