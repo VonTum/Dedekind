@@ -93,7 +93,7 @@
       <FILE name="src/FIFO.v"/>
       <FILE name="src/FastFIFO.v"/>
       <FILE name="src/memory.v"/>
-      <FILE name="src/dualClockFIFO.v"/>
+      <FILE name="src/synchronizer.v"/>
       <FILE name="src/pipelineRegister.v"/>
       
       <!-- Constraints -->

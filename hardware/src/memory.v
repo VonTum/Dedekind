@@ -246,7 +246,8 @@ endmodule
 
 module DUAL_CLOCK_MEMORY_MLAB #(
     parameter WIDTH = 20,
-    parameter DEPTH_LOG2 = 5
+    parameter DEPTH_LOG2 = 5,
+    parameter OUTPUT_REGISTER = 1
 ) (
     // Write Side
     input wrclk,
@@ -301,7 +302,7 @@ altera_syncram  altera_syncram_component (
 defparam
     altera_syncram_component.ram_block_type  = "MLAB",
     altera_syncram_component.address_reg_b  = "CLOCK1",
-    altera_syncram_component.outdata_reg_b  = "CLOCK1",
+    altera_syncram_component.outdata_reg_b  = OUTPUT_REGISTER ? "CLOCK1" : "UNREGISTERED",,
     altera_syncram_component.address_aclr_b  = "CLEAR1",
     altera_syncram_component.outdata_aclr_b  = "NONE",
     altera_syncram_component.outdata_sclr_b  = "NONE",
@@ -347,8 +348,16 @@ always @(posedge rdclk or posedge rstReadAddr) begin // Asynchronous to correctl
     else if(!readAddressStall) readAddrReg <= readAddr;
 end
 
-reg[WIDTH-1:0] dataFromMemD; always @(posedge rdclk) dataFromMemD <= memory[readAddrReg];
-assign dataOut = dataFromMemD;
+wire[WIDTH-1:0] dataFromMem = memory[readAddrReg];
+
+generate
+if(OUTPUT_REGISTER) begin
+    reg[WIDTH-1:0] dataFromMemD;
+    always @(posedge rdclk) dataFromMemD <= dataFromMem;
+    assign dataOut = dataFromMemD;
+end else
+    assign dataOut = dataFromMem;
+endgenerate
 
 `endif
 
