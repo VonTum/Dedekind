@@ -119,7 +119,7 @@ module LowLatencyFastDualClockFIFO_MLAB #(parameter WIDTH = 20, parameter ALMOST
     // Read Side
     input rdclk,
     input rdrst,
-    input readRequest,
+    input readRequestPre,
     output reg[WIDTH-1:0] dataOut,
     output reg dataOutAvailable
 );
@@ -146,11 +146,14 @@ always @(posedge wrclk) almostFull <= spaceLeft <= ALMOST_FULL_MARGIN;
 
 wire canReadNext = readAddr != canReadUpTo;
 
+(* dont_merge *) reg readRequestAddr; always @(posedge rdclk) readRequestAddr <= readRequestPre;
+(* dont_merge *) reg readRequestData; always @(posedge rdclk) readRequestData <= readRequestPre;
+
 always @(posedge rdclk) begin
     if(rdrst) begin
         readAddr <= 0;
     end else begin
-        if(readRequest) readAddr <= readAddr + canReadNext;
+        if(readRequestAddr) readAddr <= readAddr + canReadNext;
     end
 end
 
@@ -169,7 +172,7 @@ NO_READ_CLOCK_MEMORY_MLAB #(.WIDTH(WIDTH), .DEPTH_LOG2(5)) mlabMemory (
 
 reg newReadAddr;
 always @(posedge rdclk) begin
-    if(readRequest) begin
+    if(readRequestData) begin
         dataOut <= dataFromMLAB;
         dataOutAvailable <= newReadAddr;
         newReadAddr <= canReadNext;

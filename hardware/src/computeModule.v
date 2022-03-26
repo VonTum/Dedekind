@@ -68,23 +68,30 @@ module pipelinedCountConnectedCoreWithSingletonElimination #(parameter EXTRA_DAT
     output eccStatus
 );
 
-(* dont_merge *) reg requestGraphD; always @(posedge clk) requestGraphD <= requestGraph;
 (* dont_merge *) reg requestGraphDForStart; always @(posedge clk) requestGraphDForStart <= requestGraph;
-wire start = graphAvailable && requestGraphD;
+(* dont_merge *) reg requestGraphDForExtraData; always @(posedge clk) requestGraphDForExtraData <= requestGraph;
 
 reg graphAvailableD;
+reg graphAvailableDD;
 reg[EXTRA_DATA_WIDTH-1:0] extraDataInD;
+reg[EXTRA_DATA_WIDTH-1:0] extraDataInDD;
 
 always @(posedge clk) begin
-    if(requestGraphD) begin
+    if(requestGraphDForExtraData) begin
         graphAvailableD <= graphAvailable;
         extraDataInD <= extraDataIn;
+        graphAvailableDD <= graphAvailableD;
+        extraDataInDD <= extraDataInD;
     end
 end
 
-wire[127:0] singletonEliminatedGraph;
+wire[127:0] singletons;
+wire[127:0] nonSingletons;
+singletonSplitter singletonSplit(clk, requestGraph, leafEliminatedGraph, singletons, nonSingletons);
+
 wire[5:0] startingConnectCount_DELAYED;
-singletonElimination se(clk, requestGraphD, leafEliminatedGraph, singletonEliminatedGraph, startingConnectCount_DELAYED);
+singletonPopcnt singletonCounter(clk, singletons, startingConnectCount_DELAYED);
+
 
 pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATENCY(REQUEST_LATENCY), .STARTING_CONNECT_COUNT_LAG(`STARTING_CONNECT_COUNT_LAG)) core(
     .clk(clk), 
@@ -94,10 +101,10 @@ pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATE
     
     // input side
     .request(requestGraph), 
-    .graphIn(singletonEliminatedGraph), 
-    .start(graphAvailableD && requestGraphDForStart), 
+    .graphIn(nonSingletons), 
+    .start(graphAvailableDD && requestGraphDForStart), 
     .startingConnectCountIn_DELAYED(startingConnectCount_DELAYED), 
-    .extraDataIn(extraDataInD),
+    .extraDataIn(extraDataInDD),
     
     // output side
     .done(done),

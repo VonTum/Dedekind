@@ -128,8 +128,18 @@ FIFO_M20K #(.WIDTH(SELECTION_BITWIDTH), .DEPTH_LOG2(13/*8192*/), .ALMOST_FULL_MA
     .eccStatus(eccStatus)
 );
 
-assign ovalid = resultsAvailable[selectedPipeline] && !resultOriginQueueEmpty;
-assign summedDataPcoeffCountOut = {eccStatus, 2'b00, dataOut[selectedPipeline]};
+reg eccErrorOccured;
+
+always @(posedge clk) begin
+    if(rst) begin
+        eccErrorOccured <= 0;
+    end else begin
+        if(eccStatus) eccErrorOccured <= 1;
+    end
+end
+
+assign ovalid = (resultsAvailable[selectedPipeline] && !resultOriginQueueEmpty) || eccErrorOccured;
+assign summedDataPcoeffCountOut = {eccErrorOccured, 2'b00, dataOut[selectedPipeline]};
 
 
 integer i;

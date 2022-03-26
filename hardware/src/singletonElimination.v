@@ -19,6 +19,7 @@ endgenerate
 
 endmodule
 
+// 4 cycles latency
 module singletonPopcnt(
     input clk,
     input[127:0] singletons,
@@ -75,25 +76,51 @@ always @(posedge clk) singletonCount <= sumsD[0] + sumsD[1];
 endmodule
 
 // produces singletonCount after a delay of 5 clock cycles (see PipelinedCountConnectedCore::CONNECT_COUNT_IN_LAG)
-module singletonElimination(
+module singletonSplitter (
     input clk,
-    input clkEn,
+    input clkEnPre,
     input[127:0] graphIn,
-    output reg[127:0] nonSingletons,
-    output[5:0] singletonCount
+    output reg[127:0] singletons,
+    output reg[127:0] nonSingletons
 );
 
-wire[127:0] hasNeighboring;
-hasNeighbor neighborChecker(graphIn, hasNeighboring);
+genvar outI;
+genvar v;
 
-reg[127:0] singletons;
+(* dont_merge *) reg clkEnDNeighbors; always @(posedge clk) clkEnDNeighbors <= clkEnPre;
+(* dont_merge *) reg clkEnDSingletons; always @(posedge clk) clkEnDSingletons <= clkEnPre;
+(* dont_merge *) reg clkEnDNonSingletons; always @(posedge clk) clkEnDNonSingletons <= clkEnPre;
+
+reg[127:0] hasNeighboring0to4D;
+generate
+    for(outI = 0; outI < 128; outI = outI + 1) begin
+        wire[4:0] inputWires0to4;
+        for(v = 0; v < 5; v = v + 1) begin
+            assign inputWires0to4[v] = graphIn[((outI & (1 << v)) != 0) ? outI - (1 << v) : outI + (1 << v)];
+        end
+        always @(posedge clk) if(clkEnDNeighbors) hasNeighboring0to4D[outI] <= |inputWires0to4;
+    end
+endgenerate
+
+reg[127:0] graphInD;
 always @(posedge clk) begin
-if(clkEn) begin
-    singletons    <= graphIn & ~hasNeighboring;
-    nonSingletons <= graphIn & hasNeighboring;
-end
+    if(clkEnDNeighbors) graphInD <= graphIn;
 end
 
-singletonPopcnt singletonCounter(clk, singletons, singletonCount);
+wire[127:0] hasNeighboringD;
+generate
+    for(outI = 0; outI < 128; outI = outI + 1) begin
+        wire[6:5] inputWires5to6D;
+        for(v = 5; v < 7; v = v + 1) begin
+            assign inputWires5to6D[v] = graphInD[((outI & (1 << v)) != 0) ? outI - (1 << v) : outI + (1 << v)];
+        end
+        assign hasNeighboringD[outI] = |inputWires5to6D || hasNeighboring0to4D[outI];
+    end
+endgenerate
+
+always @(posedge clk) begin
+    if(clkEnDSingletons) singletons <= graphInD & ~hasNeighboringD;
+    if(clkEnDNonSingletons) nonSingletons <= graphInD & hasNeighboringD;
+end
 
 endmodule
