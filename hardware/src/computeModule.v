@@ -68,7 +68,6 @@ module pipelinedCountConnectedCoreWithSingletonElimination #(parameter EXTRA_DAT
     output eccStatus
 );
 
-(* dont_merge *) reg requestGraphDForStart; always @(posedge clk) requestGraphDForStart <= requestGraph;
 (* dont_merge *) reg requestGraphDForExtraData; always @(posedge clk) requestGraphDForExtraData <= requestGraph;
 
 reg graphAvailableD;
@@ -87,7 +86,7 @@ end
 
 wire[127:0] singletons;
 wire[127:0] nonSingletons;
-singletonSplitter singletonSplit(clk, requestGraph, leafEliminatedGraph, singletons, nonSingletons);
+singletonSplitter singletonSplit(clk, requestGraph, !graphAvailableD, leafEliminatedGraph, singletons, nonSingletons);
 
 wire[5:0] startingConnectCount_DELAYED;
 singletonPopcnt singletonCounter(clk, singletons, startingConnectCount_DELAYED);
@@ -102,7 +101,7 @@ pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(EXTRA_DATA_WIDTH), .DATA_IN_LATE
     // input side
     .request(requestGraph), 
     .graphIn(nonSingletons), 
-    .start(graphAvailableDD && requestGraphDForStart), 
+    .graphInAvailable(graphAvailableDD), 
     .startingConnectCountIn_DELAYED(startingConnectCount_DELAYED), 
     .extraDataIn(extraDataInDD),
     

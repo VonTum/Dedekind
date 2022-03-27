@@ -79,6 +79,7 @@ endmodule
 module singletonSplitter (
     input clk,
     input clkEnPre,
+    input zeroNonSingletons,
     input[127:0] graphIn,
     output reg[127:0] singletons,
     output reg[127:0] nonSingletons
@@ -120,7 +121,7 @@ endgenerate
 
 always @(posedge clk) begin
     if(clkEnDSingletons) singletons <= graphInD & ~hasNeighboringD;
-    if(clkEnDNonSingletons) nonSingletons <= graphInD & hasNeighboringD;
+    if(clkEnDNonSingletons) nonSingletons <= zeroNonSingletons ? 0 : graphInD & hasNeighboringD;
 end
 
 endmodule

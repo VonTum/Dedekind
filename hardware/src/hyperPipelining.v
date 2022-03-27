@@ -109,7 +109,7 @@ module shiftRegister_M20K #(parameter CYCLES = 1, parameter WIDTH = 1) (
 generate if (CYCLES <= 3) begin : TOO_FEW_CYCLES
     hyperpipe #(.CYCLES(CYCLES), .WIDTH(WIDTH)) pipe(clk, dataIn, dataOut);
     assign eccStatus = 1'b0;
-end else begin : MLAB_MEMORY
+end else begin : M20K_MEMORY
     localparam ITER_UPTO_INCLUDING = CYCLES-3;
     localparam BITWIDTH = $clog2(ITER_UPTO_INCLUDING+1);
 
