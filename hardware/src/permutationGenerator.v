@@ -95,7 +95,10 @@ module permutationGenerator67 (
 reg[127:0] currentlyPermuting;
 reg currentlyPermutingValid;
 
-wire permutationWillEnd = (permut6 == 0) && (permut7 == 0);
+(* dont_merge *) reg[2:0] permut6D; always @(posedge clk) permut6D <= permut6;
+(* dont_merge *) reg[2:0] permut7D; always @(posedge clk) permut7D <= permut7;
+
+wire permutationWillEnd = (permut6D == 0) && (permut7D == 0);
 assign requestNextBot = permutationWillEnd && !slowDown;
 wire endOfPermutation;
 
@@ -115,7 +118,7 @@ always @(posedge clk) begin
 end
 
 permute67 permut67(
-    clk, permut6, permut7,
+    clk, permut6D, permut7D,
     currentlyPermuting, outputBot, 
     currentlyPermutingValid, outputBotValid, 
     currentlyPermutingValid && endOfPermutation, botSeriesFinished

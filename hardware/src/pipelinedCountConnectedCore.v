@@ -449,7 +449,7 @@ shiftRegister_M20K #(.CYCLES(`TOTAL_PIPELINE_STAGES - 1 + DATA_IN_LATENCY), .WID
 // Lots of slack, latency isn't important and we want minimal influence on the resulting hardware
 hyperpipe #(.CYCLES(7)) activityMonitorPipe(clk, validIn, isActive);
 
-`define OUTPUT_DELAY 1
+`define OUTPUT_DELAY 3
 hyperpipe #(.CYCLES(`OUTPUT_DELAY)) donePipe(clk, runEndIn & validIn, done);
 hyperpipe #(.CYCLES(`OUTPUT_DELAY), .WIDTH(6)) connectCountOutPipe(clk, storedConnectionCountIn, connectCountOut);
 hyperpipe #(.CYCLES(`OUTPUT_DELAY), .WIDTH(EXTRA_DATA_WIDTH)) extraDataOutPipe(clk, storedExtraDataIn, extraDataOut);

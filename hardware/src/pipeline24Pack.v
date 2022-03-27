@@ -33,10 +33,14 @@ module pipeline24PackV2 (
 
 // generate the permuted bots
 `define PERMUTE_CHECK_LATENCY 3
-wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsD;
-wire[`NUMBER_OF_PERMUTATORS-1:0] batchesDoneD;
-hyperpipe #(.CYCLES(`PERMUTE_CHECK_LATENCY), .WIDTH(128*`NUMBER_OF_PERMUTATORS)) botsPipe(clk2x, bots, botsD);
-hyperpipe #(.CYCLES(`PERMUTE_CHECK_LATENCY), .WIDTH(`NUMBER_OF_PERMUTATORS)) batchesPipe(clk2x, batchesDone, batchesDoneD);
+wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsPreD;
+wire[`NUMBER_OF_PERMUTATORS-1:0] batchesDonePreD;
+hyperpipe #(.CYCLES(`PERMUTE_CHECK_LATENCY - 1), .WIDTH(128*`NUMBER_OF_PERMUTATORS)) botsPipe(clk2x, bots, botsPreD);
+hyperpipe #(.CYCLES(`PERMUTE_CHECK_LATENCY - 1), .WIDTH(`NUMBER_OF_PERMUTATORS)) batchesPipe(clk2x, batchesDone, batchesDonePreD);
+
+// Make last registers in chains max_fan 1, to ease timing
+(* max_fan = 1 *) reg[128*`NUMBER_OF_PERMUTATORS-1:0] botsD; always @(posedge clk2x) botsD <= botsPreD;
+(* max_fan = 1 *) reg[`NUMBER_OF_PERMUTATORS-1:0] batchesDoneD; always @(posedge clk2x) batchesDoneD <= batchesDonePreD;
 
 wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsABCD = botsD;       // vs33 (no swap)
 wire[128*`NUMBER_OF_PERMUTATORS-1:0] botsBACD;
