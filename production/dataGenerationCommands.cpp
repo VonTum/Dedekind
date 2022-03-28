@@ -149,6 +149,34 @@ void convertMBFMapToFlatMBFStructure() {
 	writeFlatMBFStructure(destinationStructure);
 }
 
+#include <random>
+#include "../dedelib/generators.h"
+
+void randomizeMBF_LUT7() {
+	constexpr unsigned int Variables = 7;
+
+	FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>(false, false, true, false);
+
+	uint64_t* mbfsUINT64 = (uint64_t*) aligned_malloc(mbfCounts[7]*sizeof(Monotonic<7>), 4096);
+
+	std::default_random_engine generator;
+	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+		Monotonic<Variables> mbf = allMBFData.mbfs[i];
+		permuteRandom(mbf, generator);
+		uint64_t upper = _mm_extract_epi64(mbf.bf.bitset.data, 1);
+		uint64_t lower = _mm_extract_epi64(mbf.bf.bitset.data, 0);
+		mbfsUINT64[i*2] = upper;
+		mbfsUINT64[i*2+1] = lower;
+
+		if(i % 100000 == 0) std::cout << i << "/" << mbfCounts[Variables] << std::endl;
+	}
+
+	writeFlatBuffer(mbfsUINT64, FileName::flatMBFsU64(Variables), FlatMBFStructure<Variables>::MBF_COUNT);
+
+	aligned_free(mbfsUINT64);
+}
+
+
 template<unsigned int Variables>
 void preComputeFiles() {
 	runGenAllMBFs<Variables>();
@@ -209,6 +237,8 @@ CommandSet dataGenCommands {"Data Generation", {
 	{"convertMBFMapToFlatMBFStructure5", []() {convertMBFMapToFlatMBFStructure<5>(); }},
 	{"convertMBFMapToFlatMBFStructure6", []() {convertMBFMapToFlatMBFStructure<6>(); }},
 	{"convertMBFMapToFlatMBFStructure7", []() {convertMBFMapToFlatMBFStructure<7>(); }},
+
+	{"randomizeMBF_LUT7", []() {randomizeMBF_LUT7();}},
 
 	{"preCompute1", []() {preComputeFiles<1>(); }},
 	{"preCompute2", []() {preComputeFiles<2>(); }},

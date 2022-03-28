@@ -130,15 +130,17 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 	auto mbfBufUploadStart = std::chrono::system_clock::now();
 	std::cout << "Uploading mbfLUT buffer..." << std::endl;
 
+	uint64_t* mbfsUINT64 = readFlatBuffer<uint64_t>(FileName::flatMBFs(Variables), FlatMBFStructure<Variables>::MBF_COUNT * 2);});
+
 	// Quick fix, apparently __m128 isn't stored as previously thought. Fix better later
-	uint64_t* mbfsUINT64 = (uint64_t*) aligned_malloc(mbfCounts[7]*sizeof(Monotonic<7>), 4096);
+	/*uint64_t* mbfsUINT64 = (uint64_t*) aligned_malloc(mbfCounts[7]*sizeof(Monotonic<7>), 4096);
 	for(size_t i = 0; i < mbfCounts[7]; i++) {
 		Monotonic<7> mbf = allMBFData.mbfs[i];
 		uint64_t upper = _mm_extract_epi64(mbf.bf.bitset.data, 1);
 		uint64_t lower = _mm_extract_epi64(mbf.bf.bitset.data, 0);
 		mbfsUINT64[i*2] = upper;
 		mbfsUINT64[i*2+1] = lower;
-	}
+	}*/
 
 	cl_int status;
 	 // This is allowed, mmap aligns buffers to the nearest page boundary. Usually something like 1024 or 4096 byte alignment > 64
@@ -151,7 +153,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 	status = clFinish(queue);
 	checkError(status, "Error while uploading mbfLUT buffer!");
 
-	aligned_free(mbfsUINT64);
+	//aligned_free(mbfsUINT64);
 
 	std::cout << "mbfLUT buffer uploaded! ";
 	auto mbfLutBufUploadDone = std::chrono::system_clock::now();
