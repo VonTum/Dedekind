@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-(* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION AUTO" *)
+(* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION off; -name SYNCHRONIZER_IDENTIFICATION auto" *)
 module synchronizer #(parameter WIDTH = 1, parameter SYNC_STAGES = 3) (
     input inClk,
     input[WIDTH-1:0] dataIn,
@@ -19,7 +19,9 @@ generate
 for(genvar i = 0; i < SYNC_STAGES-2; i=i+1) begin always @(posedge outClk) syncRegs[i] <= syncRegs[i+1]; end
 endgenerate
 
-assign dataOut = syncRegs[0];
+(* altera_attribute = "-name AUTO_SHIFT_REGISTER_RECOGNITION off; -name SYNCHRONIZER_IDENTIFICATION off" *) reg[WIDTH-1:0] outReg;
+always @(posedge outClk) outReg <= syncRegs[0];
+assign dataOut = outReg;
 
 endmodule
 

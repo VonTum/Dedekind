@@ -149,11 +149,15 @@ wire canReadNext = readAddr != canReadUpTo;
 (* dont_merge *) reg readRequestAddr; always @(posedge rdclk) readRequestAddr <= readRequestPre;
 (* dont_merge *) reg readRequestData; always @(posedge rdclk) readRequestData <= readRequestPre;
 
+reg newReadAddr;
 always @(posedge rdclk) begin
-    if(rdrst) begin
-        readAddr <= 0;
-    end else begin
-        if(readRequestAddr) readAddr <= readAddr + canReadNext;
+    if(readRequestAddr) begin
+	     if(rdrst) begin
+		      readAddr <= 0;
+		  end else begin
+            readAddr <= readAddr + canReadNext;
+		  end
+        newReadAddr <= canReadNext;
     end
 end
 
@@ -170,12 +174,10 @@ NO_READ_CLOCK_MEMORY_MLAB #(.WIDTH(WIDTH), .DEPTH_LOG2(5)) mlabMemory (
     .dataOut(dataFromMLAB)
 );
 
-reg newReadAddr;
 always @(posedge rdclk) begin
     if(readRequestData) begin
         dataOut <= dataFromMLAB;
         dataOutAvailable <= newReadAddr;
-        newReadAddr <= canReadNext;
     end
 end
 
