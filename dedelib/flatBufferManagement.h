@@ -17,6 +17,7 @@ extern BufmanagementPageSize BUFMANAGEMENT_MMAP_PAGE_SIZE;
 
 void writeFlatVoidBuffer(const void* data, const std::string& fileName, size_t size);
 const void* readFlatVoidBuffer(const std::string& fileName, size_t size);
+const void* readFlatVoidBufferNoMMAP(const std::string& fileName, size_t size);
 void freeFlatVoidBuffer(const void* buffer, size_t size);
 void free_const(const void* buffer);
 
@@ -28,6 +29,11 @@ void writeFlatBuffer(const T* data, const std::string& fileName, size_t size) {
 template<typename T>
 const T* readFlatBuffer(const std::string& fileName, size_t size) {
 	return static_cast<const T*>(readFlatVoidBuffer(fileName, sizeof(T) * size));
+}
+
+template<typename T>
+const T* readFlatBufferNoMMAP(const std::string& fileName, size_t size) {
+	return static_cast<const T*>(readFlatVoidBufferNoMMAP(fileName, sizeof(T) * size));
 }
 
 template<typename T>

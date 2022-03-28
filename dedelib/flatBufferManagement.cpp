@@ -22,6 +22,18 @@ void writeFlatVoidBuffer(const void* data, const std::string& fileName, size_t s
 	file.write(reinterpret_cast<const char*>(data), size);
 	file.close();
 }
+
+const void* readFlatVoidBufferNoMMAP(const std::string& fileName, size_t size) {
+	std::ifstream file(fileName, std::ios::binary);
+	if(!file.good()) {
+		std::cout << "Could not open file '" << fileName << "'!" << std::endl;
+		exit(1);
+	}
+	void* buffer = aligned_malloc(size, 4096); // Strong alignment is required for DMA access with OpenCL
+	file.read(static_cast<char*>(buffer), size);
+	file.close();
+	return buffer;
+}
 const void* readFlatVoidBuffer(const std::string& fileName, size_t size) {
 	if(BUFMANAGEMENT_MMAP) {
 		#ifdef __linux__
@@ -53,15 +65,7 @@ const void* readFlatVoidBuffer(const std::string& fileName, size_t size) {
 		throw "MMAP Not Supported on Non-Linux platforms!";
 		#endif
 	} else {
-		std::ifstream file(fileName, std::ios::binary);
-		if(!file.good()) {
-			std::cout << "Could not open file '" << fileName << "'!" << std::endl;
-			exit(1);
-		}
-		void* buffer = aligned_malloc(size, 4096); // Strong alignment is required for DMA access with OpenCL
-		file.read(static_cast<char*>(buffer), size);
-		file.close();
-		return buffer;
+		return readFlatVoidBufferNoMMAP(fileName, size);
 	}
 }
 void free_const(const void* buffer) {

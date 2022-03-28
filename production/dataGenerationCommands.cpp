@@ -155,11 +155,11 @@ void convertMBFMapToFlatMBFStructure() {
 void randomizeMBF_LUT7() {
 	constexpr unsigned int Variables = 7;
 
-	FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>(false, false, true, false);
+	FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>(true, false, false, false);
 
 	uint64_t* mbfsUINT64 = (uint64_t*) aligned_malloc(mbfCounts[7]*sizeof(Monotonic<7>), 4096);
 
-	std::default_random_engine generator;
+	std::mt19937 generator;
 	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
 		Monotonic<Variables> mbf = allMBFData.mbfs[i];
 		permuteRandom(mbf, generator);

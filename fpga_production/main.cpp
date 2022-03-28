@@ -130,7 +130,8 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 	auto mbfBufUploadStart = std::chrono::system_clock::now();
 	std::cout << "Uploading mbfLUT buffer..." << std::endl;
 
-	uint64_t* mbfsUINT64 = readFlatBuffer<uint64_t>(FileName::flatMBFs(Variables), FlatMBFStructure<Variables>::MBF_COUNT * 2);});
+	// Can't use MMAP here, memory mapped blocks don't mesh well with OpenCL buffer uploads
+	const uint64_t* mbfsUINT64 = readFlatBufferNoMMAP<uint64_t>(FileName::flatMBFsU64(7), FlatMBFStructure<7>::MBF_COUNT * 2);
 
 	// Quick fix, apparently __m128 isn't stored as previously thought. Fix better later
 	/*uint64_t* mbfsUINT64 = (uint64_t*) aligned_malloc(mbfCounts[7]*sizeof(Monotonic<7>), 4096);
@@ -349,7 +350,7 @@ int main(int argc, char** argv) {
 	std::cout << "Took " << std::chrono::duration<double>(kernelInitializedDone - flatMBFLoadDone).count() << "s" << std::endl;
 
 	std::cout << "Pipelining computation for " << topsToProcess.size() << " tops..." << std::endl;
-	std::vector<BetaResult> result = pcoeffPipeline<7, 32>(allMBFData, topsToProcess, fpgaProcessor_FullySerial, 70, 10);
+	std::vector<BetaResult> result = pcoeffPipeline<7, 32>(allMBFData, topsToProcess, fpgaProcessor_FullySerial, 40, 10);
 	std::cout << "Computation Finished!" << std::endl;
 
 	for(const BetaResult& r : result) {
