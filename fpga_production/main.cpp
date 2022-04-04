@@ -31,6 +31,7 @@
 #include <immintrin.h>
 #include <algorithm>
 #include <random>
+#include <fstream>
 #include "AOCLUtils/aocl_utils.h"
 
 #include "../dedelib/toString.h"
@@ -53,8 +54,9 @@ static bool SHOW_ALL = false;
 static bool ENABLE_PROFILING = false;
 static bool ENABLE_SHUFFLE = false;
 static bool ENABLE_COMPARE = false;
-static int MAX_UP_TO = 500000000;
-static int START_AT = 0;
+static bool ENABLE_STATISTICS = false;
+static int SHOW_FRONT = 0;
+static int SHOW_TAIL = 0;
 
 // OpenCL runtime configuration
 static cl_platform_id platform = NULL;
@@ -145,7 +147,13 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 
 	cl_int status;
 	 // This is allowed, mmap aligns buffers to the nearest page boundary. Usually something like 1024 or 4096 byte alignment > 64
-	status = clEnqueueWriteBuffer(queue,mbfLUTMem,0,0,mbfCounts[7]*sizeof(cl_ulong2),mbfsUINT64,0,0,0);
+	
+	for(size_t i = mbfCounts[7] * 2 / 2 - 200; i < mbfCounts[7] * 2 / 2 + 200; i++) {
+		std::cout << i << ">" << mbfsUINT64[i] << "\n";
+	}
+	std::cout << std::endl;
+
+	status = clEnqueueWriteBuffer(queue,mbfLUTMem,0,0,mbfCounts[7]*16 /*16 bytes per MBF*/,mbfsUINT64,0,0,0);
 	checkError(status, "Failed to enqueue writing to mbfLUTMem buffer");
 
 	// Preset the kernel arguments to these constant buffers
@@ -153,6 +161,19 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 	checkError(status, "Failed to set fullPipelineKernel mbfLUTMem");
 	status = clFinish(queue);
 	checkError(status, "Error while uploading mbfLUT buffer!");
+
+	std::optional<std::ofstream> statsFile = {};
+	if(ENABLE_STATISTICS) {
+		statsFile = std::ofstream(FileName::dataPath + "statsFile.csv");
+		std::ofstream& statsf = statsFile.value();
+
+		statsf << "TopIdx,BotCount,Total Permutations,Permutations Per Bot,Runtime,Total Cycles,Occupation,Bots/s";
+
+		for(int i = 0; i <= 5040; i++) {
+			statsf << ',' << i;
+		}
+	}
+
 
 	//aligned_free(mbfsUINT64);
 
@@ -165,17 +186,30 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		JobInfo& job = jobOpt.value();
 		cl_uint jobSize = static_cast<cl_int>(job.size());
 		NodeIndex* botIndices = job.bufStart;
-		std::cout << "Grabbed job " << botIndices[0] << " of size " << jobSize << std::endl;
-		botIndices[0] |= 0x80000000; // Mark top
+		NodeIndex topIdx = botIndices[0];
+		std::cout << "Grabbed job " << topIdx << " of size " << jobSize << std::endl;
+		botIndices[0] |= cl_uint(0x80000000); // Mark top
 		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
 
-		for(int i = 0; i < START_AT; i++) botIndices[i+1] = botIndices[i+1+START_AT];
-		jobSize -= START_AT;
-		if(MAX_UP_TO < jobSize) jobSize = MAX_UP_TO;
-
 		if(ENABLE_SHUFFLE) shuffleBots(botIndices + 1, botIndices + jobSize);
-		botIndices[jobSize++] = 0x80000000; // Dummy top, to get a good occupation reading
+		botIndices[jobSize++] = cl_uint(0x80000000); // Dummy top, to get a good occupation reading
 		
+		if(SHOW_TAIL != 0) {
+			std::cout << "Tail: " << std::endl;
+			for(int i = std::max(int(jobSize) - SHOW_TAIL, 0); i < jobSize + 5; i++) { // Look a bit past the end of the job, for fuller picture
+				std::cout << botIndices[i] << ',';
+			}
+			std::cout << std::endl;
+		}
+
+		if(SHOW_FRONT != 0) {
+			std::cout << "Front: " << std::endl;
+			for(int i = 0; i < SHOW_FRONT; i++) {
+				std::cout << botIndices[i] << ',';
+			}
+			std::cout << std::endl;
+		}
+
 		status = clEnqueueWriteBuffer(queue,inputMem[0],0,0,jobSize*sizeof(uint32_t),botIndices,0,0,0);
 		checkError(status, "Failed to enqueue writing to inputMem buffer");
 
@@ -214,9 +248,11 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		uint64_t activityCounter = (analysisBot & 0x1FFFFFFF80000000) >> 31;
 		uint64_t cycleCounter = analysisBot & 0x000000007FFFFFFF;
 
-		std::cout << "Previous top took " << (cycleCounter<<10) << " cycles" << std::endl;
-		std::cout << "Previous top had " << (activityCounter<<16) << " activity" << std::endl;
-		std::cout << "Previous top occupation: " << (activityCounter << 6) / (40.0 * cycleCounter) * 100.0 << "%" << std::endl;
+		double occupation = (activityCounter << 6) / (40.0 * cycleCounter);
+
+		std::cout << "Took " << (cycleCounter<<10) << " cycles" << std::endl;
+		//std::cout << (activityCounter<<16) << " activity" << std::endl;
+		std::cout << "Occupation: " << occupation * 100.0 << "%" << std::endl;
 
 		if(ENABLE_COMPARE) {
 			std::cout << "Starting MultiThread CPU comparison..." << std::endl;
@@ -241,10 +277,49 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 			std::cout << "All " << jobSize << " elements checked!" << std::endl;
 		}
 
+		if(ENABLE_STATISTICS) {
+			std::ofstream& statsf = statsFile.value();
+
+			// statsf << "TopIdx,BotCount,Total Permutations,Permutations Per Bot,Runtime,Total Cycles,Occupation,Bots/s";
+
+			uint64_t permutationBreakdown[5041];
+			for(uint64_t& item : permutationBreakdown) item = 0;
+
+			for(size_t i = 1; i < jobSize - 1; i++) {
+				uint64_t pcoeffCount = getPCoeffCount(countConnectedSumBuf[i]);
+
+				permutationBreakdown[pcoeffCount]++;
+			}
+			uint64_t totalPermutations = 0;
+			for(size_t i = 0; i <= 5040; i++) {
+				totalPermutations += i * permutationBreakdown[i];
+			}
+
+			statsf << topIdx << ',';
+			statsf << jobSize << ',';
+			statsf << totalPermutations << ',';
+			statsf << double(totalPermutations) / jobSize << ',';
+			statsf << runtimeSeconds << ',';
+			statsf << cycleCounter << ',';
+			statsf << occupation << ',';
+			statsf << double(jobSize)/runtimeSeconds;
+
+			for(int i = 0; i <= 5040; i++) {
+				statsf << ',' << permutationBreakdown[i]++;
+			}
+
+			statsf << std::endl;
+		}
+
+		// Comment out, result processor is *really* slow for some godforsaken reason. IT'S JUST MULTIPLIES!
+		/*
 		OutputBuffer result;
 		result.originalInputData = job;
 		result.outputBuf = countConnectedSumBuf;
 		context.outputQueue.push(result);
+		*/
+		context.outputBufferReturnQueue.push(countConnectedSumBuf);
+		context.inputBufferReturnQueue.push(job.bufStart);
 	}
 	std::cout << "FPGA Processor finished.\n" << std::flush;
 }
@@ -267,15 +342,11 @@ std::vector<IntT> parseIntList(const std::string& strList) {
 
 // Entry point.
 int main(int argc, char** argv) {
+	constexpr size_t Variables = 7;
 	try {
 	ParsedArgs parsed(argc, argv);
 	configure(parsed); // Configures memory mapping, and other settings
-	const std::vector<std::string>& argsFromParsedArgs = parsed.args();
-	std::vector<NodeIndex> topsToProcess{1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000};
-	if(argsFromParsedArgs.size() >= 1) {
-		topsToProcess = parseIntList<NodeIndex>(argsFromParsedArgs[0]);
-	}
-
+	
 	Options options(argc, argv);
 
 	bool reduce_data = false;
@@ -291,14 +362,6 @@ int main(int argc, char** argv) {
 
 	if(options.has("iters")) {
 		NUM_ITERATIONS = options.get<cl_int>("iters");
-	}
-
-	if(options.has("MAX_UP_TO")) {
-		MAX_UP_TO = options.get<cl_int>("MAX_UP_TO");
-	}
-
-	if(options.has("START_AT")) {
-		START_AT = options.get<cl_int>("START_AT");
 	}
 
 	if(options.has("show")) {
@@ -324,6 +387,45 @@ int main(int argc, char** argv) {
 		std::cout << "Enabled comparing with MultiThread CPU implementation" << std::endl;
 	}
 
+	if(options.has("stats")) {
+		ENABLE_STATISTICS = true;
+		std::cout << "Enabled statistics!" << std::endl;
+	}
+
+	if(options.has("front")) {
+		SHOW_FRONT = options.get<int>("front");
+		std::cout << "Set front showing to " << SHOW_FRONT << std::endl;
+	}
+
+	if(options.has("tail")) {
+		SHOW_TAIL = options.get<int>("tail");
+		std::cout << "Set tail showing to " << SHOW_TAIL << std::endl;
+	}
+
+	const std::vector<std::string>& argsFromParsedArgs = parsed.args();
+	std::vector<NodeIndex> topsToProcess;
+	if(argsFromParsedArgs.size() >= 1) {
+		// Given set of tops
+		topsToProcess = parseIntList<NodeIndex>(argsFromParsedArgs[0]);
+	} else {
+		// Sample tops
+		int SAMPLE_COUNT = 10;
+
+		if(options.has("sample")) {
+			SAMPLE_COUNT = options.get<int>("sample");
+			std::cout << "Set number of samples to N=" << SAMPLE_COUNT << std::endl;
+		}
+
+		for(int i = 0; i < SAMPLE_COUNT; i++) {
+			double expectedIndex = mbfCounts[Variables] * (i+0.5) / SAMPLE_COUNT;
+			topsToProcess.push_back(static_cast<NodeIndex>(expectedIndex));
+		}
+	}
+
+	std::cout << "Processing tops: ";
+	for(NodeIndex i : topsToProcess) std::cout << i << ',';
+	std::cout << std::endl;
+
 	std::string kernelFile = "fullPipelineKernel";
 
 	if(options.has("kernelFile")) {
@@ -335,7 +437,6 @@ int main(int argc, char** argv) {
 
 	std::cout << "Loading FlatMBFStructure..." << std::endl;
 	auto flatMBFLoadStart = std::chrono::system_clock::now();
-	constexpr size_t Variables = 7;
 	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
 	std::cout << "FlatMBFStructure ready. ";
 	auto flatMBFLoadDone = std::chrono::system_clock::now();
@@ -443,7 +544,7 @@ bool init(const char* kernelFile) {
 	checkError(status, "Failed to create fullPipelineKernel");
 
 	// Create constant mbf Look Up Table data buffer
-	mbfLUTMem = clCreateBuffer(context, CL_MEM_READ_ONLY, mbfCounts[7]*sizeof(cl_ulong2), 0, &status);
+	mbfLUTMem = clCreateBuffer(context, CL_MEM_READ_ONLY, mbfCounts[7]*16 /*16 bytes per MBF*/, 0, &status);
 	checkError(status, "Failed to create the mbfLUTMem buffer");
 
 	// Create the input and output buffers

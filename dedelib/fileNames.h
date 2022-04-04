@@ -3,6 +3,7 @@
 #include <string>
 
 namespace FileName {
+extern std::string dataPath;
 void setDataPath(std::string dataPath);
 
 std::string allMBFSInfo(unsigned int Variables);

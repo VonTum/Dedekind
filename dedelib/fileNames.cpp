@@ -4,7 +4,7 @@
 
 namespace FileName {
 
-static std::string dataPath = "../data/";
+std::string dataPath = "../data/";
 
 void setDataPath(std::string newPath) {
 	std::cout << "Set base path: " << newPath.c_str() << std::endl;

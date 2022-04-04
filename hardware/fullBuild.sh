@@ -2,7 +2,7 @@
 #SBATCH -N 1
 #SBATCH -J buildrtl
 #SBATCH -A hpc-prf-dedek
-#SBATCH -p batch
+#SBATCH -p fpgasyn
 #SBATCH -t 5:00:00
 #SBATCH --mem=100000MB
 #SBATCH --mail-type all

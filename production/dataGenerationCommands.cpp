@@ -171,7 +171,7 @@ void randomizeMBF_LUT7() {
 		if(i % 100000 == 0) std::cout << i << "/" << mbfCounts[Variables] << std::endl;
 	}
 
-	writeFlatBuffer(mbfsUINT64, FileName::flatMBFsU64(Variables), FlatMBFStructure<Variables>::MBF_COUNT);
+	writeFlatBuffer(mbfsUINT64, FileName::flatMBFsU64(Variables), FlatMBFStructure<Variables>::MBF_COUNT*2);
 
 	aligned_free(mbfsUINT64);
 }
