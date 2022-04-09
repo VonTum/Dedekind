@@ -14,8 +14,6 @@
 #include "../dedelib/serialization.h"
 #include "../dedelib/generators.h"
 
-#include "../dedelib/codeGen.h"
-
 #include "../dedelib/MBFDecomposition.h"
 #include "../dedelib/r8Computation.h"
 #include "../dedelib/tjomn.h"
@@ -475,16 +473,6 @@ void countValidPermutationSetFraction(std::vector<size_t> counts, unsigned int g
 
 CommandSet miscCommands{"Misc", {
 	{"ramTest", []() {doRAMTest(); }},
-
-	{"graphVis1", []() {genGraphVisCode(1); }},
-	{"graphVis2", []() {genGraphVisCode(2); }},
-	{"graphVis3", []() {genGraphVisCode(3); }},
-	{"graphVis4", []() {genGraphVisCode(4); }},
-	{"graphVis5", []() {genGraphVisCode(5); }},
-	{"graphVis6", []() {genGraphVisCode(6); }},
-	{"graphVis7", []() {genGraphVisCode(7); }},
-	{"graphVis8", []() {genGraphVisCode(8); }},
-	{"graphVis9", []() {genGraphVisCode(9); }},
 
 	{"revolution4", []() {doRevolution<4>(); }},
 	{"revolution5", []() {doRevolution<5>(); }},

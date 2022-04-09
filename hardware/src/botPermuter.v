@@ -147,3 +147,262 @@ always @(validBotPermutes) begin
 end
 
 endmodule
+
+
+module permute1234Naive(
+    input clk,
+    
+    input[127:0] storedBot,
+    input[1:0] selectedSet, // 0-3
+    input[2:0] selectedPermutationInSet, // 0-5
+    
+    output[127:0] permutedBot
+);
+
+`include "inlineVarSwap_header.v"
+
+wire[127:0] botABCD = storedBot;       // vs33 (no swap)
+wire[127:0] botBACD; `VAR_SWAP_INLINE(3,4,botABCD, botBACD)// varSwap #(3,4) vs34 (botABCD, botBACD);
+wire[127:0] botCBAD; `VAR_SWAP_INLINE(3,5,botABCD, botCBAD)// varSwap #(3,5) vs35 (botABCD, botCBAD);
+wire[127:0] botDBCA; `VAR_SWAP_INLINE(3,6,botABCD, botDBCA)// varSwap #(3,6) vs36 (botABCD, botDBCA);
+
+wire[127:0] botACBD; `VAR_SWAP_INLINE(4,5,botABCD, botACBD)// varSwap #(4,5) vs33_45 (botABCD, botACBD);
+wire[127:0] botBCAD; `VAR_SWAP_INLINE(4,5,botBACD, botBCAD)// varSwap #(4,5) vs34_45 (botBACD, botBCAD);
+wire[127:0] botCABD; `VAR_SWAP_INLINE(4,5,botCBAD, botCABD)// varSwap #(4,5) vs35_45 (botCBAD, botCABD);
+wire[127:0] botDCBA; `VAR_SWAP_INLINE(4,5,botDBCA, botDCBA)// varSwap #(4,5) vs36_45 (botDBCA, botDCBA);
+
+wire[127:0] botADCB; `VAR_SWAP_INLINE(4,6,botABCD, botADCB)// varSwap #(4,6) vs33_46 (botABCD, botADCB);
+wire[127:0] botBDCA; `VAR_SWAP_INLINE(4,6,botBACD, botBDCA)// varSwap #(4,6) vs34_46 (botBACD, botBDCA);
+wire[127:0] botCDAB; `VAR_SWAP_INLINE(4,6,botCBAD, botCDAB)// varSwap #(4,6) vs35_46 (botCBAD, botCDAB);
+wire[127:0] botDACB; `VAR_SWAP_INLINE(4,6,botDBCA, botDACB)// varSwap #(4,6) vs36_46 (botDBCA, botDACB);
+
+
+wire[127:0] botABDC; `VAR_SWAP_INLINE(5,6,botABCD, botABDC)
+wire[127:0] botBADC; `VAR_SWAP_INLINE(5,6,botBACD, botBADC)
+wire[127:0] botCBDA; `VAR_SWAP_INLINE(5,6,botCBAD, botCBDA)
+wire[127:0] botDBAC; `VAR_SWAP_INLINE(5,6,botDBCA, botDBAC)
+
+wire[127:0] botACDB; `VAR_SWAP_INLINE(5,6,botACBD, botACDB)
+wire[127:0] botBCDA; `VAR_SWAP_INLINE(5,6,botBCAD, botBCDA)
+wire[127:0] botCADB; `VAR_SWAP_INLINE(5,6,botCABD, botCADB)
+wire[127:0] botDCAB; `VAR_SWAP_INLINE(5,6,botDCBA, botDCAB)
+
+wire[127:0] botADBC; `VAR_SWAP_INLINE(5,6,botADCB, botADBC)
+wire[127:0] botBDAC; `VAR_SWAP_INLINE(5,6,botBDCA, botBDAC)
+wire[127:0] botCDBA; `VAR_SWAP_INLINE(5,6,botCDAB, botCDBA)
+wire[127:0] botDABC; `VAR_SWAP_INLINE(5,6,botDACB, botDABC)
+
+
+wire[127:0] allPermutations[3:0][5:0];
+        /*abcd, abdc, acbd, acdb, adbc, adcb;
+        bacd, badc, bcad, bcda, bdac, bdca;
+        cbad, cbda, cabd, cadb, cdba, cdab; 
+        dbca, dbac, dcba, dcab, dabc, dacb;*/
+
+assign allPermutations[0][0] = botABCD;
+assign allPermutations[0][1] = botABDC;
+assign allPermutations[0][2] = botACBD;
+assign allPermutations[0][3] = botACDB;
+assign allPermutations[0][4] = botADBC;
+assign allPermutations[0][5] = botADCB;
+
+assign allPermutations[1][0] = botBACD;
+assign allPermutations[1][1] = botBADC;
+assign allPermutations[1][2] = botBCAD;
+assign allPermutations[1][3] = botBCDA;
+assign allPermutations[1][4] = botBDAC;
+assign allPermutations[1][5] = botBDCA;
+
+assign allPermutations[2][0] = botCBAD;
+assign allPermutations[2][1] = botCBDA;
+assign allPermutations[2][2] = botCABD;
+assign allPermutations[2][3] = botCADB;
+assign allPermutations[2][4] = botCDBA;
+assign allPermutations[2][5] = botCDAB;
+
+assign allPermutations[3][0] = botDBCA;
+assign allPermutations[3][1] = botDBAC;
+assign allPermutations[3][2] = botDCBA;
+assign allPermutations[3][3] = botDCAB;
+assign allPermutations[3][4] = botDABC;
+assign allPermutations[3][5] = botDACB;
+
+reg[1:0] selectedSetD; always @(posedge clk) selectedSetD <= selectedSet;
+reg[2:0] selectedPermutationInSetD; always @(posedge clk) selectedPermutationInSetD <= selectedPermutationInSet;
+assign permutedBot = allPermutations[selectedSetD][selectedPermutationInSetD];
+
+endmodule
+
+module permute1234(
+    input clk,
+    
+    input[127:0] storedBot,
+    input[1:0] selectedSet, // 0-3
+    input[2:0] selectedPermutationInSet, // 0-5
+        /*abcd, abdc, acbd, acdb, adbc, adcb;
+        bacd, badc, bcad, bcda, bdac, bdca;
+        cbad, cbda, cabd, cadb, cdba, cdab; 
+        dbca, dbac, dcba, dcab, dabc, dacb;*/
+    
+    output[127:0] permutedBot
+);
+
+function [7:0] mux4;
+    input[1:0] sel;
+    input[7:0] v0, v1, v2, v3;
+    begin
+        case(sel)
+            0: mux4 = v0;
+            1: mux4 = v1;
+            2: mux4 = v2;
+            3: mux4 = v3;
+        endcase
+    end
+endfunction
+
+function [7:0] mux6;
+    input[2:0] sel;
+    input[7:0] v0, v1, v2, v4, v5, v6;
+    begin
+        case(sel)
+            0: mux6 = v0;
+            1: mux6 = v1;
+            2: mux6 = v2;
+            4: mux6 = v4;
+            5: mux6 = v5;
+            6: mux6 = v6;
+        endcase
+    end
+endfunction
+
+
+wire[7:0] bot[15:0];
+
+reg[1:0] varInPos_a;
+reg[1:0] varInPos_b;
+reg[1:0] varInPos_c;
+reg[1:0] varInPos_d;
+
+reg[2:0] varInPos_ab;
+reg[2:0] varInPos_ac;
+reg[2:0] varInPos_ad;
+
+always @(posedge clk) begin
+    /* Generated LUTs */
+    /*case({selectedSet, selectedPermutationInSet})
+        5'o00: varInPos_a<=0; 5'o01: varInPos_a<=0; 5'o02: varInPos_a<=0; 5'o03: varInPos_a<=0; 5'o04: varInPos_a<=0; 5'o05: varInPos_a<=0; 
+        5'o10: varInPos_a<=1; 5'o11: varInPos_a<=1; 5'o12: varInPos_a<=1; 5'o13: varInPos_a<=1; 5'o14: varInPos_a<=1; 5'o15: varInPos_a<=1; 
+        5'o20: varInPos_a<=2; 5'o21: varInPos_a<=2; 5'o22: varInPos_a<=2; 5'o23: varInPos_a<=2; 5'o24: varInPos_a<=2; 5'o25: varInPos_a<=2; 
+        5'o30: varInPos_a<=3; 5'o31: varInPos_a<=3; 5'o32: varInPos_a<=3; 5'o33: varInPos_a<=3; 5'o34: varInPos_a<=3; 5'o35: varInPos_a<=3; 
+        default: varInPos_a<=2'bXX;
+    endcase*/
+    varInPos_a <= selectedSet;
+    case({selectedSet, selectedPermutationInSet})
+        5'o00: varInPos_b<=1; 5'o01: varInPos_b<=1; 5'o02: varInPos_b<=2; 5'o03: varInPos_b<=2; 5'o04: varInPos_b<=3; 5'o05: varInPos_b<=3; 
+        5'o10: varInPos_b<=0; 5'o11: varInPos_b<=0; 5'o12: varInPos_b<=2; 5'o13: varInPos_b<=2; 5'o14: varInPos_b<=3; 5'o15: varInPos_b<=3; 
+        5'o20: varInPos_b<=1; 5'o21: varInPos_b<=1; 5'o22: varInPos_b<=0; 5'o23: varInPos_b<=0; 5'o24: varInPos_b<=3; 5'o25: varInPos_b<=3; 
+        5'o30: varInPos_b<=1; 5'o31: varInPos_b<=1; 5'o32: varInPos_b<=2; 5'o33: varInPos_b<=2; 5'o34: varInPos_b<=0; 5'o35: varInPos_b<=0; 
+        default: varInPos_b<=2'bXX;
+    endcase
+    case({selectedSet, selectedPermutationInSet})
+        5'o00: varInPos_c<=2; 5'o01: varInPos_c<=3; 5'o02: varInPos_c<=1; 5'o03: varInPos_c<=3; 5'o04: varInPos_c<=1; 5'o05: varInPos_c<=2; 
+        5'o10: varInPos_c<=2; 5'o11: varInPos_c<=3; 5'o12: varInPos_c<=0; 5'o13: varInPos_c<=3; 5'o14: varInPos_c<=0; 5'o15: varInPos_c<=2; 
+        5'o20: varInPos_c<=0; 5'o21: varInPos_c<=3; 5'o22: varInPos_c<=1; 5'o23: varInPos_c<=3; 5'o24: varInPos_c<=1; 5'o25: varInPos_c<=0; 
+        5'o30: varInPos_c<=2; 5'o31: varInPos_c<=0; 5'o32: varInPos_c<=1; 5'o33: varInPos_c<=0; 5'o34: varInPos_c<=1; 5'o35: varInPos_c<=2; 
+        default: varInPos_c<=2'bXX;
+    endcase
+    case({selectedSet, selectedPermutationInSet})
+        5'o00: varInPos_d<=3; 5'o01: varInPos_d<=2; 5'o02: varInPos_d<=3; 5'o03: varInPos_d<=1; 5'o04: varInPos_d<=2; 5'o05: varInPos_d<=1; 
+        5'o10: varInPos_d<=3; 5'o11: varInPos_d<=2; 5'o12: varInPos_d<=3; 5'o13: varInPos_d<=0; 5'o14: varInPos_d<=2; 5'o15: varInPos_d<=0; 
+        5'o20: varInPos_d<=3; 5'o21: varInPos_d<=0; 5'o22: varInPos_d<=3; 5'o23: varInPos_d<=1; 5'o24: varInPos_d<=0; 5'o25: varInPos_d<=1; 
+        5'o30: varInPos_d<=0; 5'o31: varInPos_d<=2; 5'o32: varInPos_d<=0; 5'o33: varInPos_d<=1; 5'o34: varInPos_d<=2; 5'o35: varInPos_d<=1; 
+        default: varInPos_d<=2'bXX;
+    endcase
+    case({selectedSet, selectedPermutationInSet})
+        5'o00: varInPos_ab<=0; 5'o01: varInPos_ab<=0; 5'o02: varInPos_ab<=1; 5'o03: varInPos_ab<=1; 5'o04: varInPos_ab<=2; 5'o05: varInPos_ab<=2; 
+        5'o10: varInPos_ab<=0; 5'o11: varInPos_ab<=0; 5'o12: varInPos_ab<=4; 5'o13: varInPos_ab<=4; 5'o14: varInPos_ab<=5; 5'o15: varInPos_ab<=5; 
+        5'o20: varInPos_ab<=4; 5'o21: varInPos_ab<=4; 5'o22: varInPos_ab<=1; 5'o23: varInPos_ab<=1; 5'o24: varInPos_ab<=6; 5'o25: varInPos_ab<=6; 
+        5'o30: varInPos_ab<=5; 5'o31: varInPos_ab<=5; 5'o32: varInPos_ab<=6; 5'o33: varInPos_ab<=6; 5'o34: varInPos_ab<=2; 5'o35: varInPos_ab<=2; 
+        default: varInPos_ab<=3'bXXX;
+    endcase
+    case({selectedSet, selectedPermutationInSet})
+        5'o00: varInPos_ac<=1; 5'o01: varInPos_ac<=2; 5'o02: varInPos_ac<=0; 5'o03: varInPos_ac<=2; 5'o04: varInPos_ac<=0; 5'o05: varInPos_ac<=1; 
+        5'o10: varInPos_ac<=4; 5'o11: varInPos_ac<=5; 5'o12: varInPos_ac<=0; 5'o13: varInPos_ac<=5; 5'o14: varInPos_ac<=0; 5'o15: varInPos_ac<=4; 
+        5'o20: varInPos_ac<=1; 5'o21: varInPos_ac<=6; 5'o22: varInPos_ac<=4; 5'o23: varInPos_ac<=6; 5'o24: varInPos_ac<=4; 5'o25: varInPos_ac<=1; 
+        5'o30: varInPos_ac<=6; 5'o31: varInPos_ac<=2; 5'o32: varInPos_ac<=5; 5'o33: varInPos_ac<=2; 5'o34: varInPos_ac<=5; 5'o35: varInPos_ac<=6; 
+        default: varInPos_ac<=3'bXXX;
+    endcase
+    case({selectedSet, selectedPermutationInSet})
+        5'o00: varInPos_ad<=2; 5'o01: varInPos_ad<=1; 5'o02: varInPos_ad<=2; 5'o03: varInPos_ad<=0; 5'o04: varInPos_ad<=1; 5'o05: varInPos_ad<=0; 
+        5'o10: varInPos_ad<=5; 5'o11: varInPos_ad<=4; 5'o12: varInPos_ad<=5; 5'o13: varInPos_ad<=0; 5'o14: varInPos_ad<=4; 5'o15: varInPos_ad<=0; 
+        5'o20: varInPos_ad<=6; 5'o21: varInPos_ad<=1; 5'o22: varInPos_ad<=6; 5'o23: varInPos_ad<=4; 5'o24: varInPos_ad<=1; 5'o25: varInPos_ad<=4; 
+        5'o30: varInPos_ad<=2; 5'o31: varInPos_ad<=6; 5'o32: varInPos_ad<=2; 5'o33: varInPos_ad<=5; 5'o34: varInPos_ad<=6; 5'o35: varInPos_ad<=5; 
+        default: varInPos_ad<=3'bXXX;
+    endcase
+end
+
+wire[7:0] permutedBotParts[15:0];
+
+assign permutedBotParts[4'b0000] = bot[4'b0000];
+assign permutedBotParts[4'b1111] = bot[4'b1111];
+
+assign permutedBotParts[4'b0001] = mux4(varInPos_a, bot[4'b0001], bot[4'b0010], bot[4'b0100], bot[4'b1000]);
+assign permutedBotParts[4'b0010] = mux4(varInPos_b, bot[4'b0001], bot[4'b0010], bot[4'b0100], bot[4'b1000]);
+assign permutedBotParts[4'b0100] = mux4(varInPos_c, bot[4'b0001], bot[4'b0010], bot[4'b0100], bot[4'b1000]);
+assign permutedBotParts[4'b1000] = mux4(varInPos_d, bot[4'b0001], bot[4'b0010], bot[4'b0100], bot[4'b1000]);
+
+assign permutedBotParts[4'b1110] = mux4(varInPos_a, bot[4'b1110], bot[4'b1101], bot[4'b1011], bot[4'b0111]);
+assign permutedBotParts[4'b1101] = mux4(varInPos_b, bot[4'b1110], bot[4'b1101], bot[4'b1011], bot[4'b0111]);
+assign permutedBotParts[4'b1011] = mux4(varInPos_c, bot[4'b1110], bot[4'b1101], bot[4'b1011], bot[4'b0111]);
+assign permutedBotParts[4'b0111] = mux4(varInPos_d, bot[4'b1110], bot[4'b1101], bot[4'b1011], bot[4'b0111]);
+
+assign permutedBotParts[4'b0011] = mux6(varInPos_ab, bot[4'b0011], bot[4'b0101], bot[4'b1001], bot[4'b0110], bot[4'b1010], bot[4'b1100]);
+assign permutedBotParts[4'b0101] = mux6(varInPos_ac, bot[4'b0011], bot[4'b0101], bot[4'b1001], bot[4'b0110], bot[4'b1010], bot[4'b1100]);
+assign permutedBotParts[4'b1001] = mux6(varInPos_ad, bot[4'b0011], bot[4'b0101], bot[4'b1001], bot[4'b0110], bot[4'b1010], bot[4'b1100]);
+assign permutedBotParts[4'b0110] = mux6(varInPos_ad, bot[4'b1100], bot[4'b1010], bot[4'b0110], bot[4'b1001], bot[4'b0101], bot[4'b0011]);
+assign permutedBotParts[4'b1010] = mux6(varInPos_ac, bot[4'b1100], bot[4'b1010], bot[4'b0110], bot[4'b1001], bot[4'b0101], bot[4'b0011]);
+assign permutedBotParts[4'b1100] = mux6(varInPos_ab, bot[4'b1100], bot[4'b1010], bot[4'b0110], bot[4'b1001], bot[4'b0101], bot[4'b0011]);
+
+genvar i;
+generate
+for(i = 0; i < 16; i = i + 1) begin
+    assign bot[i] = storedBot[8*i +: 8];
+    assign permutedBot[8*i +: 8] = permutedBotParts[i];
+end
+endgenerate
+
+
+endmodule
+
+module botPermuter1234(
+    input clk,
+    
+    // Input side
+    input writeDataIn,
+    input[127:0] botIn,
+    input[23:0] validBotPermutesIn,
+    input lastBotOfBatch,
+    output grabDataIn,
+    
+    // Output side
+    input slowDown,
+    output reg permutedBotValid,
+    output[127:0] permutedBot,
+    output reg batchDone
+);
+
+reg[127:0] storedBot;
+reg[23:0] storedValidPermutes;
+reg storedLastBotOfBatch;
+
+always @(posedge clk) begin
+    if(writeDataIn) begin
+        storedBot <= botIn;
+        storedValidPermutes <= validBotPermutesIn;
+        storedLastBotOfBatch <= lastBotOfBatch;
+    end else begin
+        
+    end
+end
+
+endmodule

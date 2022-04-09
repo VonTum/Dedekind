@@ -1,9 +1,9 @@
+#include "commands.h"
 
-#include "codeGen.h"
 
-#include "collectionOperations.h"
-#include "layerStack.h"
-#include "toString.h"
+#include "../dedelib/collectionOperations.h"
+#include "../dedelib/layerStack.h"
+#include "../dedelib/toString.h"
 
 #include <fstream>
 #include <algorithm>
@@ -207,5 +207,81 @@ void genGraphVisCode(int numLayers) {
 		}
 	}
 }
+
+#include <string.h>
+void genPermute1234Luts() {
+	const char* permutations[] {
+		"abcd", "abdc", "acbd", "acdb", "adbc", "adcb",
+        "bacd", "badc", "bcad", "bcda", "bdac", "bdca",
+        "cbad", "cbda", "cabd", "cadb", "cdba", "cdab", 
+        "dbca", "dbac", "dcba", "dcab", "dabc", "dacb"
+	};
+
+	const char* oneVars[] {
+		"a", "b", "c", "d"
+	};
+
+	const char* twoVars[] {
+		"ab", "ac", "ad", "bc", "bd", "cd"
+	};
+
+	// Single positions
+	for(const char* oneVarPosition : oneVars) {
+		std::cout << "case({selectedSet, selectedPermutationInSet})" << std::endl;
+		for(int setI = 0; setI < 4; setI++) {
+			for(int permInSetI = 0; permInSetI < 6; permInSetI++) {
+				const char* selectedPermutation = permutations[setI * 6 + permInSetI];
+
+				int varAtPosition = selectedPermutation[oneVarPosition[0] - 'a'] - 'a';
+
+				std::cout << "5'o" << (char('0' + setI)) << (char('0' + permInSetI)) << ": varInPos_" << oneVarPosition << "<=" << char('0' + varAtPosition) << "; ";
+			}
+			std::cout << "\n";
+		}
+		std::cout << "default: varInPos_" << oneVarPosition << "<=2'bXX;\nendcase" << std::endl;
+	}
+
+	// Double positions
+	for(const char* twoVarPosition : twoVars) {
+		std::cout << "case({selectedSet, selectedPermutationInSet})" << std::endl;
+		for(int setI = 0; setI < 4; setI++) {
+			for(int permInSetI = 0; permInSetI < 6; permInSetI++) {
+				const char* selectedPermutation = permutations[setI * 6 + permInSetI];
+
+				char varsAtPosition[2] {
+					selectedPermutation[twoVarPosition[0] - 'a'],
+					selectedPermutation[twoVarPosition[1] - 'a']
+				};
+				if(varsAtPosition[0] > varsAtPosition[1]) std::swap(varsAtPosition[0], varsAtPosition[1]);
+				
+				int foundAtIndex;
+				for(foundAtIndex = 0; ; foundAtIndex++) {
+					if(strncmp(varsAtPosition, twoVars[foundAtIndex], 2) == 0) break; // Found!
+				}
+
+				if(foundAtIndex >= 3) foundAtIndex++; // 0,1,2, 4,5,6. Skip 3 for more efficient multiplexers
+
+				std::cout << "5'o" << (char('0' + setI)) << (char('0' + permInSetI)) << ": varInPos_" << twoVarPosition << "<=" << char('0' + foundAtIndex) << "; ";
+			}
+			std::cout << "\n";
+		}
+		std::cout << "default: varInPos_" << twoVarPosition << "<=3'bXXX;\nendcase" << std::endl;
+	}
+}
+
+
+CommandSet codeGenCommands {"Code Generation", {
+	{"graphVis1", []() {genGraphVisCode(1); }},
+	{"graphVis2", []() {genGraphVisCode(2); }},
+	{"graphVis3", []() {genGraphVisCode(3); }},
+	{"graphVis4", []() {genGraphVisCode(4); }},
+	{"graphVis5", []() {genGraphVisCode(5); }},
+	{"graphVis6", []() {genGraphVisCode(6); }},
+	{"graphVis7", []() {genGraphVisCode(7); }},
+	{"graphVis8", []() {genGraphVisCode(8); }},
+	{"graphVis9", []() {genGraphVisCode(9); }},
+
+	{"genPermute1234LUTs", genPermute1234Luts}
+}, {}};
 
 

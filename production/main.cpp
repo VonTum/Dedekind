@@ -44,7 +44,7 @@ static CommandSet helpCommands{"Help", {
 	{"help", helpCMD}
 }, {}};
 
-static const CommandSet* knownCommandSets[]{&helpCommands, &miscCommands, &dataGenCommands, &flatCommands, &testSetCommands, &processingCommands};
+static const CommandSet* knownCommandSets[]{&helpCommands, &miscCommands, &dataGenCommands, &flatCommands, &testSetCommands, &processingCommands, &codeGenCommands};
 
 void listCommands() {
 	for(const CommandSet* cmdSet : knownCommandSets) {

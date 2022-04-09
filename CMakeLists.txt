@@ -26,7 +26,6 @@ endif()
 
 add_library(dedelib
   dedelib/aligned_alloc.cpp
-  dedelib/codeGen.cpp
   dedelib/equivalenceClass.cpp
   dedelib/intervalDecomposition.cpp
   dedelib/layerDecomposition.cpp
@@ -51,6 +50,7 @@ add_executable(production
   production/processingCommands.cpp
   production/dataGenerationCommands.cpp
   production/testSetCommands.cpp
+  production/codeGenCommands.cpp
 )
 add_executable(indev
   indev/indev.cpp

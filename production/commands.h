@@ -15,3 +15,4 @@ extern CommandSet flatCommands;
 extern CommandSet dataGenCommands;
 extern CommandSet testSetCommands;
 extern CommandSet processingCommands;
+extern CommandSet codeGenCommands;
