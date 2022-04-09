@@ -5,7 +5,6 @@
 module MEMORY_MLAB #(
     parameter WIDTH = 20,
     parameter DEPTH_LOG2 = 5,
-    parameter READ_DURING_WRITE = "DONT_CARE", // Options are "DONT_CARE", "OLD_DATA" and "NEW_DATA",
     parameter OUTPUT_REGISTER = 0
 ) (
     input clk,
@@ -70,8 +69,8 @@ defparam
     altera_syncram_component.intended_device_family  = "Stratix 10",
     altera_syncram_component.lpm_type  = "altera_syncram",
     altera_syncram_component.operation_mode  = "DUAL_PORT",
-    altera_syncram_component.power_up_uninitialized  = "FALSE",
-    altera_syncram_component.read_during_write_mode_mixed_ports  = READ_DURING_WRITE,
+    altera_syncram_component.power_up_uninitialized  = "TRUE",
+    altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
     altera_syncram_component.width_byteena_a  = 1,
     altera_syncram_component.enable_force_to_zero  = "FALSE",
     altera_syncram_component.enable_ecc  = "FALSE";
@@ -94,7 +93,7 @@ always @(posedge clk) begin
 end
 
 reg[DEPTH_LOG2-1:0] readAddrReg; always @(posedge clk) readAddrReg <= readAddr;
-wire[WIDTH-1:0] dataFromMem = (writeEnableReg && READ_DURING_WRITE == "DONT_CARE" && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
+wire[WIDTH-1:0] dataFromMem = (writeEnableReg && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
 
 generate
 if(OUTPUT_REGISTER) begin
@@ -112,8 +111,7 @@ endmodule
 
 module MEMORY_M20K #(
     parameter WIDTH = 20,
-    parameter DEPTH_LOG2 = 9,
-    parameter READ_DURING_WRITE = "DONT_CARE" // Options are "DONT_CARE", "OLD_DATA" and "NEW_DATA"
+    parameter DEPTH_LOG2 = 9
 ) (
     input clk,
     
@@ -132,7 +130,7 @@ module MEMORY_M20K #(
 `ifdef USE_M20K_IP
 
 wire[1:0] eccStatusWire;
-assign eccStatus = |eccStatusWire;
+assign eccStatus = eccStatusWire[1]; // Any error occurred, even one that could be fixed
 
 altera_syncram  altera_syncram_component (
     .clock0 (clk),
@@ -182,8 +180,8 @@ defparam
     altera_syncram_component.intended_device_family  = "Stratix 10",
     altera_syncram_component.lpm_type  = "altera_syncram",
     altera_syncram_component.operation_mode  = "DUAL_PORT",
-    altera_syncram_component.power_up_uninitialized  = "FALSE",
-    altera_syncram_component.read_during_write_mode_mixed_ports  = READ_DURING_WRITE,
+    altera_syncram_component.power_up_uninitialized  = "TRUE",
+    altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
     altera_syncram_component.width_byteena_a  = 1,
     altera_syncram_component.enable_force_to_zero  = "TRUE",
     altera_syncram_component.enable_ecc  = "TRUE",
@@ -215,7 +213,7 @@ always @(posedge clk) begin
     writeEnableReg <= writeEnable;
 end
 
-wire[WIDTH-1:0] dataFromMem = !readEnableReg ? 0 : (writeEnableReg && READ_DURING_WRITE == "DONT_CARE" && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
+wire[WIDTH-1:0] dataFromMem = !readEnableReg ? 0 : (writeEnableReg && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
 reg[WIDTH-1:0] dataFromMemD; always @(posedge clk) dataFromMemD <= dataFromMem;
 reg[WIDTH-1:0] dataFromMemDD; always @(posedge clk) dataFromMemDD <= dataFromMemD;
 
@@ -297,7 +295,7 @@ defparam
     altera_syncram_component.intended_device_family  = "Stratix 10",
     altera_syncram_component.lpm_type  = "altera_syncram",
     altera_syncram_component.operation_mode  = "DUAL_PORT",
-    altera_syncram_component.power_up_uninitialized  = "FALSE",
+    altera_syncram_component.power_up_uninitialized  = "TRUE",
     altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
     altera_syncram_component.width_byteena_a  = 1,
     altera_syncram_component.enable_force_to_zero  = "FALSE",
@@ -359,7 +357,7 @@ module DUAL_CLOCK_MEMORY_M20K #(
 `ifdef USE_M20K_IP
 
 wire[1:0] eccStatusWire;
-assign eccStatus = |eccStatusWire;
+assign eccStatus = eccStatusWire[1]; // Any error occurred, even one that could be fixed
 
 altera_syncram  altera_syncram_component (
     .clock0 (wrclk),
@@ -409,7 +407,7 @@ defparam
     altera_syncram_component.intended_device_family  = "Stratix 10",
     altera_syncram_component.lpm_type  = "altera_syncram",
     altera_syncram_component.operation_mode  = "DUAL_PORT",
-    altera_syncram_component.power_up_uninitialized  = "FALSE",
+    altera_syncram_component.power_up_uninitialized  = "TRUE",
     altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
     altera_syncram_component.width_byteena_a  = 1,
     altera_syncram_component.enable_force_to_zero  = "TRUE",
@@ -530,6 +528,123 @@ always @(posedge wrclk) begin
 end
 
 assign dataOut = memory[readAddr];
+
+`endif
+
+endmodule
+
+
+
+
+
+// Output result is given after 2 readClockEnables
+// Only dual clock version is provided. Compiler forgets addrstall clock enable when trying for single-clock
+module LOW_LATENCY_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9) (
+    // Write Side
+    input wrclk,
+    input writeEnable,
+    input[DEPTH_LOG2-1:0] writeAddr,
+    input[WIDTH-1:0] dataIn,
+    
+    // Read Side
+    input rdclk,
+    input readClockEnable,
+    input[DEPTH_LOG2-1:0] readAddr,
+    output eccStatus,
+    output[WIDTH-1:0] dataOut
+);
+
+`ifdef USE_M20K_IP
+
+wire[1:0] eccWire;
+assign eccStatus = eccWire[1]; // Any error occurred, even one that could be fixed
+
+altera_syncram  altera_syncram_component (
+    .clock0 (wrclk),
+    .clock1 (rdclk),
+    .address_a (writeAddr),
+    .address_b (readAddr),
+    .addressstall_b (!readClockEnable),
+    .clocken1 (readClockEnable),
+    .data_a (dataIn),
+    .wren_a (writeEnable),
+    .eccstatus (eccWire),
+    .q_b (dataOut),
+    .aclr0 (1'b0),
+    .aclr1 (1'b0),
+    .address2_a (1'b1),
+    .address2_b (1'b1),
+    .addressstall_a (1'b0),
+    .byteena_a (1'b1),
+    .byteena_b (1'b1),
+    .clocken0 (1'b1),
+    .clocken2 (1'b1),
+    .clocken3 (1'b1),
+    .data_b ({32{1'b1}}),
+    .eccencbypass (1'b0),
+    .eccencparity (8'b0),
+    .q_a (),
+    .rden_a (1'b1),
+    .rden_b (1'b1),
+    .sclr (1'b0),
+    .wren_b (1'b0));
+defparam
+    altera_syncram_component.address_aclr_b  = "NONE",
+    altera_syncram_component.address_reg_b  = "CLOCK1",
+    altera_syncram_component.clock_enable_input_a  = "BYPASS",
+    altera_syncram_component.clock_enable_input_b  = "BYPASS",
+    altera_syncram_component.clock_enable_output_b  = "NORMAL",
+    altera_syncram_component.intended_device_family  = "Stratix 10",
+    altera_syncram_component.lpm_type  = "altera_syncram",
+    altera_syncram_component.operation_mode  = "DUAL_PORT",
+    altera_syncram_component.outdata_aclr_b  = "NONE",
+    altera_syncram_component.outdata_sclr_b  = "NONE",
+    altera_syncram_component.outdata_reg_b  = "CLOCK1",
+    altera_syncram_component.power_up_uninitialized  = "TRUE",
+    altera_syncram_component.ram_block_type  = "M20K",
+    altera_syncram_component.width_a  = WIDTH,
+    altera_syncram_component.width_b  = WIDTH,
+    altera_syncram_component.widthad_a  = DEPTH_LOG2,
+    altera_syncram_component.widthad_b  = DEPTH_LOG2,
+    altera_syncram_component.numwords_a  = (1 << DEPTH_LOG2),
+    altera_syncram_component.numwords_b  = (1 << DEPTH_LOG2),
+    altera_syncram_component.width_byteena_a  = 1,
+    altera_syncram_component.enable_ecc  = "TRUE",
+    altera_syncram_component.ecc_pipeline_stage_enabled  = "FALSE",
+    altera_syncram_component.enable_ecc_encoder_bypass  = "FALSE",
+    altera_syncram_component.width_eccstatus  = 2;
+
+`else
+
+reg[WIDTH-1:0] memory[(1 << DEPTH_LOG2) - 1:0];
+
+reg[DEPTH_LOG2-1:0] writeAddrReg;
+reg[WIDTH-1:0] writeDataReg;
+reg writeEnableReg;
+
+
+always @(posedge wrclk) begin
+    if(writeEnableReg) begin
+        memory[writeAddrReg] <= writeDataReg;
+    end
+    
+    writeAddrReg <= writeAddr;
+    writeDataReg <= dataIn;
+    writeEnableReg <= writeEnable;
+end
+
+reg[DEPTH_LOG2-1:0] readAddrReg;
+reg[WIDTH-1:0] dataFromMemD; 
+always @(posedge rdclk) begin
+    if(readClockEnable) begin
+        readAddrReg <= readAddr;
+        dataFromMemD <= memory[readAddrReg];
+    end
+end
+
+assign dataOut = dataFromMemD;
+
+assign eccStatus = 1'b0;
 
 `endif
 

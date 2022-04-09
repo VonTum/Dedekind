@@ -21,9 +21,9 @@ module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     output slowDownInput,
     
     // Output side
-    output resultValid,
+    output reg resultValid,
     output[5:0] connectCount,
-    output[EXTRA_DATA_WIDTH-1:0] extraDataOut,
+    output reg[EXTRA_DATA_WIDTH-1:0] extraDataOut,
     output reg eccStatus
 );
 
@@ -33,7 +33,8 @@ wire collectorECC; reg collectorECC_D; always @(posedge clk) collectorECC_D <= c
 wire isBotValidECC; reg isBotValidECC_D; always @(posedge clk) isBotValidECC_D <= isBotValidECC;
 wire pipelineECC;
 
-always @(posedge clk) eccStatus <= collectorECC_D || isBotValidECC_D || pipelineECC;
+reg resultValid_D; always @(posedge clk) resultValid_D <= resultValid;
+always @(posedge clk) eccStatus <= (collectorECC_D && resultValid_D) || isBotValidECC_D || pipelineECC; // Collector ECC only matters if bot data should have actually been read. This also handles bad ECC from uninitialized memory
 
 reg[`ADDR_WIDTH-1:0] curBotIndex = 0;
 always @(posedge clk) curBotIndex <= curBotIndex + 1;
@@ -119,18 +120,21 @@ DUAL_CLOCK_MEMORY_M20K #(.WIDTH(6), .DEPTH_LOG2(`ADDR_WIDTH)) collectorMemory (
     .eccStatus(collectorECC)
 );
 
-MEMORY_M20K #(.WIDTH(1+EXTRA_DATA_WIDTH), .DEPTH_LOG2(`ADDR_WIDTH), .READ_DURING_WRITE("OLD_DATA")) isValidMemory (
+reg[`ADDR_WIDTH-1:0] curBotIndex_D; always @(posedge clk) curBotIndex_D <= curBotIndex;
+wire resultValid_Pre; always @(posedge clk) resultValid <= resultValid_Pre;
+wire[EXTRA_DATA_WIDTH-1:0] extraDataOut_Pre; always @(posedge clk) extraDataOut <= extraDataOut_Pre;
+MEMORY_M20K #(.WIDTH(1+EXTRA_DATA_WIDTH), .DEPTH_LOG2(`ADDR_WIDTH)) isValidMemory (
     .clk(clk),
     
     // Write Side
     .writeEnable(1'b1),
-    .writeAddr(curBotIndex),
+    .writeAddr(curBotIndex_D),
     .dataIn({isBotValid, extraDataIn}),
     
     // Read Side
     .readEnable(1'b1),
     .readAddr(curBotIndex),
-    .dataOut({resultValid, extraDataOut}),
+    .dataOut({resultValid_Pre, extraDataOut_Pre}),
     .eccStatus(isBotValidECC)
 );
 
