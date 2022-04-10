@@ -539,7 +539,7 @@ endmodule
 
 // Output result is given after 2 readClockEnables
 // Only dual clock version is provided. Compiler forgets addrstall clock enable when trying for single-clock
-module LOW_LATENCY_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9) (
+module LOW_LATENCY_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9, parameter USE_SCLEAR = 1) (
     // Write Side
     input wrclk,
     input writeEnable,
@@ -550,8 +550,11 @@ module LOW_LATENCY_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9) (
     input rdclk,
     input readClockEnable,
     input[DEPTH_LOG2-1:0] readAddr,
+    output[WIDTH-1:0] dataOut,
     output eccStatus,
-    output[WIDTH-1:0] dataOut
+    
+    // Optional read output reg sclear
+    input rstOutReg
 );
 
 `ifdef USE_M20K_IP
@@ -570,6 +573,7 @@ altera_syncram  altera_syncram_component (
     .wren_a (writeEnable),
     .eccstatus (eccWire),
     .q_b (dataOut),
+    .sclr (USE_SCLEAR ? rstOutReg : 1'b0),
     .aclr0 (1'b0),
     .aclr1 (1'b0),
     .address2_a (1'b1),
@@ -586,7 +590,6 @@ altera_syncram  altera_syncram_component (
     .q_a (),
     .rden_a (1'b1),
     .rden_b (1'b1),
-    .sclr (1'b0),
     .wren_b (1'b0));
 defparam
     altera_syncram_component.address_aclr_b  = "NONE",
@@ -598,7 +601,7 @@ defparam
     altera_syncram_component.lpm_type  = "altera_syncram",
     altera_syncram_component.operation_mode  = "DUAL_PORT",
     altera_syncram_component.outdata_aclr_b  = "NONE",
-    altera_syncram_component.outdata_sclr_b  = "NONE",
+    altera_syncram_component.outdata_sclr_b  = USE_SCLEAR ? "SCLEAR" : "NONE",
     altera_syncram_component.outdata_reg_b  = "CLOCK1",
     altera_syncram_component.power_up_uninitialized  = "TRUE",
     altera_syncram_component.ram_block_type  = "M20K",
@@ -634,11 +637,11 @@ always @(posedge wrclk) begin
 end
 
 reg[DEPTH_LOG2-1:0] readAddrReg;
-reg[WIDTH-1:0] dataFromMemD; 
+reg[WIDTH-1:0] dataFromMemD = 0; 
 always @(posedge rdclk) begin
     if(readClockEnable) begin
         readAddrReg <= readAddr;
-        dataFromMemD <= memory[readAddrReg];
+        dataFromMemD <= (USE_SCLEAR && rstOutReg) ? {WIDTH{1'b0}} : memory[readAddrReg];
     end
 end
 

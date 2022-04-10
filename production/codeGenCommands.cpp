@@ -259,8 +259,6 @@ void genPermute1234Luts() {
 					if(strncmp(varsAtPosition, twoVars[foundAtIndex], 2) == 0) break; // Found!
 				}
 
-				if(foundAtIndex >= 3) foundAtIndex++; // 0,1,2, 4,5,6. Skip 3 for more efficient multiplexers
-
 				std::cout << "5'o" << (char('0' + setI)) << (char('0' + permInSetI)) << ": varInPos_" << twoVarPosition << "<=" << char('0' + foundAtIndex) << "; ";
 			}
 			std::cout << "\n";
