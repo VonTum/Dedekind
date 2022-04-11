@@ -2,7 +2,91 @@
 
 `include "pipelineGlobals_header.v"
 
-module aggregatingPermutePipeline (
+module aggregatingPipelineWithOutputFIFO #(parameter PCOEFF_COUNT_BITWIDTH = `PCOEFF_COUNT_BITWIDTH) (
+    input clk,
+    input clk2x,
+    input rst,
+    input[1:0] topChannel,
+    output[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
+    
+    // Input side
+    input isBotValid,
+    input[127:0] bot,
+    input lastBotOfBatch,
+    output reg slowDownInput,
+    
+    // Output side
+    input grabResults,
+    output resultsAvailable,
+    output[PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
+    output[PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
+    
+    output wor eccStatus
+);
+
+(* dont_merge *) reg computePipeRST; always @(posedge clk) computePipeRST <= rst;
+(* dont_merge *) reg resultsFIFORST; always @(posedge clk) resultsFIFORST <= rst;
+
+// Extra fitting registers
+(* dont_merge *) reg[1:0] topChannelD; always @(posedge clk) topChannelD <= topChannel;
+(* dont_merge *) reg[1:0] topChannelDD; always @(posedge clk) topChannelDD <= topChannelD;
+
+wire aggregateFinished;
+wire[PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSumFromPipeline;
+wire[PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCountFromPipeline;
+wire aggregatingPipelineSlowDownInput;
+aggregatingPipeline #(PCOEFF_COUNT_BITWIDTH) computePipe (
+    .clk(clk),
+    .clk2x(clk2x),
+    .rst(computePipeRST),
+    .topChannel(topChannelDD),
+    .activityMeasure(activityMeasure),
+    
+    .isBotValid(isBotValid),
+    .bot(bot),
+    .lastBotOfBatch(lastBotOfBatch),
+    .slowDownInput(aggregatingPipelineSlowDownInput),
+    
+    .resultsValid(aggregateFinished),
+    .pcoeffSum(pcoeffSumFromPipeline),
+    .pcoeffCount(pcoeffCountFromPipeline),
+    
+    .eccStatus(eccStatus)
+);
+
+reg outputFIFORequestsSlowdown;
+
+// Some registers for extra slack on this connection
+wire outputFIFOAlmostFull;
+always @(posedge clk) outputFIFORequestsSlowdown <= outputFIFOAlmostFull;
+always @(posedge clk) slowDownInput <= aggregatingPipelineSlowDownInput || outputFIFORequestsSlowdown;
+
+// Some registers for extra slack on this connection
+reg aggregateFinishedD; always @(posedge clk) aggregateFinishedD <= aggregateFinished;
+reg[PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSumFromPipelineD; always @(posedge clk) pcoeffSumFromPipelineD <= pcoeffSumFromPipeline;
+reg[PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCountFromPipelineD; always @(posedge clk) pcoeffCountFromPipelineD <= pcoeffCountFromPipeline;
+
+wire resultsFIFOEmpty;
+assign resultsAvailable = !resultsFIFOEmpty;
+FIFO_M20K #(.WIDTH(PCOEFF_COUNT_BITWIDTH+35 + PCOEFF_COUNT_BITWIDTH), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(300 /*TODO See if this is enough?*/)) resultsFIFO (
+    .clk(clk),
+    .rst(resultsFIFORST),
+    
+    // input side
+    .writeEnable(aggregateFinishedD),
+    .dataIn({pcoeffSumFromPipelineD, pcoeffCountFromPipelineD}),
+    .almostFull(outputFIFOAlmostFull),
+    
+    // output side
+    .readEnable(grabResults),
+    .dataOut({pcoeffSum, pcoeffCount}),
+    .empty(resultsFIFOEmpty),
+    .eccStatus(eccStatus)
+);
+
+endmodule
+
+module aggregatingPermutePipeline #(parameter PCOEFF_COUNT_BITWIDTH = `PCOEFF_COUNT_BITWIDTH) (
     input clk,
     input clk2x,
     input rst,
@@ -18,21 +102,13 @@ module aggregatingPermutePipeline (
     // Output side
     input grabResults,
     output resultsAvailable,
-    output[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
-    output[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
+    output[PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
+    output[PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
     
-    output wor eccStatus
+    output eccStatus
 );
 
-(* dont_merge *) reg computePipeRST; always @(posedge clk) computePipeRST <= rst;
-(* dont_merge *) reg resultsFIFORST; always @(posedge clk) resultsFIFORST <= rst;
-
-// Extra fitting registers
-(* dont_merge *) reg[1:0] topChannelD; always @(posedge clk) topChannelD <= topChannel;
-(* dont_merge *) reg[1:0] topChannelDD; always @(posedge clk) topChannelDD <= topChannelD;
-
-reg outputFIFORequestsSlowdown;
-wire aggregatingPipelineSlowDownInput;
+wire requestSlowDown;
 
 wire permutedBotValid;
 wire[127:0] permutedBot;
@@ -52,7 +128,7 @@ botPermuterWithMultiFIFO multiFIFOPermuter (
     .permutedBot(permutedBot),
     .permutedBotValid(permutedBotValid),
     .batchFinished(batchFinished),
-    .requestSlowDown(aggregatingPipelineSlowDownInput || outputFIFORequestsSlowdown)
+    .requestSlowDown(requestSlowDown)
 );
 
 
@@ -60,53 +136,26 @@ reg[31:0] batchesDoneCount = 0; always @(posedge clk2x) if(rst) batchesDoneCount
 reg[31:0] batchesFinishedCount = 0; always @(posedge clk) if(rst) batchesFinishedCount <= 0; else if(batchFinished) batchesFinishedCount <= batchesFinishedCount + 1;
 
 
-wire aggregateFinished;
-wire[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSumFromPipeline;
-wire[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCountFromPipeline;
-aggregatingPipeline computePipe (
-    .clk(clk),
-    .clk2x(clk2x),
-    .rst(computePipeRST),
-    .topChannel(topChannelDD),
-    .activityMeasure(activityMeasure),
+aggregatingPipelineWithOutputFIFO #(PCOEFF_COUNT_BITWIDTH) aggregatingPipelineWithFIFO(
+    clk,
+    clk2x,
+    rst,
+    topChannel,
+    activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
     
-    .isBotValid(permutedBotValid),
-    .bot(permutedBot),
-    .lastBotOfBatch(batchFinished),
-    .slowDownInput(aggregatingPipelineSlowDownInput),
+    // Input side
+    permutedBotValid,
+    permutedBot,
+    batchFinished,
+    requestSlowDown,
     
-    .resultsValid(aggregateFinished),
-    .pcoeffSum(pcoeffSumFromPipeline),
-    .pcoeffCount(pcoeffCountFromPipeline),
+    // Output side
+    grabResults,
+    resultsAvailable,
+    pcoeffSum,
+    pcoeffCount,
     
-    .eccStatus(eccStatus)
-);
-
-// Some registers for extra slack on this connection
-wire outputFIFOSlmostFull;
-always @(posedge clk) outputFIFORequestsSlowdown <= outputFIFOSlmostFull;
-
-// Some registers for extra slack on this connection
-reg aggregateFinishedD; always @(posedge clk) aggregateFinishedD <= aggregateFinished;
-reg[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSumFromPipelineD; always @(posedge clk) pcoeffSumFromPipelineD <= pcoeffSumFromPipeline;
-reg[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCountFromPipelineD; always @(posedge clk) pcoeffCountFromPipelineD <= pcoeffCountFromPipeline;
-
-wire resultsFIFOEmpty;
-assign resultsAvailable = !resultsFIFOEmpty;
-FIFO_M20K #(.WIDTH(`PCOEFF_COUNT_BITWIDTH+35 + `PCOEFF_COUNT_BITWIDTH), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(300 /*TODO See if this is enough?*/)) resultsFIFO (
-    .clk(clk),
-    .rst(resultsFIFORST),
-    
-    // input side
-    .writeEnable(aggregateFinishedD),
-    .dataIn({pcoeffSumFromPipelineD, pcoeffCountFromPipelineD}),
-    .almostFull(outputFIFOSlmostFull),
-    
-    // output side
-    .readEnable(grabResults),
-    .dataOut({pcoeffSum, pcoeffCount}),
-    .empty(resultsFIFOEmpty),
-    .eccStatus(eccStatus)
+    eccStatus
 );
 
 endmodule

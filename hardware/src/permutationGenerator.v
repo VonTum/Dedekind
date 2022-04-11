@@ -151,14 +151,15 @@ wire[2:0] permut6Divider[`NUMBER_OF_PERMUTATORS-1:0];
 
 generate
 assign permut6Divider[0] = permut6;
-/*if(`NUMBER_OF_PERMUTATORS >= 2) assign permut6Divider[1] = permut6 < 3 ? permut6 + 3 : permut6 - 3; // (permut6 + 3) % 6
-if(`NUMBER_OF_PERMUTATORS >= 3) assign permut6Divider[2] = permut6 < 5 ? permut6 + 1 : 0; // (permut6 + 1) % 6
-if(`NUMBER_OF_PERMUTATORS >= 4) assign permut6Divider[3] = permut6 < 2 ? permut6 + 4 : permut6 - 2; // (permut6 + 4) % 6
-if(`NUMBER_OF_PERMUTATORS >= 5) assign permut6Divider[4] = permut6 < 1 ? 5 : permut6 - 1; // (permut6 + 5) % 6
-if(`NUMBER_OF_PERMUTATORS >= 6) assign permut6Divider[5] = permut6 < 4 ? permut6 + 2 : permut6 - 4; // (permut6 + 2) % 6*/
 if(`NUMBER_OF_PERMUTATORS == 3) begin
     assign permut6Divider[1] = permut6 < 2 ? permut6 + 4 : permut6 - 2; // (permut6 + 4) % 6
     assign permut6Divider[2] = permut6 < 4 ? permut6 + 2 : permut6 - 4; // (permut6 + 2) % 6
+end else begin
+    if(`NUMBER_OF_PERMUTATORS >= 2) assign permut6Divider[1] = permut6 < 3 ? permut6 + 3 : permut6 - 3; // (permut6 + 3) % 6
+    if(`NUMBER_OF_PERMUTATORS >= 3) assign permut6Divider[2] = permut6 < 5 ? permut6 + 1 : 0; // (permut6 + 1) % 6
+    if(`NUMBER_OF_PERMUTATORS >= 4) assign permut6Divider[3] = permut6 < 2 ? permut6 + 4 : permut6 - 2; // (permut6 + 4) % 6
+    if(`NUMBER_OF_PERMUTATORS >= 5) assign permut6Divider[4] = permut6 < 1 ? 5 : permut6 - 1; // (permut6 + 5) % 6
+    if(`NUMBER_OF_PERMUTATORS >= 6) assign permut6Divider[5] = permut6 < 4 ? permut6 + 2 : permut6 - 4; // (permut6 + 2) % 6
 end
 endgenerate
 

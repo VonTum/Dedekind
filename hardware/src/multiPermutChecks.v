@@ -320,12 +320,12 @@ assign threeVarBots[2] = botParts[4'b1011];assign threeVarBots[3] = botParts[4'b
 generate
 for(genvar i = 0; i < 4; i=i+1) begin
     for(genvar j = 0; j < 4; j=j+1) begin
-        assign oneThreeVarOverlaps[i * 4 + j] = &({oneVarTops[i], threeVarTops[i]} | ~{oneVarBots[j], threeVarBots[j]});
+        assign oneThreeVarOverlaps[i * 4 + j] = &((oneVarTops[i] | ~oneVarBots[j]) & (threeVarTops[i] | ~threeVarBots[j]));
     end
 end
 for(genvar i = 0; i < 3; i=i+1) begin
     for(genvar j = 0; j < 6; j=j+1) begin
-        assign twoTwoVarOverlaps[i * 6 + j] = &({twoVarTops[i], twoVarTops[i+3]} | ~{twoVarBots[j], twoVarBots[(j+3) % 6]}); // joins ab witb cd, ad with bc etc. 
+        assign twoTwoVarOverlaps[i * 6 + j] = &((twoVarTops[i] | ~twoVarBots[j]) & (twoVarTops[i+3] | ~twoVarBots[(j+3) % 6])); // joins ab witb cd, ad with bc etc. 
     end
 end
 endgenerate

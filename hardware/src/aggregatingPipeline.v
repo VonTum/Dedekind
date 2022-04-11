@@ -1,9 +1,8 @@
 `timescale 1ns / 1ps
 
 `include "leafElimination_header.v"
-`include "pipelineGlobals_header.v"
 
-module aggregatingPipeline (
+module aggregatingPipeline #(parameter PCOEFF_COUNT_BITWIDTH = 0) (
     input clk,
     input clk2x,
     input rst,
@@ -16,8 +15,8 @@ module aggregatingPipeline (
     output slowDownInput,
     
     output resultsValid,
-    output reg[`PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
-    output reg[`PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
+    output reg[PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
+    output reg[PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
     
     output eccStatus
 );

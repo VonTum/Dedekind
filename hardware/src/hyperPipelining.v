@@ -118,8 +118,7 @@ end else begin : M20K_MEMORY
     
     MEMORY_M20K #(
         .WIDTH(WIDTH),
-        .DEPTH_LOG2(BITWIDTH),
-        .READ_DURING_WRITE("DONT_CARE")
+        .DEPTH_LOG2(BITWIDTH)
     ) mem (
         .clk(clk),
         
