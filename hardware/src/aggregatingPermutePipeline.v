@@ -2,7 +2,7 @@
 
 `include "pipelineGlobals_header.v"
 
-module aggregatingPipelineWithOutputFIFO #(parameter PCOEFF_COUNT_BITWIDTH = `PCOEFF_COUNT_BITWIDTH) (
+module aggregatingPipelineWithOutputFIFO #(parameter PCOEFF_COUNT_BITWIDTH = 10) (
     input clk,
     input clk2x,
     input rst,
@@ -86,7 +86,7 @@ FIFO_M20K #(.WIDTH(PCOEFF_COUNT_BITWIDTH+35 + PCOEFF_COUNT_BITWIDTH), .DEPTH_LOG
 
 endmodule
 
-module aggregatingPermutePipeline #(parameter PCOEFF_COUNT_BITWIDTH = `PCOEFF_COUNT_BITWIDTH) (
+module aggregatingPermutePipeline #(parameter PCOEFF_COUNT_BITWIDTH = 10) (
     input clk,
     input clk2x,
     input rst,
@@ -159,3 +159,76 @@ aggregatingPipelineWithOutputFIFO #(PCOEFF_COUNT_BITWIDTH) aggregatingPipelineWi
 );
 
 endmodule
+
+
+
+module aggregatingPermutePipeline24 #(parameter PCOEFF_COUNT_BITWIDTH = 10) (
+    input clk,
+    input clk2x,
+    input rst,
+    input[1:0] topChannel,
+    output[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
+    
+    // Input side
+    input[127:0] botIn,
+    input[23:0] validBotPermutes,
+    input batchDone,
+    output slowDown,
+    
+    // Output side
+    input grabResults,
+    output resultsAvailable,
+    output[PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
+    output[PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
+    
+    output wor eccStatus
+);
+
+wire requestSlowDown;
+
+wire permutedBotValid;
+wire[127:0] permutedBot;
+wire batchFinished;
+botPermuter1234 botPermuter1234 (
+    .clk(clk),
+    .rst(rst),
+    
+    // Input side
+    .writeDataIn(|validBotPermutes || batchDone),
+    .botIn(botIn),
+    .validBotPermutesIn(validBotPermutes),
+    .lastBotOfBatchIn(batchDone),
+    .almostFull(slowDown),
+    
+    // Output side
+    .permutedBot(permutedBot),
+    .permutedBotValid(permutedBotValid),
+    .batchDone(batchFinished),
+    .slowDown(requestSlowDown),
+    .eccStatus(eccStatus)
+);
+
+aggregatingPipelineWithOutputFIFO #(PCOEFF_COUNT_BITWIDTH) aggregatingPipelineWithFIFO(
+    clk,
+    clk2x,
+    rst,
+    topChannel,
+    activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
+    
+    // Input side
+    permutedBotValid,
+    permutedBot,
+    batchFinished,
+    requestSlowDown,
+    
+    // Output side
+    grabResults,
+    resultsAvailable,
+    pcoeffSum,
+    pcoeffCount,
+    
+    eccStatus
+);
+
+endmodule
+

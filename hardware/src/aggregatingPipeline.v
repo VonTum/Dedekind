@@ -33,14 +33,16 @@ topReceiver receiver(
     top
 );
 
-wire[127:0] graph = top & ~bot;
-
-wire[127:0] leafEliminatedGraph;
-leafElimination #(.DIRECTION(`DOWN)) le(graph, leafEliminatedGraph);
-
-reg[127:0] leafEliminatedGraphD; always @(posedge clk) leafEliminatedGraphD <= leafEliminatedGraph;
+reg[127:0] graphD; always @(posedge clk) graphD <= top & ~bot;
 reg isBotValidD; always @(posedge clk) isBotValidD <= isBotValid;
 reg lastBotOfBatchD; always @(posedge clk) lastBotOfBatchD <= lastBotOfBatch;
+
+wire[127:0] leafEliminatedGraphD;
+leafElimination #(.DIRECTION(`DOWN)) le(graphD, leafEliminatedGraphD);
+
+reg[127:0] leafEliminatedGraphDD; always @(posedge clk) leafEliminatedGraphDD <= leafEliminatedGraphD;
+reg isBotValidDD; always @(posedge clk) isBotValidDD <= isBotValidD;
+reg lastBotOfBatchDD; always @(posedge clk) lastBotOfBatchDD <= lastBotOfBatchD;
 
 streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1)) core (
     .clk(clk),
@@ -50,9 +52,9 @@ streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1)) core (
     .activityMeasure(activityMeasure),
     
     // Input side
-    .isBotValid(isBotValidD),
-    .graphIn(leafEliminatedGraphD),
-    .extraDataIn(lastBotOfBatchD),
+    .isBotValid(isBotValidDD),
+    .graphIn(leafEliminatedGraphDD),
+    .extraDataIn(lastBotOfBatchDD),
     .slowDownInput(slowDownInput),
     
     // Output side

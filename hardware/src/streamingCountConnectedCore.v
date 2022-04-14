@@ -5,7 +5,7 @@
 
 `define INPUT_FIFO_DEPTH_LOG2 5
 
-`define INPUT_FIFO_MARGIN 12
+`define INPUT_FIFO_MARGIN 13
 
 module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     input clk,

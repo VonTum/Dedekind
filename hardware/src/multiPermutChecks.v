@@ -45,6 +45,25 @@ assign results = {abc, acb, bac, bca, cab, cba};
 
 endmodule
 
+module permutCheckProduceResults6Pipelined (
+    input clk,
+    input sharedAll,
+    input[8:0] oneTwoVars, // indexed [3*position+flavor], so aCb becomes 3*0+2=5
+    output reg[5:0] results // {abc, acb, bac, bca, cab, cba}
+);
+
+`define COMPUTE_WIRE(v1, v2, v3) &{sharedAll, oneTwoVars[3*0+v1], oneTwoVars[3*1+v2], oneTwoVars[3*2+v3]}
+wire abc = `COMPUTE_WIRE(0,1,2);
+wire acb = `COMPUTE_WIRE(0,2,1);
+wire bac = `COMPUTE_WIRE(1,0,2);
+wire bca = `COMPUTE_WIRE(1,2,0);
+wire cab = `COMPUTE_WIRE(2,0,1);
+wire cba = `COMPUTE_WIRE(2,1,0);
+
+always @(posedge clk) results <= {abc, acb, bac, bca, cab, cba};
+
+endmodule
+
 module permutCheckProduceResults24(
     input sharedAll,
     input[15:0] oneThreeVars24, // intermediaries
@@ -121,22 +140,22 @@ permutCvAllIntermediaries24To6 cvt(sharedAll, oneThreeVars24, twoTwoVars24,
 reg aSharedD; always @(posedge clk) aSharedD <= aShared;
 reg[8:0] aOneTwo6D; always @(posedge clk) aOneTwo6D <= aOneTwo6;
 wire[5:0] aResult;
-permutCheckProduceResults6 aResultProd(aSharedD, aOneTwo6D, aResult);
+permutCheckProduceResults6Pipelined aResultProd(clk, aSharedD, aOneTwo6D, aResult);
 
 reg bSharedD; always @(posedge clk) bSharedD <= bShared;
 reg[8:0] bOneTwo6D; always @(posedge clk) bOneTwo6D <= bOneTwo6;
 wire[5:0] bResult;
-permutCheckProduceResults6 bResultProd(bSharedD, bOneTwo6D, bResult);
+permutCheckProduceResults6Pipelined bResultProd(clk, bSharedD, bOneTwo6D, bResult);
 
 reg cSharedD; always @(posedge clk) cSharedD <= cShared;
 reg[8:0] cOneTwo6D; always @(posedge clk) cOneTwo6D <= cOneTwo6;
 wire[5:0] cResult;
-permutCheckProduceResults6 cResultProd(cSharedD, cOneTwo6D, cResult);
+permutCheckProduceResults6Pipelined cResultProd(clk, cSharedD, cOneTwo6D, cResult);
 
 reg dSharedD; always @(posedge clk) dSharedD <= dShared;
 reg[8:0] dOneTwo6D; always @(posedge clk) dOneTwo6D <= dOneTwo6;
 wire[5:0] dResult;
-permutCheckProduceResults6 dResultProd(dSharedD, dOneTwo6D, dResult);
+permutCheckProduceResults6Pipelined dResultProd(clk, dSharedD, dOneTwo6D, dResult);
 
 assign results = {aResult, bResult, cResult, dResult};
 
@@ -334,6 +353,75 @@ endmodule
 
 
 
+module permuteProduceIntermediaries24Pipelined (
+    input clk,
+    input[127:0] top,
+    input[127:0] bot,
+    input botValid,
+    output reg sharedAll,
+    output reg[15:0] oneThreeVarOverlaps,
+    output reg[17:0] twoTwoVarOverlaps
+);
+
+wire[7:0] topParts[15:0];
+wire[7:0] botParts[15:0];
+
+generate
+for(genvar i = 0; i < 16; i = i + 1) begin
+    assign topParts[i] = top[i*8+:8];
+    assign botParts[i] = bot[i*8+:8];
+end
+endgenerate
+
+always @(posedge clk) sharedAll <= (&({topParts[0], topParts[15]} | ~{botParts[0],botParts[15]})) && botValid;
+
+wire[7:0] oneVarTops[3:0]; // indexed a, b, c, d
+assign oneVarTops[0] = topParts[4'b0001];assign oneVarTops[1] = topParts[4'b0010];
+assign oneVarTops[2] = topParts[4'b0100];assign oneVarTops[3] = topParts[4'b1000];
+wire[7:0] oneVarBots[3:0];
+assign oneVarBots[0] = botParts[4'b0001];assign oneVarBots[1] = botParts[4'b0010];
+assign oneVarBots[2] = botParts[4'b0100];assign oneVarBots[3] = botParts[4'b1000];
+
+wire[7:0] twoVarTops[5:0]; // indexed ab, ac, ad, cd, bd, bc
+assign twoVarTops[0] = topParts[4'b0011];assign twoVarTops[1] = topParts[4'b0101];assign twoVarTops[2] = topParts[4'b1001];
+assign twoVarTops[3] = topParts[4'b1100];assign twoVarTops[4] = topParts[4'b1010];assign twoVarTops[5] = topParts[4'b0110];
+wire[7:0] twoVarBots[5:0];
+assign twoVarBots[0] = botParts[4'b0011];assign twoVarBots[1] = botParts[4'b0101];assign twoVarBots[2] = botParts[4'b1001];
+assign twoVarBots[3] = botParts[4'b1100];assign twoVarBots[4] = botParts[4'b1010];assign twoVarBots[5] = botParts[4'b0110];
+
+wire[7:0] threeVarTops[3:0]; // indexed bcd, acd, abd, abc
+assign threeVarTops[0] = topParts[4'b1110];assign threeVarTops[1] = topParts[4'b1101];
+assign threeVarTops[2] = topParts[4'b1011];assign threeVarTops[3] = topParts[4'b0111];
+wire[7:0] threeVarBots[3:0];
+assign threeVarBots[0] = botParts[4'b1110];assign threeVarBots[1] = botParts[4'b1101];
+assign threeVarBots[2] = botParts[4'b1011];assign threeVarBots[3] = botParts[4'b0111];
+
+
+//wire[15:0] oneThreeVarOverlaps; // 4x4 array: maps flavor to location X___, _X__, __X_, ___X, in flavors a,b,c,d
+//wire[17:0] twoTwoVarOverlaps; // 3x6 array: for the shapes XX__, X_X_ and X__X, in flavors ab, ac, ad, cd, bd, bc
+/*
+    ab__, ac__, ad__, cd__, bd__, bc__
+    a_b_, a_c_, a_d_, c_d_, b_d_, b_c_
+    a__b, a__c, a__d, c__d, b__d, b__c
+*/
+
+// maps var j to location i
+generate
+for(genvar i = 0; i < 4; i=i+1) begin
+    for(genvar j = 0; j < 4; j=j+1) begin
+        always @(posedge clk) oneThreeVarOverlaps[i * 4 + j] <= &((oneVarTops[i] | ~oneVarBots[j]) & (threeVarTops[i] | ~threeVarBots[j]));
+    end
+end
+for(genvar i = 0; i < 3; i=i+1) begin
+    for(genvar j = 0; j < 6; j=j+1) begin
+        always @(posedge clk) twoTwoVarOverlaps[i * 6 + j] <= &((twoVarTops[i] | ~twoVarBots[j]) & (twoVarTops[i+3] | ~twoVarBots[(j+3) % 6])); // joins ab witb cd, ad with bc etc. 
+    end
+end
+endgenerate
+
+endmodule
+
+
 /***************
   ALL Combined
 ***************/
@@ -403,21 +491,106 @@ module permuteCheck24Pipelined (
     input[127:0] top,
     input[127:0] bot,
     input isBotValid,
-    output reg[23:0] validBotPermutations
+    output[23:0] validBotPermutations
 );
 
-wire sharedAll;
-wire[15:0] oneThreeVarOverlaps;
-wire[17:0] twoTwoVarOverlaps;
-permuteProduceIntermediaries24 intermediaryProducer(top, bot, sharedAll, oneThreeVarOverlaps, twoTwoVarOverlaps);
+wire sharedAllD;
+wire[15:0] oneThreeVarOverlapsD;
+wire[17:0] twoTwoVarOverlapsD;
+permuteProduceIntermediaries24Pipelined intermediaryProducer(clk, top, bot, isBotValid, sharedAllD, oneThreeVarOverlapsD, twoTwoVarOverlapsD);
 
-reg resultValidD; always @(posedge clk) resultValidD <= sharedAll && isBotValid;
-reg[15:0] oneThreeVarOverlapsD; always @(posedge clk) oneThreeVarOverlapsD <= oneThreeVarOverlaps;
-reg[17:0] twoTwoVarOverlapsD; always @(posedge clk) twoTwoVarOverlapsD <= twoTwoVarOverlaps;
-
-wire[23:0] validBotPermutationsWire;
-permutCheckProduceResults24Pipelined resultsProducer(clk, resultValidD, oneThreeVarOverlapsD, twoTwoVarOverlapsD, validBotPermutationsWire);
-always @(posedge clk) validBotPermutations <= validBotPermutationsWire;
+permutCheckProduceResults24Pipelined resultsProducer(clk, sharedAllD, oneThreeVarOverlapsD, twoTwoVarOverlapsD, validBotPermutations);
 
 endmodule
 
+// 3 clock cycles latency
+module permuteCheck720Pipelined (
+    input clk,
+    input[127:0] top,
+    input[127:0] bot,
+    input isBotValid,
+    output[30*24-1:0] validBotPermutations // 30 sets of 24 valid bot permutations
+);
+
+`include "inlineVarSwap_header.v"
+
+generate
+
+wire[127:0] botPermutations[29:0];
+assign botPermutations[0] = bot;
+`VAR_SWAP_INLINE_WITHIN_GENERATE(1, 2, botPermutations[0], botPermutations[5])
+`VAR_SWAP_INLINE_WITHIN_GENERATE(1, 3, botPermutations[0], botPermutations[10])
+`VAR_SWAP_INLINE_WITHIN_GENERATE(1, 4, botPermutations[0], botPermutations[15])
+`VAR_SWAP_INLINE_WITHIN_GENERATE(1, 5, botPermutations[0], botPermutations[20])
+`VAR_SWAP_INLINE_WITHIN_GENERATE(1, 6, botPermutations[0], botPermutations[25])
+
+for(genvar i = 0; i < 6; i = i + 1) begin
+    `VAR_SWAP_INLINE_WITHIN_GENERATE(2, 3, botPermutations[5*i], botPermutations[5*i+1])
+    `VAR_SWAP_INLINE_WITHIN_GENERATE(2, 4, botPermutations[5*i], botPermutations[5*i+2])
+    `VAR_SWAP_INLINE_WITHIN_GENERATE(2, 5, botPermutations[5*i], botPermutations[5*i+3])
+    `VAR_SWAP_INLINE_WITHIN_GENERATE(2, 6, botPermutations[5*i], botPermutations[5*i+4])
+end
+
+for(genvar permutationI = 0; permutationI < 30; permutationI = permutationI + 1) begin
+    
+    
+    wire[7:0] topParts[15:0];
+    wire[7:0] botParts[15:0];
+    
+    for(genvar i = 0; i < 16; i = i + 1) begin
+        assign topParts[i] = top[i*8+:8];
+        assign botParts[i] = botPermutations[permutationI][i*8+:8];
+    end
+    
+    reg sharedAll; always @(posedge clk) sharedAll <= (&({topParts[0], topParts[15]} | ~{botParts[0],botParts[15]})) && isBotValid;
+    
+    wire[7:0] oneVarTops[3:0]; // indexed a, b, c, d
+    assign oneVarTops[0] = topParts[4'b0001];assign oneVarTops[1] = topParts[4'b0010];
+    assign oneVarTops[2] = topParts[4'b0100];assign oneVarTops[3] = topParts[4'b1000];
+    wire[7:0] oneVarBots[3:0];
+    assign oneVarBots[0] = botParts[4'b0001];assign oneVarBots[1] = botParts[4'b0010];
+    assign oneVarBots[2] = botParts[4'b0100];assign oneVarBots[3] = botParts[4'b1000];
+    
+    wire[7:0] twoVarTops[5:0]; // indexed ab, ac, ad, cd, bd, bc
+    assign twoVarTops[0] = topParts[4'b0011];assign twoVarTops[1] = topParts[4'b0101];assign twoVarTops[2] = topParts[4'b1001];
+    assign twoVarTops[3] = topParts[4'b1100];assign twoVarTops[4] = topParts[4'b1010];assign twoVarTops[5] = topParts[4'b0110];
+    wire[7:0] twoVarBots[5:0];
+    assign twoVarBots[0] = botParts[4'b0011];assign twoVarBots[1] = botParts[4'b0101];assign twoVarBots[2] = botParts[4'b1001];
+    assign twoVarBots[3] = botParts[4'b1100];assign twoVarBots[4] = botParts[4'b1010];assign twoVarBots[5] = botParts[4'b0110];
+    
+    wire[7:0] threeVarTops[3:0]; // indexed bcd, acd, abd, abc
+    assign threeVarTops[0] = topParts[4'b1110];assign threeVarTops[1] = topParts[4'b1101];
+    assign threeVarTops[2] = topParts[4'b1011];assign threeVarTops[3] = topParts[4'b0111];
+    wire[7:0] threeVarBots[3:0];
+    assign threeVarBots[0] = botParts[4'b1110];assign threeVarBots[1] = botParts[4'b1101];
+    assign threeVarBots[2] = botParts[4'b1011];assign threeVarBots[3] = botParts[4'b0111];
+    
+    
+    //wire[15:0] oneThreeVarOverlaps; // 4x4 array: maps flavor to location X___, _X__, __X_, ___X, in flavors a,b,c,d
+    //wire[17:0] twoTwoVarOverlaps; // 3x6 array: for the shapes XX__, X_X_ and X__X, in flavors ab, ac, ad, cd, bd, bc
+    /*
+        ab__, ac__, ad__, cd__, bd__, bc__
+        a_b_, a_c_, a_d_, c_d_, b_d_, b_c_
+        a__b, a__c, a__d, c__d, b__d, b__c
+    */
+    
+    reg[15:0] oneThreeVarOverlaps;
+    // maps var j to location i
+    for(genvar i = 0; i < 4; i=i+1) begin
+        for(genvar j = 0; j < 4; j=j+1) begin
+            always @(posedge clk) oneThreeVarOverlaps[i * 4 + j] <= &((oneVarTops[i] | ~oneVarBots[j]) & (threeVarTops[i] | ~threeVarBots[j]));
+        end
+    end
+    reg[17:0] twoTwoVarOverlaps;
+    for(genvar i = 0; i < 3; i=i+1) begin
+        for(genvar j = 0; j < 6; j=j+1) begin
+            always @(posedge clk) twoTwoVarOverlaps[i * 6 + j] <= &((twoVarTops[i] | ~twoVarBots[j]) & (twoVarTops[i+3] | ~twoVarBots[(j+3) % 6])); // joins ab witb cd, ad with bc etc. 
+        end
+    end
+    
+    permutCheckProduceResults24Pipelined resultsProducer(clk, sharedAll, oneThreeVarOverlaps, twoTwoVarOverlaps, validBotPermutations[24*permutationI +: 24]);
+end
+
+endgenerate
+
+endmodule
