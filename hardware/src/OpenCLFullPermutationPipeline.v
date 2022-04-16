@@ -16,30 +16,30 @@ module OpenCLFullPermutationPipeline(
     output[63:0] summedDataPcoeffCountOut   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
-// Registers to have basically a 1-deep queue, so that the module can "show it's readyness" before 40 clock cycles after reset
-reg[127:0] storedInputBotOrTop;
-reg botInValid;
-reg topInValid;
+wire[127:0] inputBotOrTop = {botUpper, botLower};
+wire botInValid = ivalid && !startNewTop;
+wire topInValid = ivalid && startNewTop;
+
+// Reset validation
+localparam RESET_CYCLES = 30;
+reg rst;
+reg[$clog2(RESET_CYCLES):0] cyclesSinceReset = 0;
 
 always @(posedge clock) begin
     if(!resetn) begin
-        botInValid <= 0;
-        topInValid <= 0;
+        cyclesSinceReset <= 0;
+        rst <= 1'b1;
     end else begin
-        if(oready) begin
-            storedInputBotOrTop <= {botUpper, botLower};
-            botInValid <= ivalid && !startNewTop;
-            topInValid <= ivalid && startNewTop;
+        if(cyclesSinceReset >= RESET_CYCLES) begin
+            rst <= 1'b0;
+        end else begin
+            cyclesSinceReset <= cyclesSinceReset + 1;
         end
     end
 end
 
-wire rst;
-wire isInitialized;
-resetNormalizer rstNormalizer(clock, resetn, rst, isInitialized);
-
 wire pipelineIsReadyForInput;
-assign oready = (pipelineIsReadyForInput && isInitialized) || (!botInValid && !topInValid && !rst); 
+assign oready = pipelineIsReadyForInput && !rst; 
 
 MultiFullPermutationPipeline multiFullPermPipeline (
     .clk(clock),
@@ -49,7 +49,7 @@ MultiFullPermutationPipeline multiFullPermPipeline (
     // Input side
     .writeBotIn(botInValid && oready),
     .writeTopIn(topInValid && oready),
-    .botOrTop(storedInputBotOrTop),
+    .botOrTop(inputBotOrTop),
     .readyForInput(pipelineIsReadyForInput),
     
     // Output side
@@ -59,7 +59,6 @@ MultiFullPermutationPipeline multiFullPermPipeline (
 );
 
 endmodule
-
 
 module MultiFullPermutationPipeline (
     input clk,
@@ -174,6 +173,19 @@ always @(posedge clk) begin
     end
 end
 
+reg[8:0] longRSTReg;
+wire longRSTWire = longRSTReg != 9'b111111111;
+always @(posedge clk) begin
+    if(rst) begin
+        longRSTReg <= 0;
+    end else begin
+        longRSTReg <= longRSTReg + longRSTWire;
+    end
+end
+
+reg longRST; always @(posedge clk) longRST <= longRSTWire;
+(* dont_merge *) reg pipelineLongRST; always @(posedge clk) pipelineLongRST <= longRST;
+(* dont_merge *) reg outputFIFOLongRST; always @(posedge clk) outputFIFOLongRST <= longRST;
 
 wire pipelineIsReady;
 assign readyForInput = pipelineIsReady && !stallInput;
@@ -185,6 +197,7 @@ fullPermutationPipeline30 permutationPipeline (
     .clk(clk),
     .clk2x(clk2x),
     .rst(rst),
+    .longRST(pipelineLongRST),
     .activityMeasure(activityMeasure),
     
     .topChannel(topChannelD),
@@ -202,7 +215,7 @@ fullPermutationPipeline30 permutationPipeline (
 wire outputFIFOEmpty; assign resultsAvailable[1] = !outputFIFOEmpty;
 FIFO_MLAB #(.WIDTH(48+13), .ALMOST_FULL_MARGIN(12)) outputFIFO (
     .clk(clk),
-    .rst(rst),
+    .rst(outputFIFOLongRST),
     
     // input side
     .writeEnable(dataFromPipelineValid),

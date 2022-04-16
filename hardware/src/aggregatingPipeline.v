@@ -6,6 +6,7 @@ module aggregatingPipeline #(parameter PCOEFF_COUNT_BITWIDTH = 0) (
     input clk,
     input clk2x,
     input rst,
+    input longRST,
     input[1:0] topChannel,
     output[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
     
@@ -33,7 +34,11 @@ topReceiver receiver(
     top
 );
 
-reg[127:0] graphD; always @(posedge clk) graphD <= top & ~bot;
+reg[127:0] graphD;
+always @(posedge clk) begin
+    graphD <= top & ~bot;
+    if(isBotValid && (bot & ~top) != 0) $error("Bad bottom for this top!");
+end
 reg isBotValidD; always @(posedge clk) isBotValidD <= isBotValid;
 reg lastBotOfBatchD; always @(posedge clk) lastBotOfBatchD <= lastBotOfBatch;
 
@@ -68,7 +73,7 @@ assign eccStatus = eccFromPipeline || (connectCountFromPipelineValid && (connect
 wire[35:0] pcoeff = 36'b000000000000000000000000000000000001 << connectCountFromPipeline;
 
 always @(posedge clk) begin
-    if(rst || resultsValid) begin
+    if(longRST || resultsValid) begin
         pcoeffSum <= 0;
         pcoeffCount <= 0;
     end else begin

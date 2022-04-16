@@ -271,9 +271,6 @@ permute67 permut67 (
 
 endmodule
 
-
-
-
 module permutationGenerator7 (
     input clk,
     input rst,
@@ -298,7 +295,7 @@ end
 wire[127:0] currentlyPermuting;
 wire currentlyPermutingUpdated;
 
-wire reqNewBot = (permut7 == 0) && !slowDown;
+wire reqNewBot = permut7 == 0;
 
 // Read latency of 4 cycles
 FastFIFO_SAFE_M20K #(.WIDTH(128), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(16)) inputFIFO (
@@ -311,7 +308,7 @@ FastFIFO_SAFE_M20K #(.WIDTH(128), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(16)) input
     .almostFull(almostFull),
     
     // Read Side
-    .readRequest(reqNewBot),
+    .readRequest(reqNewBot && !slowDown),
     .dataOut(currentlyPermuting), // Holds the last valid data
     .empty(),
     .dataOutValid(currentlyPermutingUpdated),
@@ -338,11 +335,6 @@ always @(posedge clk) begin
     outputBotValid <= curBotValid;
 end
 
-assign botSeriesFinished = curBotValid && newBotArrives;
+assign botSeriesFinished = outputBotValid && newBotArrives;
 
 endmodule
-
-
-
-
-

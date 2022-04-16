@@ -130,6 +130,7 @@ module fullPermutationPipeline30 (
     input clk,
     input clk2x,
     input rst,
+    input longRST,
     output reg[5:0] activityMeasure, // Instrumentation wire for profiling (0-60 activity level)
     
     input[1:0] topChannel,
@@ -211,26 +212,45 @@ end
 wire[29:0] slowDownWOR;
 always @(posedge clk) pipelinesRequestSlowdown <= |slowDownWOR;
 
-wire[29:0] pipelineHasResultsAvailable;
-reg allPipelinesHaveResultsAvailable; always @(posedge clk) allPipelinesHaveResultsAvailable <= &pipelineHasResultsAvailable;
-
-reg[1:0] throughputLimiter = 0; always @(posedge clk) throughputLimiter <= throughputLimiter + 1;
-reg grabPipelineResults; always @(posedge clk) grabPipelineResults <= (throughputLimiter == 0) && allPipelinesHaveResultsAvailable && !slowDown;
-
 wire[1:0] activityMeasures[29:0];
 wire[$clog2(24*7)+35-1:0] pcoeffSums[29:0];
 wire[$clog2(24*7)-1:0] pcoeffCounts[29:0];
 
 wire[29:0] eccStatuses;
-reg outputFIFOECCStatus;
-always @(posedge clk) eccStatus <= permutationGeneratorECCStatus && outputFIFOECCStatus && &eccStatuses;
+wire[29:0] memoryEccStatuses;
+always @(posedge clk) eccStatus <= permutationGeneratorECCStatus || |eccStatuses || |memoryEccStatuses;
+
+wire[29:0] outputFIFOWrites;
+wire[30*9-1:0] writeAddrs;
+wire massFIFORead;
+wire[8:0] readAddr;
+
+(* dont_merge *) reg mssLongRST; always @(posedge clk) mssLongRST <= longRST;
+MultiStreamSynchronizer #(.DEPTH_LOG2(9), .NUMBER_OF_FIFOS(30)) multiStreamSynchronizer (
+    .clk(clk),
+    .rst(mssLongRST),
+    
+    // Write side
+    .writes(outputFIFOWrites),
+    .writeAddrs(writeAddrs),
+    
+    // Read side
+    .slowDown(slowDown),
+    .readEnable(massFIFORead),
+    .readAddr(readAddr)
+);
 
 for(genvar permutationI = 0; permutationI < 30; permutationI = permutationI + 1) begin
     (* dont_merge *) reg pipelineRST; always @(posedge clk) pipelineRST <= rst;
+    (* dont_merge *) reg pipelineLongRST; always @(posedge clk) pipelineLongRST <= longRST;
+    
+    wire[$clog2(24*7)+35-1:0] sumFromPipeline;
+    wire[$clog2(24*7)-1:0] countFromPipeline;
     aggregatingPermutePipeline24 #(.PCOEFF_COUNT_BITWIDTH($clog2(24*7))) pipeline (
         .clk(clk),
         .clk2x(clk2x),
         .rst(pipelineRST),
+        .longRST(pipelineLongRST),
         .topChannel(topChannel),
         .activityMeasure(activityMeasures[permutationI]), // Instrumentation wire for profiling (0-2 activity level)
         
@@ -238,15 +258,30 @@ for(genvar permutationI = 0; permutationI < 30; permutationI = permutationI + 1)
         .botIn(botPermutations[permutationI]),
         .validBotPermutes(validBotPermutations_VALID[24*permutationI +: 24]),
         .batchDone(botFromGenSeriesFinished_VALID),
-        .slowDown(slowDownWOR[permutationI]),
+        .almostFull(slowDownWOR[permutationI]),
         
         // Output side
-        .grabResults(grabPipelineResults),
-        .resultsAvailable(pipelineHasResultsAvailable[permutationI]),
-        .pcoeffSum(pcoeffSums[permutationI]),
-        .pcoeffCount(pcoeffCounts[permutationI]),
+        .slowDown(slowDown),
+        .resultValid(outputFIFOWrites[permutationI]),
+        .pcoeffSum(sumFromPipeline),
+        .pcoeffCount(countFromPipeline),
         
         .eccStatus(eccStatuses[permutationI])
+    );
+    
+    MEMORY_M20K #(.WIDTH($clog2(24*7)+35+$clog2(24*7)), .DEPTH_LOG2(9)) pipelineOutFIFO (
+        .clk(clk),
+        
+        // Write Side
+        .writeEnable(outputFIFOWrites[permutationI]),
+        .writeAddr(writeAddrs[9*permutationI +: 9]),
+        .dataIn({sumFromPipeline, countFromPipeline}),
+        
+        // Read Side
+        .readEnable(massFIFORead),
+        .readAddr(readAddr),
+        .dataOut({pcoeffSums[permutationI], pcoeffCounts[permutationI]}),
+        .eccStatus(memoryEccStatuses[permutationI])
     );
 end
 
@@ -311,9 +346,9 @@ always @(posedge clk) begin
     pcoeffCount <= pcoeffCounts2[0] + pcoeffCounts2[1];
 end
 
-`define M20K_FIFO_READ_LATENCY 0
+`define M20K_READ_LATENCY 3
 `define SUM_PIPELINE_STAGES 5
-hyperpipe #(.CYCLES(`M20K_FIFO_READ_LATENCY + `SUM_PIPELINE_STAGES)) resultArrivesPipe(clk, grabPipelineResults, resultValid);
+hyperpipe #(.CYCLES(`M20K_READ_LATENCY + `SUM_PIPELINE_STAGES)) resultArrivesPipe(clk, massFIFORead, resultValid);
 
 endmodule
 

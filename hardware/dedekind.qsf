@@ -46,7 +46,6 @@ set_global_assignment -name VERILOG_FILE src/varSwap.v
 set_global_assignment -name VERILOG_FILE src/topManager.v
 set_global_assignment -name VERILOG_FILE src/streamingCountConnectedCore.v
 set_global_assignment -name VERILOG_FILE src/singletonElimination.v
-set_global_assignment -name VERILOG_FILE src/resetNormalizer.v
 set_global_assignment -name VERILOG_FILE src/registerPipe.v
 set_global_assignment -name VERILOG_FILE src/quadPortBRAM.v
 set_global_assignment -name VERILOG_FILE src/popcnt.v
@@ -78,7 +77,6 @@ set_global_assignment -name VERILOG_FILE src/collectionQuadPortRAM.v
 set_global_assignment -name VERILOG_FILE src/botPermuterWithFIFO.v
 set_global_assignment -name VERILOG_FILE src/botPermuter.v
 set_global_assignment -name VERILOG_FILE src/botPermuter1234.v
-set_global_assignment -name VERILOG_FILE src/graphPermuter1234.v
 set_global_assignment -name VERILOG_FILE src/aggregatingPipeline.v
 set_global_assignment -name VERILOG_FILE src/aggregatingPermutePipeline.v
 set_global_assignment -name IP_FILE src/ip/noReadClockMLAB.ip

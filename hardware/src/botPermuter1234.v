@@ -235,6 +235,7 @@ endmodule
 
 module botPermute1234SelectionGenerator(
     input clk,
+    input rst,
     
     // Input side
     input[23:0] validBotPermutesIn,
@@ -252,11 +253,6 @@ module botPermute1234SelectionGenerator(
 reg[3:0] sections[5:0];
 
 integer ii;
-initial begin
-    for(ii = 0; ii < 6; ii = ii + 1) begin
-        sections[ii] = 4'b0000;
-    end
-end
 
 wire[5:0] sectionIsZero;
 /*wire*/reg[5:0] sectionHasExactlyOneBit;
@@ -300,19 +296,19 @@ assign acceptData = (earlyAccept || tripleSectionIsZero == 2'b11) && !slowDown;
 
 
 /*wire*/reg[1:0] firstBitInSection[5:0];
-wire[5:0] isClearingSection;
 generate
 for(i = 0; i < 6; i=i+1) begin
     always @(*) begin
-        casez(sections[i])
-            4'b???1: firstBitInSection[i] = 0;
-            4'b??10: firstBitInSection[i] = 1;
-            4'b?100: firstBitInSection[i] = 2;
-            4'b1000: firstBitInSection[i] = 3;
-            4'b0000: firstBitInSection[i] = 2'bXX;
+        casez(sections[i][2:0])
+            3'b??1: firstBitInSection[i] = 0;
+            3'b?10: firstBitInSection[i] = 1;
+            3'b100: firstBitInSection[i] = 2;
+            3'b000: firstBitInSection[i] = 3;
         endcase
     end
 end
+
+wire[5:0] isClearingSection;
 assign isClearingSection[0] = 1;
 for(i = 1; i < 6; i=i+1) begin
     assign isClearingSection[i] = &sectionIsZero[i-1:0]; // All previous sections are 0
@@ -334,11 +330,16 @@ end
 always @(posedge clk) begin
     if(!slowDown) begin
         for(ii = 0; ii < 6; ii=ii+1) begin
-            if(acceptData) begin
+            if(rst) begin
+                sections[ii] <= 4'b0000;
+            end else if(acceptData) begin
                 sections[ii] <= {validBotPermutesIn[18+ii],validBotPermutesIn[12+ii],validBotPermutesIn[6+ii],validBotPermutesIn[ii]};
             end else begin
                 if(isClearingSection[ii]) begin
-                    sections[ii][firstBitInSection[ii]] <= 0;
+                    sections[ii][0] <= 0;
+                    if(sections[ii][0] == 0) sections[ii][1] <= 0;
+                    if(sections[ii][1:0] == 0) sections[ii][2] <= 0;
+                    if(firstBitInSection[ii] == 3) sections[ii][3] <= 0;
                 end
             end
         end
@@ -381,8 +382,8 @@ reg[DEPTH_LOG2-1:0] readAddr = 0;
 wire[DEPTH_LOG2-1:0] nextValidPermutesReadAddr = readAddr + 1;
 
 wire noNewDataAvailable = nextValidPermutesReadAddr == writeAddr;
-reg curAddrIsNotNew = 1;
-reg storedAddrIsNotNew = 1;
+reg curAddrIsNotNew;
+reg storedAddrIsNotNew;
 
 always @(posedge clk) begin
     if(rst) begin
@@ -509,6 +510,7 @@ wire[2:0] selectedPermutationInSet;
 wire selectionBatchDone;
 botPermute1234SelectionGenerator selectionGenerator (
     .clk(clk),
+    .rst(rst),
     
     // Input side
     .validBotPermutesIn(nextValidBotPermutesFromFIFO),

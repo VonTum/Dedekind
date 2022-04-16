@@ -166,6 +166,7 @@ module aggregatingPermutePipeline24 #(parameter PCOEFF_COUNT_BITWIDTH = 10) (
     input clk,
     input clk2x,
     input rst,
+    input longRST,
     input[1:0] topChannel,
     output[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
     
@@ -173,16 +174,19 @@ module aggregatingPermutePipeline24 #(parameter PCOEFF_COUNT_BITWIDTH = 10) (
     input[127:0] botIn,
     input[23:0] validBotPermutes,
     input batchDone,
-    output slowDown,
+    output almostFull,
     
     // Output side
-    input grabResults,
-    output resultsAvailable,
+    input slowDown,
+    output resultValid,
     output[PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
     output[PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
     
     output reg eccStatus
 );
+
+(* dont_merge *) reg botPermuterRST; always @(posedge clk) botPermuterRST <= rst;
+(* dont_merge *) reg pipelineRST; always @(posedge clk) pipelineRST <= rst;
 
 wor eccStatusWire;
 always @(posedge clk) eccStatus <= eccStatusWire;
@@ -192,45 +196,47 @@ wire requestSlowDown;
 wire permutedBotValid;
 wire[127:0] permutedBot;
 wire batchFinished;
-botPermuter1234 botPermuter1234 (
+botPermuter1234 #(.ALMOST_FULL_MARGIN(32)) botPermuter1234 (
     .clk(clk),
-    .rst(rst),
+    .rst(botPermuterRST),
     
     // Input side
     .writeDataIn(|validBotPermutes || batchDone),
     .botIn(botIn),
     .validBotPermutesIn(validBotPermutes),
     .lastBotOfBatchIn(batchDone),
-    .almostFull(slowDown),
+    .almostFull(almostFull),
     
     // Output side
     .permutedBot(permutedBot),
     .permutedBotValid(permutedBotValid),
     .batchDone(batchFinished),
     .slowDown(requestSlowDown),
+    
     .eccStatus(eccStatusWire)
 );
 
-aggregatingPipelineWithOutputFIFO #(PCOEFF_COUNT_BITWIDTH) aggregatingPipelineWithFIFO(
-    clk,
-    clk2x,
-    rst,
-    topChannel,
-    activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
+(* dont_merge *) reg[1:0] topChannelD; always @(posedge clk) topChannelD <= topChannel;
+(* dont_merge *) reg[1:0] topChannelDD; always @(posedge clk) topChannelDD <= topChannelD;
+
+aggregatingPipeline #(PCOEFF_COUNT_BITWIDTH) computePipe (
+    .clk(clk),
+    .clk2x(clk2x),
+    .rst(pipelineRST),
+    .longRST(longRST),
+    .topChannel(topChannelDD),
+    .activityMeasure(activityMeasure),
     
-    // Input side
-    permutedBotValid,
-    permutedBot,
-    batchFinished,
-    requestSlowDown,
+    .isBotValid(permutedBotValid),
+    .bot(permutedBot),
+    .lastBotOfBatch(batchFinished),
+    .slowDownInput(requestSlowDown),
     
-    // Output side
-    grabResults,
-    resultsAvailable,
-    pcoeffSum,
-    pcoeffCount,
+    .resultsValid(resultValid),
+    .pcoeffSum(pcoeffSum),
+    .pcoeffCount(pcoeffCount),
     
-    eccStatusWire
+    .eccStatus(eccStatusWire)
 );
 
 endmodule

@@ -107,6 +107,124 @@ endgenerate
 
 endmodule
 
+
+// Read latency of 4 cycles
+module FastFIFO_SAFE_M20K #(parameter WIDTH = 16, parameter DEPTH_LOG2 = 9, parameter ALMOST_FULL_MARGIN = 50) (
+    input clk,
+    input rst,
+    
+    // Write Side
+    input writeEnable,
+    input[WIDTH-1:0] dataIn,
+    output reg almostFull,
+    
+    // Read Side
+    input readRequest,
+    output[WIDTH-1:0] dataOut, // Holds the last valid data
+    output empty,
+    output dataOutValid,
+    output eccStatus
+);
+
+reg[DEPTH_LOG2-1:0] writeAddr;
+reg[DEPTH_LOG2-1:0] readAddr;
+
+wire[DEPTH_LOG2-1:0] writesLeft = readAddr - writeAddr;
+
+assign empty = writesLeft == (1 << DEPTH_LOG2) - 1;
+always @(posedge clk) almostFull <= writesLeft < ALMOST_FULL_MARGIN;
+
+wire isReading = readRequest && !empty;
+
+always @(posedge clk) begin
+    if(rst) begin
+        writeAddr <= 1; // Offset of one because read head must not wait at the position of the write head
+        readAddr <= 0;
+    end else begin
+        writeAddr <= writeAddr + writeEnable;
+        readAddr <= readAddr + isReading;
+    end
+end
+
+hyperpipe #(.CYCLES(4)) isValidPipe(clk, isReading, dataOutValid);
+
+MEMORY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2)) m20kMemory (
+    .clk(clk),
+    
+    // Write Side
+    .writeEnable(writeEnable),
+    .writeAddr(writeAddr),
+    .dataIn(dataIn),
+    
+    // Read Side
+    .readEnable(1'b1),
+    .readAddr(readAddr),
+    .dataOut(dataOut),
+    .eccStatus(eccStatus)
+);
+
+endmodule
+
+
+/*
+    Allows the synchronized outputting of several intermittent streams of data. 
+    Outputs a data element set every 4 cycles if all are available
+    This module does not provide almost full flags as they have been deemed unneccesary
+*/
+module MultiStreamSynchronizer #(parameter DEPTH_LOG2 = 9, parameter NUMBER_OF_FIFOS = 20) (
+    input clk,
+    input rst,
+    
+    // Write side
+    input[NUMBER_OF_FIFOS-1:0] writes,
+    output[DEPTH_LOG2*NUMBER_OF_FIFOS-1:0] writeAddrs,
+    
+    // Read side
+    input slowDown,
+    output reg readEnable,
+    output reg[DEPTH_LOG2-1:0] readAddr
+);
+
+reg[DEPTH_LOG2-1:0] readAddrReg;
+reg[DEPTH_LOG2-1:0] writeAddrsRegs[NUMBER_OF_FIFOS-1:0];
+
+reg[NUMBER_OF_FIFOS-1:0] hasDatas;
+
+generate
+for(genvar i = 0; i < NUMBER_OF_FIFOS; i = i + 1) begin
+    assign writeAddrs[DEPTH_LOG2 * i +: DEPTH_LOG2] = writeAddrsRegs[i];
+    always @(posedge clk) begin
+        hasDatas[i] <= readAddrReg != writeAddrsRegs[i];
+        if(rst) begin
+            writeAddrsRegs[i] <= 0;
+        end else begin
+            writeAddrsRegs[i] <= writeAddrsRegs[i] + writes[i];
+        end
+    end
+end
+endgenerate
+
+reg read; // try to read every 3 cycles
+reg readD;
+reg[1:0] cycler = 0;
+
+always @(posedge clk) begin
+    readD <= read;
+    readEnable <= readD;
+    read <= cycler == 0 && !slowDown && &hasDatas;
+    cycler <= cycler >= 2 ? 0 : cycler + 1;
+    readAddr <= readAddrReg - 1;
+    if(rst) begin
+        readAddrReg <= 0;
+    end else begin
+        readAddrReg <= readAddrReg + read;
+    end
+end
+
+endmodule
+
+
+
 // Expects sufficient readRequests while resetting, so that the output pipe is flushed properly
 module LowLatencyFastDualClockFIFO_MLAB #(parameter WIDTH = 20, parameter ALMOST_FULL_MARGIN = 8) (
     // Write Side

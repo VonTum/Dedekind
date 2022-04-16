@@ -573,7 +573,7 @@ altera_syncram  altera_syncram_component (
     .wren_a (writeEnable),
     .eccstatus (eccWire),
     .q_b (dataOut),
-    .sclr (USE_SCLEAR ? rstOutReg : 1'b0),
+    .sclr (USE_SCLEAR ? readClockEnable && rstOutReg : 1'b0), // AND with readClockEnable just in case. Documentation isn't clear on rst/CE priority. 
     .aclr0 (1'b0),
     .aclr1 (1'b0),
     .address2_a (1'b1),
@@ -637,7 +637,7 @@ always @(posedge wrclk) begin
 end
 
 reg[DEPTH_LOG2-1:0] readAddrReg;
-reg[WIDTH-1:0] dataFromMemD = 0; 
+reg[WIDTH-1:0] dataFromMemD; 
 always @(posedge rdclk) begin
     if(readClockEnable) begin
         readAddrReg <= readAddr;
