@@ -150,17 +150,19 @@ always @(*) begin
     end
 end
 
+`define ACTIVITY_MEASURE_LIMIT 60
+
 // Performance profiling with a measure of how many pipelines are working at any given time
-wire[5:0] activityMeasure; // Instrumentation wire for profiling (0-40 activity level)
+wire[5:0] activityMeasure; // Instrumentation wire for profiling (0-`ACTIVITY_MEASURE_LIMIT activity level)
 
 assign resultsAvailable[0] = 1;
 reg[45:0] activityCounter;
 reg[40:0] clockCounter;
 assign dataOut[0][60:31] = activityCounter[45:16];
 assign dataOut[0][30:0] = clockCounter[40:10];
-// The resulting occupancy is calculated as activityCounter / 40 / clockCounter
+// The resulting occupancy is calculated as activityCounter / `ACTIVITY_MEASURE_LIMIT / clockCounter
 // Also, the occupancy returned for a top is the occupancy of the PREVIOUS top
-// For an outside observer, occupancy is computed as (dataOut[60:31] << 6) / 40.0 / dataOut[30:0]
+// For an outside observer, occupancy is computed as (dataOut[60:31] << 6) / `ACTIVITY_MEASURE_LIMIT / dataOut[30:0]
 
 always @(posedge clk) begin
     if(rst || grabResults[0]) begin
@@ -175,7 +177,11 @@ end
 
 wire pipelineIsReady;
 assign readyForInput = pipelineIsReady && !stallInput;
-fullPermutationPipeline permutationPipeline (
+
+wire dataFromPipelineValid;
+wire outputFifoAlmostFull;
+wire[60:0] dataFromPipeline;
+fullPermutationPipeline30 permutationPipeline (
     .clk(clk),
     .clk2x(clk2x),
     .rst(rst),
@@ -186,11 +192,27 @@ fullPermutationPipeline permutationPipeline (
     .writeBot(writeBotIn),
     .readyForInputBot(pipelineIsReady),
     
-    .grabResults(grabResults[1]),
-    .resultsAvailable(resultsAvailable[1]),
-    .pcoeffSum(dataOut[1][47:0]),
-    .pcoeffCount(dataOut[1][60:48]),
+    .slowDown(outputFIFOAlmostFull),
+    .resultValid(dataFromPipelineValid),
+    .pcoeffSum(dataFromPipeline[47:0]),
+    .pcoeffCount(dataFromPipeline[60:48]),
     .eccStatus(eccStatus)
+);
+
+wire outputFIFOEmpty; assign resultsAvailable[1] = !outputFIFOEmpty;
+FIFO_MLAB #(.WIDTH(48+13), .ALMOST_FULL_MARGIN(12)) outputFIFO (
+    .clk(clk),
+    .rst(rst),
+    
+    // input side
+    .writeEnable(dataFromPipelineValid),
+    .dataIn(dataFromPipeline),
+    .almostFull(outputFIFOAlmostFull),
+    
+    // output side
+    .readEnable(grabResults[1]),
+    .dataOut(dataOut[1]),
+    .empty(outputFIFOEmpty)
 );
 
 endmodule

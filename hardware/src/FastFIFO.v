@@ -64,7 +64,7 @@ always @(posedge rdclk) begin
     if(rdrst) begin
         readAddr <= 0;
     end else begin
-        if(isReading) readAddr <= readAddr + 1;
+        readAddr <= readAddr + isReading;
     end
 end
 

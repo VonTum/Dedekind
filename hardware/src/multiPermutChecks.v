@@ -516,6 +516,7 @@ module permuteCheck720Pipelined (
 
 generate
 
+// Generate bot permutations, MUST MATCH fullPermutationPipeline.v
 wire[127:0] botPermutations[29:0];
 assign botPermutations[0] = bot;
 `VAR_SWAP_INLINE_WITHIN_GENERATE(1, 2, botPermutations[0], botPermutations[5])

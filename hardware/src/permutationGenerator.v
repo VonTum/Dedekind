@@ -270,3 +270,79 @@ permute67 permut67 (
 );
 
 endmodule
+
+
+
+
+module permutationGenerator7 (
+    input clk,
+    input rst,
+    
+    input[127:0] inputBot,
+    input writeInputBot,
+    output almostFull,
+    
+    input slowDown,
+    output reg[127:0] outputBot,
+    output reg outputBotValid,
+    output botSeriesFinished,
+    output eccStatus
+);
+
+reg[2:0] permut7 = 0;
+always @(posedge clk) begin
+    if(permut7 >= 6) permut7 <= 0;
+    else permut7 <= permut7 + 1;
+end
+
+wire[127:0] currentlyPermuting;
+wire currentlyPermutingUpdated;
+
+wire reqNewBot = (permut7 == 0) && !slowDown;
+
+// Read latency of 4 cycles
+FastFIFO_SAFE_M20K #(.WIDTH(128), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(16)) inputFIFO (
+    .clk(clk),
+    .rst(rst),
+    
+    // Write Side
+    .writeEnable(writeInputBot),
+    .dataIn(inputBot),
+    .almostFull(almostFull),
+    
+    // Read Side
+    .readRequest(reqNewBot),
+    .dataOut(currentlyPermuting), // Holds the last valid data
+    .empty(),
+    .dataOutValid(currentlyPermutingUpdated),
+    .eccStatus(eccStatus)
+);
+wire newBotArrives;
+hyperpipe #(.CYCLES(4)) readReqPipe(clk, reqNewBot, newBotArrives);
+
+wire curBotValid = newBotArrives ? currentlyPermutingUpdated : outputBotValid;
+
+`include "inlineVarSwap_header.v"
+
+wire[127:0] varSwaps7[6:0];
+assign varSwaps7[0] = currentlyPermuting;
+`VAR_SWAP_INLINE(0, 1, currentlyPermuting, varSwaps7[1])
+`VAR_SWAP_INLINE(0, 2, currentlyPermuting, varSwaps7[2])
+`VAR_SWAP_INLINE(0, 3, currentlyPermuting, varSwaps7[3])
+`VAR_SWAP_INLINE(0, 4, currentlyPermuting, varSwaps7[4])
+`VAR_SWAP_INLINE(0, 5, currentlyPermuting, varSwaps7[5])
+`VAR_SWAP_INLINE(0, 6, currentlyPermuting, varSwaps7[6])
+
+always @(posedge clk) begin
+    outputBot <= varSwaps7[permut7];
+    outputBotValid <= curBotValid;
+end
+
+assign botSeriesFinished = curBotValid && newBotArrives;
+
+endmodule
+
+
+
+
+

@@ -16,8 +16,8 @@ module fullPermutationPipeline(
     output readyForInputBot,
     
     // Output side
-    input grabResults,
-    output resultsAvailable,
+    input slowDown,
+    output resultValid,
     output[47:0] pcoeffSum,
     output[12:0] pcoeffCount,
     output eccStatus
@@ -84,8 +84,6 @@ multiPermutationGenerator67 permutationGenMULTI (
 
 wire grabNewResult;
 wire pipelineResultAvailable;
-wire[47:0] pcoeffSumFromPipeline;
-wire[12:0] pcoeffCountFromPipeline;
 
 (* dont_merge *) reg[1:0] topChannelD; always @(posedge clk) topChannelD <= topChannel;
 
@@ -106,15 +104,12 @@ pipeline120Pack pipeline120 (
     // Output side
     .grabResults(grabNewResult),
     .resultsAvailable(pipelineResultAvailable),
-    .pcoeffSum(pcoeffSumFromPipeline),
-    .pcoeffCount(pcoeffCountFromPipeline),
+    .pcoeffSum(pcoeffSum),
+    .pcoeffCount(pcoeffCount),
     .eccStatus(eccStatus)
 );
 
 (* dont_merge *) reg outputRST; always @(posedge clk) outputRST <= rst;
-// Extra delay needed to properly reset this fifo after other fifos in the system. Otherwise it gets messed up
-wire outputRST_Delayed;
-hyperpipe #(.CYCLES(10)) outputRSTPipe(clk, outputRST, outputRST_Delayed);
 
 // Small stalling machine, to allow for propagation delay in grabNewResult and pipelineResultAvailable
 reg[1:0] cyclesTillNextResultsGrabTry = 0; always @(posedge clk) cyclesTillNextResultsGrabTry <= cyclesTillNextResultsGrabTry + 1;
@@ -122,26 +117,204 @@ wire outputFIFOReadyForResults;
 assign grabNewResult = outputFIFOReadyForResults && pipelineResultAvailable && (cyclesTillNextResultsGrabTry == 0);
 
 
-wire grabNewResultArrived;
-hyperpipe #(.CYCLES(6)) writePipeToRegister(clk, grabNewResult, grabNewResultArrived);
+hyperpipe #(.CYCLES(6)) writePipeToRegister(clk, grabNewResult, resultValid);
 
-wire outputFIFOAlmostFull;
 // Expect output fifo to be far away from pipelines
-hyperpipe #(.CYCLES(5)) outputFIFOReadyForResultsPipe(clk, !outputFIFOAlmostFull, outputFIFOReadyForResults);
-wire outputFIFOEmpty; assign resultsAvailable = !outputFIFOEmpty;
-FIFO_MLAB #(.WIDTH(48+13), .ALMOST_FULL_MARGIN(12)) outputFIFO (
-    .clk(clk),
-    .rst(outputRST_Delayed),
-    
-    // input side
-    .writeEnable(grabNewResultArrived),
-    .dataIn({pcoeffSumFromPipeline, pcoeffCountFromPipeline}),
-    .almostFull(outputFIFOAlmostFull),
-    
-    // output side
-    .readEnable(grabResults),
-    .dataOut({pcoeffSum, pcoeffCount}),
-    .empty(outputFIFOEmpty)
-);
+hyperpipe #(.CYCLES(5)) outputFIFOReadyForResultsPipe(clk, !slowDown, outputFIFOReadyForResults);
 
 endmodule
+
+
+
+module fullPermutationPipeline30 (
+    input clk,
+    input clk2x,
+    input rst,
+    output reg[5:0] activityMeasure, // Instrumentation wire for profiling (0-60 activity level)
+    
+    input[1:0] topChannel,
+    
+    // Input side
+    input[127:0] bot,
+    input writeBot,
+    output readyForInputBot,
+    
+    // Output side
+    input slowDown,
+    output resultValid,
+    output reg[47:0] pcoeffSum,
+    output reg[12:0] pcoeffCount,
+    output reg eccStatus
+);
+
+wire permutationGeneratorIsAlmostFull;
+assign readyForInputBot = !permutationGeneratorIsAlmostFull;
+
+reg pipelinesRequestSlowdown;
+wire[127:0] botFromGen;
+wire botFromGenValid;
+wire botFromGenSeriesFinished;
+
+wire permutationGeneratorECCStatus;
+permutationGenerator7 permutationGenerator7 (
+    .clk(clk),
+    .rst(rst),
+    
+    .inputBot(bot),
+    .writeInputBot(writeBot),
+    .almostFull(permutationGeneratorIsAlmostFull),
+    
+    .slowDown(pipelinesRequestSlowdown),
+    .outputBot(botFromGen),
+    .outputBotValid(botFromGenValid),
+    .botSeriesFinished(botFromGenSeriesFinished),
+    .eccStatus(permutationGeneratorECCStatus)
+);
+
+wire[127:0] top;
+topReceiver topReceiver(clk, topChannel, top);
+wire[30*24-1:0] validBotPermutations_VALID;
+permuteCheck720Pipelined permuteCheck720Pipelined (
+    .clk(clk),
+    .top(top),
+    .bot(botFromGen),
+    .isBotValid(botFromGenValid),
+    .validBotPermutations(validBotPermutations_VALID) // 30 sets of 24 valid bot permutations
+);
+
+`define MULTI_PERMUTE_CHECK_LATENCY 3
+
+wire[127:0] botFromGen_VALID;
+hyperpipe #(.CYCLES(`MULTI_PERMUTE_CHECK_LATENCY), .WIDTH(128)) permutedBotPipe(clk, botFromGen, botFromGen_VALID);
+wire botFromGenSeriesFinished_VALID;
+hyperpipe #(.CYCLES(`MULTI_PERMUTE_CHECK_LATENCY)) botFromGenSeriesFinishedPipe(clk, botFromGenSeriesFinished, botFromGenSeriesFinished_VALID);
+
+`include "inlineVarSwap_header.v"
+
+// Generate bot permutations, MUST MATCH multiPermutChecks.v
+wire[127:0] botPermutations[29:0];
+generate
+assign botPermutations[0] = botFromGen_VALID;
+`VAR_SWAP_INLINE_WITHIN_GENERATE(1, 2, botPermutations[0], botPermutations[5])
+`VAR_SWAP_INLINE_WITHIN_GENERATE(1, 3, botPermutations[0], botPermutations[10])
+`VAR_SWAP_INLINE_WITHIN_GENERATE(1, 4, botPermutations[0], botPermutations[15])
+`VAR_SWAP_INLINE_WITHIN_GENERATE(1, 5, botPermutations[0], botPermutations[20])
+`VAR_SWAP_INLINE_WITHIN_GENERATE(1, 6, botPermutations[0], botPermutations[25])
+
+for(genvar i = 0; i < 6; i = i + 1) begin
+    `VAR_SWAP_INLINE_WITHIN_GENERATE(2, 3, botPermutations[5*i], botPermutations[5*i+1])
+    `VAR_SWAP_INLINE_WITHIN_GENERATE(2, 4, botPermutations[5*i], botPermutations[5*i+2])
+    `VAR_SWAP_INLINE_WITHIN_GENERATE(2, 5, botPermutations[5*i], botPermutations[5*i+3])
+    `VAR_SWAP_INLINE_WITHIN_GENERATE(2, 6, botPermutations[5*i], botPermutations[5*i+4])
+end
+
+wire[29:0] slowDownWOR;
+always @(posedge clk) pipelinesRequestSlowdown <= |slowDownWOR;
+
+wire[29:0] pipelineHasResultsAvailable;
+reg allPipelinesHaveResultsAvailable; always @(posedge clk) allPipelinesHaveResultsAvailable <= &pipelineHasResultsAvailable;
+
+reg[1:0] throughputLimiter = 0; always @(posedge clk) throughputLimiter <= throughputLimiter + 1;
+reg grabPipelineResults; always @(posedge clk) grabPipelineResults <= (throughputLimiter == 0) && allPipelinesHaveResultsAvailable && !slowDown;
+
+wire[1:0] activityMeasures[29:0];
+wire[$clog2(24*7)+35-1:0] pcoeffSums[29:0];
+wire[$clog2(24*7)-1:0] pcoeffCounts[29:0];
+
+wire[29:0] eccStatuses;
+reg outputFIFOECCStatus;
+always @(posedge clk) eccStatus <= permutationGeneratorECCStatus && outputFIFOECCStatus && &eccStatuses;
+
+for(genvar permutationI = 0; permutationI < 30; permutationI = permutationI + 1) begin
+    (* dont_merge *) reg pipelineRST; always @(posedge clk) pipelineRST <= rst;
+    aggregatingPermutePipeline24 #(.PCOEFF_COUNT_BITWIDTH($clog2(24*7))) pipeline (
+        .clk(clk),
+        .clk2x(clk2x),
+        .rst(pipelineRST),
+        .topChannel(topChannel),
+        .activityMeasure(activityMeasures[permutationI]), // Instrumentation wire for profiling (0-2 activity level)
+        
+        // Input side
+        .botIn(botPermutations[permutationI]),
+        .validBotPermutes(validBotPermutations_VALID[24*permutationI +: 24]),
+        .batchDone(botFromGenSeriesFinished_VALID),
+        .slowDown(slowDownWOR[permutationI]),
+        
+        // Output side
+        .grabResults(grabPipelineResults),
+        .resultsAvailable(pipelineHasResultsAvailable[permutationI]),
+        .pcoeffSum(pcoeffSums[permutationI]),
+        .pcoeffCount(pcoeffCounts[permutationI]),
+        
+        .eccStatus(eccStatuses[permutationI])
+    );
+end
+
+reg[2:0] activityMeasures15[14:0];
+reg[$clog2(24*7*2)+35-1:0] pcoeffSums15[14:0];
+reg[$clog2(24*7*2)-1:0] pcoeffCounts15[14:0];
+
+for(genvar i = 0; i < 15; i = i + 1) begin
+    always @(posedge clk) begin
+        activityMeasures15[i] <= activityMeasures[2*i] + activityMeasures[2*i+1];
+        pcoeffSums15[i] <= pcoeffSums[2*i] + pcoeffSums[2*i+1];
+        pcoeffCounts15[i] <= pcoeffCounts[2*i] + pcoeffCounts[2*i+1];
+    end
+end
+
+reg[3:0] activityMeasures8[7:0];
+reg[$clog2(24*7*2*2)+35-1:0] pcoeffSums8[7:0];
+reg[$clog2(24*7*2*2)-1:0] pcoeffCounts8[7:0];
+
+for(genvar i = 0; i < 7; i = i + 1) begin
+    always @(posedge clk) begin
+        activityMeasures8[i] <= activityMeasures15[2*i] + activityMeasures15[2*i+1];
+        pcoeffSums8[i] <= pcoeffSums15[2*i] + pcoeffSums15[2*i+1];
+        pcoeffCounts8[i] <= pcoeffCounts15[2*i] + pcoeffCounts15[2*i+1];
+    end
+end
+always @(posedge clk) begin
+    activityMeasures8[7] <= activityMeasures15[14];
+    pcoeffSums8[7] <= pcoeffSums15[14];
+    pcoeffCounts8[7] <= pcoeffCounts15[14];
+end
+
+reg[4:0] activityMeasures4[3:0];
+reg[$clog2(24*7*2*2*2)+35-1:0] pcoeffSums4[3:0];
+reg[$clog2(24*7*2*2*2)-1:0] pcoeffCounts4[3:0];
+
+for(genvar i = 0; i < 4; i = i + 1) begin
+    always @(posedge clk) begin
+        activityMeasures4[i] <= activityMeasures8[2*i] + activityMeasures8[2*i+1];
+        pcoeffSums4[i] <= pcoeffSums8[2*i] + pcoeffSums8[2*i+1];
+        pcoeffCounts4[i] <= pcoeffCounts8[2*i] + pcoeffCounts8[2*i+1];
+    end
+end
+
+reg[5:0] activityMeasures2[1:0];
+reg[$clog2(24*7*2*2*2*2)+35-1:0] pcoeffSums2[1:0];
+reg[$clog2(24*7*2*2*2*2)-1:0] pcoeffCounts2[1:0];
+
+for(genvar i = 0; i < 2; i = i + 1) begin
+    always @(posedge clk) begin
+        activityMeasures2[i] <= activityMeasures4[2*i] + activityMeasures4[2*i+1];
+        pcoeffSums2[i] <= pcoeffSums4[2*i] + pcoeffSums4[2*i+1];
+        pcoeffCounts2[i] <= pcoeffCounts4[2*i] + pcoeffCounts4[2*i+1];
+    end
+end
+
+endgenerate
+
+always @(posedge clk) begin
+    activityMeasure <= activityMeasures2[0] + activityMeasures2[1];
+    pcoeffSum <= pcoeffSums2[0] + pcoeffSums2[1];
+    pcoeffCount <= pcoeffCounts2[0] + pcoeffCounts2[1];
+end
+
+`define M20K_FIFO_READ_LATENCY 0
+`define SUM_PIPELINE_STAGES 5
+hyperpipe #(.CYCLES(`M20K_FIFO_READ_LATENCY + `SUM_PIPELINE_STAGES)) resultArrivesPipe(clk, grabPipelineResults, resultValid);
+
+endmodule
+
+

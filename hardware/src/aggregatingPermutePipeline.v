@@ -181,8 +181,11 @@ module aggregatingPermutePipeline24 #(parameter PCOEFF_COUNT_BITWIDTH = 10) (
     output[PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
     output[PCOEFF_COUNT_BITWIDTH-1:0] pcoeffCount,
     
-    output wor eccStatus
+    output reg eccStatus
 );
+
+wor eccStatusWire;
+always @(posedge clk) eccStatus <= eccStatusWire;
 
 wire requestSlowDown;
 
@@ -205,7 +208,7 @@ botPermuter1234 botPermuter1234 (
     .permutedBotValid(permutedBotValid),
     .batchDone(batchFinished),
     .slowDown(requestSlowDown),
-    .eccStatus(eccStatus)
+    .eccStatus(eccStatusWire)
 );
 
 aggregatingPipelineWithOutputFIFO #(PCOEFF_COUNT_BITWIDTH) aggregatingPipelineWithFIFO(
@@ -227,7 +230,7 @@ aggregatingPipelineWithOutputFIFO #(PCOEFF_COUNT_BITWIDTH) aggregatingPipelineWi
     pcoeffSum,
     pcoeffCount,
     
-    eccStatus
+    eccStatusWire
 );
 
 endmodule

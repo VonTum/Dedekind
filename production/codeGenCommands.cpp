@@ -209,7 +209,7 @@ void genGraphVisCode(int numLayers) {
 }
 
 #include <string.h>
-void genPermute1234Luts() {
+void genPermute1234LUTs() {
 	const char* permutations[] {
 		"abcd", "abdc", "acbd", "acdb", "adbc", "adcb",
         "bacd", "badc", "bcad", "bcda", "bdac", "bdca",
@@ -230,7 +230,7 @@ void genPermute1234Luts() {
 		std::cout << "case({selectedSet, selectedPermutationInSet})" << std::endl;
 		for(int setI = 0; setI < 4; setI++) {
 			for(int permInSetI = 0; permInSetI < 6; permInSetI++) {
-				const char* selectedPermutation = permutations[setI * 6 + permInSetI];
+				const char* selectedPermutation = permutations[23 - (setI * 6 + permInSetI)];
 
 				int varAtPosition = selectedPermutation[oneVarPosition[0] - 'a'] - 'a';
 
@@ -246,7 +246,7 @@ void genPermute1234Luts() {
 		std::cout << "case({selectedSet, selectedPermutationInSet})" << std::endl;
 		for(int setI = 0; setI < 4; setI++) {
 			for(int permInSetI = 0; permInSetI < 6; permInSetI++) {
-				const char* selectedPermutation = permutations[setI * 6 + permInSetI];
+				const char* selectedPermutation = permutations[23 - (setI * 6 + permInSetI)];
 
 				char varsAtPosition[2] {
 					selectedPermutation[twoVarPosition[0] - 'a'],
@@ -279,7 +279,7 @@ CommandSet codeGenCommands {"Code Generation", {
 	{"graphVis8", []() {genGraphVisCode(8); }},
 	{"graphVis9", []() {genGraphVisCode(9); }},
 
-	{"genPermute1234LUTs", genPermute1234Luts}
+	{"genPermute1234LUTs", genPermute1234LUTs}
 }, {}};
 
 

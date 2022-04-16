@@ -52,33 +52,33 @@ wire[127:0] allPermutations[3:0][5:0];
         cbad, cbda, cabd, cadb, cdba, cdab; 
         dbca, dbac, dcba, dcab, dabc, dacb;*/
 
-assign allPermutations[0][0] = botABCD;
-assign allPermutations[0][1] = botABDC;
-assign allPermutations[0][2] = botACBD;
-assign allPermutations[0][3] = botACDB;
-assign allPermutations[0][4] = botADBC;
-assign allPermutations[0][5] = botADCB;
+assign allPermutations[3][5] = botABCD;
+assign allPermutations[3][4] = botABDC;
+assign allPermutations[3][3] = botACBD;
+assign allPermutations[3][2] = botACDB;
+assign allPermutations[3][1] = botADBC;
+assign allPermutations[3][0] = botADCB;
 
-assign allPermutations[1][0] = botBACD;
-assign allPermutations[1][1] = botBADC;
-assign allPermutations[1][2] = botBCAD;
-assign allPermutations[1][3] = botBCDA;
-assign allPermutations[1][4] = botBDAC;
-assign allPermutations[1][5] = botBDCA;
+assign allPermutations[2][5] = botBACD;
+assign allPermutations[2][4] = botBADC;
+assign allPermutations[2][3] = botBCAD;
+assign allPermutations[2][2] = botBCDA;
+assign allPermutations[2][1] = botBDAC;
+assign allPermutations[2][0] = botBDCA;
 
-assign allPermutations[2][0] = botCBAD;
-assign allPermutations[2][1] = botCBDA;
-assign allPermutations[2][2] = botCABD;
-assign allPermutations[2][3] = botCADB;
-assign allPermutations[2][4] = botCDBA;
-assign allPermutations[2][5] = botCDAB;
+assign allPermutations[1][5] = botCBAD;
+assign allPermutations[1][4] = botCBDA;
+assign allPermutations[1][3] = botCABD;
+assign allPermutations[1][2] = botCADB;
+assign allPermutations[1][1] = botCDBA;
+assign allPermutations[1][0] = botCDAB;
 
-assign allPermutations[3][0] = botDBCA;
-assign allPermutations[3][1] = botDBAC;
-assign allPermutations[3][2] = botDCBA;
-assign allPermutations[3][3] = botDCAB;
-assign allPermutations[3][4] = botDABC;
-assign allPermutations[3][5] = botDACB;
+assign allPermutations[0][5] = botDBCA;
+assign allPermutations[0][4] = botDBAC;
+assign allPermutations[0][3] = botDCBA;
+assign allPermutations[0][2] = botDCAB;
+assign allPermutations[0][1] = botDABC;
+assign allPermutations[0][0] = botDACB;
 
 reg[1:0] selectedSetD; always @(posedge clk) selectedSetD <= selectedSet;
 reg[2:0] selectedPermutationInSetD; always @(posedge clk) selectedPermutationInSetD <= selectedPermutationInSet;
@@ -132,6 +132,11 @@ endfunction
 
 wire[7:0] bot[15:0];
 
+reg selectedSetD;
+
+// TODO Bug look into why this doesn't work
+//always @(posedge clk) selectedSetD <= selectedSet;
+//wire[1:0] varInPos_a = ~selectedSetD; // Little optimization for variable a
 reg[1:0] varInPos_a;
 reg[1:0] varInPos_b;
 reg[1:0] varInPos_c;
@@ -141,56 +146,56 @@ reg[2:0] varInPos_ab;
 reg[2:0] varInPos_ac;
 reg[2:0] varInPos_ad;
 
+
 always @(posedge clk) begin
     /* Generated LUTs */
-    /*case({selectedSet, selectedPermutationInSet})
-        5'o00: varInPos_a<=0; 5'o01: varInPos_a<=0; 5'o02: varInPos_a<=0; 5'o03: varInPos_a<=0; 5'o04: varInPos_a<=0; 5'o05: varInPos_a<=0; 
-        5'o10: varInPos_a<=1; 5'o11: varInPos_a<=1; 5'o12: varInPos_a<=1; 5'o13: varInPos_a<=1; 5'o14: varInPos_a<=1; 5'o15: varInPos_a<=1; 
-        5'o20: varInPos_a<=2; 5'o21: varInPos_a<=2; 5'o22: varInPos_a<=2; 5'o23: varInPos_a<=2; 5'o24: varInPos_a<=2; 5'o25: varInPos_a<=2; 
-        5'o30: varInPos_a<=3; 5'o31: varInPos_a<=3; 5'o32: varInPos_a<=3; 5'o33: varInPos_a<=3; 5'o34: varInPos_a<=3; 5'o35: varInPos_a<=3; 
-        default: varInPos_a<=2'bXX;
-    endcase*/
-    varInPos_a <= selectedSet;
     case({selectedSet, selectedPermutationInSet})
-        5'o00: varInPos_b<=1; 5'o01: varInPos_b<=1; 5'o02: varInPos_b<=2; 5'o03: varInPos_b<=2; 5'o04: varInPos_b<=3; 5'o05: varInPos_b<=3; 
-        5'o10: varInPos_b<=0; 5'o11: varInPos_b<=0; 5'o12: varInPos_b<=2; 5'o13: varInPos_b<=2; 5'o14: varInPos_b<=3; 5'o15: varInPos_b<=3; 
-        5'o20: varInPos_b<=1; 5'o21: varInPos_b<=1; 5'o22: varInPos_b<=0; 5'o23: varInPos_b<=0; 5'o24: varInPos_b<=3; 5'o25: varInPos_b<=3; 
-        5'o30: varInPos_b<=1; 5'o31: varInPos_b<=1; 5'o32: varInPos_b<=2; 5'o33: varInPos_b<=2; 5'o34: varInPos_b<=0; 5'o35: varInPos_b<=0; 
+        5'o00: varInPos_a<=3; 5'o01: varInPos_a<=3; 5'o02: varInPos_a<=3; 5'o03: varInPos_a<=3; 5'o04: varInPos_a<=3; 5'o05: varInPos_a<=3; 
+        5'o10: varInPos_a<=2; 5'o11: varInPos_a<=2; 5'o12: varInPos_a<=2; 5'o13: varInPos_a<=2; 5'o14: varInPos_a<=2; 5'o15: varInPos_a<=2; 
+        5'o20: varInPos_a<=1; 5'o21: varInPos_a<=1; 5'o22: varInPos_a<=1; 5'o23: varInPos_a<=1; 5'o24: varInPos_a<=1; 5'o25: varInPos_a<=1; 
+        5'o30: varInPos_a<=0; 5'o31: varInPos_a<=0; 5'o32: varInPos_a<=0; 5'o33: varInPos_a<=0; 5'o34: varInPos_a<=0; 5'o35: varInPos_a<=0; 
+        default: varInPos_a<=2'bXX;
+    endcase
+    case({selectedSet, selectedPermutationInSet})
+        5'o00: varInPos_b<=0; 5'o01: varInPos_b<=0; 5'o02: varInPos_b<=2; 5'o03: varInPos_b<=2; 5'o04: varInPos_b<=1; 5'o05: varInPos_b<=1; 
+        5'o10: varInPos_b<=3; 5'o11: varInPos_b<=3; 5'o12: varInPos_b<=0; 5'o13: varInPos_b<=0; 5'o14: varInPos_b<=1; 5'o15: varInPos_b<=1; 
+        5'o20: varInPos_b<=3; 5'o21: varInPos_b<=3; 5'o22: varInPos_b<=2; 5'o23: varInPos_b<=2; 5'o24: varInPos_b<=0; 5'o25: varInPos_b<=0; 
+        5'o30: varInPos_b<=3; 5'o31: varInPos_b<=3; 5'o32: varInPos_b<=2; 5'o33: varInPos_b<=2; 5'o34: varInPos_b<=1; 5'o35: varInPos_b<=1; 
         default: varInPos_b<=2'bXX;
     endcase
     case({selectedSet, selectedPermutationInSet})
-        5'o00: varInPos_c<=2; 5'o01: varInPos_c<=3; 5'o02: varInPos_c<=1; 5'o03: varInPos_c<=3; 5'o04: varInPos_c<=1; 5'o05: varInPos_c<=2; 
-        5'o10: varInPos_c<=2; 5'o11: varInPos_c<=3; 5'o12: varInPos_c<=0; 5'o13: varInPos_c<=3; 5'o14: varInPos_c<=0; 5'o15: varInPos_c<=2; 
-        5'o20: varInPos_c<=0; 5'o21: varInPos_c<=3; 5'o22: varInPos_c<=1; 5'o23: varInPos_c<=3; 5'o24: varInPos_c<=1; 5'o25: varInPos_c<=0; 
-        5'o30: varInPos_c<=2; 5'o31: varInPos_c<=0; 5'o32: varInPos_c<=1; 5'o33: varInPos_c<=0; 5'o34: varInPos_c<=1; 5'o35: varInPos_c<=2; 
+        5'o00: varInPos_c<=2; 5'o01: varInPos_c<=1; 5'o02: varInPos_c<=0; 5'o03: varInPos_c<=1; 5'o04: varInPos_c<=0; 5'o05: varInPos_c<=2; 
+        5'o10: varInPos_c<=0; 5'o11: varInPos_c<=1; 5'o12: varInPos_c<=3; 5'o13: varInPos_c<=1; 5'o14: varInPos_c<=3; 5'o15: varInPos_c<=0; 
+        5'o20: varInPos_c<=2; 5'o21: varInPos_c<=0; 5'o22: varInPos_c<=3; 5'o23: varInPos_c<=0; 5'o24: varInPos_c<=3; 5'o25: varInPos_c<=2; 
+        5'o30: varInPos_c<=2; 5'o31: varInPos_c<=1; 5'o32: varInPos_c<=3; 5'o33: varInPos_c<=1; 5'o34: varInPos_c<=3; 5'o35: varInPos_c<=2; 
         default: varInPos_c<=2'bXX;
     endcase
     case({selectedSet, selectedPermutationInSet})
-        5'o00: varInPos_d<=3; 5'o01: varInPos_d<=2; 5'o02: varInPos_d<=3; 5'o03: varInPos_d<=1; 5'o04: varInPos_d<=2; 5'o05: varInPos_d<=1; 
-        5'o10: varInPos_d<=3; 5'o11: varInPos_d<=2; 5'o12: varInPos_d<=3; 5'o13: varInPos_d<=0; 5'o14: varInPos_d<=2; 5'o15: varInPos_d<=0; 
-        5'o20: varInPos_d<=3; 5'o21: varInPos_d<=0; 5'o22: varInPos_d<=3; 5'o23: varInPos_d<=1; 5'o24: varInPos_d<=0; 5'o25: varInPos_d<=1; 
-        5'o30: varInPos_d<=0; 5'o31: varInPos_d<=2; 5'o32: varInPos_d<=0; 5'o33: varInPos_d<=1; 5'o34: varInPos_d<=2; 5'o35: varInPos_d<=1; 
+        5'o00: varInPos_d<=1; 5'o01: varInPos_d<=2; 5'o02: varInPos_d<=1; 5'o03: varInPos_d<=0; 5'o04: varInPos_d<=2; 5'o05: varInPos_d<=0; 
+        5'o10: varInPos_d<=1; 5'o11: varInPos_d<=0; 5'o12: varInPos_d<=1; 5'o13: varInPos_d<=3; 5'o14: varInPos_d<=0; 5'o15: varInPos_d<=3; 
+        5'o20: varInPos_d<=0; 5'o21: varInPos_d<=2; 5'o22: varInPos_d<=0; 5'o23: varInPos_d<=3; 5'o24: varInPos_d<=2; 5'o25: varInPos_d<=3; 
+        5'o30: varInPos_d<=1; 5'o31: varInPos_d<=2; 5'o32: varInPos_d<=1; 5'o33: varInPos_d<=3; 5'o34: varInPos_d<=2; 5'o35: varInPos_d<=3; 
         default: varInPos_d<=2'bXX;
     endcase
     case({selectedSet, selectedPermutationInSet})
-        5'o00: varInPos_ab<=0; 5'o01: varInPos_ab<=0; 5'o02: varInPos_ab<=1; 5'o03: varInPos_ab<=1; 5'o04: varInPos_ab<=2; 5'o05: varInPos_ab<=2; 
-        5'o10: varInPos_ab<=0; 5'o11: varInPos_ab<=0; 5'o12: varInPos_ab<=3; 5'o13: varInPos_ab<=3; 5'o14: varInPos_ab<=4; 5'o15: varInPos_ab<=4; 
-        5'o20: varInPos_ab<=3; 5'o21: varInPos_ab<=3; 5'o22: varInPos_ab<=1; 5'o23: varInPos_ab<=1; 5'o24: varInPos_ab<=5; 5'o25: varInPos_ab<=5; 
-        5'o30: varInPos_ab<=4; 5'o31: varInPos_ab<=4; 5'o32: varInPos_ab<=5; 5'o33: varInPos_ab<=5; 5'o34: varInPos_ab<=2; 5'o35: varInPos_ab<=2; 
+        5'o00: varInPos_ab<=2; 5'o01: varInPos_ab<=2; 5'o02: varInPos_ab<=5; 5'o03: varInPos_ab<=5; 5'o04: varInPos_ab<=4; 5'o05: varInPos_ab<=4; 
+        5'o10: varInPos_ab<=5; 5'o11: varInPos_ab<=5; 5'o12: varInPos_ab<=1; 5'o13: varInPos_ab<=1; 5'o14: varInPos_ab<=3; 5'o15: varInPos_ab<=3; 
+        5'o20: varInPos_ab<=4; 5'o21: varInPos_ab<=4; 5'o22: varInPos_ab<=3; 5'o23: varInPos_ab<=3; 5'o24: varInPos_ab<=0; 5'o25: varInPos_ab<=0; 
+        5'o30: varInPos_ab<=2; 5'o31: varInPos_ab<=2; 5'o32: varInPos_ab<=1; 5'o33: varInPos_ab<=1; 5'o34: varInPos_ab<=0; 5'o35: varInPos_ab<=0; 
         default: varInPos_ab<=3'bXXX;
     endcase
     case({selectedSet, selectedPermutationInSet})
-        5'o00: varInPos_ac<=1; 5'o01: varInPos_ac<=2; 5'o02: varInPos_ac<=0; 5'o03: varInPos_ac<=2; 5'o04: varInPos_ac<=0; 5'o05: varInPos_ac<=1; 
-        5'o10: varInPos_ac<=3; 5'o11: varInPos_ac<=4; 5'o12: varInPos_ac<=0; 5'o13: varInPos_ac<=4; 5'o14: varInPos_ac<=0; 5'o15: varInPos_ac<=3; 
-        5'o20: varInPos_ac<=1; 5'o21: varInPos_ac<=5; 5'o22: varInPos_ac<=3; 5'o23: varInPos_ac<=5; 5'o24: varInPos_ac<=3; 5'o25: varInPos_ac<=1; 
-        5'o30: varInPos_ac<=5; 5'o31: varInPos_ac<=2; 5'o32: varInPos_ac<=4; 5'o33: varInPos_ac<=2; 5'o34: varInPos_ac<=4; 5'o35: varInPos_ac<=5; 
+        5'o00: varInPos_ac<=5; 5'o01: varInPos_ac<=4; 5'o02: varInPos_ac<=2; 5'o03: varInPos_ac<=4; 5'o04: varInPos_ac<=2; 5'o05: varInPos_ac<=5; 
+        5'o10: varInPos_ac<=1; 5'o11: varInPos_ac<=3; 5'o12: varInPos_ac<=5; 5'o13: varInPos_ac<=3; 5'o14: varInPos_ac<=5; 5'o15: varInPos_ac<=1; 
+        5'o20: varInPos_ac<=3; 5'o21: varInPos_ac<=0; 5'o22: varInPos_ac<=4; 5'o23: varInPos_ac<=0; 5'o24: varInPos_ac<=4; 5'o25: varInPos_ac<=3; 
+        5'o30: varInPos_ac<=1; 5'o31: varInPos_ac<=0; 5'o32: varInPos_ac<=2; 5'o33: varInPos_ac<=0; 5'o34: varInPos_ac<=2; 5'o35: varInPos_ac<=1; 
         default: varInPos_ac<=3'bXXX;
     endcase
     case({selectedSet, selectedPermutationInSet})
-        5'o00: varInPos_ad<=2; 5'o01: varInPos_ad<=1; 5'o02: varInPos_ad<=2; 5'o03: varInPos_ad<=0; 5'o04: varInPos_ad<=1; 5'o05: varInPos_ad<=0; 
-        5'o10: varInPos_ad<=4; 5'o11: varInPos_ad<=3; 5'o12: varInPos_ad<=4; 5'o13: varInPos_ad<=0; 5'o14: varInPos_ad<=3; 5'o15: varInPos_ad<=0; 
-        5'o20: varInPos_ad<=5; 5'o21: varInPos_ad<=1; 5'o22: varInPos_ad<=5; 5'o23: varInPos_ad<=3; 5'o24: varInPos_ad<=1; 5'o25: varInPos_ad<=3; 
-        5'o30: varInPos_ad<=2; 5'o31: varInPos_ad<=5; 5'o32: varInPos_ad<=2; 5'o33: varInPos_ad<=4; 5'o34: varInPos_ad<=5; 5'o35: varInPos_ad<=4; 
+        5'o00: varInPos_ad<=4; 5'o01: varInPos_ad<=5; 5'o02: varInPos_ad<=4; 5'o03: varInPos_ad<=2; 5'o04: varInPos_ad<=5; 5'o05: varInPos_ad<=2; 
+        5'o10: varInPos_ad<=3; 5'o11: varInPos_ad<=1; 5'o12: varInPos_ad<=3; 5'o13: varInPos_ad<=5; 5'o14: varInPos_ad<=1; 5'o15: varInPos_ad<=5; 
+        5'o20: varInPos_ad<=0; 5'o21: varInPos_ad<=3; 5'o22: varInPos_ad<=0; 5'o23: varInPos_ad<=4; 5'o24: varInPos_ad<=3; 5'o25: varInPos_ad<=4; 
+        5'o30: varInPos_ad<=0; 5'o31: varInPos_ad<=1; 5'o32: varInPos_ad<=0; 5'o33: varInPos_ad<=2; 5'o34: varInPos_ad<=1; 5'o35: varInPos_ad<=2; 
         default: varInPos_ad<=3'bXXX;
     endcase
 end
@@ -287,8 +292,11 @@ for(i = 0; i < 2; i=i+1) begin
 end
 endgenerate
 
+reg storedLastBotOfBatch;
+
 wire[3:0] triplesCombined = {tripleSectionIsZero, tripleSectionHasExactlyOneBit};
-assign acceptData = (triplesCombined == 4'b1001 || triplesCombined == 4'b0110 || tripleSectionIsZero == 2'b11) && !slowDown;
+wire earlyAccept = !storedLastBotOfBatch && (triplesCombined == 4'b1001 || triplesCombined == 4'b0110);
+assign acceptData = (earlyAccept || tripleSectionIsZero == 2'b11) && !slowDown;
 
 
 /*wire*/reg[1:0] firstBitInSection[5:0];
@@ -327,7 +335,7 @@ always @(posedge clk) begin
     if(!slowDown) begin
         for(ii = 0; ii < 6; ii=ii+1) begin
             if(acceptData) begin
-                sections[ii] <= {validBotPermutesIn[ii],validBotPermutesIn[6+ii],validBotPermutesIn[12+ii],validBotPermutesIn[18+ii]};
+                sections[ii] <= {validBotPermutesIn[18+ii],validBotPermutesIn[12+ii],validBotPermutesIn[6+ii],validBotPermutesIn[ii]};
             end else begin
                 if(isClearingSection[ii]) begin
                     sections[ii][firstBitInSection[ii]] <= 0;
@@ -337,7 +345,6 @@ always @(posedge clk) begin
     end
 end
 
-reg storedLastBotOfBatch;
 always @(posedge clk) begin
     if(acceptData) begin
         storedLastBotOfBatch <= lastBotOfBatch;
