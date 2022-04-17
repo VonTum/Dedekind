@@ -57,6 +57,7 @@ static bool ENABLE_COMPARE = false;
 static bool ENABLE_STATISTICS = false;
 static int SHOW_FRONT = 0;
 static int SHOW_TAIL = 0;
+static double ACTIVITY_MULTIPLIER = 60.0;
 
 // OpenCL runtime configuration
 static cl_platform_id platform = NULL;
@@ -148,9 +149,9 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 	cl_int status;
 	 // This is allowed, mmap aligns buffers to the nearest page boundary. Usually something like 1024 or 4096 byte alignment > 64
 	
-	for(size_t i = mbfCounts[7] * 2 / 2 - 200; i < mbfCounts[7] * 2 / 2 + 200; i++) {
+	/*for(size_t i = mbfCounts[7] * 2 / 2 - 200; i < mbfCounts[7] * 2 / 2 + 200; i++) {
 		std::cout << i << ">" << mbfsUINT64[i] << "\n";
-	}
+	}*/
 	std::cout << std::endl;
 
 	status = clEnqueueWriteBuffer(queue,mbfLUTMem,0,0,mbfCounts[7]*16 /*16 bytes per MBF*/,mbfsUINT64,0,0,0);
@@ -248,10 +249,10 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		uint64_t activityCounter = (analysisBot & 0x1FFFFFFF80000000) >> 31;
 		uint64_t cycleCounter = analysisBot & 0x000000007FFFFFFF;
 
-		double occupation = (activityCounter << 6) / (40.0 * cycleCounter);
+		double occupation = (activityCounter << 6) / (ACTIVITY_MULTIPLIER * cycleCounter);
 
 		std::cout << "Took " << (cycleCounter<<10) << " cycles" << std::endl;
-		//std::cout << (activityCounter<<16) << " activity" << std::endl;
+		std::cout << (activityCounter<<16) << " activity" << std::endl;
 		std::cout << "Occupation: " << occupation * 100.0 << "%" << std::endl;
 
 		if(ENABLE_COMPARE) {

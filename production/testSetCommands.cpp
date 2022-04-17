@@ -308,6 +308,57 @@ void FullPermutePipelineTestSetOpenCL(std::vector<size_t> counts, std::string ou
 	testSetCpp.close();
 }
 
+#include "../dedelib/flatPCoeffProcessing.h"
+
+void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::string outFileMem) {
+	std::vector<NodeIndex> topsToProcess;
+	for(size_t i = 0; i < topsIn.size(); i++) {
+		topsToProcess.push_back(NodeIndex(topsIn[i]));
+	}
+
+	constexpr size_t Variables = 7;
+	constexpr size_t BatchSize = 8;
+	std::cout << "Reading FlatMBFStructure..." << std::endl;
+	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
+	const uint64_t* mbfsUINT64 = readFlatBufferNoMMAP<uint64_t>(FileName::flatMBFsU64(7), FlatMBFStructure<7>::MBF_COUNT * 2);
+	std::cout << "FlatMBFStructure initialized." << std::endl;
+
+	std::cout << "Starting Computation..." << std::endl;
+	PCoeffProcessingContext context(Variables, topsToProcess.size(), topsToProcess.size());
+	std::cout << "Input production..." << std::endl;
+	inputProducer<Variables, BatchSize>(allMBFData, context, topsToProcess);
+	std::cout << "Processing..." << std::endl;
+	cpuProcessor_SingleThread(allMBFData, context);
+
+	std::cout << "Results..." << std::endl;
+
+	std::ofstream testSet(outFileMem); // plain text file memory file
+
+	for(size_t i = 0; i < topsToProcess.size(); i++) {
+		OutputBuffer outBuf = context.outputQueue.pop_wait().value();
+		JobInfo& job = outBuf.originalInputData;
+		for(size_t elementI = 0; elementI < job.size(); elementI++) {
+			NodeIndex elem = job.bufStart[elementI];
+			bool isTop = elem & 0x80000000;
+			NodeIndex mbfIndex = elem & 0x7FFFFFFF;
+			uint64_t upper = mbfsUINT64[2*mbfIndex];
+			uint64_t lower = mbfsUINT64[2*mbfIndex+1];
+			BitSet<128> bitset;
+			bitset.data = _mm_set_epi64x(upper, lower);
+			ProcessedPCoeffSum processed = outBuf.outputBuf[mbfIndex];
+
+			testSet << (isTop ? '1' : '0');
+			testSet << '_' << bitset << '_';
+			printBits(testSet, getPCoeffCount(processed), 16);
+			testSet << '_';
+			printBits(testSet, getPCoeffSum(processed), 48);
+			testSet << std::endl;
+		}
+	}
+
+	testSet.close();
+}
+
 void singleStreamPipelineTestSetOpenCL(std::vector<size_t> counts, std::string outFileMem) {
 	constexpr unsigned int Variables = 7;
 	std::vector<TopBots<Variables>> topBots = readTopBots<Variables>(5000);
@@ -439,5 +490,7 @@ CommandSet testSetCommands{"Test Set Generation", {
 	{"pipeline24PackTestSetOpenCL", [](const std::string& sizeList) {pipelinePackTestSetForOpenCL(parseSizeList(sizeList), 3, FileName::pipeline24PackTestSetForOpenCLMem(7), FileName::pipeline24PackTestSetForOpenCLCpp(7)); }},
 	{"singleStreamPipelineTestSetOpenCL", [](const std::string& sizeList) {singleStreamPipelineTestSetOpenCL(parseSizeList(sizeList), FileName::singleStreamPipelineTestSetForOpenCLMem(7)); }},
 
-	{"FullPermutePipelineTestSetOpenCL", [](const std::string& sizeList) {FullPermutePipelineTestSetOpenCL(parseSizeList(sizeList), FileName::FullPermutePipelineTestSetOpenCLMem(7), FileName::FullPermutePipelineTestSetOpenCLCpp(7)); }}
+	{"FullPermutePipelineTestSetOpenCL", [](const std::string& sizeList) {FullPermutePipelineTestSetOpenCL(parseSizeList(sizeList), FileName::FullPermutePipelineTestSetOpenCLMem(7), FileName::FullPermutePipelineTestSetOpenCLCpp(7)); }},
+
+	{"GenTopsFullPermutePipelineTestSetOpenCL", [](const std::string& topList) {GenTopsFullPermutePipelineTestSetOpenCL(parseSizeList(topList), FileName::FullPermutePipelineTestSetOpenCLMem(7));}}
 }};
