@@ -235,7 +235,6 @@ MultiStreamSynchronizer #(.DEPTH_LOG2(9), .NUMBER_OF_FIFOS(30)) multiStreamSynch
     .writeAddrs(writeAddrs),
     
     // Read side
-    .slowDown(slowDown),
     .readEnable(massFIFORead),
     .readAddr(readAddr)
 );

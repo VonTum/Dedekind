@@ -34,11 +34,8 @@ topReceiver receiver(
     top
 );
 
-reg[127:0] graphD;
-always @(posedge clk) begin
-    graphD <= top & ~bot;
-    if(isBotValid && (bot & ~top) != 0) $error("Bad bottom for this top!");
-end
+reg[127:0] graphD; always @(posedge clk) graphD <= top & ~bot;
+
 reg isBotValidD; always @(posedge clk) isBotValidD <= isBotValid;
 reg lastBotOfBatchD; always @(posedge clk) lastBotOfBatchD <= lastBotOfBatch;
 

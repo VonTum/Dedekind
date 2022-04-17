@@ -543,7 +543,11 @@ for(genvar permutationI = 0; permutationI < 30; permutationI = permutationI + 1)
         assign botParts[i] = botPermutations[permutationI][i*8+:8];
     end
     
-    reg sharedAll; always @(posedge clk) sharedAll <= (&({topParts[0], topParts[15]} | ~{botParts[0],botParts[15]})) && isBotValid;
+    wire[7:0] sharedAllParts;
+    for(genvar k = 0; k < 8; k = k + 1) begin
+        assign sharedAllParts[k] = (topParts[0][k] | ~botParts[0][k]) && (topParts[15][7-k] | ~botParts[15][7-k]);
+    end
+    reg sharedAll; always @(posedge clk) sharedAll <= &sharedAllParts && isBotValid;
     
     wire[7:0] oneVarTops[3:0]; // indexed a, b, c, d
     assign oneVarTops[0] = topParts[4'b0001];assign oneVarTops[1] = topParts[4'b0010];
@@ -575,17 +579,37 @@ for(genvar permutationI = 0; permutationI < 30; permutationI = permutationI + 1)
         a__b, a__c, a__d, c__d, b__d, b__c
     */
     
-    reg[15:0] oneThreeVarOverlaps;
+    wire[15:0] oneThreeVarOverlaps;
     // maps var j to location i
     for(genvar i = 0; i < 4; i=i+1) begin
         for(genvar j = 0; j < 4; j=j+1) begin
-            always @(posedge clk) oneThreeVarOverlaps[i * 4 + j] <= &((oneVarTops[i] | ~oneVarBots[j]) & (threeVarTops[i] | ~threeVarBots[j]));
+            wire[7:0] oneThreeVarOverlapsParts;
+            for(genvar k = 0; k < 8; k = k + 1) begin
+                assign oneThreeVarOverlapsParts[k] = (oneVarTops[i][k] | ~oneVarBots[j][k]) & (threeVarTops[i][7-k] | ~threeVarBots[j][7-k]);
+            end
+            reg oneThreeOverlapsRegA;
+            reg oneThreeOverlapsRegB;
+            always @(posedge clk) begin
+                oneThreeOverlapsRegA <= (oneThreeVarOverlapsParts[0] & oneThreeVarOverlapsParts[1]) & (oneThreeVarOverlapsParts[2] & oneThreeVarOverlapsParts[3]);
+                oneThreeOverlapsRegB <= (oneThreeVarOverlapsParts[4] & oneThreeVarOverlapsParts[5]) & (oneThreeVarOverlapsParts[6] & oneThreeVarOverlapsParts[7]);
+            end
+            assign oneThreeVarOverlaps[i * 4 + j] = oneThreeOverlapsRegA & oneThreeOverlapsRegB;
         end
     end
-    reg[17:0] twoTwoVarOverlaps;
+    wire[17:0] twoTwoVarOverlaps;
     for(genvar i = 0; i < 3; i=i+1) begin
         for(genvar j = 0; j < 6; j=j+1) begin
-            always @(posedge clk) twoTwoVarOverlaps[i * 6 + j] <= &((twoVarTops[i] | ~twoVarBots[j]) & (twoVarTops[i+3] | ~twoVarBots[(j+3) % 6])); // joins ab witb cd, ad with bc etc. 
+            wire[7:0] twoTwoVarOverlapsParts;
+            for(genvar k = 0; k < 8; k = k + 1) begin
+                assign twoTwoVarOverlapsParts[k] = (twoVarTops[i][k] | ~twoVarBots[j][k]) & (twoVarTops[i+3][7-k] | ~twoVarBots[(j+3) % 6][7-k]); // joins ab witb cd, ad with bc etc. 
+            end
+            reg twoTwoOverlapsRegA;
+            reg twoTwoOverlapsRegB;
+            always @(posedge clk) begin
+                twoTwoOverlapsRegA <= (twoTwoVarOverlapsParts[0] & twoTwoVarOverlapsParts[1]) & (twoTwoVarOverlapsParts[2] & twoTwoVarOverlapsParts[3]);
+                twoTwoOverlapsRegB <= (twoTwoVarOverlapsParts[4] & twoTwoVarOverlapsParts[5]) & (twoTwoVarOverlapsParts[6] & twoTwoVarOverlapsParts[7]);
+            end
+            assign twoTwoVarOverlaps[i * 6 + j] = twoTwoOverlapsRegA & twoTwoOverlapsRegB;
         end
     end
     

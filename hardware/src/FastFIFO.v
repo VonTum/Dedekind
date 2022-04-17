@@ -180,7 +180,6 @@ module MultiStreamSynchronizer #(parameter DEPTH_LOG2 = 9, parameter NUMBER_OF_F
     output[DEPTH_LOG2*NUMBER_OF_FIFOS-1:0] writeAddrs,
     
     // Read side
-    input slowDown,
     output reg readEnable,
     output reg[DEPTH_LOG2-1:0] readAddr
 );
@@ -211,7 +210,7 @@ reg[1:0] cycler = 0;
 always @(posedge clk) begin
     readD <= read;
     readEnable <= readD;
-    read <= cycler == 0 && !slowDown && &hasDatas;
+    read <= cycler == 0 && &hasDatas;
     cycler <= cycler >= 2 ? 0 : cycler + 1;
     readAddr <= readAddrReg - 1;
     if(rst) begin
