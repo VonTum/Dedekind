@@ -22,14 +22,14 @@
            For variable latency functions, pipeline around this function will be balanced to this 
            value. Setting EXPECTED_LATENCY to a different value will still produce correct results
            but may affect number of stalls inside the pipeline. -->
-      <EXPECTED_LATENCY value="600"/> <!-- mem size is 512, so just a bit more for stalls-->
+      <EXPECTED_LATENCY value="1000"/> <!-- mem size is 512, so just a bit more for stalls-->
       
       <!-- Number of multiple inputs that can be processed simultaneously by this function.
            If IS_STALL_FREE="no" and IS_FIXED_LATENCY="no", the CAPACITY value must be specified.
            Otherwise, it is not required.
            If CAPACITY is strictly less than EXPECTED_LATENCY, the compiler will automatically 
            insert capacity-balancing FIFOs after this function when required. -->
-      <CAPACITY value="600"/> <!-- mem size is 512, so just a bit more for stalls-->
+      <CAPACITY value="16000"/> <!-- 2000 per 2xpipeline, 2x5 pipelines, should be enough. No stalling due to OpenCL please! -->
       
       <!-- Set to "yes" to indicate that this function has side-effects. Calls to functions
            with side-effects will not be optimized away and only valid data will be fed

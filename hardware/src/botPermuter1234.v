@@ -385,6 +385,8 @@ wire noNewDataAvailable = nextValidPermutesReadAddr == writeAddr;
 reg curAddrIsNotNew;
 reg storedAddrIsNotNew;
 
+wire[DEPTH_LOG2-1:0] leftoverSpace = readAddr - writeAddr;
+
 always @(posedge clk) begin
     if(rst) begin
         writeAddr <= 1;
@@ -403,7 +405,7 @@ always @(posedge clk) begin
         storedAddrIsNotNew <= curAddrIsNotNew;
     end
     
-    almostFull <= (readAddr - writeAddr) < ALMOST_FULL_MARGIN;
+    almostFull <= leftoverSpace < ALMOST_FULL_MARGIN;
 end
 
 wire botM20KECC;
