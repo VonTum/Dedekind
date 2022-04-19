@@ -1,6 +1,7 @@
+// Implemented in HDL
 ulong fullPipeline(ulong botUpper, ulong botLower, bool startNewTop);
 
-// Using HDL library components
+__attribute__((uses_global_work_offset(0)))
 kernel void fullPipelineKernel(global const ulong2 * restrict mbfLUT, global const uint * restrict jobsIn, global ulong * restrict processedPCoeffsOut, uint workGroupSize) {
   for (uint i = 0; i < workGroupSize; i++) {
     uint curJob = __pipelined_load(jobsIn + i);
