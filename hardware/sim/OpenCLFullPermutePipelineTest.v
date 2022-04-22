@@ -33,7 +33,7 @@ initial begin
     //inputBotValid = 1;
 end
 
-parameter MEMSIZE = 13713;
+parameter MEMSIZE = 99000;
 reg[1+128+16+48-1:0] dataTable[MEMSIZE-1:0];
 initial $readmemb("FullPermutePipelineTestSetOpenCL7.mem", dataTable);
 
@@ -45,7 +45,8 @@ reg[$clog2(MEMSIZE)-1:0] outputIndex = 0;//3754;
 
 always @(inputBotValid or inputIndex) if(inputIndex >= MEMSIZE) inputBotValid <= 0;
 
-wire[127:0] bot;
+wire[127:0] botA;
+wire[127:0] botB;
 
 wire startNewTop;
 wire isReadyForInput;
@@ -56,10 +57,14 @@ initial begin
     forever #10000 isReadyForOutput = !isReadyForOutput;
 end
 
-wire[63:0] summedDataPcoeffCountOut;
-wire eccStatus = summedDataPcoeffCountOut[63];
-wire[47:0] summedData = summedDataPcoeffCountOut[47:0];
-wire[12:0] pcoeffCount = summedDataPcoeffCountOut[13+48-1:48];
+wire[63:0] summedDataPcoeffCountOutA;
+wire eccStatus = summedDataPcoeffCountOutA[63];
+wire[47:0] summedDataA = summedDataPcoeffCountOutA[47:0];
+wire[12:0] pcoeffCountA = summedDataPcoeffCountOutA[13+48-1:48];
+
+wire[63:0] summedDataPcoeffCountOutB;
+wire[47:0] summedDataB = summedDataPcoeffCountOutB[47:0];
+wire[12:0] pcoeffCountB = summedDataPcoeffCountOutB[13+48-1:48];
 
 OpenCLFullPermutationPipeline elementUnderTest (
     .clock(clock),
@@ -71,9 +76,9 @@ OpenCLFullPermutationPipeline elementUnderTest (
 	.oready(isReadyForInput), 
     
     .startNewTop(startNewTop),
-    .botLower(bot[63:0]), // Represents all final 3 var swaps
-    .botUpper(bot[127:64]), // Represents all final 3 var swaps
-    .summedDataPcoeffCountOut(summedDataPcoeffCountOut)   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
+    .mbfLowers({botA[63:0], botB[63:0]}),
+    .mbfUppers({botA[127:64], botB[127:64]}),
+    .results({summedDataPcoeffCountOutA, summedDataPcoeffCountOutB})   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
 wire isPassingInput = inputBotValid && isReadyForInput;
@@ -85,24 +90,29 @@ wire isPassingBotOutput = isPassingOutput && !nextOutputIsTopOutput;
 
 always @(posedge clock) if(!rst) begin
     if(isPassingInput) begin
-        inputIndex <= inputIndex + 1;
+        inputIndex <= inputIndex + 2;
     end
     if(isPassingOutput) begin
-        resultsTable[outputIndex] = summedDataPcoeffCountOut;
+        resultsTable[outputIndex] = summedDataPcoeffCountOutA;
+        resultsTable[outputIndex+1] = summedDataPcoeffCountOutB;
         
-        outputIndex <= outputIndex + 1;
+        outputIndex <= outputIndex + 2;
     end
 end
 
-assign {startNewTop, bot} = dataTable[inputIndex][1+128+16+48-1 : 16+48];
+assign {startNewTop, botA} = dataTable[inputIndex][1+128+16+48-1 : 16+48];
+assign botB = dataTable[inputIndex+1][/*1+*/128+16+48-1 : 16+48];
 
-wire[47:0] offsetSum = dataTable[outputIndex][48-1 : 0];
-wire[12:0] offsetCount = dataTable[outputIndex][12+48 : 48];
+wire[47:0] offsetSumA = dataTable[outputIndex][48-1 : 0];
+wire[12:0] offsetCountA = dataTable[outputIndex][12+48 : 48];
 
-wire CORRECT_SUM = isPassingBotOutput ? (summedData == offsetSum) : 1'b1; //1'bX;
-wire CORRECT_COUNT = isPassingBotOutput ? (pcoeffCount == offsetCount) : 1'b1; //1'bX;
+wire[47:0] offsetSumB = dataTable[outputIndex+1][48-1 : 0];
+wire[12:0] offsetCountB = dataTable[outputIndex+1][12+48 : 48];
+
+wire CORRECT_SUM = isPassingBotOutput ? (summedDataA == offsetSumA && summedDataB == offsetSumB) : 1'b1; //1'bX;
+wire CORRECT_COUNT = isPassingBotOutput ? (pcoeffCountA == offsetCountA && pcoeffCountB == offsetCountB) : 1'b1; //1'bX;
 
 // 4 digit fixed-point real number
-wire[127:0] OCCUPANCY = isPassingTopOutput ? (summedDataPcoeffCountOut[63:32] << 6) * (10000 / 40) / summedDataPcoeffCountOut[31:0] : 1'bX;
+wire[127:0] OCCUPANCY = isPassingTopOutput ? (summedDataPcoeffCountOutA[63:32] << 6) * (10000 / 40) / summedDataPcoeffCountOutA[31:0] : 1'bX;
 
 endmodule
