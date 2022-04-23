@@ -7,8 +7,9 @@ module aggregatingPipeline #(parameter PCOEFF_COUNT_BITWIDTH = 0) (
     input clk2x,
     input rst,
     input longRST,
+    input[127:0] sharedTop,
     input[1:0] topChannel,
-    output[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
+    output isActive2x, // Instrumentation wire for profiling
     
     input isBotValid,
     input[127:0] bot,
@@ -27,14 +28,7 @@ wire eccFromPipeline;
 wire connectCountFromPipelineValid;
 wire[5:0] connectCountFromPipeline;
 
-wire[127:0] top;
-topReceiver receiver(
-    clk,
-    topChannel,
-    top
-);
-
-reg[127:0] graphD; always @(posedge clk) graphD <= top & ~bot;
+reg[127:0] graphD; always @(posedge clk) graphD <= sharedTop & ~bot;
 
 reg isBotValidD; always @(posedge clk) isBotValidD <= isBotValid;
 reg lastBotOfBatchD; always @(posedge clk) lastBotOfBatchD <= lastBotOfBatch;
@@ -51,7 +45,7 @@ streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1)) core (
     .clk2x(clk2x),
     .rst(rst),
     .topChannel(topChannel),
-    .activityMeasure(activityMeasure),
+    .isActive2x(isActive2x),
     
     // Input side
     .isBotValid(isBotValidDD),

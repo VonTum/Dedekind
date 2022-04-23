@@ -131,7 +131,7 @@ module fullPermutationPipeline30 (
     input clk2x,
     input rst,
     input longRST,
-    output reg[5:0] activityMeasure, // Instrumentation wire for profiling (0-60 activity level)
+    output[29:0] activities2x, // Instrumentation wire for profiling (0-60 activity level)
     
     input[1:0] topChannel,
     
@@ -212,7 +212,6 @@ end
 wire[29:0] slowDownWOR;
 always @(posedge clk) pipelinesRequestSlowdown <= |slowDownWOR;
 
-wire[1:0] activityMeasures[29:0];
 wire[$clog2(24*7)+35-1:0] pcoeffSums[29:0];
 wire[$clog2(24*7)-1:0] pcoeffCounts[29:0];
 
@@ -250,8 +249,9 @@ for(genvar permutationI = 0; permutationI < 30; permutationI = permutationI + 1)
         .clk2x(clk2x),
         .rst(pipelineRST),
         .longRST(pipelineLongRST),
+        .sharedTop(top),
         .topChannel(topChannel),
-        .activityMeasure(activityMeasures[permutationI]), // Instrumentation wire for profiling (0-2 activity level)
+        .isActive2x(activities2x[permutationI]), // Instrumentation wire for profiling
         
         // Input side
         .botIn(botPermutations[permutationI]),
@@ -284,54 +284,45 @@ for(genvar permutationI = 0; permutationI < 30; permutationI = permutationI + 1)
     );
 end
 
-reg[2:0] activityMeasures15[14:0];
 reg[$clog2(24*7*2)+35-1:0] pcoeffSums15[14:0];
 reg[$clog2(24*7*2)-1:0] pcoeffCounts15[14:0];
 
 for(genvar i = 0; i < 15; i = i + 1) begin
     always @(posedge clk) begin
-        activityMeasures15[i] <= activityMeasures[2*i] + activityMeasures[2*i+1];
         pcoeffSums15[i] <= pcoeffSums[2*i] + pcoeffSums[2*i+1];
         pcoeffCounts15[i] <= pcoeffCounts[2*i] + pcoeffCounts[2*i+1];
     end
 end
 
-reg[3:0] activityMeasures8[7:0];
 reg[$clog2(24*7*2*2)+35-1:0] pcoeffSums8[7:0];
 reg[$clog2(24*7*2*2)-1:0] pcoeffCounts8[7:0];
 
 for(genvar i = 0; i < 7; i = i + 1) begin
     always @(posedge clk) begin
-        activityMeasures8[i] <= activityMeasures15[2*i] + activityMeasures15[2*i+1];
         pcoeffSums8[i] <= pcoeffSums15[2*i] + pcoeffSums15[2*i+1];
         pcoeffCounts8[i] <= pcoeffCounts15[2*i] + pcoeffCounts15[2*i+1];
     end
 end
 always @(posedge clk) begin
-    activityMeasures8[7] <= activityMeasures15[14];
     pcoeffSums8[7] <= pcoeffSums15[14];
     pcoeffCounts8[7] <= pcoeffCounts15[14];
 end
 
-reg[4:0] activityMeasures4[3:0];
 reg[$clog2(24*7*2*2*2)+35-1:0] pcoeffSums4[3:0];
 reg[$clog2(24*7*2*2*2)-1:0] pcoeffCounts4[3:0];
 
 for(genvar i = 0; i < 4; i = i + 1) begin
     always @(posedge clk) begin
-        activityMeasures4[i] <= activityMeasures8[2*i] + activityMeasures8[2*i+1];
         pcoeffSums4[i] <= pcoeffSums8[2*i] + pcoeffSums8[2*i+1];
         pcoeffCounts4[i] <= pcoeffCounts8[2*i] + pcoeffCounts8[2*i+1];
     end
 end
 
-reg[5:0] activityMeasures2[1:0];
 reg[$clog2(24*7*2*2*2*2)+35-1:0] pcoeffSums2[1:0];
 reg[$clog2(24*7*2*2*2*2)-1:0] pcoeffCounts2[1:0];
 
 for(genvar i = 0; i < 2; i = i + 1) begin
     always @(posedge clk) begin
-        activityMeasures2[i] <= activityMeasures4[2*i] + activityMeasures4[2*i+1];
         pcoeffSums2[i] <= pcoeffSums4[2*i] + pcoeffSums4[2*i+1];
         pcoeffCounts2[i] <= pcoeffCounts4[2*i] + pcoeffCounts4[2*i+1];
     end
@@ -340,7 +331,6 @@ end
 endgenerate
 
 always @(posedge clk) begin
-    activityMeasure <= activityMeasures2[0] + activityMeasures2[1];
     pcoeffSum <= pcoeffSums2[0] + pcoeffSums2[1];
     pcoeffCount <= pcoeffCounts2[0] + pcoeffCounts2[1];
 end

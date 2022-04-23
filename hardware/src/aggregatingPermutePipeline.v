@@ -167,8 +167,9 @@ module aggregatingPermutePipeline24 #(parameter PCOEFF_COUNT_BITWIDTH = 10) (
     input clk2x,
     input rst,
     input longRST,
+    input[127:0] sharedTop,
     input[1:0] topChannel,
-    output[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
+    output isActive2x, // Instrumentation wire for profiling
     
     // Input side
     input[127:0] botIn,
@@ -217,15 +218,15 @@ botPermuter1234 #(.ALMOST_FULL_MARGIN(64)) botPermuter1234 (
 );
 
 (* dont_merge *) reg[1:0] topChannelD; always @(posedge clk) topChannelD <= topChannel;
-(* dont_merge *) reg[1:0] topChannelDD; always @(posedge clk) topChannelDD <= topChannelD;
 
 aggregatingPipeline #(PCOEFF_COUNT_BITWIDTH) computePipe (
     .clk(clk),
     .clk2x(clk2x),
     .rst(pipelineRST),
     .longRST(longRST),
-    .topChannel(topChannelDD),
-    .activityMeasure(activityMeasure),
+    .sharedTop(sharedTop),
+    .topChannel(topChannelD),
+    .isActive2x(isActive2x),
     
     .isBotValid(permutedBotValid),
     .bot(permutedBot),

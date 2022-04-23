@@ -12,7 +12,7 @@ module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     input clk2x,
     input rst,
     input[1:0] topChannel,
-    output reg[1:0] activityMeasure, // Instrumentation wire for profiling (0-2 activity level)
+    output isActive2x, // Instrumentation wire for profiling
     
     // Input side
     input isBotValid,
@@ -71,14 +71,6 @@ LowLatencyFastDualClockFIFO_MLAB #(.WIDTH(128+`ADDR_WIDTH), .ALMOST_FULL_MARGIN(
 wire writeToCollector2x;
 wire[5:0] connectCountToCollector2x;
 wire[`ADDR_WIDTH-1:0] addrToCollector2x;
-
-
-// Instrumentation for profiling
-wire isActive2x;
-reg isActive2xD; always @(posedge clk2x) isActive2xD <= isActive2x;// Sample the second tick too, to avoid bias from clk-clk2x synchronization
-wire isActiveA; synchronizer isActiveASync(clk2x, isActive2x, clk, isActiveA);
-wire isActiveB; synchronizer isActiveBSync(clk2x, isActive2xD, clk, isActiveB);
-always @(posedge clk) activityMeasure = isActiveA + isActiveB;
 
 wire pipelineECC2x;
 fastToSlowPulseSynchronizer eccSync(clk2x, pipelineECC2x, clk, pipelineECC);

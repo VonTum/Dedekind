@@ -11,8 +11,8 @@ module OpenCLFullPermutationPipeline(
     
     // we reuse bot to set the top, to save on inputs. 
     input startNewTop,
-    input[127:0] mbfLowers,
     input[127:0] mbfUppers,
+    input[127:0] mbfLowers,
     output[127:0] results   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
@@ -22,7 +22,7 @@ wire botInValid = ivalid && !startNewTop;
 wire topInValid = ivalid && startNewTop;
 
 // Reset validation
-localparam RESET_CYCLES = 30;
+localparam RESET_CYCLES = 35;
 reg rst;
 reg[$clog2(RESET_CYCLES):0] cyclesSinceReset = 0;
 
@@ -160,13 +160,13 @@ wire[`TOTAL_FPP_COUNT-1:0] outputFIFOEmpties;
 wire[`TOTAL_FPP_COUNT-1:0] pipelineDataRequests;
 wire requestedPipelinesHaveData = &(~pipelineDataRequests | ~outputFIFOEmpties);
 
-wire grabData = (requestedPipelinesHaveData || eccErrorOccured) && !slowDown;
+wire grabData = ((resultOriginQueueEmpty ? 0 : requestedPipelinesHaveData) || eccErrorOccured) && !slowDown;
 
 wire[`TOTAL_FPP_COUNT-1:0] pipelineReadRequests = grabData ? pipelineDataRequests : 0;
 wire[60:0] dataFromPipelines[`TOTAL_FPP_COUNT-1:0];
 
 // Debug
-wire[5:0] pipelineActivityMeasures[`TOTAL_FPP_COUNT-1:0];
+wire[`TOTAL_FPP_COUNT * 30 - 1:0] pipelineActivities;
 wire originQueueECC;
 reg[`TOTAL_FPP_COUNT-1:0] pipelineECCs;
 reg[`TOTAL_FPP_COUNT-1:0] outputFIFOECCs;
@@ -197,7 +197,7 @@ FIFO_M20K #(.WIDTH(`TOTAL_FPP_COUNT + 1), .DEPTH_LOG2(13/*8192*/), .ALMOST_FULL_
 );
 
 wire readDebugData;
-hyperpipe #(.CYCLES(4/*M20K fifo latency*/)) readDebugDataPipe(clk, readDebugDataPre, readDebugData);
+hyperpipe #(.CYCLES(4/*M20K fifo latency*/)) readDebugDataPipe(clk, resultOriginQueueEmpty ? 0 : readDebugDataPre, readDebugData);
 hyperpipe #(.CYCLES(4/*M20K fifo latency*/), .WIDTH(1)) grabbingDataPipe(clk, grabData, resultValid);
 
 generate
@@ -232,14 +232,14 @@ for(genvar pipelineI = 0; pipelineI < `TOTAL_FPP_COUNT; pipelineI = pipelineI + 
         .clk2x(clk2x),
         .rst(rstDDD),
         .longRST(longRSTDDD),
-        .activityMeasure(pipelineActivityMeasures[pipelineI]),
+        .activities2x(pipelineActivities[pipelineI*30 +: 30]),
         
         .topChannel(topChannelDDD),
         .bot(botToPipelines[pipelineI]),
         .writeBot(writeToPipeline[pipelineI]),
         .readyForInputBot(pipelineReadies[pipelineI]),
         
-        .slowDown(outputFIFOAlmostFullD),
+        .slowDown(outputFifoAlmostFullD),
         .resultValid(dataFromPipelineValid),
         .pcoeffSum(dataFromPipeline[47:0]),
         .pcoeffCount(dataFromPipeline[60:48]),
@@ -255,7 +255,7 @@ for(genvar pipelineI = 0; pipelineI < `TOTAL_FPP_COUNT; pipelineI = pipelineI + 
         // input side
         .writeEnable(dataFromPipelineValidD),
         .dataIn(dataFromPipelineD),
-        .almostFull(outputFIFOAlmostFull),
+        .almostFull(outputFifoAlmostFull),
         
         // Read Side
         .readRequest(pipelineReadRequests[pipelineI]),
@@ -273,11 +273,10 @@ endgenerate
 wire[62:0] debugDataA;
 wire[63:0] debugDataB;
 
-debugMonitor debugMon(
-    clk, clk2x, stallInput, 
+debugMonitor #(.NUMBER_OF_ACTIVITIES(30*`TOTAL_FPP_COUNT)) debugMon(
+    clk, clk2x, readDebugData, 
     
-    //input[NUMBER_OF_ACTIVITIES-1:0] activities2x,
-    pipelineActivityMeasures[0], pipelineActivityMeasures[1],
+    pipelineActivities,
     
     portStatusesMonitor,
     
@@ -328,14 +327,12 @@ end
 
 endmodule
 
-module debugMonitor (
+module debugMonitor #(parameter NUMBER_OF_ACTIVITIES = 30) (
     input clk,
     input clk2x,
     input rst,
     
-    //input[NUMBER_OF_ACTIVITIES-1:0] activities2x,
-    input[5:0] activityA,
-    input[5:0] activityB,
+    input[NUMBER_OF_ACTIVITIES-1:0] activities2x,
     
     input[3:0] flagsToTrack,
     
@@ -349,7 +346,42 @@ module debugMonitor (
 // Performance profiling with a measure of how many pipelines are working at any given time
 reg[6:0] activityMeasure; // Instrumentation wire for profiling (0-`ACTIVITY_MEASURE_LIMIT activity level)
 
-always @(posedge clk) activityMeasure <= activityA + activityB;
+// Extra slack registers
+reg[NUMBER_OF_ACTIVITIES-1:0] activities2xD; always @(posedge clk2x) activities2xD <= activities2x;
+reg[NUMBER_OF_ACTIVITIES-1:0] activities2xDD; always @(posedge clk2x) activities2xDD <= activities2xD;
+
+wire[5:0] actPipelineSums[NUMBER_OF_ACTIVITIES / 30 - 1 : 0];
+
+genvar i;
+generate
+reg[3:0] actSums2x[NUMBER_OF_ACTIVITIES / 15 -1 : 0];
+for(i = 0; i < NUMBER_OF_ACTIVITIES / 15; i = i + 1) begin
+    wire[14:0] acts2x = activities2xDD[15*i +: 15];
+    reg[2:0] sumA; reg[2:0] sumB; reg[2:0] sumC;
+    always @(posedge clk2x) begin
+        sumA <= acts2x[0] + acts2x[1] + acts2x[2] + acts2x[3] + acts2x[4];
+        sumB <= acts2x[5] + acts2x[6] + acts2x[7] + acts2x[8] + acts2x[9];
+        sumC <= acts2x[10] + acts2x[11] + acts2x[12] + acts2x[13] + acts2x[14];
+        actSums2x[i] <= sumA + sumB + sumC;
+    end
+end
+for(i = 0; i < NUMBER_OF_ACTIVITIES / 30; i = i + 1) begin
+    reg[4:0] pipelineSum2x;
+    reg[4:0] pipelineSum2xD;
+    reg[5:0] pipelineSum2xDSum;
+    reg[5:0] pipelineSumSync;
+    always @(posedge clk2x) begin
+        pipelineSum2x <= actSums2x[i*2] + actSums2x[i*2+1];
+        pipelineSum2xD <= pipelineSum2x;
+        pipelineSum2xDSum <= pipelineSum2x + pipelineSum2xD;
+    end
+    always @(posedge clk) pipelineSumSync <= pipelineSum2xDSum;
+    hyperpipe #(.CYCLES(3), .WIDTH(6)) pipelineSumPipe(clk, pipelineSumSync, actPipelineSums[i]);
+end
+
+endgenerate
+
+always @(posedge clk) activityMeasure <= actPipelineSums[0] + actPipelineSums[1];
 
 reg[45:0] activityCounter;
 reg[40:0] clockCounter;
