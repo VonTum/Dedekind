@@ -57,7 +57,7 @@ static bool ENABLE_COMPARE = false;
 static bool ENABLE_STATISTICS = false;
 static int SHOW_FRONT = 0;
 static int SHOW_TAIL = 0;
-static double ACTIVITY_MULTIPLIER = 60.0;
+static double ACTIVITY_MULTIPLIER = 120.0;
 
 // OpenCL runtime configuration
 static cl_platform_id platform = NULL;
@@ -185,20 +185,34 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 	std::cout << "FPGA Processor started.\n" << std::flush;
 	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
 		JobInfo& job = jobOpt.value();
-		cl_uint jobSize = static_cast<cl_int>(job.size());
-		NodeIndex* botIndices = job.bufStart;
-		NodeIndex topIdx = botIndices[0];
-		std::cout << "Grabbed job " << topIdx << " of size " << jobSize << std::endl;
-		botIndices[0] |= cl_uint(0x80000000); // Mark top
+		cl_uint bufferSize = static_cast<cl_int>(job.size());
+		size_t numberOfBottoms = job.getNumberOfBottoms();
+		NodeIndex topIdx = job.getTop();
+		std::cout << "Grabbed job " << topIdx << " with " << numberOfBottoms << " bottoms" << std::endl;
 		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
 
-		if(ENABLE_SHUFFLE) shuffleBots(botIndices + 1, botIndices + jobSize);
-		botIndices[jobSize++] = cl_uint(0x80000000); // Dummy top, to get a good occupation reading
-		
+		if(ENABLE_SHUFFLE) shuffleBots(job.begin(), job.end());
+
+		constexpr cl_uint JOB_SIZE_ALIGNMENT = 2;
+
+		if(bufferSize % JOB_SIZE_ALIGNMENT != 0) {
+			cl_uint fillerCount = JOB_SIZE_ALIGNMENT - (bufferSize % JOB_SIZE_ALIGNMENT);
+
+			for(cl_uint i = 0; i < fillerCount; i++) {
+				job.bufStart[bufferSize++] = mbfCounts[7] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
+			}
+		}
+
+		assert(bufferSize % JOB_SIZE_ALIGNMENT == 0);
+
+		for(size_t i = 0; i < JOB_SIZE_ALIGNMENT; i++) {
+			job.bufStart[bufferSize++] = 0x80000000; // Tops at the end for stats collection
+		}
+
 		if(SHOW_TAIL != 0) {
 			std::cout << "Tail: " << std::endl;
-			for(int i = std::max(int(jobSize) - SHOW_TAIL, 0); i < jobSize + 5; i++) { // Look a bit past the end of the job, for fuller picture
-				std::cout << botIndices[i] << ',';
+			for(int i = std::max(int(bufferSize) - SHOW_TAIL, 0); i < bufferSize + 5; i++) { // Look a bit past the end of the job, for fuller picture
+				std::cout << job.bufStart[i] << ',';
 			}
 			std::cout << std::endl;
 		}
@@ -206,12 +220,12 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		if(SHOW_FRONT != 0) {
 			std::cout << "Front: " << std::endl;
 			for(int i = 0; i < SHOW_FRONT; i++) {
-				std::cout << botIndices[i] << ',';
+				std::cout << job.bufStart[i] << ',';
 			}
 			std::cout << std::endl;
 		}
 
-		status = clEnqueueWriteBuffer(queue,inputMem[0],0,0,jobSize*sizeof(uint32_t),botIndices,0,0,0);
+		status = clEnqueueWriteBuffer(queue,inputMem[0],0,0,bufferSize*sizeof(uint32_t),job.bufStart,0,0,0);
 		checkError(status, "Failed to enqueue writing to inputMem buffer");
 
 		status = clFinish(queue);
@@ -223,59 +237,74 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		checkError(status, "Failed to set fullPipelineKernel arg 2:inputMem");
 		status = clSetKernelArg(fullPipelineKernel,2,sizeof(cl_mem),&resultMem[0]);
 		checkError(status, "Failed to set fullPipelineKernel arg 3:resultMem");
-		status = clSetKernelArg(fullPipelineKernel,3,sizeof(cl_uint),&jobSize);
+		status = clSetKernelArg(fullPipelineKernel,3,sizeof(cl_uint),&bufferSize);
 		checkError(status, "Failed to set fullPipelineKernel arg 4:job size");
 
 		auto kernelStart = std::chrono::system_clock::now();
 		status = clEnqueueNDRangeKernel(queue, fullPipelineKernel, 1, NULL, &gSize, &lSize, 0, NULL, NULL);
 		checkError(status, "Failed to launch fullPipelineKernel");
-		std::cout << "Kernel launched for size " << jobSize << std::endl;
+		std::cout << "Kernel launched for size " << bufferSize << std::endl;
 
 		status = clFinish(queue);
 		checkError(status, "Failed to Finish kernel");
 		auto kernelEnd = std::chrono::system_clock::now();
 		double runtimeSeconds = std::chrono::duration<double>(kernelEnd - kernelStart).count();
 
-		status = clEnqueueReadBuffer(queue, resultMem[0], 1, 0, jobSize*sizeof(uint64_t), countConnectedSumBuf, 0, 0, 0);
+		status = clEnqueueReadBuffer(queue, resultMem[0], 1, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 0, 0, 0);
 		checkError(status, "Failed to enqueue read buffer resultMem to countConnectedSumBuf");
 
 		status = clFinish(queue);
 		checkError(status, "Failed to Finish reading output buffer");
 
-		std::cout << "Finished job " << botIndices[0] << " of size " << jobSize << " in " << runtimeSeconds << "s, at " << (double(jobSize)/runtimeSeconds/1000000.0) << "Mbots/s" << std::endl;
+		std::cout << "Finished job " << topIdx << " with " << numberOfBottoms << " bottoms in " << runtimeSeconds << "s, at " << (double(numberOfBottoms)/runtimeSeconds/1000000.0) << "Mbots/s" << std::endl;
 
 		// Use final dummy top to get proper occupation reading
-		uint64_t analysisBot = countConnectedSumBuf[jobSize-1];
-		uint64_t activityCounter = (analysisBot & 0x1FFFFFFF80000000) >> 31;
-		uint64_t cycleCounter = analysisBot & 0x000000007FFFFFFF;
+		uint64_t debugA = countConnectedSumBuf[bufferSize-2];
+		uint64_t debugB = countConnectedSumBuf[bufferSize-1];
+		uint64_t activityData = getBitField(debugB, 32, 31);
+		uint64_t cycleData = getBitField(debugB, 0, 32);
 
-		double occupation = (activityCounter << 6) / (ACTIVITY_MULTIPLIER * cycleCounter);
+		uint64_t realCycles = cycleData << 9;
+		uint64_t realActivity = activityData << 15;
 
-		std::cout << "Took " << (cycleCounter<<10) << " cycles" << std::endl;
-		std::cout << (activityCounter<<16) << " activity" << std::endl;
+		uint64_t ivalidCycles = getBitField(debugA, 48, 16) << 16;
+		uint64_t ireadyCycles = getBitField(debugA, 32, 16) << 16;
+		uint64_t ovalidCycles = getBitField(debugA, 16, 16) << 16;
+		uint64_t oreadyCycles = getBitField(debugA, 0, 16) << 16;
+
+		double occupation = realActivity / (ACTIVITY_MULTIPLIER * realCycles);
+
+		std::cout << "Took " << realCycles << " cycles at " << (realCycles / runtimeSeconds / 1000000.0) << " Mcycles/s" << std::endl;
+		std::cout << realActivity << " activity" << std::endl;
 		std::cout << "Occupation: " << occupation * 100.0 << "%" << std::endl;
+		std::cout << "Port fractions: ";
+		std::cout << "ivalid: " << ivalidCycles * 100.0 / realCycles << "% ";
+		std::cout << "iready: " << ireadyCycles * 100.0 / realCycles << "% ";
+		std::cout << "ovalid: " << ovalidCycles * 100.0 / realCycles << "% ";
+		std::cout << "oready: " << oreadyCycles * 100.0 / realCycles << "% " << std::endl;
 
 		if(ENABLE_COMPARE) {
 			std::cout << "Starting MultiThread CPU comparison..." << std::endl;
-			std::unique_ptr<uint64_t[]> countConnectedSumBufCPU = std::make_unique<uint64_t[]>(jobSize);
+			std::unique_ptr<uint64_t[]> countConnectedSumBufCPU = std::make_unique<uint64_t[]>(job.size());
 			ThreadPool pool;
 
 			auto cpuStart = std::chrono::system_clock::now();
-			processBetasCPU_MultiThread(allMBFData, job.bufStart, job.bufEnd, countConnectedSumBufCPU.get(), pool);
+			processBetasCPU_MultiThread(allMBFData, job, countConnectedSumBufCPU.get(), pool);
 			auto cpuEnd = std::chrono::system_clock::now();
 			double cpuRuntimeSeconds = std::chrono::duration<double>(cpuEnd - cpuStart).count();
 
-			std::cout << "CPU processing completed. Took " << cpuRuntimeSeconds << "s, at " << (double(jobSize)/cpuRuntimeSeconds/1000000.0) << "Mbots/s" << std::endl;
+			std::cout << "CPU processing completed. Took " << cpuRuntimeSeconds << "s, at " << (double(numberOfBottoms)/cpuRuntimeSeconds/1000000.0) << "Mbots/s" << std::endl;
 			std::cout << "Kernel speedup of " << (cpuRuntimeSeconds / runtimeSeconds) << "x" << std::endl;
 
-			for(size_t i = 1; i < jobSize - 1; i++) {
-				if(countConnectedSumBuf[i] != countConnectedSumBufCPU[i]) {
-					std::cout << "[!!!!!!!] Mistake found at position " << i << "/" << jobSize << ": ";
-					std::cout << "FPGA: {" << getPCoeffSum(countConnectedSumBuf[i]) << "; " << getPCoeffCount(countConnectedSumBuf[i]) << "} ";
-					std::cout << "CPU: {" << getPCoeffSum(countConnectedSumBufCPU[i]) << "; " << getPCoeffCount(countConnectedSumBufCPU[i]) << "} " << std::endl;
+			for(const NodeIndex* curBot = job.begin(); curBot != job.end(); curBot++) {
+				size_t index = job.indexOf(curBot);
+				if(countConnectedSumBuf[index] != countConnectedSumBufCPU[index]) {
+					std::cout << "[!!!!!!!] Mistake found at position " << index << "/" << index << ": ";
+					std::cout << "FPGA: {" << getPCoeffSum(countConnectedSumBuf[index]) << "; " << getPCoeffCount(countConnectedSumBuf[index]) << "} ";
+					std::cout << "CPU: {" << getPCoeffSum(countConnectedSumBufCPU[index]) << "; " << getPCoeffCount(countConnectedSumBufCPU[index]) << "} " << std::endl;
 				}
 			}
-			std::cout << "All " << jobSize << " elements checked!" << std::endl;
+			std::cout << "All " << numberOfBottoms << " elements checked!" << std::endl;
 		}
 
 		if(ENABLE_STATISTICS) {
@@ -286,8 +315,8 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 			uint64_t permutationBreakdown[5041];
 			for(uint64_t& item : permutationBreakdown) item = 0;
 
-			for(size_t i = 1; i < jobSize - 1; i++) {
-				uint64_t pcoeffCount = getPCoeffCount(countConnectedSumBuf[i]);
+			for(const NodeIndex* cur = job.begin(); cur != job.end(); cur++) {
+				uint64_t pcoeffCount = getPCoeffCount(countConnectedSumBuf[job.indexOf(cur)]);
 
 				permutationBreakdown[pcoeffCount]++;
 			}
@@ -297,13 +326,13 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 			}
 
 			statsf << topIdx << ',';
-			statsf << jobSize << ',';
+			statsf << numberOfBottoms << ',';
 			statsf << totalPermutations << ',';
-			statsf << double(totalPermutations) / jobSize << ',';
+			statsf << double(totalPermutations) / numberOfBottoms << ',';
 			statsf << runtimeSeconds << ',';
-			statsf << cycleCounter << ',';
+			statsf << realCycles << ',';
 			statsf << occupation << ',';
-			statsf << double(jobSize)/runtimeSeconds;
+			statsf << double(numberOfBottoms)/runtimeSeconds;
 
 			for(int i = 0; i <= 5040; i++) {
 				statsf << ',' << permutationBreakdown[i]++;
@@ -545,16 +574,16 @@ bool init(const char* kernelFile) {
 	checkError(status, "Failed to create fullPipelineKernel");
 
 	// Create constant mbf Look Up Table data buffer
-	mbfLUTMem = clCreateBuffer(context, CL_MEM_READ_ONLY, mbfCounts[7]*16 /*16 bytes per MBF*/, 0, &status);
+	mbfLUTMem = clCreateBuffer(context, CL_MEM_READ_ONLY, mbfCounts[7]*16 /*16 bytes per MBF*/, nullptr, &status);
 	checkError(status, "Failed to create the mbfLUTMem buffer");
 
 	// Create the input and output buffers
 	for(size_t i = 0; i < INPUT_BUFFER_COUNT; i++) {
-		inputMem[i] = clCreateBuffer(context, CL_MEM_READ_ONLY, MAX_BUFSIZE(7)*sizeof(uint32_t), 0, &status);
+		inputMem[i] = clCreateBuffer(context, CL_MEM_READ_ONLY, MAX_BUFSIZE(7)*sizeof(uint32_t), nullptr, &status);
 		checkError(status, "Failed to create the inputMem buffer");
 	}
 	for(size_t i = 0; i < RESULT_BUFFER_COUNT; i++) {
-		resultMem[i] = clCreateBuffer(context, CL_MEM_WRITE_ONLY, MAX_BUFSIZE(7)*sizeof(uint64_t), 0, &status);
+		resultMem[i] = clCreateBuffer(context, CL_MEM_WRITE_ONLY, MAX_BUFSIZE(7)*sizeof(uint64_t), nullptr, &status);
 		checkError(status, "Failed to create the resultMem buffer");
 	}
 	return true;

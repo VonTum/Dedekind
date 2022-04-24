@@ -41,7 +41,7 @@
       <!-- Set to "yes" to allow multiple instances of this function to be merged by the compiler.
            This property should be set to "yes". 
            Note that marking function with HAS_SIDE_EFFECTS does not prevent merging. -->
-      <ALLOW_MERGING value="no"/>
+      <ALLOW_MERGING value="yes"/>
     </ATTRIBUTES>
     <INTERFACE>
       <AVALON port="clock" type="clock"/>
@@ -51,10 +51,10 @@
       <AVALON port="iready" type="iready"/>
       <AVALON port="ovalid" type="ovalid"/>
       <AVALON port="oready" type="oready"/>
-      <INPUT  port="botUpper" width="64"/>
-      <INPUT  port="botLower" width="64"/>
+      <INPUT  port="mbfUppers" width="128"/>
+      <INPUT  port="mbfLowers" width="128"/>
       <INPUT  port="startNewTop" width="1"/>
-      <OUTPUT port="summedDataPcoeffCountOut" width="64"/>
+      <OUTPUT port="results" width="128"/>
     </INTERFACE>
     <C_MODEL>
       <FILE name="src/fullPipelineCModel.cl"/>

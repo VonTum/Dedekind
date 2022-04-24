@@ -310,6 +310,15 @@ void FullPermutePipelineTestSetOpenCL(std::vector<size_t> counts, std::string ou
 
 #include "../dedelib/flatPCoeffProcessing.h"
 
+inline Monotonic<7> readMBFFromU64(const uint64_t* mbfsUINT64, NodeIndex idx) {
+	NodeIndex mbfIndex = idx & 0x7FFFFFFF;
+	uint64_t upper = mbfsUINT64[2*mbfIndex];
+	uint64_t lower = mbfsUINT64[2*mbfIndex+1];
+	Monotonic<7> mbf;
+	mbf.bf.bitset.data = _mm_set_epi64x(upper, lower);
+	return mbf;
+} 
+
 void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::string outFileMem) {
 	std::vector<NodeIndex> topsToProcess;
 	for(size_t i = 0; i < topsIn.size(); i++) {
@@ -328,35 +337,43 @@ void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::st
 	std::cout << "Input production..." << std::endl;
 	inputProducer<Variables, BatchSize>(allMBFData, context, topsToProcess);
 	std::cout << "Processing..." << std::endl;
-	cpuProcessor_SingleThread(allMBFData, context);
+	//std::thread cpuThread([&](){cpuProcessor_SingleThread(allMBFData, context);});
 
 	std::cout << "Results..." << std::endl;
 
 	std::ofstream testSet(outFileMem); // plain text file memory file
 
-	for(size_t i = 0; i < topsToProcess.size(); i++) {
-		OutputBuffer outBuf = context.outputQueue.pop_wait().value();
-		JobInfo& job = outBuf.originalInputData;
-		for(size_t elementI = 0; elementI < job.size(); elementI++) {
+	std::cout << "Number of tops to process is " << topsToProcess.size() << std::endl;
+	for(NodeIndex currentlyProcessingTopMeThinks : topsToProcess) {
+		std::cout << "Waiting for top to process..." << std::endl;
+		JobInfo job = context.inputQueue.pop_wait().value();
+		NodeIndex top = job.bufStart[0] & 0x7FFFFFFF;
+		size_t jobSize = job.size();
+		std::cout << "Processing top " << top << '/' << currentlyProcessingTopMeThinks << " of size " << jobSize << std::endl;
+		Monotonic<Variables> topMBF = readMBFFromU64(mbfsUINT64, top);
+		for(size_t elementI = 0; elementI < jobSize; elementI++) {
 			NodeIndex elem = job.bufStart[elementI];
-			bool isTop = elem & 0x80000000;
-			NodeIndex mbfIndex = elem & 0x7FFFFFFF;
-			uint64_t upper = mbfsUINT64[2*mbfIndex];
-			uint64_t lower = mbfsUINT64[2*mbfIndex+1];
-			BitSet<128> bitset;
-			bitset.data = _mm_set_epi64x(upper, lower);
-			ProcessedPCoeffSum processed = outBuf.outputBuf[mbfIndex];
+			bool isTop = elementI == 0;
+			//bool isTop = (uint32_t(elem) & 0x80000000) != 0;
+			Monotonic<Variables> botMBF = readMBFFromU64(mbfsUINT64, elem);
+			BooleanFunction<Variables> graphsBuf[factorial(Variables)];
+			ProcessedPCoeffSum processed = processPCoeffSum(topMBF, botMBF, graphsBuf);
 
 			testSet << (isTop ? '1' : '0');
-			testSet << '_' << bitset << '_';
+			testSet << '_' << botMBF.bf.bitset << '_';
 			printBits(testSet, getPCoeffCount(processed), 16);
 			testSet << '_';
 			printBits(testSet, getPCoeffSum(processed), 48);
 			testSet << std::endl;
 		}
+		std::cout << "Finished processing top " << top << " of size " << jobSize << std::endl;
 	}
 
 	testSet.close();
+	std::cout << "File written!" << std::endl;
+
+	//context.outputQueue.close();
+	//cpuThread.join();
 }
 
 void singleStreamPipelineTestSetOpenCL(std::vector<size_t> counts, std::string outFileMem) {

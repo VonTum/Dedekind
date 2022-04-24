@@ -106,13 +106,16 @@ void cpuProcessor_SingleThread(const FlatMBFStructure<Variables>& allMBFData, PC
 	std::cout << "SingleThread CPU Processor started.\n" << std::flush;
 	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
 		JobInfo& job = jobOpt.value();
-		shuffleBots(job.bufStart + 1, job.bufEnd);
+		//shuffleBots(job.bufStart + 1, job.bufEnd);
+		std::cout << "Grabbed job of size " << job.size() << '\n' << std::flush;
 		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
-		processBetasCPU_SingleThread(allMBFData, job.bufStart, job.bufEnd, countConnectedSumBuf);
+		std::cout << "Grabbed output buffer.\n" << std::flush;
+		processBetasCPU_SingleThread(allMBFData, job, countConnectedSumBuf);
 		OutputBuffer result;
 		result.originalInputData = job;
 		result.outputBuf = countConnectedSumBuf;
 		context.outputQueue.push(result);
+		std::cout << "Result pushed.\n" << std::flush;
 	}
 	std::cout << "SingleThread CPU Processor finished.\n" << std::flush;
 }
@@ -132,8 +135,8 @@ void cpuProcessor_FineMultiThread(const FlatMBFStructure<Variables>& allMBFData,
 	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
 		JobInfo& job = jobOpt.value();
 		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
-		shuffleBots(job.bufStart + 1, job.bufEnd);
-		processBetasCPU_MultiThread(allMBFData, job.bufStart, job.bufEnd, countConnectedSumBuf, pool);
+		//shuffleBots(job.bufStart + 1, job.bufEnd);
+		processBetasCPU_MultiThread(allMBFData, job, countConnectedSumBuf, pool);
 		OutputBuffer result;
 		result.originalInputData = job;
 		result.outputBuf = countConnectedSumBuf;

@@ -12,7 +12,12 @@ module load intelFPGA_pro nalla_pcie toolchain/gompi
 
 ./prepareLibrary.sh
 
-aoc -force-single-store-ring -num-reorder=3 fullPipelineKernel.cl -o fullPipelineKernel.aocx -I scr -L . -l fullPipeline.aoclib
+# -num-reorder=3 
+# -high-effort
+# -seed=<value>
+# -ecc  # DOES NOT WORK
+
+aoc -force-single-store-ring fullPipelineKernel.cl -o fullPipelineKernel.aocx -I scr -L . -l fullPipeline.aoclib
 
 cp fullPipelineKernel.aocx ../build
 
