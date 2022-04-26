@@ -14,7 +14,8 @@ module aggregatingPipeline #(parameter PCOEFF_COUNT_BITWIDTH = 0) (
     input isBotValid,
     input[127:0] bot,
     input lastBotOfBatch,
-    output slowDownInput,
+    input freezeCore,
+    output almostFull,
     
     output resultsValid,
     output reg[PCOEFF_COUNT_BITWIDTH+35-1:0] pcoeffSum,
@@ -32,6 +33,7 @@ reg[127:0] graphD; always @(posedge clk) graphD <= sharedTop & ~bot;
 
 reg isBotValidD; always @(posedge clk) isBotValidD <= isBotValid;
 reg lastBotOfBatchD; always @(posedge clk) lastBotOfBatchD <= lastBotOfBatch;
+reg freezeCoreD; always @(posedge clk) freezeCoreD <= freezeCore;
 
 wire[127:0] leafEliminatedGraphD;
 leafElimination #(.DIRECTION(`DOWN)) le(graphD, leafEliminatedGraphD);
@@ -39,6 +41,7 @@ leafElimination #(.DIRECTION(`DOWN)) le(graphD, leafEliminatedGraphD);
 reg[127:0] leafEliminatedGraphDD; always @(posedge clk) leafEliminatedGraphDD <= leafEliminatedGraphD;
 reg isBotValidDD; always @(posedge clk) isBotValidDD <= isBotValidD;
 reg lastBotOfBatchDD; always @(posedge clk) lastBotOfBatchDD <= lastBotOfBatchD;
+reg freezeCoreDD; always @(posedge clk) freezeCoreDD <= freezeCoreD;
 
 streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1)) core (
     .clk(clk),
@@ -51,7 +54,8 @@ streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1)) core (
     .isBotValid(isBotValidDD),
     .graphIn(leafEliminatedGraphDD),
     .extraDataIn(lastBotOfBatchDD),
-    .slowDownInput(slowDownInput),
+    .freezeCore(freezeCoreDD),
+    .almostFull(almostFull),
     
     // Output side
     .resultValid(connectCountFromPipelineValid),

@@ -33,7 +33,7 @@ initial begin
     //inputBotValid = 1;
 end
 
-parameter MEMSIZE = 2000;
+parameter MEMSIZE = 5000;
 reg[1+128+16+48-1:0] dataTable[MEMSIZE-1:0];
 initial $readmemb("FullPermutePipelineTestSetOpenCL7.mem", dataTable);
 
@@ -54,7 +54,7 @@ wire validOutput;
 reg isReadyForOutput = 1; // controller is always ready for output
 
 initial begin
-    forever #10000 isReadyForOutput = !isReadyForOutput;
+    forever #20000 isReadyForOutput = !isReadyForOutput;
 end
 
 wire[63:0] summedDataPcoeffCountOutA;

@@ -476,7 +476,7 @@ module botPermuter1234 #(parameter ALMOST_FULL_MARGIN = 64) (
     output almostFull,
     
     // Output side
-    input slowDown,
+    input slowDown, // botPermuter takes 2 cycles to respond to slowDown
     output reg permutedBotValid,
     output[127:0] permutedBot,
     output reg batchDone,

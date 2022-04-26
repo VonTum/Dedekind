@@ -131,7 +131,7 @@ module fullPermutationPipeline30 (
     input clk2x,
     input rst,
     input longRST,
-    output[29:0] activities2x, // Instrumentation wire for profiling (0-60 activity level)
+    output[29:0] activities2x, // Instrumentation wires for profiling
     
     input[1:0] topChannel,
     
@@ -224,18 +224,22 @@ wire[30*9-1:0] writeAddrs;
 wire massFIFORead;
 wire[8:0] readAddr;
 
+wire[29:0] outputFIFOsAlmostFull;
+
 (* dont_merge *) reg mssLongRST; always @(posedge clk) mssLongRST <= longRST;
-MultiStreamSynchronizer #(.DEPTH_LOG2(9), .NUMBER_OF_FIFOS(30)) multiStreamSynchronizer (
+MultiStreamSynchronizer #(.DEPTH_LOG2(9), .NUMBER_OF_FIFOS(30), .ALMOST_FULL_MARGIN(16)) multiStreamSynchronizer (
     .clk(clk),
     .rst(mssLongRST),
     
     // Write side
     .writes(outputFIFOWrites),
     .writeAddrs(writeAddrs),
+    .almostFulls(outputFIFOsAlmostFull),
     
     // Read side
     .readEnable(massFIFORead),
-    .readAddr(readAddr)
+    .readAddr(readAddr),
+    .slowDown(slowDown)
 );
 
 for(genvar permutationI = 0; permutationI < 30; permutationI = permutationI + 1) begin
@@ -260,7 +264,7 @@ for(genvar permutationI = 0; permutationI < 30; permutationI = permutationI + 1)
         .almostFull(slowDownWOR[permutationI]),
         
         // Output side
-        .slowDown(slowDown),
+        .slowDown(outputFIFOsAlmostFull[permutationI]),
         .resultValid(outputFIFOWrites[permutationI]),
         .pcoeffSum(sumFromPipeline),
         .pcoeffCount(countFromPipeline),

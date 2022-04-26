@@ -9,10 +9,9 @@ module OpenCLFullPermutationPipeline(
     output ovalid,
     output oready,
     
-    // we reuse bot to set the top, to save on inputs. 
-    input startNewTop,
     input[127:0] mbfUppers,
     input[127:0] mbfLowers,
+    input startNewTop, // we reuse bot to set the top, to save on inputs. 
     output[127:0] results   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
@@ -248,7 +247,7 @@ for(genvar pipelineI = 0; pipelineI < `TOTAL_FPP_COUNT; pipelineI = pipelineI + 
     
     wire fifoECC;
     // Has enough buffer space to empty all pipelines into it. If not backpressured it shouldn't ever really reach anywhere near the limit
-    FastFIFO_SAFE_M20K #(.WIDTH(48+13), .DEPTH_LOG2(10), .ALMOST_FULL_MARGIN(700)) outputFIFO (
+    FastFIFO_SAFE_M20K #(.WIDTH(48+13), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(16)) outputFIFO (
         .clk(clk),
         .rst(outputFIFOLongRST),
         

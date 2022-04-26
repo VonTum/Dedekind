@@ -171,17 +171,19 @@ endmodule
     Outputs a data element set every 4 cycles if all are available
     This module does not provide almost full flags as they have been deemed unneccesary
 */
-module MultiStreamSynchronizer #(parameter DEPTH_LOG2 = 9, parameter NUMBER_OF_FIFOS = 20) (
+module MultiStreamSynchronizer #(parameter DEPTH_LOG2 = 9, parameter NUMBER_OF_FIFOS = 20, parameter ALMOST_FULL_MARGIN = 16) (
     input clk,
     input rst,
     
     // Write side
     input[NUMBER_OF_FIFOS-1:0] writes,
     output[DEPTH_LOG2*NUMBER_OF_FIFOS-1:0] writeAddrs,
+    output reg[NUMBER_OF_FIFOS-1:0] almostFulls,
     
     // Read side
     output reg readEnable,
-    output reg[DEPTH_LOG2-1:0] readAddr
+    output reg[DEPTH_LOG2-1:0] readAddr,
+    input slowDown
 );
 
 reg[DEPTH_LOG2-1:0] readAddrReg;
@@ -189,11 +191,14 @@ reg[DEPTH_LOG2-1:0] writeAddrsRegs[NUMBER_OF_FIFOS-1:0];
 
 reg[NUMBER_OF_FIFOS-1:0] hasDatas;
 
+genvar i;
 generate
-for(genvar i = 0; i < NUMBER_OF_FIFOS; i = i + 1) begin
+for(i = 0; i < NUMBER_OF_FIFOS; i = i + 1) begin
     assign writeAddrs[DEPTH_LOG2 * i +: DEPTH_LOG2] = writeAddrsRegs[i];
+    wire[DEPTH_LOG2-1:0] leftoverWords = readAddrReg - writeAddrsRegs[i] - 1;
     always @(posedge clk) begin
         hasDatas[i] <= readAddrReg != writeAddrsRegs[i];
+        almostFulls[i] <= leftoverWords < ALMOST_FULL_MARGIN;
         if(rst) begin
             writeAddrsRegs[i] <= 0;
         end else begin
@@ -210,7 +215,7 @@ reg[1:0] cycler = 0;
 always @(posedge clk) begin
     readD <= read;
     readEnable <= readD;
-    read <= cycler == 0 && &hasDatas;
+    read <= cycler == 0 && !slowDown && &hasDatas;
     cycler <= cycler >= 2 ? 0 : cycler + 1;
     readAddr <= readAddrReg - 1;
     if(rst) begin

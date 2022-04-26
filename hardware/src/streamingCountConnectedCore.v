@@ -18,7 +18,8 @@ module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     input isBotValid,
     input[127:0] graphIn,
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
-    output slowDownInput,
+    input freezeCore,
+    output almostFull,
     
     // Output side
     output reg resultValid,
@@ -26,6 +27,27 @@ module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     output reg[EXTRA_DATA_WIDTH-1:0] extraDataOut,
     output reg eccStatus
 );
+
+reg[31:0] validIn_COUNT;
+reg[31:0] validOut_COUNT;
+
+reg[31:0] batchDoneIn_COUNT;
+reg[31:0] batchDoneOut_COUNT;
+
+always @(posedge clk) begin
+    if(rst) begin
+        validIn_COUNT <= 0;
+        validOut_COUNT <= 0;
+        batchDoneIn_COUNT <= 0;
+        batchDoneOut_COUNT <= 0;
+    end else begin
+        if(isBotValid === 1'b1) validIn_COUNT <= validIn_COUNT + 1;
+        if(resultValid === 1'b1) validOut_COUNT <= validOut_COUNT + 1;
+        if(extraDataIn === 1'b1) batchDoneIn_COUNT <= batchDoneIn_COUNT + 1;
+        if(extraDataOut === 1'b1) batchDoneOut_COUNT <= batchDoneOut_COUNT + 1;
+    end
+end
+
 
 (* dont_merge *) reg pipelineRST; always @(posedge clk) pipelineRST <= rst;
 
@@ -37,7 +59,22 @@ reg resultValid_D; always @(posedge clk) resultValid_D <= resultValid;
 always @(posedge clk) eccStatus <= (collectorECC_D && resultValid_D) || isBotValidECC_D || pipelineECC; // Collector ECC only matters if bot data should have actually been read. This also handles bad ECC from uninitialized memory
 
 reg[`ADDR_WIDTH-1:0] curBotIndex = 0;
-always @(posedge clk) curBotIndex <= curBotIndex + 1;
+always @(posedge clk) begin
+`ifdef ALTERA_RESERVED_QIS
+    if(!freezeCore) curBotIndex <= curBotIndex + 1;
+`elsif SYNTHESIS
+    if(!freezeCore) curBotIndex <= curBotIndex + !freezeCore;
+`else
+    /* 
+    FreezeCore being uninitialized at the start makes curBotIndex undefined for the whole duration of the run
+    It doesn't matter in practice what the value of curBotIndex is, as long as each value is repeated every 512 cycles. 
+    The synthesis guards allow this non-synthesizeable fix to exist
+    */
+    if(freezeCore !== 1'bX && freezeCore !== 1'bZ) begin
+        if(!freezeCore) curBotIndex <= curBotIndex + !freezeCore;
+    end
+`endif
+end
 
 wire inputFifoAvailable2x;
 wire requestGraph2x;
@@ -58,7 +95,7 @@ LowLatencyFastDualClockFIFO_MLAB #(.WIDTH(128+`ADDR_WIDTH), .ALMOST_FULL_MARGIN(
     .wrrst(pipelineRST),
     .writeEnable(isBotValid),
     .dataIn({graphIn, curBotIndex}),
-    .almostFull(slowDownInput),
+    .almostFull(almostFull),
     
     // output side
     .rdclk(clk2x),
@@ -112,19 +149,19 @@ DUAL_CLOCK_MEMORY_M20K #(.WIDTH(6), .DEPTH_LOG2(`ADDR_WIDTH)) collectorMemory (
     .eccStatus(collectorECC)
 );
 
-reg[`ADDR_WIDTH-1:0] curBotIndex_D; always @(posedge clk) curBotIndex_D <= curBotIndex;
+reg[`ADDR_WIDTH-1:0] curBotIndex_D; always @(posedge clk) if(!freezeCore) curBotIndex_D <= curBotIndex;
 wire resultValid_Pre; always @(posedge clk) resultValid <= resultValid_Pre;
 wire[EXTRA_DATA_WIDTH-1:0] extraDataOut_Pre; always @(posedge clk) extraDataOut <= extraDataOut_Pre;
 MEMORY_M20K #(.WIDTH(1+EXTRA_DATA_WIDTH), .DEPTH_LOG2(`ADDR_WIDTH)) isValidMemory (
     .clk(clk),
     
     // Write Side
-    .writeEnable(1'b1),
+    .writeEnable(!freezeCore),
     .writeAddr(curBotIndex_D),
     .dataIn({isBotValid, extraDataIn}),
     
     // Read Side
-    .readEnable(1'b1),
+    .readEnable(!freezeCore), // Use the force-to-zero to zero out these outputs when frozen
     .readAddr(curBotIndex),
     .dataOut({resultValid_Pre, extraDataOut_Pre}),
     .eccStatus(isBotValidECC)

@@ -192,7 +192,7 @@ module aggregatingPermutePipeline24 #(parameter PCOEFF_COUNT_BITWIDTH = 10) (
 wor eccStatusWire;
 always @(posedge clk) eccStatus <= eccStatusWire;
 
-wire requestSlowDown;
+wire pcoeffCoreAlmostFull;
 
 wire permutedBotValid;
 wire[127:0] permutedBot;
@@ -212,10 +212,13 @@ botPermuter1234 #(.ALMOST_FULL_MARGIN(64)) botPermuter1234 (
     .permutedBot(permutedBot),
     .permutedBotValid(permutedBotValid),
     .batchDone(batchFinished),
-    .slowDown(requestSlowDown),
+    .slowDown(pcoeffCoreAlmostFull || slowDown),
     
     .eccStatus(eccStatusWire)
 );
+
+wire freezeCore;
+hyperpipe #(.CYCLES(2/*Number of cycles it takes for botPermuter1234 to respond to external slowDown*/)) slowDownBotPermuterDelayPipe(clk, slowDown, freezeCore);
 
 (* dont_merge *) reg[1:0] topChannelD; always @(posedge clk) topChannelD <= topChannel;
 
@@ -228,11 +231,14 @@ aggregatingPipeline #(PCOEFF_COUNT_BITWIDTH) computePipe (
     .topChannel(topChannelD),
     .isActive2x(isActive2x),
     
+    // Input side
     .isBotValid(permutedBotValid),
     .bot(permutedBot),
     .lastBotOfBatch(batchFinished),
-    .slowDownInput(requestSlowDown),
+    .freezeCore(freezeCore),
+    .almostFull(pcoeffCoreAlmostFull),
     
+    // Output side
     .resultsValid(resultValid),
     .pcoeffSum(pcoeffSum),
     .pcoeffCount(pcoeffCount),
