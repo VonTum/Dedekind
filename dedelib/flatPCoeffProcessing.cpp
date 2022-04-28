@@ -64,7 +64,7 @@ void shuffleBots(NodeIndex* bots, NodeIndex* botsEnd) {
 			itemsFromCluster[itemWithinCluster] = bots[numGroups * itemWithinCluster + groupI];
 		}
 		for(size_t itemWithinCluster = 0; itemWithinCluster < CLUSTER_SIZE; itemWithinCluster++) {
-			IndexType sourceIndex = reverseBits(static_cast<IndexType>((itemWithinCluster + groupI) % CLUSTER_SIZE));
+			IndexType sourceIndex = reverseBits(static_cast<IndexType>((itemWithinCluster + groupI / 16) % CLUSTER_SIZE)); // Try to keep indices somewhat consecutive for better memory pattern
 			bots[numGroups * itemWithinCluster + groupI] = itemsFromCluster[sourceIndex];
 		}
 	}
