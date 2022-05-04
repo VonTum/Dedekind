@@ -96,8 +96,8 @@ MultiFullPermutationPipeline #(.TOTAL_FPP_COUNT(TOTAL_FPP_COUNT)) multiFullPermP
     
     // Input side
     .writeBotIn(botInValid && oready),
-    .mbfA(mbfA),
-    .mbfB(mbfB),
+    .botA(mbfA),
+    .botB(mbfB),
     .almostFull(processorAlmostFull),
     .empty(pipelineEmpty),
     
@@ -180,8 +180,8 @@ module MultiFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 4) (
     
     // Input side
     input writeBotIn,
-    input[127:0] mbfA,
-    input[127:0] mbfB,
+    input[127:0] botA,
+    input[127:0] botB,
     output almostFull,
     output empty,
     
@@ -226,8 +226,8 @@ wor[60:0] outWOR_B;
 
 generate
 for(genvar i = 0; i < FPP_PER_CHANNEL; i=i+1) begin
-    assign botToPipelines[i] = mbfA;
-    assign botToPipelines[FPP_PER_CHANNEL+i] = mbfB;
+    assign botToPipelines[i] = botA;
+    assign botToPipelines[FPP_PER_CHANNEL+i] = botB;
     
     assign outWOR_A = dataFromPipelines[i];
     assign outWOR_B = dataFromPipelines[FPP_PER_CHANNEL+i];
@@ -335,8 +335,8 @@ generate
 assign shifteds[0] = selectedOneHot;
 assign selectedShifted[0] = selectedOneHot; // Stay in place as fallback
 for(genvar i = 1; i < WIDTH; i = i + 1) begin
-    assign shifteds[i] = {shifteds[i-1][0], shifteds[i-1][WIDTH-1]};
-    wire isValidShifted = (shifteds[i] & ~almostFulls) != 0;
+    assign shifteds[i] = {shifteds[i-1][0], shifteds[i-1][WIDTH-1:1]};
+    wire isValidShifted = |(shifteds[i] & ~almostFulls);
     assign selectedShifted[i] = isValidShifted ? shifteds[i] : selectedShifted[i-1];
 end
 endgenerate

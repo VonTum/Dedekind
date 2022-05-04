@@ -464,7 +464,6 @@ always @(posedge rdclk) begin
         end
     end
 end
-reg[WIDTH-1:0] dataFromMemD; always @(posedge rdclk) dataFromMemD <= dataFromMem;
 reg[WIDTH-1:0] dataFromMemDD; always @(posedge rdclk) dataFromMemDD <= dataFromMemD;
 
 assign dataOut = dataFromMemDD;
