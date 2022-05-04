@@ -53,9 +53,9 @@ wire isReadyForInput;
 wire validOutput;
 reg isReadyForOutput = 1; // controller is always ready for output
 
-initial begin
+/*initial begin
     forever #20000 isReadyForOutput = !isReadyForOutput;
-end
+end*/
 
 wire[63:0] summedDataPcoeffCountOutA;
 wire eccStatus = summedDataPcoeffCountOutA[63];

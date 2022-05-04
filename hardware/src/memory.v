@@ -111,7 +111,8 @@ endmodule
 
 module MEMORY_M20K #(
     parameter WIDTH = 20,
-    parameter DEPTH_LOG2 = 9
+    parameter DEPTH_LOG2 = 9,
+    parameter FORCE_TO_ZERO = 1 // Force output to 0 when not readEnable
 ) (
     input clk,
     
@@ -121,7 +122,7 @@ module MEMORY_M20K #(
     input[WIDTH-1:0] dataIn,
     
     // Read Side
-    input readEnable, // if not readEnable then the output is forced to 0 (thanks to force_to_zero)
+    input readEnable,
     input[DEPTH_LOG2-1:0] readAddr,
     output[WIDTH-1:0] dataOut,
     output eccStatus
@@ -183,7 +184,7 @@ defparam
     altera_syncram_component.power_up_uninitialized  = "FALSE",
     altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
     altera_syncram_component.width_byteena_a  = 1,
-    altera_syncram_component.enable_force_to_zero  = "TRUE",
+    altera_syncram_component.enable_force_to_zero  = FORCE_TO_ZERO ? "TRUE" : "FALSE",
     altera_syncram_component.enable_ecc  = "TRUE",
     altera_syncram_component.ecc_pipeline_stage_enabled  = "TRUE",
     altera_syncram_component.enable_ecc_encoder_bypass  = "FALSE",
@@ -213,8 +214,17 @@ always @(posedge clk) begin
     writeEnableReg <= writeEnable;
 end
 
-wire[WIDTH-1:0] dataFromMem = !readEnableReg ? 0 : (writeEnableReg && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
-reg[WIDTH-1:0] dataFromMemD; always @(posedge clk) dataFromMemD <= dataFromMem;
+wire[WIDTH-1:0] dataFromMem = (writeEnableReg && writeAddrReg == readAddrReg) ? {WIDTH{1'bX}} : memory[readAddrReg];
+reg[WIDTH-1:0] dataFromMemD;
+always @(posedge clk) begin
+    if(readEnableReg) begin
+        dataFromMemD <= dataFromMem;
+    end else begin
+        if(FORCE_TO_ZERO) begin
+            dataFromMemD <= 0;
+        end
+    end
+end
 reg[WIDTH-1:0] dataFromMemDD; always @(posedge clk) dataFromMemDD <= dataFromMemD;
 
 assign dataOut = dataFromMemDD;
@@ -338,7 +348,8 @@ endmodule
 
 module DUAL_CLOCK_MEMORY_M20K #(
     parameter WIDTH = 20,
-    parameter DEPTH_LOG2 = 9
+    parameter DEPTH_LOG2 = 9,
+    parameter FORCE_TO_ZERO = 1 // Force output to 0 when not readEnable
 ) (
     // Write Side
     input wrclk,
@@ -348,7 +359,7 @@ module DUAL_CLOCK_MEMORY_M20K #(
     
     // Read Side
     input rdclk,
-    input readEnable, // if not readEnable then the output is forced to 0 (thanks to force_to_zero)
+    input readEnable,
     input[DEPTH_LOG2-1:0] readAddr,
     output[WIDTH-1:0] dataOut,
     output eccStatus
@@ -410,7 +421,7 @@ defparam
     altera_syncram_component.power_up_uninitialized  = "FALSE",
     altera_syncram_component.read_during_write_mode_mixed_ports  = "DONT_CARE",
     altera_syncram_component.width_byteena_a  = 1,
-    altera_syncram_component.enable_force_to_zero  = "TRUE",
+    altera_syncram_component.enable_force_to_zero  = FORCE_TO_ZERO ? "TRUE" : "FALSE",
     altera_syncram_component.enable_ecc  = "TRUE",
     altera_syncram_component.ecc_pipeline_stage_enabled  = "TRUE",
     altera_syncram_component.enable_ecc_encoder_bypass  = "FALSE",
@@ -442,7 +453,17 @@ always @(posedge rdclk) begin
     readEnableReg <= readEnable;
 end
 
-wire[WIDTH-1:0] dataFromMem = readEnableReg ? memory[readAddrReg] : 0;
+wire[WIDTH-1:0] dataFromMem = memory[readAddrReg];
+reg[WIDTH-1:0] dataFromMemD;
+always @(posedge rdclk) begin
+    if(readEnableReg) begin
+        dataFromMemD <= dataFromMem;
+    end else begin
+        if(FORCE_TO_ZERO) begin
+            dataFromMemD <= 0;
+        end
+    end
+end
 reg[WIDTH-1:0] dataFromMemD; always @(posedge rdclk) dataFromMemD <= dataFromMem;
 reg[WIDTH-1:0] dataFromMemDD; always @(posedge rdclk) dataFromMemDD <= dataFromMemD;
 

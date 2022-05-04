@@ -82,15 +82,16 @@ topTransmitter topTransmitter (
     .topChannel(topChannel)
 );
 
-wire pipelineReadyForInputBot;
-wire isPassingInput = inputBotValid && pipelineReadyForInputBot;
+wire almostFull;
+wire isPassingInput = inputBotValid && !almostFull;
 wire isPassingOutput;
 
-wire eccStatus;
+wor eccStatus;
 wire[47:0] pcoeffSum;
 wire[12:0] pcoeffCount;
 
 wire[29:0] activities2x;
+
 fullPermutationPipeline30 fullPermutationPipeline30Test (
     .clk(clock),
     .clk2x(clock2x),
@@ -101,9 +102,9 @@ fullPermutationPipeline30 fullPermutationPipeline30Test (
     .topChannel(topChannel),
     
     // Input side
-    .bot(bot),
-    .writeBot(isPassingInput),
-    .readyForInputBot(pipelineReadyForInputBot),
+    .botIn(bot),
+    .writeBotIn(isPassingInput),
+    .almostFull(almostFull),
     
     // Output side
     .slowDown(slowDownOutput),

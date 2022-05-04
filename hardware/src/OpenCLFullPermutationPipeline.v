@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module OpenCLFullPermutationPipeline(
+module OpenCLFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 6) (
     input clock,
     input clock2x, // apparently this specific name gives access to a 2x speed clock. Very useful!
     input resetn,
@@ -12,7 +12,7 @@ module OpenCLFullPermutationPipeline(
     input[127:0] mbfUppers,
     input[127:0] mbfLowers,
     input startNewTop, // we reuse bot to set the top, to save on inputs. 
-    output[127:0] results   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
+    output[127:0] results   // first 3 bits ecc status, 13 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
 wire[127:0] mbfA = {mbfUppers[127:64], mbfLowers[127:64]};
@@ -38,8 +38,9 @@ always @(posedge clock) begin
     end
 end
 
-wire pipelineIsReadyForInput;
-assign oready = pipelineIsReadyForInput && !rst; 
+wire processorAlmostFull;
+wire topManagerStall;
+assign oready = !processorAlmostFull && !topManagerStall && !rst; 
 
 
 
@@ -57,265 +58,353 @@ reg longRST; always @(posedge clock) longRST <= longRSTWire;
 
 
 
+// Top manager
 wire outputFIFOAlmostFull;
 reg outputFIFOAlmostFullD; always @(posedge clock) outputFIFOAlmostFullD <= outputFIFOAlmostFull;
+wire[1:0] topChannel;
+wire pipelineEmpty;
+topManager topMngr (
+    .clk(clock),
+    .rst(rst),
+    
+    .topIn(mbfA),
+    .topInValid(topInValid && oready),
+    
+    .stallInput(topManagerStall),
+    .pipelineIsEmpty(pipelineEmpty && !outputFIFOAlmostFullD),
+    
+    .topChannel(topChannel)
+);
+
+reg prevTopManagerStall; always @(posedge clock) prevTopManagerStall <= topManagerStall;
+wire newTopInstalled = !topManagerStall && prevTopManagerStall;
+
+
+wire[TOTAL_FPP_COUNT * 30 - 1:0] activities2x;
+
+wire eccStatus;
 wire dataFromPipelineValid;
-wire[63:0] summedDataPcoeffCountOutA;
-wire[63:0] summedDataPcoeffCountOutB;
-MultiFullPermutationPipeline multiFullPermPipeline (
+wire[60:0] summedDataPcoeffCountOutA;
+wire[60:0] summedDataPcoeffCountOutB;
+MultiFullPermutationPipeline #(.TOTAL_FPP_COUNT(TOTAL_FPP_COUNT)) multiFullPermPipeline (
     .clk(clock),
     .clk2x(clock2x),
     .rst(rst),
     .longRST(longRST),
-    
-    .portStatusesMonitor({ivalid, iready, ovalid, oready}),
+    .topChannel(topChannel),
+    .activities2x(activities2x),
     
     // Input side
     .writeBotIn(botInValid && oready),
-    .writeTopIn(topInValid && oready),
     .mbfA(mbfA),
     .mbfB(mbfB),
-    .readyForInput(pipelineIsReadyForInput),
+    .almostFull(processorAlmostFull),
+    .empty(pipelineEmpty),
     
     // Output side
     .slowDown(outputFIFOAlmostFullD),
     .resultValid(dataFromPipelineValid),
     .summedDataPcoeffCountOutA(summedDataPcoeffCountOutA),   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
-    .summedDataPcoeffCountOutB(summedDataPcoeffCountOutB)   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
+    .summedDataPcoeffCountOutB(summedDataPcoeffCountOutB),   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
+    
+    .eccStatus(eccStatus)
 );
 
-(* dont_merge *) reg fastResponseTimeFIFORST; always @(posedge clock) fastResponseTimeFIFORST <= rst;
-wire outputFIFOEmpty;
-assign ovalid = !outputFIFOEmpty;
-FIFO_MLAB #(.WIDTH(128), .ALMOST_FULL_MARGIN(16)) fastResponseTimeFIFO (
+
+
+
+// Debug monitor
+wire[62:0] debugDataA;
+wire[63:0] debugDataB;
+
+debugMonitor #(.NUMBER_OF_ACTIVITIES(30*TOTAL_FPP_COUNT)) debugMon(
     .clk(clock),
-    .rst(fastResponseTimeFIFORST),
+    .clk2x(clock2x),
+    .rst(newTopInstalled),
     
-    // input side
-    .writeEnable(dataFromPipelineValid),
-    .dataIn({summedDataPcoeffCountOutA, summedDataPcoeffCountOutB}),
-    .almostFull(outputFIFOAlmostFull),
+    .activities2x(activities2x),
+    .flagToTrack0(ivalid),
+    .flagToTrack1(iready),
+    .flagToTrack2(ovalid),
+    .flagToTrack3(oready),
     
-    // output side
-    .readEnable(iready && !outputFIFOEmpty),
-    .dataOut(results),
-    .empty(outputFIFOEmpty)
+    .outputDataA(debugDataA),
+    .outputDataB(debugDataB)
 );
 
-endmodule
-
-module MultiFullPermutationPipeline (
-    input clk,
-    input clk2x,
-    input rst,
-    input longRST,
-    
-    input[3:0] portStatusesMonitor,
-    
-    // Input side
-    input writeBotIn,
-    input writeTopIn,
-    input[127:0] mbfA,
-    input[127:0] mbfB,
-    output readyForInput,
-    
-    // Output side
-    input slowDown,
-    output resultValid,
-    output[63:0] summedDataPcoeffCountOutA,   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
-    output[63:0] summedDataPcoeffCountOutB   // first 16 bits pcoeffCountOut, last 48 bits summedDataOut
-);
-
-`define TOTAL_FPP_COUNT 2
 
 wire eccErrorOccured;
-
-(* dont_merge *) reg outputFIFOLongRST; always @(posedge clk) outputFIFOLongRST <= longRST;
-
-wire[1:0] topChannel;
-wire stallInput;
-wire resultOriginQueueEmpty;
-topManager topMngr (
-    .clk(clk),
-    .rst(rst),
-    
-    .topIn(mbfA),
-    .topInValid(writeTopIn),
-    
-    .stallInput(stallInput),
-    .pipelineIsEmpty(resultOriginQueueEmpty),
-    
-    .topChannel(topChannel)
-);
-
-// Pipeline inputs
-wire[127:0] botToPipelines[`TOTAL_FPP_COUNT-1:0];
-wire[`TOTAL_FPP_COUNT-1:0] writeToPipeline;
-
-wire[`TOTAL_FPP_COUNT-1:0] pipelineReadies;
-
-// Pipeline outputs
-wire[`TOTAL_FPP_COUNT-1:0] outputFIFOEmpties;
-wire[`TOTAL_FPP_COUNT-1:0] pipelineDataRequests;
-wire requestedPipelinesHaveData = &(~pipelineDataRequests | ~outputFIFOEmpties);
-
-wire grabData = ((resultOriginQueueEmpty ? 0 : requestedPipelinesHaveData) || eccErrorOccured) && !slowDown;
-
-wire[`TOTAL_FPP_COUNT-1:0] pipelineReadRequests = grabData ? pipelineDataRequests : 0;
-wire[60:0] dataFromPipelines[`TOTAL_FPP_COUNT-1:0];
-
-// Debug
-wire[`TOTAL_FPP_COUNT * 30 - 1:0] pipelineActivities;
-wire originQueueECC;
-reg[`TOTAL_FPP_COUNT-1:0] pipelineECCs;
-reg[`TOTAL_FPP_COUNT-1:0] outputFIFOECCs;
-eccMonitor #(.NUMBER_OF_PIPELINES(`TOTAL_FPP_COUNT)) eccMon (
-    clk, rst, 
-    originQueueECC, pipelineECCs, outputFIFOECCs,
+eccMonitor eccMon (
+    clock, rst, 
+    eccStatus,
     eccErrorOccured
 );
 
 
+// Output FIFO
+
+wire[62:0] dataToOutA = newTopInstalled ? debugDataA : {2'b00, summedDataPcoeffCountOutA};
+wire[63:0] dataToOutB = newTopInstalled ? debugDataB : {3'b000, summedDataPcoeffCountOutB};
+
+(* dont_merge *) reg fastResponseTimeFIFORST; always @(posedge clock) fastResponseTimeFIFORST <= rst;
+
+wire[126:0] resultsData;
+assign results = {eccErrorOccured, resultsData};
+wire outputFIFOEmpty;
+FIFO_MLAB #(.WIDTH(127), .ALMOST_FULL_MARGIN(16)) fastResponseTimeFIFO (
+    .clk(clock),
+    .rst(fastResponseTimeFIFORST),
+    
+    // input side
+    .writeEnable(dataFromPipelineValid || newTopInstalled), // These should never occur at the same time, so should be safe
+    .dataIn({dataToOutA, dataToOutB}),
+    .almostFull(outputFIFOAlmostFull),
+    
+    // output side
+    .readEnable(iready && !outputFIFOEmpty),
+    .dataOut(resultsData),
+    .empty(outputFIFOEmpty)
+);
+assign ovalid = !outputFIFOEmpty || eccErrorOccured;
+
+endmodule
+
+module MultiFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 4) (
+    input clk,
+    input clk2x,
+    input rst,
+    input longRST,
+    input[1:0] topChannel,
+    
+    output[TOTAL_FPP_COUNT * 30 - 1:0] activities2x,
+    
+    // Input side
+    input writeBotIn,
+    input[127:0] mbfA,
+    input[127:0] mbfB,
+    output almostFull,
+    output empty,
+    
+    // Output side
+    input slowDown,
+    output resultValid,
+    output reg[60:0] summedDataPcoeffCountOutA,   // first 13 bits pcoeffCountOut, last 48 bits summedDataOut
+    output reg[60:0] summedDataPcoeffCountOutB,   // first 13 bits pcoeffCountOut, last 48 bits summedDataOut
+    
+    output reg eccStatus
+);
+
+localparam FPP_PER_CHANNEL = TOTAL_FPP_COUNT / 2;
+
+(* dont_merge *) reg outputFIFOLongRST; always @(posedge clk) outputFIFOLongRST <= longRST;
+
+// Pipeline inputs
+wire[127:0] botToPipelines[TOTAL_FPP_COUNT-1:0];
+wire[TOTAL_FPP_COUNT-1:0] writeToPipeline;
+
+wire[TOTAL_FPP_COUNT-1:0] pipelineAlmostFulls;
+
+// Pipeline outputs
+wire[TOTAL_FPP_COUNT-1:0] outputFIFOEmpties;
+wire[TOTAL_FPP_COUNT-1:0] pipelineDataRequests;
+wire requestedPipelinesHaveData = &(~pipelineDataRequests | ~outputFIFOEmpties);
+
+wire resultOriginQueueEmpty;
+wire grabData = (resultOriginQueueEmpty ? 0 : requestedPipelinesHaveData) && !slowDown;
+
+wire[TOTAL_FPP_COUNT-1:0] pipelineReadRequests = grabData ? pipelineDataRequests : 0;
+wire[60:0] dataFromPipelines[TOTAL_FPP_COUNT-1:0];
+
+// ECC
+wire originQueueECC;
+wor pipelineECC;
+wor outputFIFOECC;
+always @(posedge clk) eccStatus <= originQueueECC || pipelineECC || outputFIFOECC;
+
+wor[60:0] outWOR_A;
+wor[60:0] outWOR_B;
+
+generate
+for(genvar i = 0; i < FPP_PER_CHANNEL; i=i+1) begin
+    assign botToPipelines[i] = mbfA;
+    assign botToPipelines[FPP_PER_CHANNEL+i] = mbfB;
+    
+    assign outWOR_A = dataFromPipelines[i];
+    assign outWOR_B = dataFromPipelines[FPP_PER_CHANNEL+i];
+end
+endgenerate
+
+always @(posedge clk) summedDataPcoeffCountOutA <= outWOR_A;
+always @(posedge clk) summedDataPcoeffCountOutB <= outWOR_B;
+
+wire[TOTAL_FPP_COUNT-1:0] selectedWriteToPipelines;
+assign writeToPipeline = writeBotIn ? selectedWriteToPipelines : 0;
+resourceDividerAB #(.NUMBER_OF_PIPELINES(TOTAL_FPP_COUNT)) selector (
+    .clk(clk),
+    .rst(rst),
+    
+    // Input side
+    .accept(writeBotIn),
+    .almostFull(almostFull),
+    
+    // Output side
+    .almostFulls(pipelineAlmostFulls),
+    .selectedOut(selectedWriteToPipelines)
+);
+
 // OriginQueue
-wire readDebugDataPre;
-wire resultOriginQueueAlmostFull;
-FIFO_M20K #(.WIDTH(`TOTAL_FPP_COUNT + 1), .DEPTH_LOG2(13/*8192*/), .ALMOST_FULL_MARGIN(128)) resultOriginQueue (
+FIFO_M20K #(.WIDTH(TOTAL_FPP_COUNT), .DEPTH_LOG2(15/*32000*/)) resultOriginQueue (
     .clk(clk),
     .rst(rst),
     
     // input side
-    .writeEnable(writeTopIn || writeBotIn),
-    .dataIn({writeToPipeline, writeTopIn}),
-    .almostFull(resultOriginQueueAlmostFull),
+    .writeEnable(writeBotIn),
+    .dataIn(selectedWriteToPipelines),
+    .almostFull(), // Not connected, FIFO larger than it could possibly fill
     
     // output side
     .readEnable(grabData),
-    .dataOut({pipelineDataRequests, readDebugDataPre}),
+    .dataOut(pipelineDataRequests),
     .empty(resultOriginQueueEmpty),
     .eccStatus(originQueueECC)
 );
 
-wire readDebugData;
-hyperpipe #(.CYCLES(4/*M20K fifo latency*/)) readDebugDataPipe(clk, resultOriginQueueEmpty ? 0 : readDebugDataPre, readDebugData);
-hyperpipe #(.CYCLES(4/*M20K fifo latency*/), .WIDTH(1)) grabbingDataPipe(clk, grabData, resultValid);
+hyperpipe #(.CYCLES(4+1/*M20K fifo latency+1 reg*/), .WIDTH(1)) grabbingDataPipe(clk, grabData, resultValid);
 
 generate
-for(genvar pipelineI = 0; pipelineI < `TOTAL_FPP_COUNT; pipelineI = pipelineI + 1) begin
-    
-    (* dont_merge *) reg[1:0] topChannelD; always @(posedge clk) topChannelD <= topChannel;
-    (* dont_merge *) reg[1:0] topChannelDD; always @(posedge clk) topChannelDD <= topChannelD;
-    (* dont_merge *) reg[1:0] topChannelDDD; always @(posedge clk) topChannelDDD <= topChannelDD;
-    
-    (* dont_merge *) reg longRSTD; always @(posedge clk) longRSTD <= longRST;
-    (* dont_merge *) reg longRSTDD; always @(posedge clk) longRSTDD <= longRSTD;
-    (* dont_merge *) reg longRSTDDD; always @(posedge clk) longRSTDDD <= longRSTDD;
-    
-    (* dont_merge *) reg rstD; always @(posedge clk) rstD <= rst;
-    (* dont_merge *) reg rstDD; always @(posedge clk) rstDD <= rstD;
-    (* dont_merge *) reg rstDDD; always @(posedge clk) rstDDD <= rstDD;
-    
-    wire pipelineECC;
-    reg pipelineECCD; always @(posedge clk) pipelineECCD <= pipelineECC;
-    reg pipelineECCDD; always @(posedge clk) pipelineECCDD <= pipelineECCD;
-    always @(posedge clk) pipelineECCs[pipelineI] <= pipelineECCDD;
-    
-    wire[60:0] dataFromPipeline;
-    wire dataFromPipelineValid;
-    wire outputFifoAlmostFull;
-    // Extra registers to allow long distance between pipeline and fifo
-    reg[60:0] dataFromPipelineD; always @(posedge clk) dataFromPipelineD <= dataFromPipeline;
-    reg dataFromPipelineValidD; always @(posedge clk) dataFromPipelineValidD <= dataFromPipelineValid;
-    reg outputFifoAlmostFullD; always @(posedge clk) outputFifoAlmostFullD <= outputFifoAlmostFull;
-    fullPermutationPipeline30 permutationPipeline (
+for(genvar pipelineI = 0; pipelineI < TOTAL_FPP_COUNT; pipelineI = pipelineI + 1) begin
+    fullPermutationPipeline30WithOutFIFOAndSpacingRegisters permutationPipeline (
         .clk(clk),
         .clk2x(clk2x),
-        .rst(rstDDD),
-        .longRST(longRSTDDD),
-        .activities2x(pipelineActivities[pipelineI*30 +: 30]),
+        .rst(rst),
+        .longRST(longRST),
+        .activities2x(activities2x[pipelineI*30 +: 30]),
         
-        .topChannel(topChannelDDD),
-        .bot(botToPipelines[pipelineI]),
-        .writeBot(writeToPipeline[pipelineI]),
-        .readyForInputBot(pipelineReadies[pipelineI]),
+        .topChannel(topChannel),
+        .botIn(botToPipelines[pipelineI]),
+        .writeBotIn(writeToPipeline[pipelineI]),
+        .almostFull(pipelineAlmostFulls[pipelineI]),
         
-        .slowDown(outputFifoAlmostFullD),
-        .resultValid(dataFromPipelineValid),
-        .pcoeffSum(dataFromPipeline[47:0]),
-        .pcoeffCount(dataFromPipeline[60:48]),
-        .eccStatus(pipelineECC)
-    );
-    
-    wire fifoECC;
-    // Has enough buffer space to empty all pipelines into it. If not backpressured it shouldn't ever really reach anywhere near the limit
-    FastFIFO_SAFE_M20K #(.WIDTH(48+13), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(16)) outputFIFO (
-        .clk(clk),
-        .rst(outputFIFOLongRST),
-        
-        // input side
-        .writeEnable(dataFromPipelineValidD),
-        .dataIn(dataFromPipelineD),
-        .almostFull(outputFifoAlmostFull),
-        
-        // Read Side
         .readRequest(pipelineReadRequests[pipelineI]),
-        .dataOut(dataFromPipelines[pipelineI]), // Holds the last valid data
         .empty(outputFIFOEmpties[pipelineI]),
-        .dataOutValid(),
-        .eccStatus(fifoECC)
+        .dataOut(dataFromPipelines[pipelineI]), // Holds the last valid data
+        
+        .eccStatusPipeline(pipelineECC),
+        .eccStatusFIFO(outputFIFOECC)
     );
-    always @(posedge clk) outputFIFOECCs[pipelineI] <= fifoECC;
 end
 endgenerate
 
-
-
-wire[62:0] debugDataA;
-wire[63:0] debugDataB;
-
-debugMonitor #(.NUMBER_OF_ACTIVITIES(30*`TOTAL_FPP_COUNT)) debugMon(
-    clk, clk2x, readDebugData, 
-    
-    pipelineActivities,
-    
-    portStatusesMonitor,
-    
-    debugDataA, debugDataB
-);
-
-
-// Connections for dual-stream mbfA, mbfB
-assign writeToPipeline = writeBotIn? 2'b11 : 2'b00;
-assign botToPipelines[0] = mbfA;
-assign botToPipelines[1] = mbfB;
-
-wire mbfAReady = pipelineReadies[0];
-wire mbfBReady = pipelineReadies[1];
-assign readyForInput = mbfAReady && mbfBReady && !stallInput && !resultOriginQueueAlmostFull;
-
-
-wire[60:0] selectedDataA = dataFromPipelines[0];
-wire[60:0] selectedDataB = dataFromPipelines[1];
-
-assign summedDataPcoeffCountOutA = {eccErrorOccured, (readDebugData ? debugDataA : {2'b00, selectedDataA})};
-assign summedDataPcoeffCountOutB = readDebugData ? debugDataB : {3'b000, selectedDataB};
+// Smoothing to make sure empty flag is conservative
+wire nonEmptyIndicator = !resultOriginQueueEmpty || writeBotIn;
+reg[3:0] cyclesEmpty;
+assign empty = cyclesEmpty == 15;
+always @(posedge clk) begin
+    if(nonEmptyIndicator || rst) cyclesEmpty <= 0;
+    else cyclesEmpty <= cyclesEmpty + !empty;
+end
 
 endmodule
 
-
-
-module eccMonitor #(parameter NUMBER_OF_PIPELINES = 2) (
+module resourceDivider #(parameter WIDTH = 5) (
     input clk,
     input rst,
     
-    input originQueueECC,
-    input[NUMBER_OF_PIPELINES-1:0] pipelineECCs,
-    input[NUMBER_OF_PIPELINES-1:0] outputFIFOECCs,
+    input accept,
+    input[WIDTH-1:0] almostFulls,
+    
+    output reg[WIDTH-1:0] selectedOneHot
+);
+
+wire[WIDTH-1:0] nextOneHot;
+
+always @(posedge clk) begin
+    if(rst) begin
+        selectedOneHot <= 1; // select first one
+    end else begin
+        if(accept) begin
+            selectedOneHot <= nextOneHot;
+        end
+    end
+end
+
+wire[WIDTH-1:0] shifteds[WIDTH-1:0];
+wire[WIDTH-1:0] selectedShifted[WIDTH-1:0];
+
+generate
+assign shifteds[0] = selectedOneHot;
+assign selectedShifted[0] = selectedOneHot; // Stay in place as fallback
+for(genvar i = 1; i < WIDTH; i = i + 1) begin
+    assign shifteds[i] = {shifteds[i-1][0], shifteds[i-1][WIDTH-1]};
+    wire isValidShifted = (shifteds[i] & ~almostFulls) != 0;
+    assign selectedShifted[i] = isValidShifted ? shifteds[i] : selectedShifted[i-1];
+end
+endgenerate
+
+assign nextOneHot = selectedShifted[WIDTH-1];
+
+endmodule
+
+module resourceDividerAB #(parameter NUMBER_OF_PIPELINES = 2) (
+    input clk,
+    input rst,
+    
+    // Input side
+    input accept,
+    output almostFull,
+    
+    // Output side
+    input[NUMBER_OF_PIPELINES-1:0] almostFulls,
+    output[NUMBER_OF_PIPELINES-1:0] selectedOut
+);
+
+localparam PIPELINES_PER_CHANNEL = NUMBER_OF_PIPELINES / 2;
+
+wire[PIPELINES_PER_CHANNEL-1:0] selectedA;
+wire[PIPELINES_PER_CHANNEL-1:0] selectedB;
+
+wire[PIPELINES_PER_CHANNEL-1:0] almostFullsA = almostFulls[PIPELINES_PER_CHANNEL-1:0];
+wire[PIPELINES_PER_CHANNEL-1:0] almostFullsB = almostFulls[2*PIPELINES_PER_CHANNEL-1:PIPELINES_PER_CHANNEL];
+
+assign selectedOut[PIPELINES_PER_CHANNEL-1:0] = selectedA;
+assign selectedOut[2*PIPELINES_PER_CHANNEL-1:PIPELINES_PER_CHANNEL] = selectedB;
+
+assign almostFull = &almostFullsA || &almostFullsB;
+
+// Selection mechanism
+
+resourceDivider #(PIPELINES_PER_CHANNEL) divA(
+    .clk(clk),
+    .rst(rst),
+    
+    .accept(accept),
+    .almostFulls(almostFullsA),
+    
+    .selectedOneHot(selectedA)
+);
+
+resourceDivider #(PIPELINES_PER_CHANNEL) divB(
+    .clk(clk),
+    .rst(rst),
+    
+    .accept(accept),
+    .almostFulls(almostFullsB),
+    
+    .selectedOneHot(selectedB)
+);
+
+endmodule
+
+module eccMonitor (
+    input clk,
+    input rst,
+    
+    input eccStatus,
     
     output reg eccErrorOccured
 );
 
 // ECC Detection
-wire eccStatus = originQueueECC || |pipelineECCs || |outputFIFOECCs;
 always @(posedge clk) begin
     if(rst) begin
         eccErrorOccured <= 0;
@@ -333,7 +422,10 @@ module debugMonitor #(parameter NUMBER_OF_ACTIVITIES = 30) (
     
     input[NUMBER_OF_ACTIVITIES-1:0] activities2x,
     
-    input[3:0] flagsToTrack,
+    input flagToTrack0,
+    input flagToTrack1,
+    input flagToTrack2,
+    input flagToTrack3,
     
     output[62:0] outputDataA,
     output[63:0] outputDataB
@@ -403,7 +495,10 @@ end
 reg[31:0] trackerCycles[3:0];
 
 // Extra slack
-reg[3:0] flagsToTrackD; always @(posedge clk) flagsToTrackD <= flagsToTrack;
+reg flagToTrack0D; always @(posedge clk) flagToTrack0D <= flagToTrack0;
+reg flagToTrack1D; always @(posedge clk) flagToTrack1D <= flagToTrack1;
+reg flagToTrack2D; always @(posedge clk) flagToTrack2D <= flagToTrack2;
+reg flagToTrack3D; always @(posedge clk) flagToTrack3D <= flagToTrack3;
 
 always @(posedge clk) begin
     if(rst) begin
@@ -412,14 +507,145 @@ always @(posedge clk) begin
         trackerCycles[2] <= 0;
         trackerCycles[3] <= 0;
     end else begin
-        trackerCycles[0] <= trackerCycles[0] + flagsToTrackD[0];
-        trackerCycles[1] <= trackerCycles[1] + flagsToTrackD[1];
-        trackerCycles[2] <= trackerCycles[2] + flagsToTrackD[2];
-        trackerCycles[3] <= trackerCycles[3] + flagsToTrackD[3];
+        trackerCycles[0] <= trackerCycles[0] + flagToTrack0D;
+        trackerCycles[1] <= trackerCycles[1] + flagToTrack1D;
+        trackerCycles[2] <= trackerCycles[2] + flagToTrack2D;
+        trackerCycles[3] <= trackerCycles[3] + flagToTrack3D;
     end
 end
 
 assign outputDataB = {trackerCycles[3][31:16], trackerCycles[2][31:16], trackerCycles[1][31:16], trackerCycles[0][31:16]};
 
 endmodule
+
+
+module fullPermutationPipeline30WithOutFIFOAndSpacingRegisters (
+    input clk,
+    input clk2x,
+    input rst,
+    input longRST,
+    output[29:0] activities2x, // Instrumentation wires for profiling
+    
+    input[1:0] topChannel,
+    
+    // Input side
+    input[127:0] botIn,
+    input writeBotIn,
+    output reg almostFull,
+    
+    // Output side
+    input readRequest,
+    output empty,
+    output[60:0] dataOut,
+    
+    output reg eccStatusPipeline,
+    output reg eccStatusFIFO
+);
+
+(* dont_merge *) reg[1:0] topChannelD; always @(posedge clk) topChannelD <= topChannel;
+(* dont_merge *) reg[1:0] topChannelDD; always @(posedge clk) topChannelDD <= topChannelD;
+(* dont_merge *) reg[1:0] topChannelDDD; always @(posedge clk) topChannelDDD <= topChannelDD;
+
+(* dont_merge *) reg longRSTD; always @(posedge clk) longRSTD <= longRST;
+(* dont_merge *) reg longRSTDD; always @(posedge clk) longRSTDD <= longRSTD;
+(* dont_merge *) reg longRSTDDD; always @(posedge clk) longRSTDDD <= longRSTDD;
+
+(* dont_merge *) reg rstD; always @(posedge clk) rstD <= rst;
+(* dont_merge *) reg rstDD; always @(posedge clk) rstDD <= rstD;
+(* dont_merge *) reg rstDDD; always @(posedge clk) rstDDD <= rstDD;
+
+wire pipelineECC;
+reg pipelineECCD; always @(posedge clk) pipelineECCD <= pipelineECC;
+reg pipelineECCDD; always @(posedge clk) pipelineECCDD <= pipelineECCD;
+always @(posedge clk) eccStatusPipeline <= pipelineECCDD;
+
+wire[60:0] dataFromPipeline;
+wire dataFromPipelineValid;
+wire outputFifoAlmostFull;
+// Extra registers to allow long distance between pipeline and fifo
+reg[60:0] dataFromPipelineD; always @(posedge clk) dataFromPipelineD <= dataFromPipeline;
+reg[60:0] dataFromPipelineDD; always @(posedge clk) dataFromPipelineDD <= dataFromPipelineD;
+reg dataFromPipelineValidD; always @(posedge clk) dataFromPipelineValidD <= dataFromPipelineValid;
+reg dataFromPipelineValidDD; always @(posedge clk) dataFromPipelineValidDD <= dataFromPipelineValidD;
+reg outputFifoAlmostFullD; always @(posedge clk) outputFifoAlmostFullD <= outputFifoAlmostFull;
+reg outputFifoAlmostFullDD; always @(posedge clk) outputFifoAlmostFullDD <= outputFifoAlmostFullD;
+
+wire almostFullPre;
+reg almostFullPreD; always @(posedge clk) almostFullPreD <= almostFullPre;
+reg almostFullPreDD; always @(posedge clk) almostFullPreDD <= almostFullPreD;
+always @(posedge clk) almostFull <= almostFullPreDD;
+
+(* dont_merge *) reg[127:0] botInD; always @(posedge clk) botInD <= botIn;
+(* dont_merge *) reg[127:0] botInDD; always @(posedge clk) botInDD <= botInD;
+
+(* dont_merge *) reg writeBotInD; always @(posedge clk) writeBotInD <= writeBotIn;
+(* dont_merge *) reg writeBotInDD; always @(posedge clk) writeBotInDD <= writeBotInD;
+
+fullPermutationPipeline30 fullPermutationPipeline30 (
+    .clk(clk),
+    .clk2x(clk2x),
+    .rst(rstDDD),
+    .longRST(longRSTDDD),
+    .activities2x(activities2x),
+    
+    .topChannel(topChannelDDD),
+    .botIn(botInDD),
+    .writeBotIn(writeBotInDD),
+    .almostFull(almostFullPre),
+    
+    .slowDown(outputFifoAlmostFullDD),
+    .resultValid(dataFromPipelineValid),
+    .pcoeffSum(dataFromPipeline[47:0]),
+    .pcoeffCount(dataFromPipeline[60:48]),
+    .eccStatus(pipelineECC)
+);
+
+wire fifoECC;
+// Has enough buffer space to empty all pipelines into it. If not backpressured it shouldn't ever really reach anywhere near the limit
+FastFIFO_SAFE_M20K #(.WIDTH(48+13), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(16), .HOLD_LAST_READ(0)) outputFIFO (
+    .clk(clk),
+    .rst(longRST),
+    
+    // input side
+    .writeEnable(dataFromPipelineValidDD),
+    .dataIn(dataFromPipelineDD),
+    .almostFull(outputFifoAlmostFull),
+    
+    // Read Side
+    .readRequest(readRequest),
+    .dataOut(dataOut), // Forced to 0 when not reading
+    .empty(empty),
+    .dataOutValid(),
+    .eccStatus(fifoECC)
+);
+
+always @(posedge clk) eccStatusFIFO <= fifoECC;
+
+endmodule
+
+// Mock of fullPermutationPipeline for shorter elaboration time
+module fullPermutationPipeline30_MOCK_MOCK_MOCK_MOCK (
+    input clk,
+    input clk2x,
+    input rst,
+    input longRST,
+    output[29:0] activities2x, // Instrumentation wires for profiling
+    
+    input[1:0] topChannel,
+    
+    // Input side
+    input[127:0] botIn,
+    input writeBotIn,
+    output reg almostFull,
+    
+    // Output side
+    input slowDown,
+    output resultValid,
+    output reg[47:0] pcoeffSum,
+    output reg[12:0] pcoeffCount,
+    output reg eccStatus
+);
+
+endmodule
+
 

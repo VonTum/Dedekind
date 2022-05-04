@@ -298,7 +298,7 @@ wire currentlyPermutingUpdated;
 wire reqNewBot = permut7 == 0;
 
 // Read latency of 4 cycles
-FastFIFO_SAFE_M20K #(.WIDTH(128), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(64)) inputFIFO (
+FastFIFO_SAFE_M20K #(.WIDTH(128), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(32), .HOLD_LAST_READ(1)) inputFIFO (
     .clk(clk),
     .rst(rst),
     

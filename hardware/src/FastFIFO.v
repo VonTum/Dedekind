@@ -109,7 +109,7 @@ endmodule
 
 
 // Read latency of 4 cycles
-module FastFIFO_SAFE_M20K #(parameter WIDTH = 16, parameter DEPTH_LOG2 = 9, parameter ALMOST_FULL_MARGIN = 50) (
+module FastFIFO_SAFE_M20K #(parameter WIDTH = 16, parameter DEPTH_LOG2 = 9, parameter ALMOST_FULL_MARGIN = 50, parameter HOLD_LAST_READ = 1) (
     input clk,
     input rst,
     
@@ -148,7 +148,9 @@ end
 
 hyperpipe #(.CYCLES(4)) isValidPipe(clk, isReading, dataOutValid);
 
-MEMORY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2)) m20kMemory (
+reg isReadingD; always @(posedge clk) isReadingD <= isReading;
+
+MEMORY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .FORCE_TO_ZERO(!HOLD_LAST_READ)) m20kMemory (
     .clk(clk),
     
     // Write Side
@@ -157,14 +159,13 @@ MEMORY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2)) m20kMemory (
     .dataIn(dataIn),
     
     // Read Side
-    .readEnable(1'b1),
+    .readEnable(isReadingD), // readAddr must first increment, only then read
     .readAddr(readAddr),
     .dataOut(dataOut),
     .eccStatus(eccStatus)
 );
 
 endmodule
-
 
 /*
     Allows the synchronized outputting of several intermittent streams of data. 

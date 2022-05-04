@@ -197,7 +197,7 @@ wire pcoeffCoreAlmostFull;
 wire permutedBotValid;
 wire[127:0] permutedBot;
 wire batchFinished;
-botPermuter1234 #(.ALMOST_FULL_MARGIN(64)) botPermuter1234 (
+botPermuter1234 #(.ALMOST_FULL_MARGIN(32)) botPermuter1234 (
     .clk(clk),
     .rst(botPermuterRST),
     

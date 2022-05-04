@@ -136,9 +136,9 @@ module fullPermutationPipeline30 (
     input[1:0] topChannel,
     
     // Input side
-    input[127:0] bot,
-    input writeBot,
-    output readyForInputBot,
+    input[127:0] botIn,
+    input writeBotIn,
+    output almostFull,
     
     // Output side
     input slowDown,
@@ -148,28 +148,27 @@ module fullPermutationPipeline30 (
     output reg eccStatus
 );
 
-wire permutationGeneratorIsAlmostFull;
-assign readyForInputBot = !permutationGeneratorIsAlmostFull;
-
-reg pipelinesRequestSlowdown;
 wire[127:0] botFromGen;
 wire botFromGenValid;
 wire botFromGenSeriesFinished;
 
-wire permutationGeneratorECCStatus;
+wire permutationGeneratorECC;
+reg slowDownGenerator;
+(* dont_merge *) reg permutationGenerator7RST; always @(posedge clk) permutationGenerator7RST <= rst;
 permutationGenerator7 permutationGenerator7 (
     .clk(clk),
-    .rst(rst),
+    .rst(permutationGenerator7RST),
     
-    .inputBot(bot),
-    .writeInputBot(writeBot),
-    .almostFull(permutationGeneratorIsAlmostFull),
+    .inputBot(botIn),
+    .writeInputBot(writeBotIn),
+    .almostFull(almostFull),
     
-    .slowDown(pipelinesRequestSlowdown),
+    .slowDown(slowDownGenerator),
     .outputBot(botFromGen),
     .outputBotValid(botFromGenValid),
     .botSeriesFinished(botFromGenSeriesFinished),
-    .eccStatus(permutationGeneratorECCStatus)
+    
+    .eccStatus(permutationGeneratorECC)
 );
 
 wire[127:0] top;
@@ -209,15 +208,15 @@ for(genvar i = 0; i < 6; i = i + 1) begin
     `VAR_SWAP_INLINE_WITHIN_GENERATE(2, 6, botPermutations[5*i], botPermutations[5*i+4])
 end
 
-wire[29:0] slowDownWOR;
-always @(posedge clk) pipelinesRequestSlowdown <= |slowDownWOR;
+wire[29:0] pipelinesAlmostFull;
+always @(posedge clk) slowDownGenerator <= |pipelinesAlmostFull;
 
 wire[$clog2(24*7)+35-1:0] pcoeffSums[29:0];
 wire[$clog2(24*7)-1:0] pcoeffCounts[29:0];
 
 wire[29:0] eccStatuses;
 wire[29:0] memoryEccStatuses;
-always @(posedge clk) eccStatus <= permutationGeneratorECCStatus || |eccStatuses || |memoryEccStatuses;
+always @(posedge clk) eccStatus <= |eccStatuses || |memoryEccStatuses | permutationGeneratorECC;
 
 wire[29:0] outputFIFOWrites;
 wire[30*9-1:0] writeAddrs;
@@ -261,7 +260,7 @@ for(genvar permutationI = 0; permutationI < 30; permutationI = permutationI + 1)
         .botIn(botPermutations[permutationI]),
         .validBotPermutes(validBotPermutations_VALID[24*permutationI +: 24]),
         .batchDone(botFromGenSeriesFinished_VALID),
-        .almostFull(slowDownWOR[permutationI]),
+        .almostFull(pipelinesAlmostFull[permutationI]),
         
         // Output side
         .slowDown(outputFIFOsAlmostFull[permutationI]),
