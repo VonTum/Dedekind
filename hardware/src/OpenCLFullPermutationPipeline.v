@@ -209,8 +209,8 @@ wire[TOTAL_FPP_COUNT-1:0] outputFIFOEmpties;
 wire[TOTAL_FPP_COUNT-1:0] pipelineDataRequests;
 wire requestedPipelinesHaveData = &(~pipelineDataRequests | ~outputFIFOEmpties);
 
-wire resultOriginQueueEmpty;
-wire grabData = (resultOriginQueueEmpty ? 0 : requestedPipelinesHaveData) && !slowDown;
+wire originIndexAvailable;
+wire grabData = (originIndexAvailable ? requestedPipelinesHaveData : 0) && !slowDown;
 
 wire[TOTAL_FPP_COUNT-1:0] pipelineReadRequests = grabData ? pipelineDataRequests : 0;
 wire[60:0] dataFromPipelines[TOTAL_FPP_COUNT-1:0];
@@ -252,8 +252,8 @@ resourceDividerAB #(.NUMBER_OF_PIPELINES(TOTAL_FPP_COUNT)) selector (
     .selectedOut(selectedWriteToPipelines)
 );
 
-// OriginQueue
-FIFO_M20K #(.WIDTH(TOTAL_FPP_COUNT), .DEPTH_LOG2(15/*32000*/)) resultOriginQueue (
+// Expects sufficient readRequests while resetting, so that the output pipe is flushed properly
+LowLatencyFastDualClockFIFO_M20K #(.WIDTH(TOTAL_FPP_COUNT), .DEPTH_LOG2(15/*32000*/)) resultOriginQueue (
     .clk(clk),
     .rst(rst),
     
@@ -262,10 +262,11 @@ FIFO_M20K #(.WIDTH(TOTAL_FPP_COUNT), .DEPTH_LOG2(15/*32000*/)) resultOriginQueue
     .dataIn(selectedWriteToPipelines),
     .almostFull(), // Not connected, FIFO larger than it could possibly fill
     
-    // output side
-    .readEnable(grabData),
+    // Read Side
+    .readEnable(grabData || !originIndexAvailable),
     .dataOut(pipelineDataRequests),
-    .empty(resultOriginQueueEmpty),
+    .dataOutAvailable(originIndexAvailable),
+    
     .eccStatus(originQueueECC)
 );
 
@@ -296,7 +297,7 @@ end
 endgenerate
 
 // Smoothing to make sure empty flag is conservative
-wire nonEmptyIndicator = !resultOriginQueueEmpty || writeBotIn;
+wire nonEmptyIndicator = originIndexAvailable || writeBotIn;
 reg[3:0] cyclesEmpty;
 assign empty = cyclesEmpty == 15;
 always @(posedge clk) begin

@@ -237,7 +237,7 @@ module LowLatencyFastDualClockFIFO_MLAB #(parameter WIDTH = 20, parameter ALMOST
     input wrrst,
     input writeEnable,
     input[WIDTH-1:0] dataIn,
-    output reg almostFull, // Works in octants. Activated when 75-87.5% of the fifo is used (128-64 for M20K(512), 8-4 for MLAB(32))
+    output reg almostFull,
     
     // Read Side
     input rdclk,
@@ -275,11 +275,11 @@ wire canReadNext = readAddr != canReadUpTo;
 reg newReadAddr;
 always @(posedge rdclk) begin
     if(readRequestAddr) begin
-	     if(rdrst) begin
-		      readAddr <= 0;
-		  end else begin
+        if(rdrst) begin
+            readAddr <= 0;
+        end else begin
             readAddr <= readAddr + canReadNext;
-		  end
+        end
         newReadAddr <= canReadNext;
     end
 end
@@ -304,7 +304,76 @@ always @(posedge rdclk) begin
     end
 end
 
-endmodule 
+endmodule
+
+// Expects sufficient readRequests while resetting, so that the output pipe is flushed properly
+module LowLatencyFastDualClockFIFO_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9, parameter ALMOST_FULL_MARGIN = 64) (
+    input clk,
+    input rst,
+    
+    // Write Side
+    input writeEnable,
+    input[WIDTH-1:0] dataIn,
+    output reg almostFull,
+    
+    // Read Side
+    input readEnable,
+    output reg[WIDTH-1:0] dataOut,
+    output reg dataOutAvailable,
+    
+    output reg eccStatus
+);
+
+reg[DEPTH_LOG2-1:0] writeAddr;
+reg[DEPTH_LOG2-1:0] readAddr;
+
+wire[DEPTH_LOG2-1:0] spaceLeft = readAddr - writeAddr - 1;
+always @(posedge clk) almostFull <= spaceLeft <= ALMOST_FULL_MARGIN;
+
+wire canReadNext = readAddr != writeAddr;
+
+wire memECC;
+
+wire[WIDTH-1:0] dataFromM20K;
+reg newReadAddrStoredInM20K;
+reg newDataStoredInM20K;
+always @(posedge clk) begin
+    if(rst) begin
+        writeAddr <= 0;
+        readAddr <= 0;
+    end else begin
+        writeAddr <= writeAddr + writeEnable;
+        readAddr <= readAddr + (canReadNext && readEnable);
+    end
+    if(readEnable || rst) begin
+        newReadAddrStoredInM20K <= canReadNext;
+        newDataStoredInM20K <= newReadAddrStoredInM20K;
+        
+        dataOut <= dataFromM20K;
+        dataOutAvailable <= newDataStoredInM20K;
+        
+        eccStatus <= memECC && newDataStoredInM20K;
+    end
+end
+
+LOW_LATENCY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(0)) m20kMemory (
+    // Write Side
+    .wrclk(clk),
+    .writeEnable(writeEnable),
+    .writeAddr(writeAddr),
+    .dataIn(dataIn),
+    
+    // Read Side
+    .rdclk(clk),
+    .readClockEnable(readEnable),
+    .readAddr(readAddr),
+    .dataOut(dataFromM20K),
+    .eccStatus(memECC),
+    
+    .rstOutReg(1'b0) // Unconnected
+);
+
+endmodule
 
 /*
 Output register to be placed after fifo. This allows for zero-latency access, but dramatically reduces the throughput of the output port!
