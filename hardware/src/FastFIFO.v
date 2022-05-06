@@ -336,6 +336,7 @@ wire memECC;
 
 wire[WIDTH-1:0] dataFromM20K;
 reg newReadAddrStoredInM20K;
+reg newDataStoredInM20KPipelineReg;
 reg newDataStoredInM20K;
 always @(posedge clk) begin
     if(rst) begin
@@ -347,7 +348,8 @@ always @(posedge clk) begin
     end
     if(readEnable || rst) begin
         newReadAddrStoredInM20K <= canReadNext;
-        newDataStoredInM20K <= newReadAddrStoredInM20K;
+        newDataStoredInM20KPipelineReg <= newReadAddrStoredInM20K;
+        newDataStoredInM20K <= newDataStoredInM20KPipelineReg;
         
         dataOut <= dataFromM20K;
         dataOutAvailable <= newDataStoredInM20K;
@@ -356,7 +358,7 @@ always @(posedge clk) begin
     end
 end
 
-LOW_LATENCY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(0)) m20kMemory (
+LOW_LATENCY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(0), .USE_PIPELINE_REGISTER(1)) m20kMemory (
     // Write Side
     .wrclk(clk),
     .writeEnable(writeEnable),

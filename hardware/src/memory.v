@@ -559,7 +559,7 @@ endmodule
 
 // Output result is given after 2 readClockEnables
 // Only dual clock version is provided. Compiler forgets addrstall clock enable when trying for single-clock
-module LOW_LATENCY_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9, parameter USE_SCLEAR = 1) (
+module LOW_LATENCY_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9, parameter USE_SCLEAR = 1, parameter USE_PIPELINE_REGISTER = 0) (
     // Write Side
     input wrclk,
     input writeEnable,
@@ -593,7 +593,7 @@ altera_syncram  altera_syncram_component (
     .wren_a (writeEnable),
     .eccstatus (eccWire),
     .q_b (dataOut),
-    .sclr (USE_SCLEAR ? readClockEnable && rstOutReg : 1'b0), // AND with readClockEnable just in case. Documentation isn't clear on rst/CE priority. 
+    .sclr (USE_SCLEAR ? rstOutReg : 1'b0),
     .aclr0 (1'b0),
     .aclr1 (1'b0),
     .address2_a (1'b1),
@@ -633,7 +633,7 @@ defparam
     altera_syncram_component.numwords_b  = (1 << DEPTH_LOG2),
     altera_syncram_component.width_byteena_a  = 1,
     altera_syncram_component.enable_ecc  = "TRUE",
-    altera_syncram_component.ecc_pipeline_stage_enabled  = "FALSE",
+    altera_syncram_component.ecc_pipeline_stage_enabled  = USE_PIPELINE_REGISTER ? "TRUE" : "FALSE",
     altera_syncram_component.enable_ecc_encoder_bypass  = "FALSE",
     altera_syncram_component.width_eccstatus  = 2;
 
@@ -657,15 +657,17 @@ always @(posedge wrclk) begin
 end
 
 reg[DEPTH_LOG2-1:0] readAddrReg;
-reg[WIDTH-1:0] dataFromMemD; 
+reg[WIDTH-1:0] pipelineReg;
+reg[WIDTH-1:0] dataOutReg;
 always @(posedge rdclk) begin
     if(readClockEnable) begin
         readAddrReg <= readAddr;
-        dataFromMemD <= (USE_SCLEAR && rstOutReg) ? {WIDTH{1'b0}} : memory[readAddrReg];
+        pipelineReg <= memory[readAddrReg];
+        dataOutReg <= (USE_SCLEAR && rstOutReg) ? {WIDTH{1'b0}} : USE_PIPELINE_REGISTER ? pipelineReg : memory[readAddrReg];
     end
 end
 
-assign dataOut = dataFromMemD;
+assign dataOut = dataOutReg;
 
 assign eccStatus = 1'b0;
 
