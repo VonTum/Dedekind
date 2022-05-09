@@ -211,7 +211,7 @@ endmodule
 // The combinatorial pipeline that does all the work. Loopback is done outside of this module through combinatorialStateIn/Out
 // Pipeline stages are marked by wire_STAGE for clarity
 // If graphInAvailable == 0, then graphIn must == 128'b0
-module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10, parameter STARTING_CONNECT_COUNT_LAG = 3) (
+module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10) (
     input clk,
     input rst,
     input[1:0] topChannel,
@@ -219,7 +219,6 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10, p
     // input side
     input[127:0] graphIn,
     input graphInAvailable,
-    input[5:0] startingConnectCountIn_DELAYED,
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
     
     // state loop
@@ -230,7 +229,7 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10, p
     input shouldGrabNewSeedIn,
     input[1:0] graphSelectorIn,
     input validIn,
-    input[5:0] storedConnectionCountIn_DELAYED,
+    input[5:0] storedConnectionCountIn_NSD,
     input[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn,
     
     output request_EXPL,
@@ -240,7 +239,7 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10, p
     output shouldGrabNewSeedOut_EXPL,
     output[1:0] graphSelectorOut_EXPL,
     output reg validOut_D, 
-    output reg[5:0] connectionCountOut_DELAYED_D, 
+    output reg[5:0] connectionCountOut_NSD_D, 
     output reg[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut_D,
     output reg eccStatus
 );
@@ -280,18 +279,13 @@ shiftRegister_M20K #(.CYCLES(`OFFSET_DOWN - 2), .WIDTH(128)) newSeedProductionPi
     eccStatusWire
 );
 
-wire runEndIn_DELAYED;
-wire shouldIncrementConnectionCount_DELAYED;
-hyperpipe #(.CYCLES(STARTING_CONNECT_COUNT_LAG - `OFFSET_NSD), .MAX_FAN(35)) shouldIncrementConnectionCountPipe(clk,
-    shouldIncrementConnectionCount_NSD,
-    shouldIncrementConnectionCount_DELAYED
-);
-hyperpipe #(.CYCLES(STARTING_CONNECT_COUNT_LAG), .WIDTH(1)) runEndInPipe(clk,
+wire runEndIn_NSD;
+hyperpipe #(.CYCLES(`OFFSET_NSD), .WIDTH(1)) runEndInPipe(clk,
     runEndIn,
-    runEndIn_DELAYED
+    runEndIn_NSD
 );
 
-always @(posedge clk) connectionCountOut_DELAYED_D <= (runEndIn_DELAYED ? startingConnectCountIn_DELAYED : storedConnectionCountIn_DELAYED) + shouldIncrementConnectionCount_DELAYED;
+always @(posedge clk) connectionCountOut_NSD_D <= (runEndIn_NSD ? 0 : storedConnectionCountIn_NSD) + shouldIncrementConnectionCount_NSD;
 
 
 // PIPELINE STEP "EXPLORATION"
@@ -315,7 +309,7 @@ endmodule
 
 
 // requires a reset signal of at least 2*(MAX_PIPELINE_DEPTH+DATA_IN_LATENCY) cycles, or more!
-module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter DATA_IN_LATENCY = 4, parameter STARTING_CONNECT_COUNT_LAG = 3) (
+module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter DATA_IN_LATENCY = 4) (
     input clk,
     input rst,
     input[1:0] topChannel,
@@ -325,7 +319,6 @@ module pipelinedCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 10, parameter 
     output request,
     input[127:0] graphIn,
     input graphInAvailable,
-    input[5:0] startingConnectCountIn_DELAYED,
     input[EXTRA_DATA_WIDTH-1:0] extraDataIn,
     
     // output side
@@ -345,7 +338,7 @@ wire[127:0] reducedGraphIn;
 wire shouldGrabNewSeedIn;
 wire[1:0] graphSelectorIn;
 wire validIn;
-wire[5:0] storedConnectionCountIn_DELAYED;
+wire[5:0] storedConnectionCountIn_NSD;
 wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn;
 
 wire requestOut_EXPL;
@@ -355,12 +348,12 @@ wire[127:0] reducedGraphOut_DOWN;
 wire shouldGrabNewSeedOut_EXPL;
 wire[1:0] graphSelectorOut_EXPL;
 wire validOut_D;
-wire[5:0] connectionCountOut_DELAYED_D;
+wire[5:0] connectionCountOut_NSD_D;
 wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut_D;
 
 assign request = requestOut_EXPL;
 
-pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH, STARTING_CONNECT_COUNT_LAG) combinatorialComponent (
+pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH) combinatorialComponent (
     clk,
     rst,
     topChannel,
@@ -368,7 +361,6 @@ pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH, STARTING_CONNECT_COUNT_
     // input side
     graphIn,
     graphInAvailable,
-    startingConnectCountIn_DELAYED,
     extraDataIn,
     
     // combinatorial state loop
@@ -379,7 +371,7 @@ pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH, STARTING_CONNECT_COUNT_
     shouldGrabNewSeedIn,
     graphSelectorIn,
     validIn,
-    storedConnectionCountIn_DELAYED,
+    storedConnectionCountIn_NSD,
     storedExtraDataIn,
     
     requestOut_EXPL,
@@ -389,7 +381,7 @@ pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH, STARTING_CONNECT_COUNT_
     shouldGrabNewSeedOut_EXPL,
     graphSelectorOut_EXPL,
     validOut_D,
-    connectionCountOut_DELAYED_D,
+    connectionCountOut_NSD_D,
     storedExtraDataOut_D,
     eccStatusWOR
 );
@@ -406,8 +398,8 @@ shiftRegister_M20K #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_DOWN + DATA_IN_LAT
 
 // delays
 wire[5:0] storedConnectionCountIn;
-hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES + DATA_IN_LATENCY - STARTING_CONNECT_COUNT_LAG - 1), .WIDTH(6)) connectCountOutSyncPipe(clk,
-    connectionCountOut_DELAYED_D,
+hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES + DATA_IN_LATENCY - (`OFFSET_NSD + 1)), .WIDTH(6)) connectCountOutSyncPipe(clk,
+    connectionCountOut_NSD_D,
     storedConnectionCountIn
 );
 
@@ -416,9 +408,9 @@ hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_EXPL + DATA_IN_LATENCY), .W
     {runEndIn, shouldGrabNewSeedIn, graphSelectorIn}
 );
 
-hyperpipe #(.CYCLES(STARTING_CONNECT_COUNT_LAG), .WIDTH(6)) storedConnectionCountDelayedPipe(clk,
+hyperpipe #(.CYCLES(`OFFSET_NSD), .WIDTH(6)) storedConnectionCountDelayedPipe(clk,
     storedConnectionCountIn,
-    storedConnectionCountIn_DELAYED
+    storedConnectionCountIn_NSD
 );
 
 hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_DOWN + DATA_IN_LATENCY), .WIDTH(128)) loopBackPipeReducedGraph(clk,

@@ -243,7 +243,7 @@ module LowLatencyFastDualClockFIFO_MLAB #(parameter WIDTH = 20, parameter ALMOST
     input rdclk,
     input rdrst,
     input readRequestPre,
-    output reg[WIDTH-1:0] dataOut,
+    output reg[WIDTH-1:0] dataOut, // Forced to 0 if not dataOutAvailable
     output reg dataOutAvailable
 );
 
@@ -299,7 +299,7 @@ NO_READ_CLOCK_MEMORY_MLAB #(.WIDTH(WIDTH), .DEPTH_LOG2(5)) mlabMemory (
 
 always @(posedge rdclk) begin
     if(readRequestData) begin
-        dataOut <= dataFromMLAB;
+        dataOut <= newReadAddr ? dataFromMLAB : 0; // Force output to 0 if not valid
         dataOutAvailable <= newReadAddr;
     end
 end
@@ -307,7 +307,7 @@ end
 endmodule
 
 // Expects sufficient readRequests while resetting, so that the output pipe is flushed properly
-module LowLatencyFastDualClockFIFO_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9, parameter ALMOST_FULL_MARGIN = 64) (
+module LowLatencyFastFIFO_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9, parameter ALMOST_FULL_MARGIN = 64) (
     input clk,
     input rst,
     

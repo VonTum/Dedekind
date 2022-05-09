@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module OpenCLFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 6) (
+module OpenCLFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 2) (
     input clock,
     input clock2x, // apparently this specific name gives access to a 2x speed clock. Very useful!
     input resetn,
@@ -253,7 +253,7 @@ resourceDividerAB #(.NUMBER_OF_PIPELINES(TOTAL_FPP_COUNT)) selector (
 );
 
 // Expects sufficient readRequests while resetting, so that the output pipe is flushed properly
-LowLatencyFastDualClockFIFO_M20K #(.WIDTH(TOTAL_FPP_COUNT), .DEPTH_LOG2(15/*32000*/)) resultOriginQueue (
+LowLatencyFastFIFO_M20K #(.WIDTH(TOTAL_FPP_COUNT), .DEPTH_LOG2(15/*32000*/)) resultOriginQueue (
     .clk(clk),
     .rst(rst),
     

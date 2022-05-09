@@ -1,29 +1,10 @@
 `timescale 1ns / 1ps
 
-module hasNeighbor(
-    input[127:0] graphIn,
-    output[127:0] hasNeighboring
-);
-
-generate
-    genvar outI;
-    genvar v;
-    for(outI = 0; outI < 128; outI = outI + 1) begin
-        wire[6:0] inputWires;
-        for(v = 0; v < 7; v = v + 1) begin
-            assign inputWires[v] = graphIn[((outI & (1 << v)) != 0) ? outI - (1 << v) : outI + (1 << v)];
-        end
-        assign hasNeighboring[outI] = |inputWires;
-    end
-endgenerate
-
-endmodule
-
-// 4 cycles latency
+// 1 cycle latency
 module singletonPopcnt(
     input clk,
     input[127:0] singletons,
-    output reg[5:0] singletonCount
+    output[5:0] singletonCount
 );
 
 // singletons can't be next to each other
@@ -63,65 +44,44 @@ endgenerate
 
 // Finally crunsh all subsums down to our result
 wire[2:0] sumsB[7:0];
-reg[3:0] sumsC[3:0];
-reg[4:0] sumsD[1:0];
+wire[3:0] sumsC[3:0];
+wire[4:0] sumsD[1:0];
 generate
 for(i = 0; i < 8; i = i + 1) begin assign sumsB[i] = sumsA[2*i] + sumsA[2*i+1]; end
-for(i = 0; i < 4; i = i + 1) begin always @(posedge clk) sumsC[i] <= sumsB[2*i] + sumsB[2*i+1]; end
-for(i = 0; i < 2; i = i + 1) begin always @(posedge clk) sumsD[i] <= sumsC[2*i] + sumsC[2*i+1]; end
+for(i = 0; i < 4; i = i + 1) begin assign sumsC[i] = sumsB[2*i] + sumsB[2*i+1]; end
+for(i = 0; i < 2; i = i + 1) begin assign sumsD[i] = sumsC[2*i] + sumsC[2*i+1]; end
 endgenerate
 
-always @(posedge clk) singletonCount <= sumsD[0] + sumsD[1];
+assign singletonCount = sumsD[0] + sumsD[1];
 
 endmodule
 
-// produces singletonCount after a delay of 5 clock cycles (see PipelinedCountConnectedCore::CONNECT_COUNT_IN_LAG)
-module singletonSplitter (
+
+module singletonElimination (
     input clk,
-    input clkEnPre,
-    input zeroNonSingletons,
     input[127:0] graphIn,
-    output reg[127:0] singletons,
-    output reg[127:0] nonSingletons
+    output reg[127:0] nonSingletons, // 1 cycle latency
+    output[5:0] singletonCount // 1 cycle latency
 );
 
-genvar outI;
-genvar v;
-
-(* dont_merge *) reg clkEnDNeighbors; always @(posedge clk) clkEnDNeighbors <= clkEnPre;
-(* dont_merge *) reg clkEnDSingletons; always @(posedge clk) clkEnDSingletons <= clkEnPre;
-(* dont_merge *) reg clkEnDNonSingletons; always @(posedge clk) clkEnDNonSingletons <= clkEnPre;
-
-reg[127:0] hasNeighboring0to4D;
+wire[6:0] neighbors[127:0];
+wire[127:0] hasNeighbor;
 generate
-    for(outI = 0; outI < 128; outI = outI + 1) begin
-        wire[4:0] inputWires0to4;
-        for(v = 0; v < 5; v = v + 1) begin
-            assign inputWires0to4[v] = graphIn[((outI & (1 << v)) != 0) ? outI - (1 << v) : outI + (1 << v)];
-        end
-        always @(posedge clk) if(clkEnDNeighbors) hasNeighboring0to4D[outI] <= |inputWires0to4;
+for(genvar outI = 0; outI < 128; outI = outI + 1) begin
+    for(genvar v = 0; v < 7; v = v + 1) begin
+        assign neighbors[outI][v] = graphIn[((outI & (1 << v)) != 0) ? outI - (1 << v) : outI + (1 << v)];
     end
+    assign hasNeighbor[outI] = |neighbors[outI];
+end
 endgenerate
 
-reg[127:0] graphInD;
-always @(posedge clk) begin
-    if(clkEnDNeighbors) graphInD <= graphIn;
-end
+wire[127:0] singletons = graphIn & ~hasNeighbor;
+always @(posedge clk) nonSingletons <= graphIn & hasNeighbor;
 
-wire[127:0] hasNeighboringD;
-generate
-    for(outI = 0; outI < 128; outI = outI + 1) begin
-        wire[6:5] inputWires5to6D;
-        for(v = 5; v < 7; v = v + 1) begin
-            assign inputWires5to6D[v] = graphInD[((outI & (1 << v)) != 0) ? outI - (1 << v) : outI + (1 << v)];
-        end
-        assign hasNeighboringD[outI] = |inputWires5to6D || hasNeighboring0to4D[outI];
-    end
-endgenerate
-
-always @(posedge clk) begin
-    if(clkEnDSingletons) singletons <= graphInD & ~hasNeighboringD;
-    if(clkEnDNonSingletons) nonSingletons <= zeroNonSingletons ? 0 : graphInD & hasNeighboringD;
-end
+singletonPopcnt counter (
+    .clk(clk),
+    .singletons(singletons),
+    .singletonCount(singletonCount)
+);
 
 endmodule

@@ -77,11 +77,10 @@
             <FILE name="src/aggregatingPipeline.v"/>
               <FILE name="src/leafElimination.v"/>
                 <FILE name="src/exactlyOne.v"/>
+              <FILE name="src/singletonElimination.v"/>
               <FILE name="src/streamingCountConnectedCore.v"/>
-                <FILE name="src/computeModule.v"/>
-                  <FILE name="src/singletonElimination.v"/>
-                  <FILE name="src/pipelinedCountConnectedCore.v"/>
-                    <FILE name="src/monotonize.v"/>
+                <FILE name="src/pipelinedCountConnectedCore.v"/>
+                  <FILE name="src/monotonize.v"/>
       
       <!-- Utility files -->
       <FILE name="src/hyperPipelining.v"/>

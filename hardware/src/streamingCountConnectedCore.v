@@ -115,21 +115,21 @@ fastToSlowPulseSynchronizer eccSync(clk2x, pipelineECC2x, clk, pipelineECC);
 wire[1:0] topChannel2x;
 synchronizer #(.WIDTH(2)) topChannel2xSync(clk, topChannel, clk2x, topChannel2x);
 
-pipelinedCountConnectedCoreWithSingletonElimination #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH), .REQUEST_LATENCY(`FIFO_READ_LATENCY)) countConnectedCore (
+pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH), .DATA_IN_LATENCY(`FIFO_READ_LATENCY)) countConnectedCore (
     .clk(clk2x),
     .rst(cccRST2x),
     .topChannel(topChannel2x),
     .isActive(isActive2x),
     
     // input side
-    .leafEliminatedGraph(graphToComputeModule2x),
-    .graphAvailable(inputFifoAvailable2x),
+    .request(requestGraph2x),
+    .graphIn(graphToComputeModule2x),
+    .graphInAvailable(inputFifoAvailable2x),
     .extraDataIn(addrToComputeModule2x),
-    .requestGraph(requestGraph2x),
     
     // output side
     .done(writeToCollector2x),
-    .resultCount(connectCountToCollector2x),
+    .connectCountOut(connectCountToCollector2x),
     .extraDataOut(addrToCollector2x),
     .eccStatus(pipelineECC2x)
 );

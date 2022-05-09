@@ -43,7 +43,15 @@ reg isBotValidDD; always @(posedge clk) isBotValidDD <= isBotValidD;
 reg lastBotOfBatchDD; always @(posedge clk) lastBotOfBatchDD <= lastBotOfBatchD;
 reg freezeCoreDD; always @(posedge clk) freezeCoreDD <= freezeCoreD;
 
-streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1)) core (
+wire[127:0] nonSingletonGraphDDD;
+wire[5:0] singletonCountDDD;
+singletonElimination se (clk, leafEliminatedGraphDD, nonSingletonGraphDDD, singletonCountDDD);
+reg isBotValidDDD; always @(posedge clk) isBotValidDDD <= isBotValidDD;
+reg lastBotOfBatchDDD; always @(posedge clk) lastBotOfBatchDDD <= lastBotOfBatchDD;
+reg freezeCoreDDD; always @(posedge clk) freezeCoreDDD <= freezeCoreDD;
+
+wire[5:0] savedSingletonCount;
+streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1+6)) core (
     .clk(clk),
     .clk2x(clk2x),
     .rst(rst),
@@ -51,21 +59,21 @@ streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1)) core (
     .isActive2x(isActive2x),
     
     // Input side
-    .isBotValid(isBotValidDD),
-    .graphIn(leafEliminatedGraphDD),
-    .extraDataIn(lastBotOfBatchDD),
-    .freezeCore(freezeCoreDD),
+    .isBotValid(isBotValidDDD),
+    .graphIn(nonSingletonGraphDDD),
+    .extraDataIn({lastBotOfBatchDDD, singletonCountDDD}),
+    .freezeCore(freezeCoreDDD),
     .almostFull(almostFull),
     
     // Output side
     .resultValid(connectCountFromPipelineValid),
     .connectCount(connectCountFromPipeline),
-    .extraDataOut(resultsValid),
+    .extraDataOut({resultsValid, savedSingletonCount}),
     .eccStatus(eccFromPipeline)
 );
 
-assign eccStatus = eccFromPipeline || (connectCountFromPipelineValid && (connectCountFromPipeline > 35)); // Connect Count should *never* be > 35
-wire[35:0] pcoeff = 36'b000000000000000000000000000000000001 << connectCountFromPipeline;
+assign eccStatus = eccFromPipeline || connectCountFromPipelineValid; // Connect Count should *never* be > 35
+wire[35:0] pcoeff = 36'b000000000000000000000000000000000001 << (connectCountFromPipeline + savedSingletonCount);
 
 always @(posedge clk) begin
     if(longRST || resultsValid) begin
