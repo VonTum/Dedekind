@@ -24,8 +24,6 @@ module aggregatingPipeline #(parameter PCOEFF_COUNT_BITWIDTH = 0) (
     output eccStatus
 );
 
-
-wire eccFromPipeline;
 wire connectCountFromPipelineValid;
 wire[5:0] connectCountFromPipeline;
 
@@ -69,10 +67,9 @@ streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1+6)) core (
     .resultValid(connectCountFromPipelineValid),
     .connectCount(connectCountFromPipeline),
     .extraDataOut({resultsValid, savedSingletonCount}),
-    .eccStatus(eccFromPipeline)
+    .eccStatus(eccStatus)
 );
 
-assign eccStatus = eccFromPipeline || connectCountFromPipelineValid; // Connect Count should *never* be > 35
 wire[35:0] pcoeff = 36'b000000000000000000000000000000000001 << (connectCountFromPipeline + savedSingletonCount);
 
 always @(posedge clk) begin

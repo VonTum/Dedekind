@@ -114,7 +114,7 @@ MultiFullPermutationPipeline #(.TOTAL_FPP_COUNT(TOTAL_FPP_COUNT)) multiFullPermP
 
 
 // Debug monitor
-wire[62:0] debugDataA;
+wire[60:0] debugDataA;
 wire[63:0] debugDataB;
 
 debugMonitor #(.NUMBER_OF_ACTIVITIES(30*TOTAL_FPP_COUNT)) debugMon(
@@ -134,24 +134,31 @@ debugMonitor #(.NUMBER_OF_ACTIVITIES(30*TOTAL_FPP_COUNT)) debugMon(
 
 
 wire eccErrorOccured;
-eccMonitor eccMon (
-    clock, rst, 
-    eccStatus,
-    eccErrorOccured
+wire seuOccured;
+wire seuSysError;
+wire[63:0] seuData;
+cosmicRayDetection errorDetector (
+    .clk(clock),
+    .rst(rst),
+    .eccStatus(eccStatus),
+    
+    .eccErrorOccured(eccErrorOccured),
+    .seuOccured(seuOccured),
+    .seuSysError(seuSysError),
+    .seuData(seuData)
 );
-
 
 // Output FIFO
 
-wire[62:0] dataToOutA = newTopInstalled ? debugDataA : {2'b00, summedDataPcoeffCountOutA};
-wire[63:0] dataToOutB = newTopInstalled ? debugDataB : {3'b000, summedDataPcoeffCountOutB};
+wire[60:0] dataToOutA = newTopInstalled ? debugDataA : summedDataPcoeffCountOutA;
+wire[63:0] dataToOutB = seuOccured ? seuData : newTopInstalled ? debugDataB : {3'b000, summedDataPcoeffCountOutB};
 
 (* dont_merge *) reg fastResponseTimeFIFORST; always @(posedge clock) fastResponseTimeFIFORST <= rst;
 
-wire[126:0] resultsData;
-assign results = {eccErrorOccured, resultsData};
+wire[124:0] resultsData;
+assign results = {eccErrorOccured, seuOccured, seuSysError, resultsData};
 wire outputFIFOEmpty;
-FIFO_MLAB #(.WIDTH(127), .ALMOST_FULL_MARGIN(16)) fastResponseTimeFIFO (
+FIFO_MLAB #(.WIDTH(125), .ALMOST_FULL_MARGIN(16)) fastResponseTimeFIFO (
     .clk(clock),
     .rst(fastResponseTimeFIFORST),
     
@@ -396,26 +403,6 @@ resourceDivider #(PIPELINES_PER_CHANNEL) divB(
 
 endmodule
 
-module eccMonitor (
-    input clk,
-    input rst,
-    
-    input eccStatus,
-    
-    output reg eccErrorOccured
-);
-
-// ECC Detection
-always @(posedge clk) begin
-    if(rst) begin
-        eccErrorOccured <= 0;
-    end else begin
-        if(eccStatus) eccErrorOccured <= 1;
-    end
-end
-
-endmodule
-
 module debugMonitor #(parameter NUMBER_OF_ACTIVITIES = 30) (
     input clk,
     input clk2x,
@@ -428,7 +415,7 @@ module debugMonitor #(parameter NUMBER_OF_ACTIVITIES = 30) (
     input flagToTrack2,
     input flagToTrack3,
     
-    output[62:0] outputDataA,
+    output[60:0] outputDataA,
     output[63:0] outputDataB
 );
 
@@ -477,7 +464,7 @@ always @(posedge clk) activityMeasure <= actPipelineSums[0] + actPipelineSums[1]
 
 reg[45:0] activityCounter;
 reg[40:0] clockCounter;
-assign outputDataA[62:32] = activityCounter[45:15];
+assign outputDataA[60:32] = activityCounter[45:17];
 assign outputDataA[31:0] = clockCounter[40:9];
 // The resulting occupancy is calculated as activityCounter / `ACTIVITY_MEASURE_LIMIT / clockCounter
 // Also, the occupancy returned for a top is the occupancy of the PREVIOUS top
