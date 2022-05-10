@@ -228,9 +228,9 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10) (
     input[127:0] reducedGraphIn,
     input shouldGrabNewSeedIn,
     input[1:0] graphSelectorIn,
-    input validIn,
+    input validIn_NSD,
     input[5:0] storedConnectionCountIn_NSD,
-    input[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn,
+    input[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn_NSD,
     
     output request_EXPL,
     output[127:0] extendedOut_DOWN,
@@ -238,14 +238,16 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10) (
     output[127:0] reducedGraphOut_DOWN,
     output shouldGrabNewSeedOut_EXPL,
     output[1:0] graphSelectorOut_EXPL,
-    output reg validOut_D, 
+    output reg validOut_NSD_D, 
     output reg[5:0] connectionCountOut_NSD_D, 
-    output reg[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut_D,
+    output reg[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut_NSD_D,
+    
+    // output side
+    output done,
+    output[5:0] connectCountOut,
+    output[EXTRA_DATA_WIDTH-1:0] extraDataOut,
     output reg eccStatus
 );
-
-always @(posedge clk) storedExtraDataOut_D <= runEndIn ? extraDataIn : storedExtraDataIn;
-always @(posedge clk) validOut_D <= runEndIn ? graphInAvailable : validIn;
 
 // PIPELINE STEP 5
 `define GRAPH_RESET 2'b00
@@ -305,6 +307,24 @@ assign graphSelectorOut_EXPL =
     request_EXPL ? `GRAPH_START : 
     shouldGrabNewSeedOut_EXPL ? `GRAPH_NEW_SEED : `GRAPH_LEFTOVER;
 
+
+// Outputs
+
+wire[EXTRA_DATA_WIDTH-1:0] extraDataIn_NSD;
+wire graphInAvailable_NSD;
+
+hyperpipe #(.CYCLES(`NEW_SEED_DEPTH), .WIDTH(EXTRA_DATA_WIDTH+1)) extraDataInGraphInAvailablePipe(clk,
+    {extraDataIn, graphInAvailable},
+    {extraDataIn_NSD, graphInAvailable_NSD}
+);
+
+always @(posedge clk) storedExtraDataOut_NSD_D <= runEndIn_NSD ? extraDataIn_NSD : storedExtraDataIn_NSD;
+always @(posedge clk) validOut_NSD_D <= runEndIn_NSD ? graphInAvailable_NSD : validIn_NSD;
+
+assign done = runEndIn_NSD && validIn_NSD;
+assign connectCountOut = storedConnectionCountIn_NSD;
+assign extraDataOut = storedExtraDataIn_NSD;
+
 endmodule
 
 
@@ -337,9 +357,9 @@ wire[127:0] leftoverGraphIn;
 wire[127:0] reducedGraphIn;
 wire shouldGrabNewSeedIn;
 wire[1:0] graphSelectorIn;
-wire validIn;
+wire validIn_NSD;
 wire[5:0] storedConnectionCountIn_NSD;
-wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn;
+wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn_NSD;
 
 wire requestOut_EXPL;
 wire[127:0] extendedOut_DOWN;
@@ -347,9 +367,9 @@ wire[127:0] leftoverGraphOut_PRE_DOWN;
 wire[127:0] reducedGraphOut_DOWN;
 wire shouldGrabNewSeedOut_EXPL;
 wire[1:0] graphSelectorOut_EXPL;
-wire validOut_D;
+wire validOut_NSD_D;
 wire[5:0] connectionCountOut_NSD_D;
-wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut_D;
+wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut_NSD_D;
 
 assign request = requestOut_EXPL;
 
@@ -370,9 +390,9 @@ pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH) combinatorialComponent 
     reducedGraphIn,
     shouldGrabNewSeedIn,
     graphSelectorIn,
-    validIn,
+    validIn_NSD,
     storedConnectionCountIn_NSD,
-    storedExtraDataIn,
+    storedExtraDataIn_NSD,
     
     requestOut_EXPL,
     extendedOut_DOWN,
@@ -380,9 +400,13 @@ pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH) combinatorialComponent 
     reducedGraphOut_DOWN,
     shouldGrabNewSeedOut_EXPL,
     graphSelectorOut_EXPL,
-    validOut_D,
+    validOut_NSD_D,
     connectionCountOut_NSD_D,
-    storedExtraDataOut_D,
+    storedExtraDataOut_NSD_D,
+    
+    done,
+    connectCountOut,
+    extraDataOut,
     eccStatusWOR
 );
 
@@ -397,20 +421,9 @@ shiftRegister_M20K #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_DOWN + DATA_IN_LAT
 );
 
 // delays
-wire[5:0] storedConnectionCountIn;
-hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES + DATA_IN_LATENCY - (`OFFSET_NSD + 1)), .WIDTH(6)) connectCountOutSyncPipe(clk,
-    connectionCountOut_NSD_D,
-    storedConnectionCountIn
-);
-
 hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_EXPL + DATA_IN_LATENCY), .WIDTH(1+1+2)) loopBackPipeAllData(clk,
     {requestOut_EXPL, shouldGrabNewSeedOut_EXPL, graphSelectorOut_EXPL},
     {runEndIn, shouldGrabNewSeedIn, graphSelectorIn}
-);
-
-hyperpipe #(.CYCLES(`OFFSET_NSD), .WIDTH(6)) storedConnectionCountDelayedPipe(clk,
-    storedConnectionCountIn,
-    storedConnectionCountIn_NSD
 );
 
 hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_DOWN + DATA_IN_LATENCY), .WIDTH(128)) loopBackPipeReducedGraph(clk,
@@ -432,18 +445,12 @@ wire loopBackPipeValidAndExtraDataECCWire;
 reg loopBackPipeValidAndExtraDataECC; always @(posedge clk) loopBackPipeValidAndExtraDataECC <= loopBackPipeValidAndExtraDataECCWire;
 assign eccStatusWOR = loopBackPipeValidAndExtraDataECC;
 
-shiftRegister_M20K #(.CYCLES(`TOTAL_PIPELINE_STAGES - 1 + DATA_IN_LATENCY), .WIDTH(1+EXTRA_DATA_WIDTH)) loopBackPipeValidAndExtraData (clk,
-    {validOut_D, storedExtraDataOut_D},
-    {validIn, storedExtraDataIn},
+shiftRegister_M20K #(.CYCLES(`TOTAL_PIPELINE_STAGES - 1 + DATA_IN_LATENCY), .WIDTH(1 + EXTRA_DATA_WIDTH + 6)) loopBackPipeValidAndExtraData (clk,
+    {validOut_NSD_D, storedExtraDataOut_NSD_D, connectionCountOut_NSD_D},
+    {validIn_NSD, storedExtraDataIn_NSD, storedConnectionCountIn_NSD},
     loopBackPipeValidAndExtraDataECCWire
 );
 
-// Lots of slack, latency isn't important and we want minimal influence on the resulting hardware
-hyperpipe #(.CYCLES(7)) activityMonitorPipe(clk, validIn, isActive);
-
-`define OUTPUT_DELAY 3
-hyperpipe #(.CYCLES(`OUTPUT_DELAY)) donePipe(clk, runEndIn & validIn, done);
-hyperpipe #(.CYCLES(`OUTPUT_DELAY), .WIDTH(6)) connectCountOutPipe(clk, storedConnectionCountIn, connectCountOut);
-hyperpipe #(.CYCLES(`OUTPUT_DELAY), .WIDTH(EXTRA_DATA_WIDTH)) extraDataOutPipe(clk, storedExtraDataIn, extraDataOut);
+assign isActive = validIn_NSD;
 
 endmodule

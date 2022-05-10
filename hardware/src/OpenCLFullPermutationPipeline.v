@@ -439,8 +439,8 @@ module debugMonitor #(parameter NUMBER_OF_ACTIVITIES = 30) (
 reg[6:0] activityMeasure; // Instrumentation wire for profiling (0-`ACTIVITY_MEASURE_LIMIT activity level)
 
 // Extra slack registers
-reg[NUMBER_OF_ACTIVITIES-1:0] activities2xD; always @(posedge clk2x) activities2xD <= activities2x;
-reg[NUMBER_OF_ACTIVITIES-1:0] activities2xDD; always @(posedge clk2x) activities2xDD <= activities2xD;
+wire[NUMBER_OF_ACTIVITIES-1:0] activities2xD;
+hyperpipe #(.CYCLES(5), .WIDTH(NUMBER_OF_ACTIVITIES)) activitiesPipe(clk2x, activities2x, activities2xD);
 
 wire[5:0] actPipelineSums[NUMBER_OF_ACTIVITIES / 30 - 1 : 0];
 
@@ -448,7 +448,7 @@ genvar i;
 generate
 reg[3:0] actSums2x[NUMBER_OF_ACTIVITIES / 15 -1 : 0];
 for(i = 0; i < NUMBER_OF_ACTIVITIES / 15; i = i + 1) begin
-    wire[14:0] acts2x = activities2xDD[15*i +: 15];
+    wire[14:0] acts2x = activities2xD[15*i +: 15];
     reg[2:0] sumA; reg[2:0] sumB; reg[2:0] sumC;
     always @(posedge clk2x) begin
         sumA <= acts2x[0] + acts2x[1] + acts2x[2] + acts2x[3] + acts2x[4];
