@@ -431,14 +431,9 @@ hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_DOWN + DATA_IN_LATENCY), .W
     reducedGraphIn
 );
 
-wire loopBackPipeLeftOverGraphECCWire;
-reg loopBackPipeLeftOverGraphECC; always @(posedge clk) loopBackPipeLeftOverGraphECC <= loopBackPipeLeftOverGraphECCWire;
-assign eccStatusWOR = loopBackPipeLeftOverGraphECC;
-
-shiftRegister_M20K #(.CYCLES(`TOTAL_PIPELINE_STAGES - (`OFFSET_DOWN-1) + DATA_IN_LATENCY), .WIDTH(128)) loopBackPipeLeftoverGraph(clk,
+hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES - (`OFFSET_DOWN-1) + DATA_IN_LATENCY), .WIDTH(128)) loopBackPipeLeftoverGraph(clk,
     leftoverGraphOut_PRE_DOWN,
-    leftoverGraphIn,
-    loopBackPipeLeftOverGraphECCWire
+    leftoverGraphIn
 );
 
 wire loopBackPipeValidAndExtraDataECCWire;

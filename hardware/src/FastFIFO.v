@@ -231,7 +231,7 @@ endmodule
 
 
 // Expects sufficient readRequests while resetting, so that the output pipe is flushed properly
-module LowLatencyFastDualClockFIFO_MLAB #(parameter WIDTH = 20, parameter ALMOST_FULL_MARGIN = 8) (
+module LowLatencyFastDualClockFIFO_MLAB #(parameter WIDTH = 20, parameter DEPTH_LOG2 = 5, parameter ALMOST_FULL_MARGIN = 8) (
     // Write Side
     input wrclk,
     input wrrst,
@@ -247,8 +247,8 @@ module LowLatencyFastDualClockFIFO_MLAB #(parameter WIDTH = 20, parameter ALMOST
     output reg dataOutAvailable
 );
 
-reg[4:0] writeAddr;
-reg[4:0] readAddr;
+reg[DEPTH_LOG2-1:0] writeAddr;
+reg[DEPTH_LOG2-1:0] readAddr;
 
 always @(posedge wrclk) begin
     if(wrrst) begin
@@ -258,13 +258,13 @@ always @(posedge wrclk) begin
     end
 end
 
-wire[4:0] writeAddrWire_rd;
-wire[4:0] readAddrWire_wr; 
-grayCodePipe #(5) wr_rd(wrclk, writeAddr, rdclk, writeAddrWire_rd);
-grayCodePipe #(5) rd_wr(rdclk, readAddr, wrclk, readAddrWire_wr);
-reg[4:0] canReadUpTo; always @(posedge rdclk) canReadUpTo <= writeAddrWire_rd - 1;
+wire[DEPTH_LOG2-1:0] writeAddrWire_rd;
+wire[DEPTH_LOG2-1:0] readAddrWire_wr; 
+grayCodePipe #(DEPTH_LOG2) wr_rd(wrclk, writeAddr, rdclk, writeAddrWire_rd);
+grayCodePipe #(DEPTH_LOG2) rd_wr(rdclk, readAddr, wrclk, readAddrWire_wr);
+reg[DEPTH_LOG2-1:0] canReadUpTo; always @(posedge rdclk) canReadUpTo <= writeAddrWire_rd - 1;
 
-wire[4:0] spaceLeft = readAddrWire_wr - writeAddr;
+wire[DEPTH_LOG2-1:0] spaceLeft = readAddrWire_wr - writeAddr;
 always @(posedge wrclk) almostFull <= spaceLeft <= ALMOST_FULL_MARGIN;
 
 wire canReadNext = readAddr != canReadUpTo;
@@ -285,7 +285,7 @@ always @(posedge rdclk) begin
 end
 
 wire[WIDTH-1:0] dataFromMLAB;
-NO_READ_CLOCK_MEMORY_MLAB #(.WIDTH(WIDTH), .DEPTH_LOG2(5)) mlabMemory (
+NO_READ_CLOCK_MEMORY_MLAB #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2)) mlabMemory (
     // Write Side
     .wrclk(wrclk),
     .writeEnable(writeEnable),
@@ -305,6 +305,88 @@ always @(posedge rdclk) begin
 end
 
 endmodule
+
+
+
+// Expects sufficient readRequests while resetting, so that the output pipe is flushed properly
+module LowLatencyFastDualClockFIFO_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9, parameter ALMOST_FULL_MARGIN = 8) (
+    // Write Side
+    input wrclk,
+    input wrrst,
+    input writeEnable,
+    input[WIDTH-1:0] dataIn,
+    output reg almostFull,
+    
+    // Read Side
+    input rdclk,
+    input rdrst,
+    input readRequest,
+    output[WIDTH-1:0] dataOut, // Forced to 0 if not dataOutAvailable
+    output reg dataOutAvailable,
+    
+    output reg eccStatus
+);
+
+reg[DEPTH_LOG2-1:0] writeAddr;
+reg[DEPTH_LOG2-1:0] readAddr;
+
+always @(posedge wrclk) begin
+    if(wrrst) begin
+        writeAddr <= 0;
+    end else begin
+        writeAddr <= writeAddr + writeEnable;
+    end
+end
+
+wire[DEPTH_LOG2-1:0] writeAddrWire_rd;
+wire[DEPTH_LOG2-1:0] readAddrWire_wr; 
+grayCodePipe #(DEPTH_LOG2) wr_rd(wrclk, writeAddr, rdclk, writeAddrWire_rd);
+grayCodePipe #(DEPTH_LOG2) rd_wr(rdclk, readAddr, wrclk, readAddrWire_wr);
+reg[DEPTH_LOG2-1:0] canReadUpTo; always @(posedge rdclk) canReadUpTo <= writeAddrWire_rd;
+
+wire[DEPTH_LOG2-1:0] spaceLeft = readAddrWire_wr - writeAddr - 1;
+always @(posedge wrclk) almostFull <= spaceLeft <= ALMOST_FULL_MARGIN;
+
+wire canReadNext = readAddr != canReadUpTo;
+
+reg storedAddrValid;
+reg storedPipelineRegValid;
+always @(posedge rdclk) begin
+    if(readRequest) begin
+        if(rdrst) begin
+            readAddr <= 0;
+        end else begin
+            readAddr <= readAddr + canReadNext;
+        end
+        storedAddrValid <= canReadNext;
+        storedPipelineRegValid <= storedAddrValid;
+        dataOutAvailable <= storedPipelineRegValid;
+    end
+end
+
+wire eccWire;
+always @(posedge rdclk) eccStatus <= eccWire;
+LOW_LATENCY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(1), .USE_PIPELINE_REGISTER(1)) m20kMemory (
+    // Write Side
+    .wrclk(wrclk),
+    .writeEnable(writeEnable),
+    .writeAddr(writeAddr),
+    .dataIn(dataIn),
+    
+    // Read Side
+    .rdclk(rdclk),
+    .readClockEnable(readRequest),
+    .readAddr(readAddr),
+    .dataOut(dataOut),
+    .eccStatus(eccWire),
+    
+    // Optional read output reg sclear
+    .rstOutReg(!storedPipelineRegValid)
+);
+
+endmodule
+
+
 
 // Expects sufficient readRequests while resetting, so that the output pipe is flushed properly
 module LowLatencyFastFIFO_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9, parameter ALMOST_FULL_MARGIN = 64) (
