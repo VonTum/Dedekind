@@ -69,6 +69,7 @@
       <!-- Source Files -->
       <FILE name="src/OpenCLFullPermutationPipeline.v"/>
         <FILE name="src/topManager.v"/>
+        <FILE name="src/cosmicRayDetection.v"/>
         <FILE name="src/fullPermutationPipeline.v"/>
           <FILE name="src/permutationGenerator.v"/>
           <FILE name="src/multiPermutChecks.v"/>

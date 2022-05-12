@@ -87,9 +87,10 @@ synchronizer pipelineRSTSynchronizer(clk, pipelineRST, clk2x, pipelineRST2x);
 (* dont_merge *) reg inputFIFORST2x; always @(posedge clk2x) inputFIFORST2x <= pipelineRST2x;
 (* dont_merge *) reg cccRST2x; always @(posedge clk2x) cccRST2x <= pipelineRST2x;
 
-// request Pipe has 0 cycle, FIFO has 0 cycles read latency, dataOut pipe has 0 cycles
-`define FIFO_READ_LATENCY (0+0+0)
+// request Pipe has 1 cycle, FIFO has 0 cycles read latency, dataOut pipe has 0 cycles
+`define FIFO_READ_LATENCY (1+0+0)
 wire inputFifoECC2x;
+reg requestGraph2xD; always @(posedge clk2x) requestGraph2xD <= requestGraph2x; // Extra reg for more timing tolerance
 LowLatencyFastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(5), .ALMOST_FULL_MARGIN(12)) inputFIFO (// Upper 6 cycles max latency for permutation generation, 4 cycles turnaround time, 2 cycles of margin
     // input side
     .wrclk(clk),
@@ -101,7 +102,7 @@ LowLatencyFastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(5), .ALM
     // output side
     .rdclk(clk2x),
     .rdrst(inputFIFORST2x),
-    .readRequest(requestGraph2x),
+    .readRequest(requestGraph2xD),
     .dataOut({graphToComputeModule2x, addrToComputeModule2x}), // Forced to 0 if not inputFifoAvailable2x
     .dataOutAvailable(inputFifoAvailable2x),
     

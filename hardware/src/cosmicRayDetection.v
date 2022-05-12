@@ -25,7 +25,7 @@ wire seuValid;
 wire seuSysErrorWire;
 wire[63:0] seuDataWire;
 
-`ifdef ALTERA_RESERVED_QIS
+/*`ifdef ALTERA_RESERVED_QIS
 seuDetection_stratix10_asd_1910_6oetfnq #(
     .ERROR_DEPTH       (4),
     .REGION_MASK_WIDTH (1),
@@ -38,11 +38,11 @@ seuDetection_stratix10_asd_1910_6oetfnq #(
     .avst_seu_source_ready (!rst),            //   input,   width = 1,                .ready
     .sys_error_sys_error   (seuSysErrorWire)  //  output,   width = 1,       sys_error.sys_error
 );
-`else
+`else*/
 assign seuValid = 0;
 assign seuSysErrorWire = 0;
 assign seuDataWire = 0;
-`endif
+//`endif
 
 always @(posedge clk) begin
     if(rst) begin

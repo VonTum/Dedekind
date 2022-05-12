@@ -27,6 +27,7 @@
 #include <cstring>
 #include <thread>
 #include <CL/opencl.h>
+#include <CL/cl_ext_intelfpga.h>
 #include <chrono>
 #include <immintrin.h>
 #include <algorithm>
@@ -51,12 +52,12 @@ static cl_int BUFSIZE = 500;
 static int NUM_ITERATIONS = 1;
 static bool SHOW_NONZEROS = false;
 static bool SHOW_ALL = false;
-static bool ENABLE_PROFILING = false;
 static bool ENABLE_SHUFFLE = false;
 static bool ENABLE_COMPARE = false;
 static bool ENABLE_STATISTICS = false;
-static int SHOW_FRONT = 0;
-static int SHOW_TAIL = 0;
+static cl_uint SHOW_FRONT = 0;
+static cl_uint SHOW_TAIL = 0;
+static bool USE_DOUBLE_MBF_LUT = 1;
 static double ACTIVITY_MULTIPLIER = 120.0;
 
 // OpenCL runtime configuration
@@ -66,7 +67,8 @@ static cl_context context = NULL;
 static cl_command_queue queue = NULL;
 static cl_kernel fullPipelineKernel = NULL;
 static cl_program program = NULL;
-static cl_mem mbfLUTMem = NULL;
+static cl_mem mbfLUTMemA = NULL;
+static cl_mem mbfLUTMemB = NULL;
 static cl_mem inputMem[INPUT_BUFFER_COUNT]{NULL};
 static cl_mem resultMem[RESULT_BUFFER_COUNT]{NULL};
 static cl_int N = 1;
@@ -154,12 +156,18 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 	}*/
 	std::cout << std::endl;
 
-	status = clEnqueueWriteBuffer(queue,mbfLUTMem,0,0,mbfCounts[7]*16 /*16 bytes per MBF*/,mbfsUINT64,0,0,0);
-	checkError(status, "Failed to enqueue writing to mbfLUTMem buffer");
+	status = clEnqueueWriteBuffer(queue,mbfLUTMemA,0,0,mbfCounts[7]*16 /*16 bytes per MBF*/,mbfsUINT64,0,0,0);
+	checkError(status, "Failed to enqueue writing to mbfLUTMemA buffer");
+	status = clEnqueueWriteBuffer(queue,mbfLUTMemB,0,0,mbfCounts[7]*16 /*16 bytes per MBF*/,mbfsUINT64,0,0,0);
+	checkError(status, "Failed to enqueue writing to mbfLUTMemB buffer");
 
 	// Preset the kernel arguments to these constant buffers
-	status = clSetKernelArg(fullPipelineKernel,0,sizeof(cl_mem),&mbfLUTMem);
-	checkError(status, "Failed to set fullPipelineKernel mbfLUTMem");
+	status = clSetKernelArg(fullPipelineKernel,0,sizeof(cl_mem),&mbfLUTMemA);
+	checkError(status, "Failed to set fullPipelineKernel mbfLUTMemA");
+	if(USE_DOUBLE_MBF_LUT) {
+		status = clSetKernelArg(fullPipelineKernel,1,sizeof(cl_mem),&mbfLUTMemB);
+		checkError(status, "Failed to set fullPipelineKernel mbfLUTMemB");
+	}
 	status = clFinish(queue);
 	checkError(status, "Error while uploading mbfLUT buffer!");
 
@@ -211,7 +219,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 
 		if(SHOW_TAIL != 0) {
 			std::cout << "Tail: " << std::endl;
-			for(int i = std::max(int(bufferSize) - SHOW_TAIL, 0); i < bufferSize + 5; i++) { // Look a bit past the end of the job, for fuller picture
+			for(cl_uint i = std::max(bufferSize - SHOW_TAIL, cl_uint(0)); i < bufferSize + 5; i++) { // Look a bit past the end of the job, for fuller picture
 				std::cout << job.bufStart[i] << ',';
 			}
 			std::cout << std::endl;
@@ -219,7 +227,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 
 		if(SHOW_FRONT != 0) {
 			std::cout << "Front: " << std::endl;
-			for(int i = 0; i < SHOW_FRONT; i++) {
+			for(cl_uint i = 0; i < SHOW_FRONT; i++) {
 				std::cout << job.bufStart[i] << ',';
 			}
 			std::cout << std::endl;
@@ -232,12 +240,12 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		checkError(status, "Failed to Finish writing inputMem buffer");
 
 		// Set the kernel arguments for kernel
-		// The 0th argument, mbfLUTMem is a constant buffer and remains unchanged throughout a run. 
-		status = clSetKernelArg(fullPipelineKernel,1,sizeof(cl_mem),&inputMem[0]);
+		// The 0th and 1st argument, mbfLUTMemA/B is a constant buffer and remains unchanged throughout a run. 
+		status = clSetKernelArg(fullPipelineKernel,1+USE_DOUBLE_MBF_LUT,sizeof(cl_mem),&inputMem[0]);
 		checkError(status, "Failed to set fullPipelineKernel arg 2:inputMem");
-		status = clSetKernelArg(fullPipelineKernel,2,sizeof(cl_mem),&resultMem[0]);
+		status = clSetKernelArg(fullPipelineKernel,2+USE_DOUBLE_MBF_LUT,sizeof(cl_mem),&resultMem[0]);
 		checkError(status, "Failed to set fullPipelineKernel arg 3:resultMem");
-		status = clSetKernelArg(fullPipelineKernel,3,sizeof(cl_uint),&bufferSize);
+		status = clSetKernelArg(fullPipelineKernel,3+USE_DOUBLE_MBF_LUT,sizeof(cl_uint),&bufferSize);
 		checkError(status, "Failed to set fullPipelineKernel arg 4:job size");
 
 		auto kernelStart = std::chrono::system_clock::now();
@@ -403,10 +411,6 @@ int main(int argc, char** argv) {
 		SHOW_NONZEROS = true;
 	}
 
-	if(options.has("profile")) {
-		ENABLE_PROFILING = true;
-	}
-
 	if(options.has("shuffle")) {
 		ENABLE_SHUFFLE = true;
 		std::cout << "Enabled shuffling" << std::endl;
@@ -420,6 +424,11 @@ int main(int argc, char** argv) {
 	if(options.has("stats")) {
 		ENABLE_STATISTICS = true;
 		std::cout << "Enabled statistics!" << std::endl;
+	}
+
+	if(options.has("singleLUT")) {
+		USE_DOUBLE_MBF_LUT = false;
+		std::cout << "Using single mbf LUT!" << std::endl;
 	}
 
 	if(options.has("front")) {
@@ -458,8 +467,8 @@ int main(int argc, char** argv) {
 
 	std::string kernelFile = "fullPipelineKernel";
 
-	if(options.has("kernelFile")) {
-		kernelFile = options.get<std::string>("kernelFile");
+	if(options.has("kernel")) {
+		kernelFile = options.get<std::string>("kernel");
 		std::cout << "Set Kernel file to: " << kernelFile << "[.aocx]" << std::endl;
 	}
 
@@ -540,6 +549,9 @@ bool init(const char* kernelFile) {
 
 	devices.reset(getDevices(platform, CL_DEVICE_TYPE_ALL, &num_devices));
 
+	// TODO ECC detection, VERY NICE
+	//clSetDeviceExceptionCallbackIntelFPGA(num_devices, devices.get(), )
+
 	// We'll just use the first device.
 	device = devices[0];
 
@@ -551,11 +563,9 @@ bool init(const char* kernelFile) {
 	checkError(status, "Failed to create context");
 
 	// Create the command queue.
-	if(ENABLE_PROFILING) {
-		queue = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &status);
-	} else {
-		queue = clCreateCommandQueue(context, device, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, &status);
-	}
+	//queue = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &status);
+	queue = clCreateCommandQueue(context, device, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, &status);
+	
 	checkError(status, "Failed to create command queue");
 
 	// Create the program.
@@ -574,8 +584,10 @@ bool init(const char* kernelFile) {
 	checkError(status, "Failed to create fullPipelineKernel");
 
 	// Create constant mbf Look Up Table data buffer
-	mbfLUTMem = clCreateBuffer(context, CL_MEM_READ_ONLY, mbfCounts[7]*16 /*16 bytes per MBF*/, nullptr, &status);
-	checkError(status, "Failed to create the mbfLUTMem buffer");
+	mbfLUTMemA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_CHANNEL_3_INTELFPGA, mbfCounts[7]*16 /*16 bytes per MBF*/, nullptr, &status);
+	checkError(status, "Failed to create the mbfLUTMemA buffer");
+	mbfLUTMemB = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_CHANNEL_4_INTELFPGA, mbfCounts[7]*16 /*16 bytes per MBF*/, nullptr, &status);
+	checkError(status, "Failed to create the mbfLUTMemB buffer");
 
 	// Create the input and output buffers
 	for(size_t i = 0; i < INPUT_BUFFER_COUNT; i++) {
@@ -603,8 +615,11 @@ void cleanup() {
 	if(context) {
 		clReleaseContext(context);
 	}
-	if(mbfLUTMem) {
-		clReleaseMemObject(mbfLUTMem);
+	if(mbfLUTMemA) {
+		clReleaseMemObject(mbfLUTMemA);
+	}
+	if(mbfLUTMemB) {
+		clReleaseMemObject(mbfLUTMemB);
 	}
 
 	for(size_t i = 0; i < INPUT_BUFFER_COUNT; i++) {
@@ -623,7 +638,7 @@ void cleanup() {
 static void device_info_ulong( cl_device_id device, cl_device_info param, const char* name) {
 	cl_ulong a;
 	clGetDeviceInfo(device, param, sizeof(cl_ulong), &a, NULL);
-	printf("%-40s = %llu\n", name, a);
+	printf("%-40s = %lu\n", name, a);
 }
 static void device_info_uint( cl_device_id device, cl_device_info param, const char* name) {
 	cl_uint a;
@@ -672,6 +687,8 @@ static void display_device_info( cl_device_id device ) {
 	device_info_uint(device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_LONG, "CL_DEVICE_PREFERRED_VECTOR_WIDTH_LONG");
 	device_info_uint(device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_FLOAT, "CL_DEVICE_PREFERRED_VECTOR_WIDTH_FLOAT");
 	device_info_uint(device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_DOUBLE, "CL_DEVICE_PREFERRED_VECTOR_WIDTH_DOUBLE");
+
+	device_info_uint(device, CL_DEVICE_CORE_TEMPERATURE_INTELFPGA, "CL_DEVICE_CORE_TEMPERATURE_INTELFPGA");
 
 	{
 		cl_command_queue_properties ccp;

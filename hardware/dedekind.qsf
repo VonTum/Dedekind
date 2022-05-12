@@ -35,11 +35,12 @@ set_global_assignment -name USE_PWRMGT_ALERT SDM_IO12
 set_global_assignment -name VID_OPERATION_MODE "PMBUS SLAVE"
 set_global_assignment -name PWRMGT_DEVICE_ADDRESS_IN_PMBUS_SLAVE_MODE 01
 
-set_instance_assignment -name PARTITION_COLOUR 4291313151 -to OpenCLFullPermutationPipeline -entity OpenCLFullPermutationPipeline
 set_global_assignment -name DEVICE_FILTER_PACKAGE FBGA
 set_global_assignment -name DEVICE_FILTER_PIN_COUNT 1760
 set_global_assignment -name DEVICE_FILTER_SPEED_GRADE 2
 set_global_assignment -name FLOW_DISABLE_ASSEMBLER ON
+set_global_assignment -name IP_FILE src/ip/seuDetection.ip
+set_global_assignment -name VERILOG_FILE src/cosmicRayDetection.v
 set_global_assignment -name VERILOG_FILE src/synchronizer.v
 set_global_assignment -name SDC_FILE src/pipelineClock.sdc
 set_global_assignment -name VERILOG_FILE src/varSwap.v
@@ -79,4 +80,4 @@ set_global_assignment -name VERILOG_FILE src/botPermuter.v
 set_global_assignment -name VERILOG_FILE src/botPermuter1234.v
 set_global_assignment -name VERILOG_FILE src/aggregatingPipeline.v
 set_global_assignment -name VERILOG_FILE src/aggregatingPermutePipeline.v
-set_global_assignment -name IP_FILE src/ip/noReadClockMLAB.ip
+set_instance_assignment -name PARTITION_COLOUR 4291313151 -to OpenCLFullPermutationPipeline -entity OpenCLFullPermutationPipeline
