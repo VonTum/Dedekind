@@ -349,8 +349,8 @@ always @(posedge wrclk) almostFull <= spaceLeft <= ALMOST_FULL_MARGIN;
 
 wire canReadNext = readAddr != canReadUpTo;
 
-reg storedAddrValid;
-reg storedPipelineRegValid;
+(* dont_merge *) reg storedAddrValid;
+(* dont_merge *) reg storedAddrValidForClear;
 always @(posedge rdclk) begin
     if(readRequest) begin
         if(rdrst) begin
@@ -359,14 +359,14 @@ always @(posedge rdclk) begin
             readAddr <= readAddr + canReadNext;
         end
         storedAddrValid <= canReadNext;
-        storedPipelineRegValid <= storedAddrValid;
-        dataOutAvailable <= storedPipelineRegValid;
+        storedAddrValidForClear <= canReadNext;
+        dataOutAvailable <= storedAddrValid;
     end
 end
 
 wire eccWire;
 always @(posedge rdclk) eccStatus <= eccWire;
-LOW_LATENCY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(1), .USE_PIPELINE_REGISTER(1)) m20kMemory (
+LOW_LATENCY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(1), .USE_PIPELINE_REGISTER(0)) m20kMemory (
     // Write Side
     .wrclk(wrclk),
     .writeEnable(writeEnable),
@@ -381,7 +381,7 @@ LOW_LATENCY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(1), .USE_
     .eccStatus(eccWire),
     
     // Optional read output reg sclear
-    .rstOutReg(!storedPipelineRegValid)
+    .rstOutReg(!storedAddrValidForClear)
 );
 
 endmodule
@@ -418,7 +418,6 @@ wire memECC;
 
 wire[WIDTH-1:0] dataFromM20K;
 reg newReadAddrStoredInM20K;
-reg newDataStoredInM20KPipelineReg;
 reg newDataStoredInM20K;
 always @(posedge clk) begin
     if(rst) begin
@@ -430,8 +429,7 @@ always @(posedge clk) begin
     end
     if(readEnable || rst) begin
         newReadAddrStoredInM20K <= canReadNext;
-        newDataStoredInM20KPipelineReg <= newReadAddrStoredInM20K;
-        newDataStoredInM20K <= newDataStoredInM20KPipelineReg;
+        newDataStoredInM20K <= newReadAddrStoredInM20K;
         
         dataOut <= dataFromM20K;
         dataOutAvailable <= newDataStoredInM20K;
@@ -440,7 +438,7 @@ always @(posedge clk) begin
     end
 end
 
-LOW_LATENCY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(0), .USE_PIPELINE_REGISTER(1)) m20kMemory (
+LOW_LATENCY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(0), .USE_PIPELINE_REGISTER(0)) m20kMemory (
     // Write Side
     .wrclk(clk),
     .writeEnable(writeEnable),

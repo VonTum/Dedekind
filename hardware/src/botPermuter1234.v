@@ -412,7 +412,7 @@ wire botM20KECC;
 wire validPermutesM20KECC;
 always @(posedge clk) eccStatus <= botM20KECC || validPermutesM20KECC;
 
-LOW_LATENCY_M20K #(.WIDTH(24+1), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(1)) validPermutesM20K (
+LOW_LATENCY_M20K #(.WIDTH(24+1), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(1), .USE_PIPELINE_REGISTER(0)) validPermutesM20K (
     // Write Side
     .wrclk(clk),
     .writeEnable(write),
