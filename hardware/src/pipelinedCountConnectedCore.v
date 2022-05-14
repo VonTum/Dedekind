@@ -1,8 +1,8 @@
 `timescale 1ns / 1ps
 
-`define NEW_SEED_HASBIT_DEPTH 3
+`define NEW_SEED_HASBIT_DEPTH 2
 `define NEW_SEED_HASBIT_OFFSET (1+`NEW_SEED_HASBIT_DEPTH)
-`define NEW_SEED_DEPTH 4
+`define NEW_SEED_DEPTH (`NEW_SEED_HASBIT_DEPTH+1)
 `define EXPLORATION_DOWN_OFFSET 5
 `define EXPLORATION_DEPTH 7
 
@@ -12,135 +12,81 @@
 `define OFFSET_EXPL (`OFFSET_MID+`EXPLORATION_DEPTH)
 `define TOTAL_PIPELINE_STAGES `OFFSET_EXPL
 
-module hasFirstBitAnalysis(
+module hasFirstBitAnalysis (
     input clk,
     
     input[127:0] graphIn,
-    output reg[1:0] hasBit64,
-    // grouped in sets of 4, an element is marked '1' if its 4 bits contain the first bit of the 16 bits of the group
-    output reg[4*8-1:0] hasFirstBit4,
-    // grouped in sets of 4, an element is marked '1' if its 16 bits contain the first bit of the 64 bits of the group
-    output reg[4*2-1:0] hasFirstBit16
+    // Grouped by 4, denotes if this set of 4 bits contains the first bit
+    output reg[31:0] firstBit4,
+    output reg isEmpty
 );
 
 reg[31:0] hasBit4;
-reg[7:0] hasBit16;
+wire[7:0] hasBit16;
+wire[8:0] firstBit16;
 genvar i;
 generate
 for(i = 0; i < 32; i = i + 1) begin always @(posedge clk) hasBit4[i] <= |graphIn[i*4+:4]; end
-for(i = 0; i < 8; i = i + 1) begin always @(posedge clk) hasBit16[i] <= |hasBit4[i*4+:4]; end
-for(i = 0; i < 2; i = i + 1) begin always @(posedge clk) hasBit64[i] = |hasBit16[i*4+:4]; end
-endgenerate
-
-reg[4*8-1:0] hasFirstBit4PreDelay;
-
-generate
+for(i = 0; i < 8; i = i + 1) begin assign hasBit16[i] = |hasBit4[i*4+:4]; end
+assign firstBit16[0] = 1;
+assign firstBit16[1] = !hasBit16[0];
+for(i = 2; i < 9; i = i + 1) begin assign firstBit16[i] = firstBit16[i-1] && !hasBit16[i-1]; end
 for(i = 0; i < 8; i = i + 1) begin
     always @(posedge clk) begin
-        hasFirstBit4PreDelay[4*i+0] <= hasBit4[4*i];
-        hasFirstBit4PreDelay[4*i+1] <= !hasBit4[4*i] & hasBit4[4*i+1];
-        hasFirstBit4PreDelay[4*i+2] <= !hasBit4[4*i] & !hasBit4[4*i+1] & hasBit4[4*i+2];
-        hasFirstBit4PreDelay[4*i+3] <= !hasBit4[4*i] & !hasBit4[4*i+1] & !hasBit4[4*i+2] & hasBit4[4*i+3];
+        firstBit4[4*i] <= firstBit16[i];
+        firstBit4[4*i+1] <= firstBit16[i] && !hasBit4[4*i];
+        firstBit4[4*i+2] <= firstBit16[i] && !hasBit4[4*i] && !hasBit4[4*i+1];
+        firstBit4[4*i+3] <= firstBit16[i] && !hasBit4[4*i] && !hasBit4[4*i+1] && !hasBit4[4*i+2];
     end
 end
 endgenerate
-always @(posedge clk) hasFirstBit4 <= hasFirstBit4PreDelay;
+always @(posedge clk) isEmpty <= firstBit16[8];
 
-generate
-for(i = 0; i < 2; i = i + 1) begin
-    always @(posedge clk) begin
-        hasFirstBit16[4*i+0] <=  hasBit16[4*i];
-        hasFirstBit16[4*i+1] <= !hasBit16[4*i] &  hasBit16[4*i+1];
-        hasFirstBit16[4*i+2] <= !hasBit16[4*i] & !hasBit16[4*i+1] &  hasBit16[4*i+2];
-        hasFirstBit16[4*i+3] <= !hasBit16[4*i] & !hasBit16[4*i+1] & !hasBit16[4*i+2] & hasBit16[4*i+3];
-    end
-end
-endgenerate
 endmodule
-
-
-module newExtendingProducer (
-    input clk,
-    input[127:0] graphIn,
-    input[127:0] extendedIn,
-    input shouldGrabNewSeedIn,
-    input[1:0] hasBit64,
-    input[4*8-1:0] hasFirstBit4,
-    input[4*2-1:0] hasFirstBit16,
-    output reg[127:0] newExtendingOut
-);
-
-genvar i;
-genvar j;
-wire[63:0] isFirstBit2;
-generate
-for(i = 0; i < 4; i = i + 1) begin
-    for(j = 0; j < 4; j = j + 1) begin
-        assign isFirstBit2[i*8+j*2+0] = (|graphIn[16*i+4*j +: 2]) & hasFirstBit4[4*i+j] & hasFirstBit16[4*0+i];
-        assign isFirstBit2[i*8+j*2+1] = !(|graphIn[16*i+4*j +: 2]) & hasFirstBit4[4*i+j] & hasFirstBit16[4*0+i];
-    end
-end
-for(i = 0; i < 4; i = i + 1) begin
-    for(j = 0; j < 4; j = j + 1) begin
-        assign isFirstBit2[32+i*8+j*2+0] = (|graphIn[64+16*i+4*j +: 2]) & hasFirstBit4[4*(4+i)+j] & hasFirstBit16[4*1+i] & !hasBit64[0];
-        assign isFirstBit2[32+i*8+j*2+1] = !(|graphIn[64+16*i+4*j +: 2]) & hasFirstBit4[4*(4+i)+j] & hasFirstBit16[4*1+i] & !hasBit64[0];
-    end
-end
-endgenerate
-
-generate
-// synthesizes to 1 ALM module a piece
-for(i = 0; i < 64; i = i + 1) begin
-    always @(posedge clk) newExtendingOut[i*2+:2] <= shouldGrabNewSeedIn ? (isFirstBit2[i] ? (graphIn[i*2] ? 2'b01 : 2'b10) : 2'b00) : extendedIn[i*2+:2];
-end
-endgenerate
-endmodule
-
 
 module newSeedProductionPipeline (
     input clk,
     
     input[127:0] graphIn_START,
+    output[127:0] graphIn_HASBIT,
     input[127:0] extended_HASBIT,
     input shouldGrabNewSeed_START,
     
     output shouldIncrementConnectionCount,
-    output[127:0] newCurExtendingOut_D
+    output reg[127:0] newCurExtendingOut_D
 );
 
 // PIPELINE STEP 1 and 2
-wire[1:0] hasBit64_HASBIT;
-wire[4*8-1:0] hasFirstBit4_HASBIT;
-wire[4*2-1:0] hasFirstBit16_HASBIT;
+wire[4*8-1:0] firstBit4_HASBIT;
+wire isEmpty_HASBIT;
 hasFirstBitAnalysis firstBitAnalysis(
     clk,
     graphIn_START,
-    hasBit64_HASBIT,
-    hasFirstBit4_HASBIT,
-    hasFirstBit16_HASBIT
+    firstBit4_HASBIT,
+    isEmpty_HASBIT
 );
 
 // delays
-wire[127:0] graphIn_HASBIT;
 wire shouldGrabNewSeed_HASBIT;
 
 hyperpipe #(.CYCLES(`NEW_SEED_HASBIT_DEPTH), .WIDTH(128)) graphIn_START_TO_HASBIT_DELAY (clk, graphIn_START, graphIn_HASBIT);
 hyperpipe #(.CYCLES(`NEW_SEED_HASBIT_DEPTH), .WIDTH(1), .MAX_FAN(35)) shouldGrabNewSeed_START_TO_HASBIT_DELAY (clk, shouldGrabNewSeed_START, shouldGrabNewSeed_HASBIT);
 
-// PIPELINE STEP 3
-newExtendingProducer resultProducer(
-    clk,
-    graphIn_HASBIT,
-    extended_HASBIT,
-    shouldGrabNewSeed_HASBIT,
-    hasBit64_HASBIT,
-    hasFirstBit4_HASBIT,
-    hasFirstBit16_HASBIT,
-    newCurExtendingOut_D
-);
+wire[127:0] newSeed_HASBIT;
+generate
+// synthesizes to 1 ALM module a piece
+for(genvar i = 0; i < 32; i = i + 1) begin
+    assign newSeed_HASBIT[4*i]   = firstBit4_HASBIT[i] && graphIn_HASBIT[i*4];
+    assign newSeed_HASBIT[4*i+1] = firstBit4_HASBIT[i] && graphIn_HASBIT[i*4+1]; // A is allowed even if X is active. Guaranteed single connected component
+    assign newSeed_HASBIT[4*i+2] = firstBit4_HASBIT[i] && graphIn_HASBIT[i*4+2] && !graphIn_HASBIT[i*4+1]; // Only B requires that A is not active. 
+    assign newSeed_HASBIT[4*i+3] = firstBit4_HASBIT[i] && graphIn_HASBIT[i*4+3]; // AB is allowed even if A or B or X are active. Guaranteed single connected component
+end
+endgenerate
+
+always @(posedge clk) newCurExtendingOut_D <= shouldGrabNewSeed_HASBIT ? newSeed_HASBIT : extended_HASBIT;
 
 // Now we can finally produce the resulting connectionCount
-assign shouldIncrementConnectionCount = shouldGrabNewSeed_HASBIT & (hasBit64_HASBIT[0] | hasBit64_HASBIT[1]);
+assign shouldIncrementConnectionCount = shouldGrabNewSeed_HASBIT && !isEmpty_HASBIT;
 
 endmodule
 
@@ -250,13 +196,11 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10) (
 );
 
 // PIPELINE STEP 5
-`define GRAPH_RESET 2'b00
-`define GRAPH_START 2'b01
-`define GRAPH_NEW_SEED 2'b10
-`define GRAPH_LEFTOVER 2'b11
+`define GRAPH_START 2'b00
+`define GRAPH_NEW_SEED 2'b01
+`define GRAPH_LEFTOVER 2'b10
 
-wire[127:0] graphMultiplexer[3:0];
-assign graphMultiplexer[`GRAPH_RESET] = 128'b0;
+wire[127:0] graphMultiplexer[2:0];
 assign graphMultiplexer[`GRAPH_START] = graphIn;
 assign graphMultiplexer[`GRAPH_NEW_SEED] = reducedGraphIn;
 assign graphMultiplexer[`GRAPH_LEFTOVER] = leftoverGraphIn;
@@ -264,19 +208,23 @@ assign graphMultiplexer[`GRAPH_LEFTOVER] = leftoverGraphIn;
 // PIPELINE STEP "NEW SEED PRODUCTION"
 // Generation of new seed, find index and test if graph is 0 to increment connectCount
 
-reg[127:0] leftoverGraph_START; always @(posedge clk) leftoverGraph_START <= graphMultiplexer[graphSelectorIn];
+(* dont_merge *) reg rstD; always @(posedge clk) rstD <= rst;
+(* dont_merge *) reg rstDD; always @(posedge clk) rstDD <= rstD;
+
+reg[127:0] leftoverGraph_START; always @(posedge clk) leftoverGraph_START <= rstDD ? 128'b0 : graphMultiplexer[graphSelectorIn];
 reg shouldGrabNewSeed_START;
 
 always @(posedge clk) shouldGrabNewSeed_START <= shouldGrabNewSeedIn;
 
 wire shouldIncrementConnectionCount_NSD;
 wire[127:0] curExtending_MID;
-newSeedProductionPipeline newSeedProductionPipe(clk, leftoverGraph_START, extendedIn_HASBIT, shouldGrabNewSeed_START, shouldIncrementConnectionCount_NSD, curExtending_MID);
+wire[127:0] leftoverGraph_HASBIT; // Use later leftoverGraph for easier timing on leftoverGraph_START multiplexer
+newSeedProductionPipeline newSeedProductionPipe(clk, leftoverGraph_START, leftoverGraph_HASBIT, extendedIn_HASBIT, shouldGrabNewSeed_START, shouldIncrementConnectionCount_NSD, curExtending_MID);
 
 wire eccStatusWire;
 always @(posedge clk) eccStatus <= eccStatusWire;
-shiftRegister_M20K #(.CYCLES(`OFFSET_DOWN - 2), .WIDTH(128)) newSeedProductionPipeBypassLeftoverGraphWireDelay(clk,
-    leftoverGraph_START,
+shiftRegister_M20K #(.CYCLES(`OFFSET_DOWN - 2 - `NEW_SEED_HASBIT_DEPTH), .WIDTH(128)) newSeedProductionPipeBypassLeftoverGraphWireDelay(clk,
+    leftoverGraph_HASBIT,
     leftoverGraphOut_PRE_DOWN,
     eccStatusWire
 );
@@ -297,13 +245,8 @@ always @(posedge clk) connectionCountOut_NSD_D <= (runEndIn_NSD ? 0 : storedConn
 // output wire request_EXPL;
 explorationPipeline explorationPipe(clk, topChannel, leftoverGraphOut_PRE_DOWN, curExtending_MID, reducedGraphOut_DOWN, extendedOut_DOWN, request_EXPL, shouldGrabNewSeedOut_EXPL);
 
-
-wire rstLocal; // Manual reset tree, can't use constraints to have it generate it for me. 
-hyperpipe #(.CYCLES(2)) rstPipe(clk, rst, rstLocal);
-
 // Inputs become available
 assign graphSelectorOut_EXPL = 
-    rstLocal ? `GRAPH_RESET : 
     request_EXPL ? `GRAPH_START : 
     shouldGrabNewSeedOut_EXPL ? `GRAPH_NEW_SEED : `GRAPH_LEFTOVER;
 
