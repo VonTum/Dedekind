@@ -278,6 +278,7 @@ module permutationGenerator7 (
     input[127:0] inputBot,
     input writeInputBot,
     output almostFull,
+    output almostEmpty,
     
     input slowDown,
     output reg[127:0] outputBot,
@@ -298,7 +299,7 @@ wire currentlyPermutingUpdated;
 wire reqNewBot = permut7 == 0;
 
 // Read latency of 4 cycles
-FastFIFO_SAFE_M20K #(.WIDTH(128), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(32), .HOLD_LAST_READ(1)) inputFIFO (
+FastFIFO_SAFE_M20K #(.WIDTH(128), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(32), .ALMOST_EMPTY_MARGIN(32), .HOLD_LAST_READ(1)) inputFIFO (
     .clk(clk),
     .rst(rst),
     
@@ -306,6 +307,7 @@ FastFIFO_SAFE_M20K #(.WIDTH(128), .DEPTH_LOG2(9), .ALMOST_FULL_MARGIN(32), .HOLD
     .writeEnable(writeInputBot),
     .dataIn(inputBot),
     .almostFull(almostFull),
+    .almostEmpty(almostEmpty),
     
     // Read Side
     .readRequest(reqNewBot && !slowDown),

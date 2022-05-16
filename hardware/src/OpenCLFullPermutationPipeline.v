@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module OpenCLFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 2) (
+module OpenCLFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 11, parameter ENABLE_DEBUG_DATA = 1) (
     input clock,
     input clock2x, // apparently this specific name gives access to a 2x speed clock. Very useful!
     input resetn,
@@ -110,55 +110,51 @@ MultiFullPermutationPipeline #(.TOTAL_FPP_COUNT(TOTAL_FPP_COUNT)) multiFullPermP
     .eccStatus(eccStatus)
 );
 
-
-
-
-// Debug monitor
-wire[60:0] debugDataA;
-wire[63:0] debugDataB;
-
-debugMonitor #(.NUMBER_OF_ACTIVITIES(30*TOTAL_FPP_COUNT)) debugMon(
-    .clk(clock),
-    .clk2x(clock2x),
-    .rst(newTopInstalled),
-    
-    .activities2x(activities2x),
-    .flagToTrack0(ivalid),
-    .flagToTrack1(iready),
-    .flagToTrack2(ovalid),
-    .flagToTrack3(oready),
-    
-    .outputDataA(debugDataA),
-    .outputDataB(debugDataB)
-);
-
-
 wire eccErrorOccured;
-wire seuOccured;
-wire seuSysError;
-wire[63:0] seuData;
 cosmicRayDetection errorDetector (
     .clk(clock),
     .rst(rst),
     .eccStatus(eccStatus),
     
-    .eccErrorOccured(eccErrorOccured),
-    .seuOccured(seuOccured),
-    .seuSysError(seuSysError),
-    .seuData(seuData)
+    .eccErrorOccured(eccErrorOccured)
 );
 
-// Output FIFO
-
-wire[60:0] dataToOutA = newTopInstalled ? debugDataA : summedDataPcoeffCountOutA;
-wire[63:0] dataToOutB = seuOccured ? seuData : newTopInstalled ? debugDataB : {3'b000, summedDataPcoeffCountOutB};
+// Debug monitor
+wire[62:0] dataToOutA;
+wire[63:0] dataToOutB;
+generate
+if(ENABLE_DEBUG_DATA) begin
+    wire[62:0] debugDataA;
+    wire[63:0] debugDataB;
+    debugMonitor #(.NUMBER_OF_ACTIVITIES(30*TOTAL_FPP_COUNT)) debugMon(
+        .clk(clock),
+        .clk2x(clock2x),
+        .rst(newTopInstalled),
+        
+        .activities2x(activities2x),
+        .flagToTrack0(ivalid),
+        .flagToTrack1(iready),
+        .flagToTrack2(ovalid),
+        .flagToTrack3(oready),
+        
+        .outputDataA(debugDataA),
+        .outputDataB(debugDataB)
+    );
+    
+    assign dataToOutA = newTopInstalled ? debugDataA : {2'b00, summedDataPcoeffCountOutA};
+    assign dataToOutB = newTopInstalled ? debugDataB : {3'b000, summedDataPcoeffCountOutB};
+end else begin
+    assign dataToOutA = {2'b00, summedDataPcoeffCountOutA};
+    assign dataToOutB = {3'b000, summedDataPcoeffCountOutB};
+end
+endgenerate
 
 (* dont_merge *) reg fastResponseTimeFIFORST; always @(posedge clock) fastResponseTimeFIFORST <= rst;
 
-wire[124:0] resultsData;
-assign results = {eccErrorOccured, seuOccured, seuSysError, resultsData};
+wire[126:0] resultsData;
+assign results = {eccErrorOccured, resultsData};
 wire outputFIFOEmpty;
-FIFO_MLAB #(.WIDTH(125), .ALMOST_FULL_MARGIN(16)) fastResponseTimeFIFO (
+FIFO_MLAB #(.WIDTH(127), .ALMOST_FULL_MARGIN(16)) fastResponseTimeFIFO (
     .clk(clock),
     .rst(fastResponseTimeFIFORST),
     
@@ -176,7 +172,7 @@ assign ovalid = !outputFIFOEmpty || eccErrorOccured;
 
 endmodule
 
-module MultiFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 4) (
+module MultiFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 5) (
     input clk,
     input clk2x,
     input rst,
@@ -206,10 +202,12 @@ localparam FPP_PER_CHANNEL = TOTAL_FPP_COUNT / 2;
 (* dont_merge *) reg outputFIFOLongRST; always @(posedge clk) outputFIFOLongRST <= longRST;
 
 // Pipeline inputs
+wire sharedSource;
 wire[127:0] botToPipelines[TOTAL_FPP_COUNT-1:0];
 wire[TOTAL_FPP_COUNT-1:0] writeToPipeline;
 
 wire[TOTAL_FPP_COUNT-1:0] pipelineAlmostFulls;
+wire[TOTAL_FPP_COUNT-1:0] pipelineAlmostEmpties;
 
 // Pipeline outputs
 wire[TOTAL_FPP_COUNT-1:0] outputFIFOEmpties;
@@ -228,21 +226,40 @@ wor pipelineECC;
 wor outputFIFOECC;
 always @(posedge clk) eccStatus <= originQueueECC || pipelineECC || outputFIFOECC;
 
-wor[60:0] outWOR_A;
-wor[60:0] outWOR_B;
+localparam GRAB_LATENCY = 4; //M20K fifo latency
+hyperpipe #(.CYCLES(GRAB_LATENCY+1/*+output reg*/), .WIDTH(1)) grabbingDataPipe(clk, grabData, resultValid);
 
 generate
-for(genvar i = 0; i < FPP_PER_CHANNEL; i=i+1) begin
+wor[60:0] outWOR_A;
+wor[60:0] outWOR_B;
+for(genvar i = 0; i <= FPP_PER_CHANNEL-1; i=i+1) begin
     assign botToPipelines[i] = botA;
     assign botToPipelines[FPP_PER_CHANNEL+i] = botB;
     
     assign outWOR_A = dataFromPipelines[i];
     assign outWOR_B = dataFromPipelines[FPP_PER_CHANNEL+i];
 end
+if(TOTAL_FPP_COUNT % 2 == 1) begin
+    assign botToPipelines[TOTAL_FPP_COUNT-1] = sharedSource ? botB : botA;
+    
+    wire[60:0] sharedPipelineOutput = dataFromPipelines[TOTAL_FPP_COUNT-1];
+
+    wire reqNotSharedA = |pipelineDataRequests[FPP_PER_CHANNEL-1:0];
+    wire reqNotSharedB = |pipelineDataRequests[2*FPP_PER_CHANNEL-1 : FPP_PER_CHANNEL];
+    
+    wire doesNotUseSharedA;
+    wire doesNotUseSharedB;
+    hyperpipe #(.CYCLES(GRAB_LATENCY), .WIDTH(1)) reqNotSharedAPipe(clk, reqNotSharedA, doesNotUseSharedA);
+    hyperpipe #(.CYCLES(GRAB_LATENCY), .WIDTH(1)) reqNotSharedBPipe(clk, reqNotSharedB, doesNotUseSharedB);
+    
+    always @(posedge clk) summedDataPcoeffCountOutA <= doesNotUseSharedA ? outWOR_A : sharedPipelineOutput;
+    always @(posedge clk) summedDataPcoeffCountOutB <= doesNotUseSharedB ? outWOR_B : sharedPipelineOutput;
+end else begin
+    always @(posedge clk) summedDataPcoeffCountOutA <= outWOR_A;
+    always @(posedge clk) summedDataPcoeffCountOutB <= outWOR_B;
+end
 endgenerate
 
-always @(posedge clk) summedDataPcoeffCountOutA <= outWOR_A;
-always @(posedge clk) summedDataPcoeffCountOutB <= outWOR_B;
 
 wire[TOTAL_FPP_COUNT-1:0] selectedWriteToPipelines;
 assign writeToPipeline = writeBotIn ? selectedWriteToPipelines : 0;
@@ -256,7 +273,9 @@ resourceDividerAB #(.NUMBER_OF_PIPELINES(TOTAL_FPP_COUNT)) selector (
     
     // Output side
     .almostFulls(pipelineAlmostFulls),
-    .selectedOut(selectedWriteToPipelines)
+    .almostEmpties(pipelineAlmostEmpties),
+    .selectedOut(selectedWriteToPipelines),
+    .sharedSource(sharedSource)
 );
 
 // Expects sufficient readRequests while resetting, so that the output pipe is flushed properly
@@ -277,7 +296,6 @@ LowLatencyFastFIFO_M20K #(.WIDTH(TOTAL_FPP_COUNT), .DEPTH_LOG2(15/*32000*/)) res
     .eccStatus(originQueueECC)
 );
 
-hyperpipe #(.CYCLES(4+1/*M20K fifo latency+1 reg*/), .WIDTH(1)) grabbingDataPipe(clk, grabData, resultValid);
 
 generate
 for(genvar pipelineI = 0; pipelineI < TOTAL_FPP_COUNT; pipelineI = pipelineI + 1) begin
@@ -292,6 +310,7 @@ for(genvar pipelineI = 0; pipelineI < TOTAL_FPP_COUNT; pipelineI = pipelineI + 1
         .botIn(botToPipelines[pipelineI]),
         .writeBotIn(writeToPipeline[pipelineI]),
         .almostFull(pipelineAlmostFulls[pipelineI]),
+        .almostEmpty(pipelineAlmostEmpties[pipelineI]),
         
         .readRequest(pipelineReadRequests[pipelineI]),
         .empty(outputFIFOEmpties[pipelineI]),
@@ -363,25 +382,69 @@ module resourceDividerAB #(parameter NUMBER_OF_PIPELINES = 2) (
     
     // Output side
     input[NUMBER_OF_PIPELINES-1:0] almostFulls,
-    output[NUMBER_OF_PIPELINES-1:0] selectedOut
+    input[NUMBER_OF_PIPELINES-1:0] almostEmpties,
+    output[NUMBER_OF_PIPELINES-1:0] selectedOut,
+    output sharedSource
 );
 
-localparam PIPELINES_PER_CHANNEL = NUMBER_OF_PIPELINES / 2;
+localparam UNIQUE_CH_WIDTH = NUMBER_OF_PIPELINES / 2;
+localparam CH_WIDTH = (NUMBER_OF_PIPELINES+1) / 2;
 
-wire[PIPELINES_PER_CHANNEL-1:0] selectedA;
-wire[PIPELINES_PER_CHANNEL-1:0] selectedB;
+wire[CH_WIDTH-1:0] selectedA;
+wire[CH_WIDTH-1:0] selectedB;
 
-wire[PIPELINES_PER_CHANNEL-1:0] almostFullsA = almostFulls[PIPELINES_PER_CHANNEL-1:0];
-wire[PIPELINES_PER_CHANNEL-1:0] almostFullsB = almostFulls[2*PIPELINES_PER_CHANNEL-1:PIPELINES_PER_CHANNEL];
+wire[CH_WIDTH-1:0] almostFullsA;
+wire[CH_WIDTH-1:0] almostFullsB;
 
-assign selectedOut[PIPELINES_PER_CHANNEL-1:0] = selectedA;
-assign selectedOut[2*PIPELINES_PER_CHANNEL-1:PIPELINES_PER_CHANNEL] = selectedB;
+wire[UNIQUE_CH_WIDTH-1:0] uniqueAlmostFullsA = almostFulls[UNIQUE_CH_WIDTH-1:0];
+wire[UNIQUE_CH_WIDTH-1:0] uniqueAlmostFullsB = almostFulls[2*UNIQUE_CH_WIDTH-1:UNIQUE_CH_WIDTH];
+
+assign almostFullsA[UNIQUE_CH_WIDTH-1:0] = uniqueAlmostFullsA;
+assign almostFullsB[UNIQUE_CH_WIDTH-1:0] = uniqueAlmostFullsB;
+
+assign selectedOut[UNIQUE_CH_WIDTH-1:0] = selectedA[UNIQUE_CH_WIDTH-1:0];
+assign selectedOut[2*UNIQUE_CH_WIDTH-1:UNIQUE_CH_WIDTH] = selectedB[UNIQUE_CH_WIDTH-1:0];
+
+if(NUMBER_OF_PIPELINES % 2 == 1) begin
+    wire sharedAlmostEmpty = almostEmpties[NUMBER_OF_PIPELINES-1];
+    reg sharedAlmostEmptyD; always @(posedge clk) sharedAlmostEmptyD <= sharedAlmostEmpty;
+    reg sharedAlmostEmptyDD; always @(posedge clk) sharedAlmostEmptyDD <= sharedAlmostEmptyD;
+    
+    reg sharedSourceReg = 0;
+    
+    wire pipelineCanUseSharedA = sharedAlmostEmptyDD || (uniqueAlmostFullsA != 0);
+    wire pipelineCanUseSharedB = sharedAlmostEmptyDD || (uniqueAlmostFullsB != 0);
+    
+    assign almostFullsA[CH_WIDTH-1] =  sharedSourceReg || !pipelineCanUseSharedA || almostFulls[NUMBER_OF_PIPELINES-1];
+    assign almostFullsB[CH_WIDTH-1] = !sharedSourceReg || !pipelineCanUseSharedB || almostFulls[NUMBER_OF_PIPELINES-1];
+    
+    wire sharedSelected = selectedA[CH_WIDTH-1] || selectedB[CH_WIDTH-1]; // Exclusive, should never be both
+    
+    assign selectedOut[NUMBER_OF_PIPELINES-1] = sharedSelected;
+    
+    wire[$clog2(CH_WIDTH)-1:0] fullCountA; popcntNaive #(UNIQUE_CH_WIDTH) popcntA (uniqueAlmostFullsA, fullCountA);
+    wire[$clog2(CH_WIDTH)-1:0] fullCountB; popcntNaive #(UNIQUE_CH_WIDTH) popcntB (uniqueAlmostFullsB, fullCountB);
+    
+    wire preferredNextSharedSource = fullCountA == fullCountB ? !sharedSourceReg : fullCountA < fullCountB; // Prefer B if it has more full pipelines
+    
+    reg sharedSourceInUse = 0;
+    assign sharedSource = sharedSourceInUse;
+    always @(posedge clk) begin
+        /*Only switch if the shared pipeline isn't being used to prevent both channels from writing to shared pipeline*/
+        if(accept) begin
+            if(!sharedSelected) sharedSourceReg <= preferredNextSharedSource;
+            sharedSourceInUse <= sharedSourceReg; // 1 Cycle delay to sync with selectedOut
+        end
+    end
+end else begin
+    assign sharedSource = 1'bZ;
+end
 
 assign almostFull = &almostFullsA || &almostFullsB;
 
 // Selection mechanism
 
-resourceDivider #(PIPELINES_PER_CHANNEL) divA(
+resourceDivider #(CH_WIDTH) divA(
     .clk(clk),
     .rst(rst),
     
@@ -391,7 +454,7 @@ resourceDivider #(PIPELINES_PER_CHANNEL) divA(
     .selectedOneHot(selectedA)
 );
 
-resourceDivider #(PIPELINES_PER_CHANNEL) divB(
+resourceDivider #(CH_WIDTH) divB(
     .clk(clk),
     .rst(rst),
     
@@ -415,15 +478,12 @@ module debugMonitor #(parameter NUMBER_OF_ACTIVITIES = 30) (
     input flagToTrack2,
     input flagToTrack3,
     
-    output[60:0] outputDataA,
+    output[62:0] outputDataA,
     output[63:0] outputDataB
 );
 
-// Activity measures
-`define ACTIVITY_MEASURE_LIMIT 60
-
 // Performance profiling with a measure of how many pipelines are working at any given time
-reg[6:0] activityMeasure; // Instrumentation wire for profiling (0-`ACTIVITY_MEASURE_LIMIT activity level)
+reg[$clog2(2*NUMBER_OF_ACTIVITIES+1)-1:0] activityMeasure; // Instrumentation wire for profiling (0-2*NUMBER_OF_ACTIVITIES activity level)
 
 // Extra slack registers
 wire[NUMBER_OF_ACTIVITIES-1:0] activities2xD;
@@ -460,11 +520,18 @@ end
 
 endgenerate
 
-always @(posedge clk) activityMeasure <= actPipelineSums[0] + actPipelineSums[1];
+reg[$clog2(2*NUMBER_OF_ACTIVITIES+1)-1:0] activityMeasuresSubSums[NUMBER_OF_ACTIVITIES / 30 - 1 : 0];
+generate
+always @(posedge clk) activityMeasuresSubSums[0] <= actPipelineSums[0];
+for(genvar i = 1; i < NUMBER_OF_ACTIVITIES / 30; i = i + 1) begin
+    always @(posedge clk) activityMeasuresSubSums[i] <= activityMeasuresSubSums[i-1] + actPipelineSums[i];
+end
+endgenerate
+always @(posedge clk) activityMeasure <= activityMeasuresSubSums[NUMBER_OF_ACTIVITIES / 30 - 1];
 
-reg[45:0] activityCounter;
+reg[49:0] activityCounter;
 reg[40:0] clockCounter;
-assign outputDataA[60:32] = activityCounter[45:17];
+assign outputDataA[62:32] = activityCounter[49:19];
 assign outputDataA[31:0] = clockCounter[40:9];
 // The resulting occupancy is calculated as activityCounter / `ACTIVITY_MEASURE_LIMIT / clockCounter
 // Also, the occupancy returned for a top is the occupancy of the PREVIOUS top
@@ -520,6 +587,7 @@ module fullPermutationPipeline30WithOutFIFOAndSpacingRegisters (
     input[127:0] botIn,
     input writeBotIn,
     output reg almostFull,
+    output almostEmpty,
     
     // Output side
     input readRequest,
@@ -580,6 +648,7 @@ fullPermutationPipeline30 fullPermutationPipeline30 (
     .botIn(botInDD),
     .writeBotIn(writeBotInDD),
     .almostFull(almostFullPre),
+    .almostEmpty(almostEmpty),
     
     .slowDown(outputFifoAlmostFullDD),
     .resultValid(dataFromPipelineValid),

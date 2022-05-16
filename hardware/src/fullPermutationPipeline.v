@@ -139,6 +139,7 @@ module fullPermutationPipeline30 (
     input[127:0] botIn,
     input writeBotIn,
     output almostFull,
+    output almostEmpty,
     
     // Output side
     input slowDown,
@@ -162,6 +163,7 @@ permutationGenerator7 permutationGenerator7 (
     .inputBot(botIn),
     .writeInputBot(writeBotIn),
     .almostFull(almostFull),
+    .almostEmpty(almostEmpty),
     
     .slowDown(slowDownGenerator),
     .outputBot(botFromGen),

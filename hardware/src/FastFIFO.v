@@ -109,7 +109,13 @@ endmodule
 
 
 // Read latency of 4 cycles
-module FastFIFO_SAFE_M20K #(parameter WIDTH = 16, parameter DEPTH_LOG2 = 9, parameter ALMOST_FULL_MARGIN = 50, parameter HOLD_LAST_READ = 1) (
+module FastFIFO_SAFE_M20K #(
+    parameter WIDTH = 16,
+    parameter DEPTH_LOG2 = 9,
+    parameter ALMOST_FULL_MARGIN = 50,
+    parameter ALMOST_EMPTY_MARGIN = 50,
+    parameter HOLD_LAST_READ = 1
+) (
     input clk,
     input rst,
     
@@ -117,6 +123,7 @@ module FastFIFO_SAFE_M20K #(parameter WIDTH = 16, parameter DEPTH_LOG2 = 9, para
     input writeEnable,
     input[WIDTH-1:0] dataIn,
     output reg almostFull,
+    output almostEmpty,
     
     // Read Side
     input readRequest,
@@ -130,6 +137,8 @@ reg[DEPTH_LOG2-1:0] writeAddr;
 reg[DEPTH_LOG2-1:0] readAddr;
 
 wire[DEPTH_LOG2-1:0] writesLeft = readAddr - writeAddr;
+wire[DEPTH_LOG2-1:0] usedw = writeAddr - readAddr - 1;
+assign almostEmpty = usedw <= ALMOST_EMPTY_MARGIN;
 
 assign empty = writesLeft == (1 << DEPTH_LOG2) - 1;
 always @(posedge clk) almostFull <= writesLeft < ALMOST_FULL_MARGIN;

@@ -20,3 +20,22 @@ generate
 endgenerate
 
 endmodule
+
+
+module popcntNaive #(parameter WIDTH = 5) (
+    input[WIDTH-1:0] bits,
+    output[$clog2(WIDTH)-1:0] count
+);
+
+wire[$clog2(WIDTH)-1:0] subCounts[WIDTH-1:0];
+assign subCounts[0] = bits[0];
+
+generate
+for(genvar i = 1; i < WIDTH; i=i+1) begin
+    assign subCounts[i] = subCounts[i-1] + bits[i];
+end
+endgenerate
+
+assign count = subCounts[WIDTH-1];
+
+endmodule

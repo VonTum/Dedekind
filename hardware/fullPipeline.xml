@@ -55,6 +55,8 @@
       <INPUT  port="mbfLowers" width="128"/>
       <INPUT  port="startNewTop" width="1"/>
       <OUTPUT port="results" width="128"/>
+      <PARAMETER name="TOTAL_FPP_COUNT" value="11"/>
+      <PARAMETER name="ENABLE_DEBUG_DATA" value="0"/>
     </INTERFACE>
     <C_MODEL>
       <FILE name="src/fullPipelineCModel.cl"/>

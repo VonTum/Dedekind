@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-`define NEW_SEED_HASBIT_DEPTH 2
+`define NEW_SEED_HASBIT_DEPTH 3
 `define NEW_SEED_HASBIT_OFFSET (1+`NEW_SEED_HASBIT_DEPTH)
 `define NEW_SEED_DEPTH (`NEW_SEED_HASBIT_DEPTH+1)
 `define EXPLORATION_DOWN_OFFSET 5
@@ -22,21 +22,22 @@ module hasFirstBitAnalysis (
 );
 
 reg[31:0] hasBit4;
-wire[7:0] hasBit16;
+reg[31:0] hasBit4D; always @(posedge clk) hasBit4D <= hasBit4;
+reg[7:0] hasBit16;
 wire[8:0] firstBit16;
 genvar i;
 generate
 for(i = 0; i < 32; i = i + 1) begin always @(posedge clk) hasBit4[i] <= |graphIn[i*4+:4]; end
-for(i = 0; i < 8; i = i + 1) begin assign hasBit16[i] = |hasBit4[i*4+:4]; end
+for(i = 0; i < 8; i = i + 1) begin always @(posedge clk) hasBit16[i] <= |hasBit4[i*4+:4]; end
 assign firstBit16[0] = 1;
 assign firstBit16[1] = !hasBit16[0];
 for(i = 2; i < 9; i = i + 1) begin assign firstBit16[i] = firstBit16[i-1] && !hasBit16[i-1]; end
 for(i = 0; i < 8; i = i + 1) begin
     always @(posedge clk) begin
         firstBit4[4*i] <= firstBit16[i];
-        firstBit4[4*i+1] <= firstBit16[i] && !hasBit4[4*i];
-        firstBit4[4*i+2] <= firstBit16[i] && !hasBit4[4*i] && !hasBit4[4*i+1];
-        firstBit4[4*i+3] <= firstBit16[i] && !hasBit4[4*i] && !hasBit4[4*i+1] && !hasBit4[4*i+2];
+        firstBit4[4*i+1] <= firstBit16[i] && !hasBit4D[4*i];
+        firstBit4[4*i+2] <= firstBit16[i] && !hasBit4D[4*i] && !hasBit4D[4*i+1];
+        firstBit4[4*i+3] <= firstBit16[i] && !hasBit4D[4*i] && !hasBit4D[4*i+1] && !hasBit4D[4*i+2];
     end
 end
 endgenerate
