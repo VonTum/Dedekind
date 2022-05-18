@@ -1,9 +1,11 @@
 
 # Basic pipeline clock
-create_clock -name Clock -period 250MHz [get_ports clk]
-create_clock -name pipelineClk -period 300MHz [get_ports clock]
-#create_clock -name computeClk -period 600MHz [get_ports clock2x]
-create_generated_clock -name computeClk -multiply_by 2 -master_clock pipelineClk -source [get_ports clock] [get_ports clock2x]
+create_clock -name DebugClock -period 500MHz [get_ports clk]
+create_generated_clock -name DebugClock2x -multiply_by 2 -master_clock DebugClock -source [get_ports clk] [get_ports clk2x]
+
+create_clock -name kernelClock -period 300MHz [get_ports clock]
+#create_clock -name fastClock -period 600MHz [get_ports clock2x]
+create_generated_clock -name fastClock -multiply_by 2 -master_clock kernelClock -source [get_ports clock] [get_ports clock2x]
 
 create_clock -name dualClockFIFOrdclk -period 1.0ns [get_ports rdclk]
 create_clock -name dualClockFIFOwrclk -period 1.0ns [get_ports wrclk]

@@ -471,8 +471,114 @@ void countValidPermutationSetFraction(std::vector<size_t> counts, unsigned int g
 	}
 }
 
+void printWindowStats(const std::vector<long long>& values, size_t windowSize) {
+	long long valuesWindowSum = 0;
+	for(size_t i = 0; i < windowSize; i++) {
+		valuesWindowSum += values[i];
+	}
+
+	long long minValuesWindowSum = valuesWindowSum;
+	long long maxValuesWindowSum = valuesWindowSum;
+	for(size_t i = windowSize; i < values.size(); i++) {
+		valuesWindowSum += values[i] - values[i-windowSize];
+		minValuesWindowSum = std::min(minValuesWindowSum, valuesWindowSum);
+		maxValuesWindowSum = std::max(maxValuesWindowSum, valuesWindowSum);
+	}
+
+	double differencePercentage = 100.0 * maxValuesWindowSum / minValuesWindowSum;
+	std::cout << "For window size " << windowSize << " window sum range: " << minValuesWindowSum << "-" << maxValuesWindowSum << ": " << differencePercentage << "%" << std::endl;
+	
+}
+
+void printStats(const std::vector<long long>& values) {
+	long long totalSum = 0;
+	for(size_t i = 0; i < values.size(); i++) {
+		totalSum += values[i];
+	}
+	std::cout << "Total sum: " << totalSum << std::endl;
+	printWindowStats(values, 5);
+	printWindowStats(values, 15);
+	printWindowStats(values, 50);
+	printWindowStats(values, 150);
+}
+
+void printBasicMixInfo(const std::vector<long long>& oldValues, size_t divisions) {
+	std::vector<long long> reshuffledValues;
+	reshuffledValues.reserve(oldValues.size());
+
+	size_t CHUNK_OFFSET = oldValues.size() / divisions;
+	for(size_t i = 0; i < oldValues.size(); i++) {
+		size_t mod = i % divisions;
+		size_t set = i / divisions;
+		size_t source = CHUNK_OFFSET * mod + set;
+		reshuffledValues.push_back(oldValues[source]);
+	}
+
+	std::cout << "Stats for shuffle with " << divisions << " divisions:" << std::endl;
+	printStats(reshuffledValues);
+}
+
+template<typename T>
+T bitReverse(T original, size_t bits) {
+	T result = 0;
+	for(size_t i = 0; i < (bits+1) / 2; i++) {
+		result |= (original & (static_cast<T>(1) << i)) << (bits - 2 * i - 1);
+		result |= (original & (static_cast<T>(1) << (bits - i - 1))) >> (bits - 2 * i - 1);
+	}
+	return result;
+}
+
+void printReversingMixInfo(const std::vector<long long>& oldValues, size_t divisionsLOG2) {
+	size_t divisions = 1 << divisionsLOG2;
+	std::vector<long long> reshuffledValues;
+	reshuffledValues.reserve(oldValues.size());
+
+	size_t CHUNK_OFFSET = oldValues.size() / divisions;
+	for(size_t i = 0; i < oldValues.size(); i++) {
+		size_t mod = i % divisions;
+		size_t set = i / divisions;
+		size_t source = CHUNK_OFFSET * bitReverse(mod, divisionsLOG2) + set;
+		reshuffledValues.push_back(oldValues[source]);
+	}
+
+	std::cout << "Stats for index reversing shuffle with " << divisions << " divisions:" << std::endl;
+	printStats(reshuffledValues);
+}
+
+void testMixingPattern() {
+	constexpr size_t SIZE = 910*1024;
+	
+	std::vector<long long> expensivenessValues;
+	expensivenessValues.reserve(SIZE);
+	
+	// Generate a model difficulty distribution
+	for(size_t i = 0; i < SIZE; i++) {
+		double x = double(i) / SIZE;
+		double estimatedExpensiveness = std::exp(12*x)*(1-x); // About matches the real distribution
+		expensivenessValues.push_back(static_cast<long long>(estimatedExpensiveness*1000));
+	}
+
+	std::cout << "Stats for baseline:" << std::endl;
+	printStats(expensivenessValues);
+
+	printBasicMixInfo(expensivenessValues, 4);
+	printBasicMixInfo(expensivenessValues, 8);
+	printBasicMixInfo(expensivenessValues, 16);
+	printBasicMixInfo(expensivenessValues, 32);
+	printBasicMixInfo(expensivenessValues, 64);
+	printBasicMixInfo(expensivenessValues, 128);
+
+	printReversingMixInfo(expensivenessValues, 2);
+	printReversingMixInfo(expensivenessValues, 3);
+	printReversingMixInfo(expensivenessValues, 4);
+	printReversingMixInfo(expensivenessValues, 5);
+	printReversingMixInfo(expensivenessValues, 6);
+	printReversingMixInfo(expensivenessValues, 7);
+}
+
 CommandSet miscCommands{"Misc", {
 	{"ramTest", []() {doRAMTest(); }},
+	{"testMixingPattern", [](){testMixingPattern();}},
 
 	{"revolution4", []() {doRevolution<4>(); }},
 	{"revolution5", []() {doRevolution<5>(); }},
