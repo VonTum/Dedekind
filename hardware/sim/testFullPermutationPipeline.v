@@ -18,7 +18,7 @@ reg inputBotValid = 0;
 reg longRST = 0;
 reg transmitTop = 0;
 
-reg slowDownOutput = 1;
+reg slowDownOutput = 0; // Don't slow down output
 
 initial begin
     #31

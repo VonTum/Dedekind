@@ -24,7 +24,7 @@ endmodule
 
 module popcntNaive #(parameter WIDTH = 5) (
     input[WIDTH-1:0] bits,
-    output[$clog2(WIDTH)-1:0] count
+    output[$clog2(WIDTH+1)-1:0] count
 );
 
 wire[$clog2(WIDTH)-1:0] subCounts[WIDTH-1:0];

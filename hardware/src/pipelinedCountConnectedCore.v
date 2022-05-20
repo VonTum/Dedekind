@@ -124,12 +124,10 @@ always @(posedge clk) begin
 end
 
 reg[127:0] midPoint_DOWN;
-reg[127:0] leftoverGraphIn_DOWN;
 always @(posedge clk) begin
     midPoint_DOWN <= midPoint_PRE_DOWN;
     reducedGraphOut_DOWN <= leftoverGraph_PRE_DOWN & ~monotonizedDown_PRE_DOWN;
     extendedOut_DOWN <= leftoverGraph_PRE_DOWN & monotonizedDown_PRE_DOWN;
-    leftoverGraphIn_DOWN <= leftoverGraph_PRE_DOWN;
 end
 
 // PIPELINE STEP 5
@@ -171,20 +169,16 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10) (
     // state loop
     input runEndIn,
     input[127:0] extendedIn_HASBIT,
-    input[127:0] leftoverGraphIn,
     input[127:0] reducedGraphIn,
     input shouldGrabNewSeedIn,
-    input[1:0] graphSelectorIn,
     input validIn_NSD,
     input[5:0] storedConnectionCountIn_NSD,
     input[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn_NSD,
     
     output request_EXPL,
     output[127:0] extendedOut_DOWN,
-    output[127:0] leftoverGraphOut_PRE_DOWN,
     output[127:0] reducedGraphOut_DOWN,
     output shouldGrabNewSeedOut_EXPL,
-    output[1:0] graphSelectorOut_EXPL,
     output reg validOut_NSD_D, 
     output reg[5:0] connectionCountOut_NSD_D, 
     output reg[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut_NSD_D,
@@ -204,7 +198,7 @@ module pipelinedCountConnectedCombinatorial #(parameter EXTRA_DATA_WIDTH = 10) (
 wire[127:0] graphMultiplexer[2:0];
 assign graphMultiplexer[`GRAPH_START] = graphIn;
 assign graphMultiplexer[`GRAPH_NEW_SEED] = reducedGraphIn;
-assign graphMultiplexer[`GRAPH_LEFTOVER] = leftoverGraphIn;
+assign graphMultiplexer[`GRAPH_LEFTOVER] = reducedGraphIn;
 
 // PIPELINE STEP "NEW SEED PRODUCTION"
 // Generation of new seed, find index and test if graph is 0 to increment connectCount
@@ -212,7 +206,7 @@ assign graphMultiplexer[`GRAPH_LEFTOVER] = leftoverGraphIn;
 (* dont_merge *) reg rstD; always @(posedge clk) rstD <= rst;
 (* dont_merge *) reg rstDD; always @(posedge clk) rstDD <= rstD;
 
-reg[127:0] leftoverGraph_START; always @(posedge clk) leftoverGraph_START <= rstDD ? 128'b0 : graphMultiplexer[graphSelectorIn];
+reg[127:0] leftoverGraph_START; always @(posedge clk) leftoverGraph_START <= rstDD ? 128'b0 : runEndIn ? graphIn : reducedGraphIn;
 reg shouldGrabNewSeed_START;
 
 always @(posedge clk) shouldGrabNewSeed_START <= shouldGrabNewSeedIn;
@@ -223,6 +217,7 @@ wire[127:0] leftoverGraph_HASBIT; // Use later leftoverGraph for easier timing o
 newSeedProductionPipeline newSeedProductionPipe(clk, leftoverGraph_START, leftoverGraph_HASBIT, extendedIn_HASBIT, shouldGrabNewSeed_START, shouldIncrementConnectionCount_NSD, curExtending_MID);
 
 wire eccStatusWire;
+wire[127:0] leftoverGraphOut_PRE_DOWN;
 always @(posedge clk) eccStatus <= eccStatusWire;
 shiftRegister_M20K #(.CYCLES(`OFFSET_DOWN - 2 - `NEW_SEED_HASBIT_DEPTH), .WIDTH(128)) newSeedProductionPipeBypassLeftoverGraphWireDelay(clk,
     leftoverGraph_HASBIT,
@@ -245,12 +240,6 @@ always @(posedge clk) connectionCountOut_NSD_D <= (runEndIn_NSD ? 0 : storedConn
 // output wire shouldGrabNewSeedOut_EXPL;
 // output wire request_EXPL;
 explorationPipeline explorationPipe(clk, topChannel, leftoverGraphOut_PRE_DOWN, curExtending_MID, reducedGraphOut_DOWN, extendedOut_DOWN, request_EXPL, shouldGrabNewSeedOut_EXPL);
-
-// Inputs become available
-assign graphSelectorOut_EXPL = 
-    request_EXPL ? `GRAPH_START : 
-    shouldGrabNewSeedOut_EXPL ? `GRAPH_NEW_SEED : `GRAPH_LEFTOVER;
-
 
 // Outputs
 
@@ -297,20 +286,16 @@ always @(posedge clk) eccStatus <= eccStatusWOR;
 
 wire runEndIn;
 wire[127:0] extendedIn_HASBIT;
-wire[127:0] leftoverGraphIn;
 wire[127:0] reducedGraphIn;
 wire shouldGrabNewSeedIn;
-wire[1:0] graphSelectorIn;
 wire validIn_NSD;
 wire[5:0] storedConnectionCountIn_NSD;
 wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataIn_NSD;
 
 wire requestOut_EXPL;
 wire[127:0] extendedOut_DOWN;
-wire[127:0] leftoverGraphOut_PRE_DOWN;
 wire[127:0] reducedGraphOut_DOWN;
 wire shouldGrabNewSeedOut_EXPL;
-wire[1:0] graphSelectorOut_EXPL;
 wire validOut_NSD_D;
 wire[5:0] connectionCountOut_NSD_D;
 wire[EXTRA_DATA_WIDTH-1:0] storedExtraDataOut_NSD_D;
@@ -330,20 +315,16 @@ pipelinedCountConnectedCombinatorial #(EXTRA_DATA_WIDTH) combinatorialComponent 
     // combinatorial state loop
     runEndIn,
     extendedIn_HASBIT,
-    leftoverGraphIn,
     reducedGraphIn,
     shouldGrabNewSeedIn,
-    graphSelectorIn,
     validIn_NSD,
     storedConnectionCountIn_NSD,
     storedExtraDataIn_NSD,
     
     requestOut_EXPL,
     extendedOut_DOWN,
-    leftoverGraphOut_PRE_DOWN,
     reducedGraphOut_DOWN,
     shouldGrabNewSeedOut_EXPL,
-    graphSelectorOut_EXPL,
     validOut_NSD_D,
     connectionCountOut_NSD_D,
     storedExtraDataOut_NSD_D,
@@ -365,19 +346,14 @@ shiftRegister_M20K #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_DOWN + DATA_IN_LAT
 );
 
 // delays
-hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_EXPL + DATA_IN_LATENCY), .WIDTH(1+1+2)) loopBackPipeAllData(clk,
-    {requestOut_EXPL, shouldGrabNewSeedOut_EXPL, graphSelectorOut_EXPL},
-    {runEndIn, shouldGrabNewSeedIn, graphSelectorIn}
+hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_EXPL + DATA_IN_LATENCY), .WIDTH(1+1)) loopBackPipeAllData(clk,
+    {requestOut_EXPL, shouldGrabNewSeedOut_EXPL},
+    {runEndIn, shouldGrabNewSeedIn}
 );
 
 hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES - `OFFSET_DOWN + DATA_IN_LATENCY), .WIDTH(128)) loopBackPipeReducedGraph(clk,
     reducedGraphOut_DOWN,
     reducedGraphIn
-);
-
-hyperpipe #(.CYCLES(`TOTAL_PIPELINE_STAGES - (`OFFSET_DOWN-1) + DATA_IN_LATENCY), .WIDTH(128)) loopBackPipeLeftoverGraph(clk,
-    leftoverGraphOut_PRE_DOWN,
-    leftoverGraphIn
 );
 
 wire loopBackPipeValidAndExtraDataECCWire;

@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module OpenCLFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 11, parameter ENABLE_DEBUG_DATA = 0) (
+module OpenCLFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 3, parameter ENABLE_DEBUG_DATA = 1) (
     input clock,
     input clock2x, // apparently this specific name gives access to a 2x speed clock. Very useful!
     input resetn,
@@ -422,8 +422,8 @@ if(NUMBER_OF_PIPELINES % 2 == 1) begin
     
     assign selectedOut[NUMBER_OF_PIPELINES-1] = sharedSelected;
     
-    wire[$clog2(CH_WIDTH)-1:0] fullCountA; popcntNaive #(UNIQUE_CH_WIDTH) popcntA (uniqueAlmostFullsA, fullCountA);
-    wire[$clog2(CH_WIDTH)-1:0] fullCountB; popcntNaive #(UNIQUE_CH_WIDTH) popcntB (uniqueAlmostFullsB, fullCountB);
+    wire[$clog2(UNIQUE_CH_WIDTH+1)-1:0] fullCountA; popcntNaive #(UNIQUE_CH_WIDTH) popcntA (uniqueAlmostFullsA, fullCountA);
+    wire[$clog2(UNIQUE_CH_WIDTH+1)-1:0] fullCountB; popcntNaive #(UNIQUE_CH_WIDTH) popcntB (uniqueAlmostFullsB, fullCountB);
     
     wire preferredNextSharedSource = fullCountA == fullCountB ? !sharedSourceReg : fullCountA < fullCountB; // Prefer B if it has more full pipelines
     
