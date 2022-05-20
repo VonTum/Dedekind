@@ -17,7 +17,7 @@ module load intelFPGA_pro nalla_pcie toolchain/gompi
 # -seed=<value>
 # -ecc  # DOES NOT WORK
 
-aoc -force-single-store-ring -no-interleaving=default fullPipelineKernel.cl -o fullPipelineKernel.aocx -L . -l fullPipeline.aoclib
+aoc -force-single-store-ring -no-interleaving=default dedekindAccelerator.cl -o dedekindAccelerator.aocx -L . -l pcoeffProcessor.aoclib
 
-cp fullPipelineKernel.aocx ../build
+cp dedekindAccelerator.aocx ../build
 

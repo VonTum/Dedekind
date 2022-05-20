@@ -1,5 +1,5 @@
 // Implemented in HDL
-ulong2 fullPipeline(ulong2 mbfUppers, ulong2 mbfLowers, bool startNewTop);
+ulong2 pcoeffProcessor(ulong2 mbfUppers, ulong2 mbfLowers, bool startNewTop);
 
 uint bitReverse4(uint v) {
   return ((v & 0x1) << 3) | ((v & 0x2) << 1) | ((v & 0x4) >> 1) | ((v & 0x8) >> 3);
@@ -21,7 +21,7 @@ uint shuffleClusters(uint idx, uint workGroupSize) {
 
 // Attribute to fix report warning that it is missing
 __attribute__((uses_global_work_offset(0)))
-kernel void fullPipelineKernel(
+kernel void dedekindAccelerator(
       global const ulong2 * restrict mbfLUTA,
       global const ulong2 * restrict mbfLUTB,
       global const uint2 * restrict jobsIn,
@@ -42,7 +42,7 @@ kernel void fullPipelineKernel(
     uppers.y = mbfB.x;
     lowers.x = mbfA.y;
     lowers.y = mbfB.y;
-    processedPCoeffsOut[shuffledI] = fullPipeline(uppers, lowers, startNewTop);
+    processedPCoeffsOut[shuffledI] = pcoeffProcessor(uppers, lowers, startNewTop);
   }
 }
 

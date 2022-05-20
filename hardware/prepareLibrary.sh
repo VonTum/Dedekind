@@ -2,5 +2,5 @@
 
 module load intelFPGA_pro nalla_pcie toolchain/gompi
 
-aocl library hdl-comp-pkg fullPipeline.xml -o fullPipeline.aoco
-aocl library create -name fullPipeline fullPipeline.aoco
+aocl library hdl-comp-pkg pcoeffProcessor.xml -o pcoeffProcessor.aoco
+aocl library create -name pcoeffProcessor pcoeffProcessor.aoco

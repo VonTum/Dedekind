@@ -1,7 +1,7 @@
 <RTL_SPEC>
   <!-- 'name' is how this function will be called from an OpenCL kernel.
        'module' is the top-level HDL module name that implements the function. -->
-  <FUNCTION name="fullPipeline" module="OpenCLFullPermutationPipeline">
+  <FUNCTION name="pcoeffProcessor" module="OpenCLFullPermutationPipeline">
     <ATTRIBUTES>
       <!-- Setting IS_STALL_FREE="yes" means the function neither generates stalls internally nor can it 
            properly handle incoming stalls (because it simply ignores its stall/valid inputs). If set
@@ -55,11 +55,9 @@
       <INPUT  port="mbfLowers" width="128"/>
       <INPUT  port="startNewTop" width="1"/>
       <OUTPUT port="results" width="128"/>
-      <PARAMETER name="TOTAL_FPP_COUNT" value="11"/>
-      <PARAMETER name="ENABLE_DEBUG_DATA" value="0"/>
     </INTERFACE>
     <C_MODEL>
-      <FILE name="src/fullPipelineCModel.cl"/>
+      <FILE name="src/pcoeffProcessorCModel.cl"/>
     </C_MODEL>
     <REQUIREMENTS>
       <!--Verilog Headers -->
@@ -70,6 +68,7 @@
       
       <!-- Source Files -->
       <FILE name="src/OpenCLFullPermutationPipeline.v"/>
+        <FILE name="src/popcnt.v"/>
         <FILE name="src/topManager.v"/>
         <FILE name="src/cosmicRayDetection.v"/>
         <FILE name="src/fullPermutationPipeline.v"/>

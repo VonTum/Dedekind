@@ -201,7 +201,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 
 		if(ENABLE_SHUFFLE) shuffleBots(job.begin(), job.end());
 
-		constexpr cl_uint JOB_SIZE_ALIGNMENT = 2;
+		constexpr cl_uint JOB_SIZE_ALIGNMENT = 16*32; // Block Size 32, shuffle size 16
 
 		if(bufferSize % JOB_SIZE_ALIGNMENT != 0) {
 			cl_uint fillerCount = JOB_SIZE_ALIGNMENT - (bufferSize % JOB_SIZE_ALIGNMENT);
@@ -213,9 +213,9 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 
 		assert(bufferSize % JOB_SIZE_ALIGNMENT == 0);
 
-		for(size_t i = 0; i < JOB_SIZE_ALIGNMENT; i++) {
+		/*for(size_t i = 0; i < JOB_SIZE_ALIGNMENT; i++) {
 			job.bufStart[bufferSize++] = 0x80000000; // Tops at the end for stats collection
-		}
+		}*/
 
 		if(SHOW_TAIL != 0) {
 			std::cout << "Tail: " << std::endl;
@@ -465,7 +465,7 @@ int main(int argc, char** argv) {
 	for(NodeIndex i : topsToProcess) std::cout << i << ',';
 	std::cout << std::endl;
 
-	std::string kernelFile = "fullPipelineKernel";
+	std::string kernelFile = "dedekindAccelerator";
 
 	if(options.has("kernel")) {
 		kernelFile = options.get<std::string>("kernel");
@@ -580,8 +580,8 @@ bool init(const char* kernelFile) {
 
 	// Create the kernel - name passed in here must match kernel name in the
 	// original CL file, that was compiled into an AOCX file using the AOC tool
-	fullPipelineKernel = clCreateKernel(program, "fullPipelineKernel", &status);
-	checkError(status, "Failed to create fullPipelineKernel");
+	fullPipelineKernel = clCreateKernel(program, "dedekindAccelerator", &status);
+	checkError(status, "Failed to create dedekindAccelerator");
 
 	// Create constant mbf Look Up Table data buffer
 	mbfLUTMemA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_CHANNEL_3_INTELFPGA, mbfCounts[7]*16 /*16 bytes per MBF*/, nullptr, &status);

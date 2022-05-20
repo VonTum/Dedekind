@@ -12,5 +12,5 @@ module load intelFPGA_pro nalla_pcie toolchain/gompi
 
 ./prepareLibrary.sh
 
-aoc -march=emulator fullPipelineKernel.cl -o fullPipelineKernel.aocx -I scr -L . -l fullPipeline.aoclib
+aoc -march=emulator dedekindAccelerator.cl -o dedekindAccelerator.aocx -I scr -L . -l pcoeffProcessor.aoclib
 

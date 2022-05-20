@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module OpenCLFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 11, parameter ENABLE_DEBUG_DATA = 1) (
+module OpenCLFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 11, parameter ENABLE_DEBUG_DATA = 0) (
     input clock,
     input clock2x, // apparently this specific name gives access to a 2x speed clock. Very useful!
     input resetn,
