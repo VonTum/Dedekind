@@ -168,7 +168,6 @@ module aggregatingPermutePipeline24 #(parameter PCOEFF_COUNT_BITWIDTH = 10) (
     input rst,
     input longRST,
     input[127:0] sharedTop,
-    input[1:0] topChannel,
     output isActive2x, // Instrumentation wire for profiling
     
     // Input side
@@ -220,15 +219,12 @@ botPermuter1234 #(.ALMOST_FULL_MARGIN(32)) botPermuter1234 (
 wire freezeCore;
 hyperpipe #(.CYCLES(2/*Number of cycles it takes for botPermuter1234 to respond to external slowDown*/)) slowDownBotPermuterDelayPipe(clk, slowDown, freezeCore);
 
-(* dont_merge *) reg[1:0] topChannelD; always @(posedge clk) topChannelD <= topChannel;
-
 aggregatingPipeline #(PCOEFF_COUNT_BITWIDTH) computePipe (
     .clk(clk),
     .clk2x(clk2x),
     .rst(pipelineRST),
     .longRST(longRST),
     .sharedTop(sharedTop),
-    .topChannel(topChannelD),
     .isActive2x(isActive2x),
     
     // Input side

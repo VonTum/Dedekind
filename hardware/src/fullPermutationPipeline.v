@@ -255,7 +255,6 @@ for(genvar permutationI = 0; permutationI < 30; permutationI = permutationI + 1)
         .rst(pipelineRST),
         .longRST(pipelineLongRST),
         .sharedTop(top),
-        .topChannel(topChannel),
         .isActive2x(activities2x[permutationI]), // Instrumentation wire for profiling
         
         // Input side

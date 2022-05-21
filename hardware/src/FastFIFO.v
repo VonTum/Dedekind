@@ -396,6 +396,82 @@ LOW_LATENCY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(1), .USE_
 endmodule
 
 
+// 4 cycles read latency
+module FastDualClockFIFO_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9, parameter ALMOST_FULL_MARGIN = 8) (
+    // Write Side
+    input wrclk,
+    input wrrst,
+    input writeEnable,
+    input[WIDTH-1:0] dataIn,
+    output reg almostFull,
+    
+    // Read Side
+    input rdclk,
+    input rdrst,
+    input readRequest,
+    output[WIDTH-1:0] dataOut, // Forced to 0 if not dataOutValid
+    output reg dataOutValid,
+    
+    output reg eccStatus
+);
+
+reg[DEPTH_LOG2-1:0] writeAddr;
+reg[DEPTH_LOG2-1:0] readAddr;
+
+always @(posedge wrclk) begin
+    if(wrrst) begin
+        writeAddr <= 1;
+    end else begin
+        writeAddr <= writeAddr + writeEnable;
+    end
+end
+
+wire[DEPTH_LOG2-1:0] writeAddrWire_rd;
+wire[DEPTH_LOG2-1:0] readAddrWire_wr; 
+grayCodePipe #(DEPTH_LOG2) wr_rd(wrclk, writeAddr, rdclk, writeAddrWire_rd);
+grayCodePipe #(DEPTH_LOG2) rd_wr(rdclk, readAddr, wrclk, readAddrWire_wr);
+reg[DEPTH_LOG2-1:0] canReadUpTo; always @(posedge rdclk) canReadUpTo <= writeAddrWire_rd - 1;
+
+wire[DEPTH_LOG2-1:0] spaceLeft = readAddrWire_wr - writeAddr;
+always @(posedge wrclk) almostFull <= spaceLeft <= ALMOST_FULL_MARGIN;
+
+wire canReadNext = readAddr != canReadUpTo;
+
+reg memRead; always @(posedge rdclk) memRead <= canReadNext && readRequest;
+reg valid_ADDR; always @(posedge rdclk) valid_ADDR <= memRead;
+reg valid_PIPE; always @(posedge rdclk) valid_PIPE <= valid_ADDR;
+always @(posedge rdclk) dataOutValid <= valid_PIPE;
+
+(* dont_merge *) reg storedAddrValid;
+(* dont_merge *) reg storedAddrValidForClear;
+always @(posedge rdclk) begin
+    if(rdrst) begin
+        readAddr <= 0;
+    end else begin
+        readAddr <= readAddr + (canReadNext && readRequest);
+    end
+end
+
+wire eccWire;
+always @(posedge rdclk) eccStatus <= eccWire;
+DUAL_CLOCK_MEMORY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .FORCE_TO_ZERO(1)) m20kMemory (
+    // Write Side
+    .wrclk(wrclk),
+    .writeEnable(writeEnable),
+    .writeAddr(writeAddr),
+    .dataIn(dataIn),
+    
+    // Read Side
+    .rdclk(rdclk),
+    .readEnable(memRead),
+    .readAddr(readAddr),
+    .dataOut(dataOut), // == 0 if not reading
+    .eccStatus(eccWire)
+);
+
+endmodule
+
+
 
 // Expects sufficient readRequests while resetting, so that the output pipe is flushed properly
 module LowLatencyFastFIFO_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9, parameter ALMOST_FULL_MARGIN = 64) (

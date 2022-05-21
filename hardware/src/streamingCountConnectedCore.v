@@ -11,7 +11,6 @@ module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     input clk,
     input clk2x,
     input rst,
-    input[1:0] topChannel,
     output isActive2x, // Instrumentation wire for profiling
     
     // Input side
@@ -76,7 +75,7 @@ always @(posedge clk) begin
 `endif
 end
 
-wire inputFifoAvailable2x;
+wire inputFifoValid2x;
 wire requestGraph2x;
 
 wire[127:0] graphToComputeModule2x;
@@ -87,11 +86,10 @@ synchronizer pipelineRSTSynchronizer(clk, pipelineRST, clk2x, pipelineRST2x);
 (* dont_merge *) reg inputFIFORST2x; always @(posedge clk2x) inputFIFORST2x <= pipelineRST2x;
 (* dont_merge *) reg cccRST2x; always @(posedge clk2x) cccRST2x <= pipelineRST2x;
 
-// request Pipe has 1 cycle, FIFO has 0 cycles read latency, dataOut pipe has 0 cycles
-`define FIFO_READ_LATENCY (1+0+0)
+// request Pipe has 0 cycle, FIFO has 4 cycles read latency, dataOut pipe has 0 cycles
+`define FIFO_READ_LATENCY (0+4+0)
 wire inputFifoECC2x;
-reg requestGraph2xD; always @(posedge clk2x) requestGraph2xD <= requestGraph2x; // Extra reg for more timing tolerance
-LowLatencyFastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(5), .ALMOST_FULL_MARGIN(12)) inputFIFO (// Upper 6 cycles max latency for permutation generation, 4 cycles turnaround time, 2 cycles of margin
+FastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(5), .ALMOST_FULL_MARGIN(12)) inputFIFO (// Upper 6 cycles max latency for permutation generation, 4 cycles turnaround time, 2 cycles of margin
     // input side
     .wrclk(clk),
     .wrrst(pipelineRST),
@@ -102,9 +100,9 @@ LowLatencyFastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(5), .ALM
     // output side
     .rdclk(clk2x),
     .rdrst(inputFIFORST2x),
-    .readRequest(requestGraph2xD),
-    .dataOut({graphToComputeModule2x, addrToComputeModule2x}), // Forced to 0 if not inputFifoAvailable2x
-    .dataOutAvailable(inputFifoAvailable2x),
+    .readRequest(requestGraph2x),
+    .dataOut({graphToComputeModule2x, addrToComputeModule2x}), // Forced to 0 if not inputFifoValid2x
+    .dataOutValid(inputFifoValid2x),
     
     .eccStatus(inputFifoECC2x)
 );
@@ -116,19 +114,15 @@ wire[`ADDR_WIDTH-1:0] addrToCollector2x;
 wire pipelineECC2x;
 fastToSlowPulseSynchronizer eccSync(clk2x, pipelineECC2x || inputFifoECC2x, clk, pipelineECC);
 
-wire[1:0] topChannel2x;
-synchronizer #(.WIDTH(2)) topChannel2xSync(clk, topChannel, clk2x, topChannel2x);
-
 pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH), .DATA_IN_LATENCY(`FIFO_READ_LATENCY)) countConnectedCore (
     .clk(clk2x),
     .rst(cccRST2x),
-    .topChannel(topChannel2x),
     .isActive(isActive2x),
     
     // input side
     .request(requestGraph2x),
     .graphIn(graphToComputeModule2x),
-    .graphInAvailable(inputFifoAvailable2x),
+    .graphInValid(inputFifoValid2x),
     .extraDataIn(addrToComputeModule2x),
     
     // output side

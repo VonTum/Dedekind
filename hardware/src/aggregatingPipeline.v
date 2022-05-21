@@ -8,7 +8,6 @@ module aggregatingPipeline #(parameter PCOEFF_COUNT_BITWIDTH = 0) (
     input rst,
     input longRST,
     input[127:0] sharedTop,
-    input[1:0] topChannel,
     output isActive2x, // Instrumentation wire for profiling
     
     input isBotValid,
@@ -53,7 +52,6 @@ streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1+6)) core (
     .clk(clk),
     .clk2x(clk2x),
     .rst(rst),
-    .topChannel(topChannel),
     .isActive2x(isActive2x),
     
     // Input side
