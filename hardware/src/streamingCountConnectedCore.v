@@ -89,7 +89,7 @@ synchronizer pipelineRSTSynchronizer(clk, pipelineRST, clk2x, pipelineRST2x);
 // request Pipe has 0 cycle, FIFO has 4 cycles read latency, dataOut pipe has 0 cycles
 `define FIFO_READ_LATENCY (0+4+0)
 wire inputFifoECC2x;
-FastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(5), .ALMOST_FULL_MARGIN(12)) inputFIFO (// Upper 6 cycles max latency for permutation generation, 4 cycles turnaround time, 2 cycles of margin
+FastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(5), .ALMOST_FULL_MARGIN(9)) inputFIFO (// 7 cycles turnaround. 2 margin cycles
     // input side
     .wrclk(clk),
     .wrrst(pipelineRST),

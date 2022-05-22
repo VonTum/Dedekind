@@ -3,8 +3,8 @@
 `define NEW_SEED_HASBIT_DEPTH 3
 `define NEW_SEED_HASBIT_OFFSET (1+`NEW_SEED_HASBIT_DEPTH)
 `define NEW_SEED_DEPTH (`NEW_SEED_HASBIT_DEPTH+1)
-`define EXPLORATION_DOWN_OFFSET 5
-`define EXPLORATION_DEPTH 8
+`define EXPLORATION_DOWN_OFFSET 8
+`define EXPLORATION_DEPTH 11
 
 `define OFFSET_NSD `NEW_SEED_DEPTH
 `define OFFSET_MID (`OFFSET_NSD+2)
@@ -104,39 +104,32 @@ module explorationPipeline(
     output reg shouldGrabNewSeedOut_D
 );
 
-wire[127:0] leftoverGraph_PRE_MID;
-hyperpipe #(.CYCLES(2), .WIDTH(128)) leftoverGraphPipeA (clk,
-    leftoverGraph,
-    leftoverGraph_PRE_MID
-);
+wire[127:0] leftoverGraph_A;
+wire[127:0] leftoverGraph_B;
+wire[127:0] leftoverGraph_C;
+wire[127:0] leftoverGraph_PRE_DOWN;
+hyperpipe #(.CYCLES(2), .WIDTH(128)) leftoverGraphPipeA (clk, leftoverGraph, leftoverGraph_A);
+hyperpipe #(.CYCLES(2), .WIDTH(128)) leftoverGraphPipeB (clk, leftoverGraph_A, leftoverGraph_B);
+hyperpipe #(.CYCLES(2), .WIDTH(128)) leftoverGraphPipeC (clk, leftoverGraph_B, leftoverGraph_C);
+hyperpipe #(.CYCLES(2), .WIDTH(128)) leftoverGraphPipeD (clk, leftoverGraph_C, leftoverGraph_PRE_DOWN);
 
-// PIPELINE STEP 1, 2, 3
-wire[127:0] monotonizedUp_PRE_MID; pipelinedMonotonizeUp #(0,0,1,0,0,1,0) mUp(clk, curExtendingIn, monotonizedUp_PRE_MID);
+wire[127:0] monotonizedUp_A; pipelinedMonotonizeUp #(0,1,0,0,1,0,0) mUpA(clk, curExtendingIn, monotonizedUp_A);
+wire[127:0] monotonizedDown_B; pipelinedMonotonizeDown #(0,1,0,0,1,0,0) mDownB(clk, monotonizedUp_A & leftoverGraph_A, monotonizedDown_B);
+wire[127:0] monotonizedUp_C; pipelinedMonotonizeUp #(0,1,0,0,1,0,0) mUpC(clk, monotonizedDown_B & leftoverGraph_B, monotonizedUp_C);
+reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_C & leftoverGraph_C;
+wire[127:0] monotonizedDown_PRE_DOWN; pipelinedMonotonizeDown #(0,0,0,1,0,0,0) mDownD(clk, midPoint_MID, monotonizedDown_PRE_DOWN);
 
 // Instead of this
 //reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_PRE_MID & leftoverGraphIn_PRE_MID;
 // Use top, that way we can reduce resource usage by moving leftoverGraphIn to a longer shift register
 //wire[127:0] top;
 //topReceiver receiver(clk, topChannel, top);
-reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_PRE_MID & leftoverGraph_PRE_MID;
+//reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_PRE_MID & leftoverGraph_PRE_MID;
 
-wire[127:0] leftoverGraph_PRE_DOWN;
-hyperpipe #(.CYCLES(3), .WIDTH(128)) leftoverGraphPipeB (clk,
-    leftoverGraph_PRE_MID,
-    leftoverGraph_PRE_DOWN
-);
-
-// PIPELINE STEP 3, 4
-wire[127:0] monotonizedDown_PRE_DOWN; pipelinedMonotonizeDown #(0,0,1,0,0,1,0) mDown(clk, midPoint_MID, monotonizedDown_PRE_DOWN);
-reg[127:0] midPoint_POST_MID;
 reg[127:0] midPoint_PRE_DOWN;
-always @(posedge clk) begin
-    midPoint_POST_MID <= midPoint_MID;
-    midPoint_PRE_DOWN <= midPoint_POST_MID;
-end
-
 reg[127:0] midPoint_DOWN;
 always @(posedge clk) begin
+    midPoint_PRE_DOWN <= midPoint_MID;
     midPoint_DOWN <= midPoint_PRE_DOWN;
     reducedGraphOut_DOWN <= leftoverGraph_PRE_DOWN & ~monotonizedDown_PRE_DOWN;
     extendedOut_DOWN <= leftoverGraph_PRE_DOWN & monotonizedDown_PRE_DOWN;
