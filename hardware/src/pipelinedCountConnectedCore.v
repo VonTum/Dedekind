@@ -113,10 +113,10 @@ hyperpipe #(.CYCLES(2), .WIDTH(128)) leftoverGraphPipeB (clk, leftoverGraph_A, l
 hyperpipe #(.CYCLES(2), .WIDTH(128)) leftoverGraphPipeC (clk, leftoverGraph_B, leftoverGraph_C);
 hyperpipe #(.CYCLES(2), .WIDTH(128)) leftoverGraphPipeD (clk, leftoverGraph_C, leftoverGraph_PRE_DOWN);
 
-wire[127:0] monotonizedUp_A; pipelinedMonotonizeUp #(0,0,0,1,0,0,0) mUpA(clk, curExtendingIn, monotonizedUp_A); reg[127:0] mUp_A_R; always @(posedge clk) mUp_A_R <= monotonizedUp_A & leftoverGraph_A;
-wire[127:0] monotonizedDown_B; pipelinedMonotonizeDown #(0,0,0,1,0,0,0) mDownB(clk, mUp_A_R, monotonizedDown_B); reg[127:0] mDown_B_R; always @(posedge clk) mDown_B_R <= monotonizedDown_B & leftoverGraph_B;
-wire[127:0] monotonizedUp_C; pipelinedMonotonizeUp #(0,0,0,1,0,0,0) mUpC(clk, mDown_B_R, monotonizedUp_C); reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_C & leftoverGraph_C;
-wire[127:0] monotonizedDown_PRE_DOWN; pipelinedMonotonizeDown #(0,0,0,1,0,0,0) mDownD(clk, midPoint_MID, monotonizedDown_PRE_DOWN);
+wire[127:0] monotonizedUp_A; pipelinedMonotonizeUp mUpA(clk, curExtendingIn, monotonizedUp_A); reg[127:0] mUp_A_R; always @(posedge clk) mUp_A_R <= monotonizedUp_A & leftoverGraph_A;
+wire[127:0] monotonizedDown_B; pipelinedMonotonizeDown mDownB(clk, mUp_A_R, monotonizedDown_B); reg[127:0] mDown_B_R; always @(posedge clk) mDown_B_R <= monotonizedDown_B & leftoverGraph_B;
+wire[127:0] monotonizedUp_C; pipelinedMonotonizeUp mUpC(clk, mDown_B_R, monotonizedUp_C); reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_C & leftoverGraph_C;
+wire[127:0] monotonizedDown_PRE_DOWN; pipelinedMonotonizeDown mDownD(clk, midPoint_MID, monotonizedDown_PRE_DOWN);
 
 // Instead of this
 //reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_PRE_MID & leftoverGraphIn_PRE_MID;
