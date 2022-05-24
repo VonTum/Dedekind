@@ -86,10 +86,11 @@ synchronizer pipelineRSTSynchronizer(clk, pipelineRST, clk2x, pipelineRST2x);
 (* dont_merge *) reg inputFIFORST2x; always @(posedge clk2x) inputFIFORST2x <= pipelineRST2x;
 (* dont_merge *) reg cccRST2x; always @(posedge clk2x) cccRST2x <= pipelineRST2x;
 
-// request Pipe has 0 cycle, FIFO has 4 cycles read latency, dataOut pipe has 0 cycles
-`define FIFO_READ_LATENCY (0+4+0)
+// request Pipe has 1 cycle, FIFO has 5 cycles read latency, dataOut pipe has 0 cycles
+`define FIFO_READ_LATENCY (1+5+0)
+(* dont_merge *) reg requestGraph2xD; always @(posedge clk2x) requestGraph2xD <= requestGraph2x;
 wire inputFifoECC2x;
-FastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(5), .ALMOST_FULL_MARGIN(9)) inputFIFO (// 7 cycles turnaround. 2 margin cycles
+FastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(5), .ALMOST_FULL_MARGIN(12)) inputFIFO (// 7 cycles turnaround. 5 margin cycles
     // input side
     .wrclk(clk),
     .wrrst(pipelineRST),
@@ -100,7 +101,7 @@ FastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(5), .ALMOST_FULL_M
     // output side
     .rdclk(clk2x),
     .rdrst(inputFIFORST2x),
-    .readRequest(requestGraph2x),
+    .readRequest(requestGraph2xD),
     .dataOut({graphToComputeModule2x, addrToComputeModule2x}), // Forced to 0 if not inputFifoValid2x
     .dataOutValid(inputFifoValid2x),
     

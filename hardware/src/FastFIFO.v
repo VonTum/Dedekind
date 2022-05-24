@@ -396,7 +396,7 @@ LOW_LATENCY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .USE_SCLEAR(1), .USE_
 endmodule
 
 
-// 4 cycles read latency
+// 5 cycles read latency
 module FastDualClockFIFO_M20K #(parameter WIDTH = 32, parameter DEPTH_LOG2 = 9, parameter ALMOST_FULL_MARGIN = 8) (
     // Write Side
     input wrclk,
@@ -438,9 +438,6 @@ always @(posedge wrclk) almostFull <= spaceLeft <= ALMOST_FULL_MARGIN;
 wire canReadNext = readAddr != canReadUpTo;
 
 reg memRead; always @(posedge rdclk) memRead <= canReadNext && readRequest;
-reg valid_ADDR; always @(posedge rdclk) valid_ADDR <= memRead;
-reg valid_PIPE; always @(posedge rdclk) valid_PIPE <= valid_ADDR;
-always @(posedge rdclk) dataOutValid <= valid_PIPE;
 
 (* dont_merge *) reg storedAddrValid;
 (* dont_merge *) reg storedAddrValidForClear;
@@ -452,8 +449,9 @@ always @(posedge rdclk) begin
     end
 end
 
+(* max_fan = 1 *) reg[DEPTH_LOG2-1:0] readAddrD; always @(posedge rdclk) readAddrD <= readAddr;
+(* max_fan = 1 *) reg memReadD; always @(posedge rdclk) memReadD <= memRead;
 wire eccWire;
-always @(posedge rdclk) eccStatus <= eccWire;
 DUAL_CLOCK_MEMORY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .FORCE_TO_ZERO(1)) m20kMemory (
     // Write Side
     .wrclk(wrclk),
@@ -463,11 +461,17 @@ DUAL_CLOCK_MEMORY_M20K #(.WIDTH(WIDTH), .DEPTH_LOG2(DEPTH_LOG2), .FORCE_TO_ZERO(
     
     // Read Side
     .rdclk(rdclk),
-    .readEnable(memRead),
-    .readAddr(readAddr),
+    .readEnable(memReadD),
+    .readAddr(readAddrD),
     .dataOut(dataOut), // == 0 if not reading
     .eccStatus(eccWire)
 );
+
+reg valid_ADDR; always @(posedge rdclk) valid_ADDR <= memReadD;
+reg valid_PIPE; always @(posedge rdclk) valid_PIPE <= valid_ADDR;
+always @(posedge rdclk) dataOutValid <= valid_PIPE;
+
+always @(posedge rdclk) eccStatus <= eccWire;
 
 endmodule
 

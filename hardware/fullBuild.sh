@@ -15,7 +15,7 @@ module load intelFPGA_pro nalla_pcie toolchain/gompi
 # -num-reorder=3
 # -high-effort
 # -seed=<value>
-# -ecc  # DOES NOT WORK
+# -ecc DOES NOT WORK
 
 aoc -force-single-store-ring -no-interleaving=default dedekindAccelerator.cl -o dedekindAccelerator.aocx -L . -l pcoeffProcessor.aoclib
 

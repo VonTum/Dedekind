@@ -30,19 +30,16 @@ kernel void dedekindAccelerator(
 ) {
   for (uint i = 0; i < workGroupSize / 2; i++) { // 2 mbfs per iteration
     uint shuffledI = shuffleClusters(i, workGroupSize / 2);
-    uint2 curJob = __burst_coalesced_load(&jobsIn[shuffledI]);
+    uint2 curJob = __fpga_reg(__burst_coalesced_load(&jobsIn[shuffledI]));
     bool startNewTop = (curJob.x & 0x80000000u) != 0x00000000u; // First bit describes if the selected mbf is a top marking the start of a new bot series
     // Have to cut off the first bit, so  we don't have incorrect addresses
     // Load the mbf from memory. Pipelined, because accessed mbfs are nonconsecutive. No cache either because it could never be large enough to be functional
     ulong2 mbfA = __burst_coalesced_load(&mbfLUTA[curJob.x & 0x7FFFFFFFu]);
     ulong2 mbfB = __burst_coalesced_load(&mbfLUTB[curJob.y & 0x7FFFFFFFu]);
-    ulong2 uppers;
-    ulong2 lowers;
-    uppers.x = mbfA.x;
-    uppers.y = mbfB.x;
-    lowers.x = mbfA.y;
-    lowers.y = mbfB.y;
-    processedPCoeffsOut[shuffledI] = pcoeffProcessor(uppers, lowers, startNewTop);
+    ulong2 uppers = (ulong2)(mbfA.x, mbfB.x);
+    ulong2 lowers = (ulong2)(mbfA.y, mbfB.y);
+    ulong2 result = pcoeffProcessor(__fpga_reg(uppers), __fpga_reg(lowers), __fpga_reg(startNewTop));
+    processedPCoeffsOut[shuffledI] = __fpga_reg(result);
   }
 }
 

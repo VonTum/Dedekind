@@ -1,4 +1,4 @@
-set_global_assignment -name TOP_LEVEL_ENTITY OpenCLFullPermutationPipeline
+set_global_assignment -name TOP_LEVEL_ENTITY pcoeffProcessorUnit
 set_global_assignment -name ORIGINAL_QUARTUS_VERSION 21.4.0
 set_global_assignment -name PROJECT_CREATION_TIME_DATE "17:22:50  MARCH 08, 2022"
 set_global_assignment -name LAST_QUARTUS_VERSION "20.4.0 Pro Edition"
@@ -39,6 +39,7 @@ set_global_assignment -name DEVICE_FILTER_PACKAGE FBGA
 set_global_assignment -name DEVICE_FILTER_PIN_COUNT 1760
 set_global_assignment -name DEVICE_FILTER_SPEED_GRADE 2
 set_global_assignment -name FLOW_DISABLE_ASSEMBLER ON
+set_global_assignment -name VERILOG_FILE src/pcoeffProcessorUnit.v
 set_global_assignment -name IP_FILE src/ip/seuDetection.ip
 set_global_assignment -name VERILOG_FILE src/cosmicRayDetection.v
 set_global_assignment -name VERILOG_FILE src/synchronizer.v
@@ -80,4 +81,4 @@ set_global_assignment -name VERILOG_FILE src/botPermuter.v
 set_global_assignment -name VERILOG_FILE src/botPermuter1234.v
 set_global_assignment -name VERILOG_FILE src/aggregatingPipeline.v
 set_global_assignment -name VERILOG_FILE src/aggregatingPermutePipeline.v
-set_instance_assignment -name PARTITION_COLOUR 4291313151 -to OpenCLFullPermutationPipeline -entity OpenCLFullPermutationPipeline
+set_instance_assignment -name PARTITION_COLOUR 4291313151 -to OpenCLFullPermutationPipeline -entity pcoeffProcessorUnit

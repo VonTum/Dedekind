@@ -1,6 +1,6 @@
 
 # Basic pipeline clock
-create_clock -name DebugClock -period 500MHz [get_ports clk]
+create_clock -name DebugClock -period 250MHz [get_ports clk]
 create_generated_clock -name DebugClock2x -multiply_by 2 -master_clock DebugClock -source [get_ports clk] [get_ports clk2x]
 
 create_clock -name kernelClock -period 300MHz [get_ports clock]
