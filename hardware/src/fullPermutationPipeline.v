@@ -218,7 +218,7 @@ wire[$clog2(24*7)-1:0] pcoeffCounts[29:0];
 
 wire[29:0] eccStatuses;
 wire[29:0] memoryEccStatuses;
-always @(posedge clk) eccStatus <= |eccStatuses || |memoryEccStatuses | permutationGeneratorECC;
+always @(posedge clk) eccStatus <= |eccStatuses || |memoryEccStatuses || permutationGeneratorECC;
 
 wire[29:0] outputFIFOWrites;
 wire[30*9-1:0] writeAddrs;

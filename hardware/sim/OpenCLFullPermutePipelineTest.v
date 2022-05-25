@@ -40,8 +40,8 @@ initial $readmemb("FullPermutePipelineTestSetOpenCL7.mem", dataTable);
 reg[16+48-1:0] resultsTable[MEMSIZE-1:0];
 //initial for(integer i = 0; i < MEMSIZE; i = i + 1) resultsTable[i] = 0;
 
-reg[$clog2(MEMSIZE)-1:0] inputIndex = 0;//3912;
-reg[$clog2(MEMSIZE)-1:0] outputIndex = 0;//3912;
+reg[$clog2(MEMSIZE)-1:0] inputIndex = 2002;//3912;
+reg[$clog2(MEMSIZE)-1:0] outputIndex = 2002;//3912;
 
 always @(inputBotValid or inputIndex) if(inputIndex >= MEMSIZE) inputBotValid <= 0;
 
@@ -66,7 +66,7 @@ wire[63:0] summedDataPcoeffCountOutB;
 wire[47:0] summedDataB = summedDataPcoeffCountOutB[47:0];
 wire[12:0] pcoeffCountB = summedDataPcoeffCountOutB[13+48-1:48];
 
-OpenCLFullPermutationPipeline elementUnderTest (
+OpenCLFullPermutationPipeline #(.TOTAL_FPP_COUNT(3)) elementUnderTest (
     .clock(clock),
     .clock2x(clock2x),
     .resetn(!rst),

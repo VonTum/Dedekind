@@ -1,16 +1,15 @@
 `timescale 1ns / 1ps
 
-`define ADDR_WIDTH 9
-`define ADDR_DEPTH 512
+`define ADDR_WIDTH 11
+`define ADDR_DEPTH (1 << `ADDR_WIDTH)
 
 `define INPUT_FIFO_DEPTH_LOG2 5
-
-`define INPUT_FIFO_MARGIN 10
 
 module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     input clk,
     input clk2x,
     input rst,
+    input longRST,
     output isActive2x, // Instrumentation wire for profiling
     
     // Input side
@@ -55,7 +54,7 @@ wire isBotValidECC; reg isBotValidECC_D; always @(posedge clk) isBotValidECC_D <
 wire pipelineECC;
 
 reg resultValid_D; always @(posedge clk) resultValid_D <= resultValid;
-always @(posedge clk) eccStatus <= (collectorECC_D && resultValid_D) || isBotValidECC_D || pipelineECC; // Collector ECC only matters if bot data should have actually been read. This also handles bad ECC from uninitialized memory
+always @(posedge clk) eccStatus <= (!longRST && ((collectorECC_D && resultValid_D) || isBotValidECC_D)) || pipelineECC; // Collector ECC only matters if bot data should have actually been read. This also handles bad ECC from uninitialized memory
 
 reg[`ADDR_WIDTH-1:0] curBotIndex = 0;
 always @(posedge clk) begin
@@ -90,7 +89,7 @@ synchronizer pipelineRSTSynchronizer(clk, pipelineRST, clk2x, pipelineRST2x);
 `define FIFO_READ_LATENCY (1+5+0)
 (* dont_merge *) reg requestGraph2xD; always @(posedge clk2x) requestGraph2xD <= requestGraph2x;
 wire inputFifoECC2x;
-FastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(5), .ALMOST_FULL_MARGIN(12)) inputFIFO (// 7 cycles turnaround. 5 margin cycles
+FastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(6), .ALMOST_FULL_MARGIN(10)) inputFIFO (// 7 cycles turnaround. 3 margin cycles
     // input side
     .wrclk(clk),
     .wrrst(pipelineRST),
@@ -133,37 +132,55 @@ pipelinedCountConnectedCore #(.EXTRA_DATA_WIDTH(`ADDR_WIDTH), .DATA_IN_LATENCY(`
     .eccStatus(pipelineECC2x)
 );
 
-DUAL_CLOCK_MEMORY_M20K #(.WIDTH(6), .DEPTH_LOG2(`ADDR_WIDTH)) collectorMemory (
+wire[1:0] connectCountToCollectorECC2x;
+smallECCEncoder encCC({connectCountToCollector2x, 2'b00}, connectCountToCollectorECC2x);
+
+wire[1:0] connectCountECC;
+wire[1:0] connectCountECCCheck;
+smallECCEncoder decCC({connectCount, 2'b00}, connectCountECCCheck);
+
+assign collectorECC = connectCountECC != connectCountECCCheck;
+wire[1:0] paddingECC;
+DUAL_CLOCK_MEMORY_M20K_NO_ECC #(.WIDTH(6+2+2), .DEPTH_LOG2(`ADDR_WIDTH)) collectorMemory (
     // Write Side
     .wrclk(clk2x),
     .writeEnable(writeToCollector2x),
     .writeAddr(addrToCollector2x),
-    .dataIn(connectCountToCollector2x),
+    .dataIn({connectCountToCollector2x, 2'b00, connectCountToCollectorECC2x}),
     
     // Read Side
     .rdclk(clk),
     .readEnable(1'b1),
     .readAddr(curBotIndex),
-    .dataOut(connectCount),
-    .eccStatus(collectorECC)
+    .dataOut({connectCount, paddingECC, connectCountECC})
 );
 
 reg[`ADDR_WIDTH-1:0] curBotIndex_D; always @(posedge clk) if(!freezeCore) curBotIndex_D <= curBotIndex;
 wire resultValid_Pre; always @(posedge clk) resultValid <= resultValid_Pre;
 wire[EXTRA_DATA_WIDTH-1:0] extraDataOut_Pre; always @(posedge clk) extraDataOut <= extraDataOut_Pre;
-MEMORY_M20K #(.WIDTH(1+EXTRA_DATA_WIDTH), .DEPTH_LOG2(`ADDR_WIDTH)) isValidMemory (
+
+wire[1:0] isValidMemECC;
+smallECCEncoder encIsValidECC({isBotValid, extraDataIn}, isValidMemECC);
+
+
+wire[1:0] isValidMemECCOut;
+wire[1:0] isValidMemECCOutCheck;
+smallECCEncoder decIsValidECC({resultValid_Pre, extraDataOut_Pre}, isValidMemECCOutCheck);
+
+assign isBotValidECC = isValidMemECCOut != isValidMemECCOutCheck;
+
+MEMORY_M20K_NO_ECC #(.WIDTH(1+EXTRA_DATA_WIDTH+2), .DEPTH_LOG2(`ADDR_WIDTH)) isValidMemory (
     .clk(clk),
     
     // Write Side
     .writeEnable(!freezeCore),
     .writeAddr(curBotIndex_D),
-    .dataIn({isBotValid, extraDataIn}),
+    .dataIn({isBotValid, extraDataIn, isValidMemECC}),
     
     // Read Side
     .readEnable(!freezeCore), // Use the force-to-zero to zero out these outputs when frozen
     .readAddr(curBotIndex),
-    .dataOut({resultValid_Pre, extraDataOut_Pre}),
-    .eccStatus(isBotValidECC)
+    .dataOut({resultValid_Pre, extraDataOut_Pre, isValidMemECCOut})
 );
 
 endmodule

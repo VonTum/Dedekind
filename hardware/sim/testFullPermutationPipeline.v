@@ -28,7 +28,7 @@ initial begin
     rst = 0;
     fork
     begin
-    #2048
+    #8192
         longRST = 0;
         /*rst = 1;
         inputBotValid = 0;
@@ -56,7 +56,7 @@ initial begin
     //inputBotValid = 1;
 end
 
-parameter MEMSIZE = 2000;
+parameter MEMSIZE = 3000;
 reg[1+128+16+48-1:0] dataTable[MEMSIZE-1:0];
 initial $readmemb("FullPermutePipelineTestSetOpenCL7.mem", dataTable);
 
@@ -64,13 +64,15 @@ reg[47:0] resultsSums[MEMSIZE-1:0];
 reg[12:0] resultsCounts[MEMSIZE-1:0];
 //initial for(integer i = 0; i < MEMSIZE; i = i + 1) resultsTable[i] = 0;
 
-reg[$clog2(MEMSIZE)-1:0] inputIndex = 2;//3754;
-reg[$clog2(MEMSIZE)-1:0] outputIndex = 2;//3754;
+localparam TOP_IDX = 2003;
+
+reg[$clog2(MEMSIZE)-1:0] inputIndex = TOP_IDX+1;//3754;
+reg[$clog2(MEMSIZE)-1:0] outputIndex = TOP_IDX+1;//3754;
 
 always @(inputBotValid or inputIndex) if(inputIndex >= MEMSIZE) inputBotValid = 0;
 
 wire[127:0] bot = dataTable[inputIndex][128+16+48-1 : 16+48];
-wire[127:0] top = dataTable[0][128+16+48-1 : 16+48];
+wire[127:0] top = dataTable[TOP_IDX][128+16+48-1 : 16+48];
 wire[1:0] topChannel;
 wire doneTransmittingTop;
 topTransmitter topTransmitter (

@@ -52,6 +52,7 @@ streamingCountConnectedCore #(.EXTRA_DATA_WIDTH(1+6)) core (
     .clk(clk),
     .clk2x(clk2x),
     .rst(rst),
+    .longRST(longRST),
     .isActive2x(isActive2x),
     
     // Input side

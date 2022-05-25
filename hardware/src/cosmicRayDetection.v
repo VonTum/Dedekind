@@ -19,3 +19,14 @@ always @(posedge clk) begin
 end
 
 endmodule
+
+
+module smallECCEncoder(
+    input[7:0] data,
+    output[1:0] eccValue
+);
+
+assign eccValue = data[1:0] ^ data[3:2] ^ data[5:4] ^ data[7:6];
+
+endmodule
+

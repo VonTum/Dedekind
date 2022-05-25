@@ -45,8 +45,9 @@ assign oready = !processorAlmostFull && !topManagerStall && !rst;
 
 
 // Long reset generation
-reg[8:0] longRSTReg;
-wire longRSTWire = longRSTReg != 9'b111111111;
+localparam LONG_RST_TIME_LOG2 = 11;
+reg[LONG_RST_TIME_LOG2-1:0] longRSTReg;
+wire longRSTWire = longRSTReg != {LONG_RST_TIME_LOG2{1'b1}};
 always @(posedge clock) begin
     if(rst) begin
         longRSTReg <= 0;
