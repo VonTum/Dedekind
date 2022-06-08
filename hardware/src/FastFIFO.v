@@ -439,8 +439,6 @@ wire canReadNext = readAddr != canReadUpTo;
 
 reg memRead; always @(posedge rdclk) memRead <= canReadNext && readRequest;
 
-(* dont_merge *) reg storedAddrValid;
-(* dont_merge *) reg storedAddrValidForClear;
 always @(posedge rdclk) begin
     if(rdrst) begin
         readAddr <= 0;

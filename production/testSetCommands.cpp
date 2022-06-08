@@ -319,7 +319,26 @@ inline Monotonic<7> readMBFFromU64(const uint64_t* mbfsUINT64, NodeIndex idx) {
 	return mbf;
 } 
 
-void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::string outFileMem) {
+typedef std::uint32_t uint;
+uint bitReverse4(uint v) {
+  return ((v & 0x1) << 3) | ((v & 0x2) << 1) | ((v & 0x4) >> 1) | ((v & 0x8) >> 3);
+}
+// Very primitive shuffle for balancing out the load across a job. This divides the job into 16 chunks and intersperses them
+uint shuffleIndex(uint idx, uint workGroupSize) {
+  uint chunkOffset = workGroupSize >> 4;
+  uint mod = idx & 0xF;
+  uint div = idx >> 4;
+  return chunkOffset * bitReverse4(mod) + div;
+}
+// Shuffles blocks of 16 elements instead of individual elements. For better memory utilization
+uint shuffleClusters(uint idx, uint workGroupSize) {
+  uint block = idx >> 4;
+  uint idxInBlock = idx & 0xF;
+  uint numberOfBlocks = workGroupSize >> 4;
+  return (shuffleIndex(block, numberOfBlocks) << 4) | idxInBlock;
+}
+
+void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::string outFileMem, bool shuffle) {
 	std::vector<NodeIndex> topsToProcess;
 	for(size_t i = 0; i < topsIn.size(); i++) {
 		topsToProcess.push_back(NodeIndex(topsIn[i]));
@@ -348,11 +367,12 @@ void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::st
 		std::cout << "Waiting for top to process..." << std::endl;
 		JobInfo job = context.inputQueue.pop_wait().value();
 		NodeIndex top = job.bufStart[0] & 0x7FFFFFFF;
-		size_t jobSize = job.size();
+		size_t jobSize = job.size() & ~size_t(0xF);
 		std::cout << "Processing top " << top << '/' << currentlyProcessingTopMeThinks << " of size " << jobSize << std::endl;
 		Monotonic<Variables> topMBF = readMBFFromU64(mbfsUINT64, top);
 		for(size_t elementI = 0; elementI < jobSize; elementI++) {
-			NodeIndex elem = job.bufStart[elementI];
+			size_t selectedElement = shuffle ? shuffleClusters(elementI, jobSize) : elementI;
+			NodeIndex elem = job.bufStart[selectedElement];
 			bool isTop = elementI == 0;
 			//bool isTop = (uint32_t(elem) & 0x80000000) != 0;
 			Monotonic<Variables> botMBF = readMBFFromU64(mbfsUINT64, elem);
@@ -509,5 +529,5 @@ CommandSet testSetCommands{"Test Set Generation", {
 
 	{"FullPermutePipelineTestSetOpenCL", [](const std::string& sizeList) {FullPermutePipelineTestSetOpenCL(parseSizeList(sizeList), FileName::FullPermutePipelineTestSetOpenCLMem(7), FileName::FullPermutePipelineTestSetOpenCLCpp(7)); }},
 
-	{"GenTopsFullPermutePipelineTestSetOpenCL", [](const std::string& topList) {GenTopsFullPermutePipelineTestSetOpenCL(parseSizeList(topList), FileName::FullPermutePipelineTestSetOpenCLMem(7));}}
+	{"GenTopsFullPermutePipelineTestSetOpenCL", [](const std::string& topList) {GenTopsFullPermutePipelineTestSetOpenCL(parseSizeList(topList), FileName::FullPermutePipelineTestSetOpenCLMem(7), true);}}
 }};

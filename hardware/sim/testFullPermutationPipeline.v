@@ -56,18 +56,19 @@ initial begin
     //inputBotValid = 1;
 end
 
-parameter MEMSIZE = 3000;
+parameter MEMSIZE = 49000;
 reg[1+128+16+48-1:0] dataTable[MEMSIZE-1:0];
-initial $readmemb("FullPermutePipelineTestSetOpenCL7.mem", dataTable);
+initial $readmemb("FullPermutePipelineTestSetOpenCL7_shuffled_26950715.mem", dataTable);
 
 reg[47:0] resultsSums[MEMSIZE-1:0];
 reg[12:0] resultsCounts[MEMSIZE-1:0];
 //initial for(integer i = 0; i < MEMSIZE; i = i + 1) resultsTable[i] = 0;
 
-localparam TOP_IDX = 2003;
+localparam TOP_IDX = 0;
+localparam FIRST_BOT = 20000;
 
-reg[$clog2(MEMSIZE)-1:0] inputIndex = TOP_IDX+1;//3754;
-reg[$clog2(MEMSIZE)-1:0] outputIndex = TOP_IDX+1;//3754;
+reg[$clog2(MEMSIZE)-1:0] inputIndex = FIRST_BOT;
+reg[$clog2(MEMSIZE)-1:0] outputIndex = FIRST_BOT;
 
 always @(inputBotValid or inputIndex) if(inputIndex >= MEMSIZE) inputBotValid = 0;
 

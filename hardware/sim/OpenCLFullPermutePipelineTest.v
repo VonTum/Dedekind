@@ -66,7 +66,7 @@ wire[63:0] summedDataPcoeffCountOutB;
 wire[47:0] summedDataB = summedDataPcoeffCountOutB[47:0];
 wire[12:0] pcoeffCountB = summedDataPcoeffCountOutB[13+48-1:48];
 
-OpenCLFullPermutationPipeline #(.TOTAL_FPP_COUNT(3)) elementUnderTest (
+OpenCLFullPermutationPipeline #(.TOTAL_FPP_COUNT(2)) elementUnderTest (
     .clock(clock),
     .clock2x(clock2x),
     .resetn(!rst),

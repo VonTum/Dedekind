@@ -203,19 +203,17 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 
 		constexpr cl_uint JOB_SIZE_ALIGNMENT = 16*32; // Block Size 32, shuffle size 16
 
-		if(bufferSize % JOB_SIZE_ALIGNMENT != 0) {
-			cl_uint fillerCount = JOB_SIZE_ALIGNMENT - (bufferSize % JOB_SIZE_ALIGNMENT);
+		for(; (bufferSize+2) % JOB_SIZE_ALIGNMENT != 0; bufferSize++) {
+			job.bufStart[bufferSize++] = mbfCounts[7] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
+		}
 
-			for(cl_uint i = 0; i < fillerCount; i++) {
-				job.bufStart[bufferSize++] = mbfCounts[7] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
-			}
+		for(size_t i = 0; i < 2; i++) {
+			job.bufStart[bufferSize++] = 0x80000000; // Tops at the end for stats collection
 		}
 
 		assert(bufferSize % JOB_SIZE_ALIGNMENT == 0);
-
-		/*for(size_t i = 0; i < JOB_SIZE_ALIGNMENT; i++) {
-			job.bufStart[bufferSize++] = 0x80000000; // Tops at the end for stats collection
-		}*/
+		
+		std::cout << "Resulting buffer size: " << bufferSize << std::endl;
 
 		if(SHOW_TAIL != 0) {
 			std::cout << "Tail: " << std::endl;
@@ -306,6 +304,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 
 			for(const NodeIndex* curBot = job.begin(); curBot != job.end(); curBot++) {
 				size_t index = job.indexOf(curBot);
+				if(countConnectedSumBuf[index] & 0xE000000000000000 != 0) std::cout << "[ECC ECC]" << std::flush;
 				if(countConnectedSumBuf[index] != countConnectedSumBufCPU[index]) {
 					std::cout << "[!!!!!!!] Mistake found at position " << index << "/" << index << ": ";
 					std::cout << "FPGA: {" << getPCoeffSum(countConnectedSumBuf[index]) << "; " << getPCoeffCount(countConnectedSumBuf[index]) << "} ";

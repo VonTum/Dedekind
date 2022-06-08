@@ -26,27 +26,6 @@ module streamingCountConnectedCore #(parameter EXTRA_DATA_WIDTH = 1) (
     output reg eccStatus
 );
 
-reg[31:0] validIn_COUNT;
-reg[31:0] validOut_COUNT;
-
-reg[31:0] batchDoneIn_COUNT;
-reg[31:0] batchDoneOut_COUNT;
-
-always @(posedge clk) begin
-    if(rst) begin
-        validIn_COUNT <= 0;
-        validOut_COUNT <= 0;
-        batchDoneIn_COUNT <= 0;
-        batchDoneOut_COUNT <= 0;
-    end else begin
-        if(isBotValid === 1'b1) validIn_COUNT <= validIn_COUNT + 1;
-        if(resultValid === 1'b1) validOut_COUNT <= validOut_COUNT + 1;
-        if(extraDataIn === 1'b1) batchDoneIn_COUNT <= batchDoneIn_COUNT + 1;
-        if(extraDataOut === 1'b1) batchDoneOut_COUNT <= batchDoneOut_COUNT + 1;
-    end
-end
-
-
 (* dont_merge *) reg pipelineRST; always @(posedge clk) pipelineRST <= rst;
 
 wire collectorECC; reg collectorECC_D; always @(posedge clk) collectorECC_D <= collectorECC;
@@ -58,19 +37,17 @@ always @(posedge clk) eccStatus <= (!longRST && ((collectorECC_D && resultValid_
 
 reg[`ADDR_WIDTH-1:0] curBotIndex = 0;
 always @(posedge clk) begin
-`ifdef ALTERA_RESERVED_QIS
-    if(!freezeCore) curBotIndex <= curBotIndex + 1;
-`elsif SYNTHESIS
-    if(!freezeCore) curBotIndex <= curBotIndex + !freezeCore;
-`else
+`ifdef XILINX_SIMULATOR
     /* 
     FreezeCore being uninitialized at the start makes curBotIndex undefined for the whole duration of the run
     It doesn't matter in practice what the value of curBotIndex is, as long as each value is repeated every 512 cycles. 
     The synthesis guards allow this non-synthesizeable fix to exist
     */
     if(freezeCore !== 1'bX && freezeCore !== 1'bZ) begin
-        if(!freezeCore) curBotIndex <= curBotIndex + !freezeCore;
+        curBotIndex <= curBotIndex + !freezeCore;
     end
+`else
+    curBotIndex <= curBotIndex + !freezeCore;
 `endif
 end
 
@@ -85,9 +62,8 @@ synchronizer pipelineRSTSynchronizer(clk, pipelineRST, clk2x, pipelineRST2x);
 (* dont_merge *) reg inputFIFORST2x; always @(posedge clk2x) inputFIFORST2x <= pipelineRST2x;
 (* dont_merge *) reg cccRST2x; always @(posedge clk2x) cccRST2x <= pipelineRST2x;
 
-// request Pipe has 1 cycle, FIFO has 5 cycles read latency, dataOut pipe has 0 cycles
-`define FIFO_READ_LATENCY (1+5+0)
-(* dont_merge *) reg requestGraph2xD; always @(posedge clk2x) requestGraph2xD <= requestGraph2x;
+// request Pipe has 0 cycle, FIFO has 5 cycles read latency, dataOut pipe has 0 cycles
+`define FIFO_READ_LATENCY (0+5+0)
 wire inputFifoECC2x;
 FastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(6), .ALMOST_FULL_MARGIN(10)) inputFIFO (// 7 cycles turnaround. 3 margin cycles
     // input side
@@ -100,7 +76,7 @@ FastDualClockFIFO_M20K #(.WIDTH(128+`ADDR_WIDTH), .DEPTH_LOG2(6), .ALMOST_FULL_M
     // output side
     .rdclk(clk2x),
     .rdrst(inputFIFORST2x),
-    .readRequest(requestGraph2xD),
+    .readRequest(requestGraph2x),
     .dataOut({graphToComputeModule2x, addrToComputeModule2x}), // Forced to 0 if not inputFifoValid2x
     .dataOutValid(inputFifoValid2x),
     

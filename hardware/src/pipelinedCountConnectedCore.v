@@ -1,10 +1,10 @@
 `timescale 1ns / 1ps
 
-`define NEW_SEED_HASBIT_DEPTH 3
+`define NEW_SEED_HASBIT_DEPTH 2
 `define NEW_SEED_HASBIT_OFFSET (1+`NEW_SEED_HASBIT_DEPTH)
 `define NEW_SEED_DEPTH (`NEW_SEED_HASBIT_DEPTH+1)
-`define EXPLORATION_DOWN_OFFSET 11
-`define EXPLORATION_DEPTH 14
+`define EXPLORATION_DOWN_OFFSET 7
+`define EXPLORATION_DEPTH 10
 
 `define OFFSET_NSD `NEW_SEED_DEPTH
 `define OFFSET_MID (`OFFSET_NSD+2)
@@ -21,27 +21,27 @@ module hasFirstBitAnalysis (
     output reg isEmpty
 );
 
-reg[31:0] hasBit4;
+wire[31:0] hasBit4;
 reg[31:0] hasBit4D; always @(posedge clk) hasBit4D <= hasBit4;
-reg[7:0] hasBit16;
-wire[8:0] firstBit16;
+reg[7:0] hasBit16D;
+wire[8:0] firstBit16D;
 genvar i;
 generate
-for(i = 0; i < 32; i = i + 1) begin always @(posedge clk) hasBit4[i] <= |graphIn[i*4+:4]; end
-for(i = 0; i < 8; i = i + 1) begin always @(posedge clk) hasBit16[i] <= |hasBit4[i*4+:4]; end
-assign firstBit16[0] = 1;
-assign firstBit16[1] = !hasBit16[0];
-for(i = 2; i < 9; i = i + 1) begin assign firstBit16[i] = firstBit16[i-1] && !hasBit16[i-1]; end
+for(i = 0; i < 32; i = i + 1) begin assign hasBit4[i] = |graphIn[i*4+:4]; end
+for(i = 0; i < 8; i = i + 1) begin always @(posedge clk) hasBit16D[i] <= |hasBit4[i*4+:4]; end
+assign firstBit16D[0] = 1;
+assign firstBit16D[1] = !hasBit16D[0];
+for(i = 2; i < 9; i = i + 1) begin assign firstBit16D[i] = firstBit16D[i-1] && !hasBit16D[i-1]; end
 for(i = 0; i < 8; i = i + 1) begin
     always @(posedge clk) begin
-        firstBit4[4*i] <= firstBit16[i];
-        firstBit4[4*i+1] <= firstBit16[i] && !hasBit4D[4*i];
-        firstBit4[4*i+2] <= firstBit16[i] && !hasBit4D[4*i] && !hasBit4D[4*i+1];
-        firstBit4[4*i+3] <= firstBit16[i] && !hasBit4D[4*i] && !hasBit4D[4*i+1] && !hasBit4D[4*i+2];
+        firstBit4[4*i] <= firstBit16D[i];
+        firstBit4[4*i+1] <= firstBit16D[i] && !hasBit4D[4*i];
+        firstBit4[4*i+2] <= firstBit16D[i] && !hasBit4D[4*i] && !hasBit4D[4*i+1];
+        firstBit4[4*i+3] <= firstBit16D[i] && !hasBit4D[4*i] && !hasBit4D[4*i+1] && !hasBit4D[4*i+2];
     end
 end
 endgenerate
-always @(posedge clk) isEmpty <= firstBit16[8];
+always @(posedge clk) isEmpty <= firstBit16D[8];
 
 endmodule
 
@@ -108,15 +108,15 @@ wire[127:0] leftoverGraph_A;
 wire[127:0] leftoverGraph_B;
 wire[127:0] leftoverGraph_C;
 wire[127:0] leftoverGraph_PRE_DOWN;
-hyperpipe #(.CYCLES(2), .WIDTH(128)) leftoverGraphPipeA (clk, leftoverGraph, leftoverGraph_A);
-hyperpipe #(.CYCLES(3), .WIDTH(128)) leftoverGraphPipeB (clk, leftoverGraph_A, leftoverGraph_B);
-hyperpipe #(.CYCLES(3), .WIDTH(128)) leftoverGraphPipeC (clk, leftoverGraph_B, leftoverGraph_C);
-hyperpipe #(.CYCLES(3), .WIDTH(128)) leftoverGraphPipeD (clk, leftoverGraph_C, leftoverGraph_PRE_DOWN);
+hyperpipe #(.CYCLES(1), .WIDTH(128)) leftoverGraphPipeA (clk, leftoverGraph, leftoverGraph_A);
+hyperpipe #(.CYCLES(2), .WIDTH(128)) leftoverGraphPipeB (clk, leftoverGraph_A, leftoverGraph_B);
+hyperpipe #(.CYCLES(2), .WIDTH(128)) leftoverGraphPipeC (clk, leftoverGraph_B, leftoverGraph_C);
+hyperpipe #(.CYCLES(2), .WIDTH(128)) leftoverGraphPipeD (clk, leftoverGraph_C, leftoverGraph_PRE_DOWN);
 
-wire[127:0] monotonizedUp_A; pipelinedMonotonizeUp #(0,1,0,0,1,0,0) mUpA(clk, curExtendingIn, monotonizedUp_A); reg[127:0] mUp_A_R; always @(posedge clk) mUp_A_R <= monotonizedUp_A & leftoverGraph_A;
-wire[127:0] monotonizedDown_B; pipelinedMonotonizeDown #(0,1,0,0,1,0,0) mDownB(clk, mUp_A_R, monotonizedDown_B); reg[127:0] mDown_B_R; always @(posedge clk) mDown_B_R <= monotonizedDown_B & leftoverGraph_B;
-wire[127:0] monotonizedUp_C; pipelinedMonotonizeUp #(0,1,0,0,1,0,0) mUpC(clk, mDown_B_R, monotonizedUp_C); reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_C & leftoverGraph_C;
-wire[127:0] monotonizedDown_PRE_DOWN; pipelinedMonotonizeDown #(0,1,0,0,1,0,0) mDownD(clk, midPoint_MID, monotonizedDown_PRE_DOWN);
+wire[127:0] monotonizedUp_A; pipelinedMonotonizeUp #(0,0,0,1,0,0,0) mUpA(clk, curExtendingIn, monotonizedUp_A); reg[127:0] mUp_A_R; always @(posedge clk) mUp_A_R <= monotonizedUp_A & leftoverGraph_A;
+wire[127:0] monotonizedDown_B; pipelinedMonotonizeDown #(0,0,0,1,0,0,0) mDownB(clk, mUp_A_R, monotonizedDown_B); reg[127:0] mDown_B_R; always @(posedge clk) mDown_B_R <= monotonizedDown_B & leftoverGraph_B;
+wire[127:0] monotonizedUp_C; pipelinedMonotonizeUp #(0,0,0,1,0,0,0) mUpC(clk, mDown_B_R, monotonizedUp_C); reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_C & leftoverGraph_C;
+wire[127:0] monotonizedDown_PRE_DOWN; pipelinedMonotonizeDown #(0,0,0,1,0,0,0) mDownD(clk, midPoint_MID, monotonizedDown_PRE_DOWN);
 
 // Instead of this
 //reg[127:0] midPoint_MID; always @(posedge clk) midPoint_MID <= monotonizedUp_PRE_MID & leftoverGraphIn_PRE_MID;
