@@ -75,6 +75,20 @@ inline uint64_t deserializeU64(const uint8_t* outputBuf) {
 	return result;
 }
 
+inline void serializeU128(__uint128_t value, uint8_t* outputBuf) {
+	for(size_t i = 0; i < 16; i++) {
+		*outputBuf++ = static_cast<uint8_t>(value >> (120 - i * 8));
+	}
+}
+
+inline __uint128_t deserializeU128(const uint8_t* outputBuf) {
+	__uint128_t result = 0;
+	for(size_t i = 0; i < 16; i++) {
+		result |= static_cast<__uint128_t>(*outputBuf++) << (120 - i * 8);
+	}
+	return result;
+}
+
 template<unsigned int Variables>
 constexpr size_t getMBFSizeInBytes() {
 	return ((1 << Variables) + 7) / 8;
@@ -168,6 +182,7 @@ MAKE_SERIALIZER(uint16_t, serializeU16, deserializeU16, 2);
 MAKE_SERIALIZER(uint32_t, serializeU32, deserializeU32, 4);
 MAKE_SERIALIZER(uint64_t, serializeU48, deserializeU48, 6);
 MAKE_SERIALIZER(uint64_t, serializeU64, deserializeU64, 8);
+MAKE_SERIALIZER(__uint128_t, serializeU128, deserializeU128, 16);
 
 MAKE_VARIABLE_SERIALIZER(BooleanFunction<Variables>, serializeBooleanFunction, deserializeBooleanFunction, getMBFSizeInBytes<Variables>());
 MAKE_VARIABLE_SERIALIZER(Monotonic<Variables>, serializeMBF, deserializeMBF, getMBFSizeInBytes<Variables>());
@@ -236,4 +251,19 @@ std::vector<TopBots<Variables>> readTopBots(size_t limitSize) {
 	if(!benchFile.is_open()) throw "File not opened!";
 
 	return deserializeVector(benchFile, limitSize, deserializeTopBots<Variables>);
+}
+
+
+template<typename T>
+void serializePODVector(const std::vector<T>& data, std::ostream& outFile) {
+	serializeU64(data.size(), outFile);
+	outFile.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(T));
+}
+
+template<typename T>
+std::vector<T> deserializePODVector(std::istream& inFile) {
+	uint64_t size = deserializeU64(inFile);
+	std::vector<T> vec(size);
+	inFile.read(reinterpret_cast<char*>(vec.data()), size * sizeof(T));
+	return vec;
 }

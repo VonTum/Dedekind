@@ -35,6 +35,7 @@ add_library(dedelib
   dedelib/configure.cpp
   dedelib/terminalColor.cpp
   dedelib/flatPCoeffProcessing.cpp
+  dedelib/supercomputerJobs.cpp
 
   dedelib/bigint/uint128_t.cpp
   dedelib/bigint/uint256_t.cpp

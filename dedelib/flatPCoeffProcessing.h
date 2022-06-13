@@ -148,6 +148,11 @@ void cpuProcessor_FineMultiThread(const FlatMBFStructure<Variables>& allMBFData,
 // Requires a Processor function of type void(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context)
 template<unsigned int Variables, size_t BatchSize, typename Processor>
 std::vector<BetaResult> pcoeffPipeline(const FlatMBFStructure<Variables>& allMBFData, const std::vector<NodeIndex>& topIndices, const Processor& processorFunc, size_t numberOfInputBuffers, size_t numberOfOutputBuffers) {
+	if(numberOfInputBuffers < BatchSize) {
+		std::cerr << "Too few input buffers!" << std::endl;
+		std::abort();
+	}
+	
 	PCoeffProcessingContext context(Variables, numberOfInputBuffers, numberOfOutputBuffers);
 
 	std::vector<BetaResult> results;
@@ -201,8 +206,11 @@ void processDedekindNumber(const Processor& processorFunc, size_t numberOfInputB
 	std::cout << "Starting Computation..." << std::endl;
 	std::vector<BetaResult> betaResults = pcoeffPipeline<Variables, BatchSize, Processor>(allMBFData, topsToProcess, processorFunc, numberOfInputBuffers, numberOfOutputBuffers);
 
+	BetaResultCollector collector(Variables);
+	collector.addBetaResults(betaResults);
+
 	std::cout << "Computation finished." << std::endl;
-	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, betaResults);
+	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, collector.getResultingSums());
 
 	std::cout << "D(" << (Variables + 2) << ") = " << dedekindNumber << std::endl;
 }

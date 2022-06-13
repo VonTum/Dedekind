@@ -451,24 +451,63 @@ void computeBatchBetaSums(const FlatMBFStructure<Variables>& allMBFData, JobBatc
 
 
 struct BetaResult {
-	NodeIndex topIndex;
 	BetaSum betaSum;
+	NodeIndex topIndex;
+};
+
+class BetaResultCollector {
+	std::vector<BetaSum> allBetaSums;
+	std::vector<bool> hasSeenResult;
+
+public:
+	BetaResultCollector(unsigned int Variables) :
+		allBetaSums(mbfCounts[Variables]),
+		hasSeenResult(mbfCounts[Variables], false) {}
+	
+	void addBetaResult(BetaResult result) {
+		if(hasSeenResult[result.topIndex]) {
+			std::cerr << "Error: Duplicate beta result for topIdx " << result.topIndex << "! Aborting!" << std::endl;
+			std::abort();
+		} else {
+			hasSeenResult[result.topIndex] = true;
+			allBetaSums[result.topIndex] = result.betaSum;
+		}
+	}
+	void addBetaResults(const std::vector<BetaResult>& results) {
+		for(BetaResult r : results) {
+			this->addBetaResult(r);
+		}
+	}
+
+	std::vector<BetaSum> getResultingSums() {
+		for(size_t i = 0; i < hasSeenResult.size(); i++) {
+			if(!hasSeenResult[i]) {
+				std::cerr << "No Result for top index " << i << " computation not complete! Aborting!";
+				std::abort();
+			}
+		}
+		return allBetaSums;
+	}
 };
 
 template<unsigned int Variables>
-u192 computeDedekindNumberFromBetaSums(const FlatMBFStructure<Variables>& allMBFData, const std::vector<BetaResult>& betaResults) {
-	assert(betaResults.size() == mbfCounts[Variables]);
+u192 computeDedekindNumberFromBetaSums(const FlatMBFStructure<Variables>& allMBFData, const std::vector<BetaSum>& betaSums) {
+	if(betaSums.size() != mbfCounts[Variables]) {
+		std::cerr << "Incorrect number of beta sums! Aborting!" << std::endl;
+		std::abort();
+	}
 	u192 total = 0;
-	for(const BetaResult& betaResult : betaResults) {
-		ClassInfo topInfo = allMBFData.allClassInfos[betaResult.topIndex];
+	for(size_t i = 0; i < betaSums.size(); i++) {
+		BetaSum betaSum = betaSums[i];
+		ClassInfo topInfo = allMBFData.allClassInfos[i];
 		
 		// invalid for DEDUPLICATION
 #ifndef PCOEFF_DEDUPLICATE
-		if(betaResult.betaSum.countedIntervalSizeDown != topInfo.intervalSizeDown) throw "INVALID!";
+		if(betaSum.countedIntervalSizeDown != topInfo.intervalSizeDown) throw "INVALID!";
 #endif
-		uint64_t topIntervalSizeUp = allMBFData.allClassInfos[allMBFData.allNodes[betaResult.topIndex].dual].intervalSizeDown;
+		uint64_t topIntervalSizeUp = allMBFData.allClassInfos[allMBFData.allNodes[i].dual].intervalSizeDown;
 		uint64_t topFactor = topIntervalSizeUp * topInfo.classSize; // max log2(2414682040998*5040) = 53.4341783883
-		total += umul192(betaResult.betaSum.betaSum, topFactor);
+		total += umul192(betaSum.betaSum, topFactor);
 	}
 	return total;
 }
@@ -511,7 +550,10 @@ u192 flatDPlus2() {
 		}
 	}
 	
-	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, betaResults);
+	BetaResultCollector collector(Variables);
+	collector.addBetaResults(betaResults);
+
+	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, collector.getResultingSums());
 	std::cout << "D(" << (Variables + 2) << ") = " << dedekindNumber << std::endl;
 
 	for(size_t i = 0; i < BatchSize; i++) {
