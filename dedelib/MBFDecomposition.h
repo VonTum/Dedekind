@@ -173,13 +173,13 @@ inline size_t serializeLinkedNodeList(const LinkedNode* ln, size_t count, uint8_
 
 template<unsigned int Variables>
 void sortAndComputeLinks(std::ifstream& allClassesSorted, std::ofstream& outputMBFs, std::ofstream& linkNodeFile) {
-	//Monotonic<Variables>* buf = new Monotonic<Variables>[getMaxLayerSize<Variables>()];
+	//Monotonic<Variables>* buf = new Monotonic<Variables>[getMaxLayerSize(Variables)];
 
 	BufferedSet<Monotonic<Variables>> prevSet;
 	for(size_t layer = 0; layer <= (1 << Variables); layer++) {
 		std::cout << "Baking layer " << layer << "\n";
 
-		size_t curLayerSize = getLayerSize<Variables>(layer);
+		size_t curLayerSize = layerSizes[Variables][layer];
 		BufferedSet<Monotonic<Variables>> fisSet(curLayerSize);
 
 		for(size_t i = 0; i < curLayerSize; i++) {
@@ -218,7 +218,7 @@ void sortAndComputeLinks(std::ifstream& allClassesSorted, std::ofstream& outputM
 template<unsigned int Variables>
 void computeLinksForMap() {
 	std::ifstream mapFile(FileName::allIntervalSymmetries(Variables));
-	//Monotonic<Variables>* buf = new Monotonic<Variables>[getMaxLayerSize<Variables>()];
+	//Monotonic<Variables>* buf = new Monotonic<Variables>[getMaxLayerSize(Variables)];
 
 	for(size_t layer = 0; layer <= (1 << Variables); layer++) {
 		if(layer != 0) { // skip first layer, nothing links to first layer
@@ -284,8 +284,8 @@ struct FullMBFHashSet {
 	FullMBFHashSet(std::ifstream& inputFile) : mbfs(new Monotonic<Variables>[mbfCounts[Variables]]), bufSets(new BakedSet<Monotonic<Variables>>[(1 << Variables) + 1]) {
 		Monotonic<Variables>* curBufOffset = mbfs;
 		for(size_t i = 0; i < (1 << Variables) + 1; i++) {
-			bufSets[i] = BakedSet<Monotonic<Variables>>(curBufOffset, getLayerSize<Variables>(i));
-			curBufOffset += getLayerSize<Variables>(i);
+			bufSets[i] = BakedSet<Monotonic<Variables>>(curBufOffset, layerSizes[Variables][i]);
+			curBufOffset += layerSizes[Variables][i];
 		}
 	}
 
@@ -328,7 +328,7 @@ struct MBFDecomposition {
 
 	constexpr static size_t LAYER_COUNT = (size_t(1) << Variables) + 1;
 
-	MBFDecomposition() : layers(new Layer[LAYER_COUNT]), allOffsets(new LinkBufPtr[mbfCounts[Variables]]), allFullBufs(new LinkedNode[getTotalLinkCount<Variables>()]), allFibs(new Monotonic<Variables>[mbfCounts[Variables]]) {
+	MBFDecomposition() : layers(new Layer[LAYER_COUNT]), allOffsets(new LinkBufPtr[mbfCounts[Variables]]), allFullBufs(new LinkedNode[getTotalLinkCount(Variables)]), allFibs(new Monotonic<Variables>[mbfCounts[Variables]]) {
 		LinkBufPtr* curOffsets = allOffsets;
 		LinkedNode* curFullBufs = allFullBufs;
 		Monotonic<Variables>* curFibs = allFibs;
@@ -338,9 +338,9 @@ struct MBFDecomposition {
 			layers[i].fullBuf = curFullBufs;
 			layers[i].bf = curFibs;
 
-			curOffsets += getLayerSize<Variables>(i);
-			curFullBufs += getLinkCount<Variables>(i);
-			curFibs += getLayerSize<Variables>(i);
+			curOffsets += layerSizes[Variables][i];
+			curFullBufs += linkCounts[Variables][i];
+			curFibs += layerSizes[Variables][i];
 		}
 	}
 
@@ -394,11 +394,11 @@ struct MBFDecompositionWithHash : public MBFDecomposition<Variables> {
 		new(&this->hashsets[0]) BakedSet<Monotonic<Variables>>(startSet, this->layers[0].bf);
 
 		for(size_t layer = 1; layer < (1 << Variables); layer++) {
-			BufferedSet<Monotonic<Variables>> newBufSet(getLayerSize<Variables>(layer));
+			BufferedSet<Monotonic<Variables>> newBufSet(layerSizes[Variables][layer]);
 
 			const BakedSet<Monotonic<Variables>>& prevSet = this->hashsets[layer - 1];
 
-			for(size_t elem = 0; elem < getLayerSize<Variables>(layer); elem++) {
+			for(size_t elem = 0; elem < layerSizes[Variables][layer]; elem++) {
 				const Monotonic<Variables>& curFibs = prevSet[elem];
 
 				std::pair<Monotonic<Variables>, int> expandedMBFBuf[MAX_EXPANSION];
@@ -409,7 +409,7 @@ struct MBFDecompositionWithHash : public MBFDecomposition<Variables> {
 					newBufSet.getOrAdd(curExpanded->first);
 				}
 			}
-			assert(newBufSet.size() == getLayerSize<Variables>(layer));
+			assert(newBufSet.size() == layerSizes[Variables][layer]);
 
 			new(&this->hashsets[layer]) BakedSet<Monotonic<Variables>>(newBufSet, this->layers[layer].bf);
 		}
@@ -428,7 +428,7 @@ MBFDecomposition<Variables> readFullMBFDecomposition() {
 	MBFDecomposition<Variables> result;
 
 	for(int i = 0; i < (1 << Variables); i++) {
-		getLinkLayer(linkFile, getLayerSize<Variables>(i), result.layers[i].offsets, result.layers[i].fullBuf); // before layers
+		getLinkLayer(linkFile, layerSizes[Variables][i], result.layers[i].offsets, result.layers[i].fullBuf); // before layers
 	}
 	linkFile.close();
 
@@ -439,7 +439,7 @@ MBFDecomposition<Variables> readFullMBFDecomposition() {
 
 	uint8_t buf[getMBFSizeInBytes<Variables>()];
 	for(int layer = 0; layer < (1 << Variables); layer++) {
-		for(int mbfI = 0; mbfI < getLayerSize<Variables>(layer); mbfI++) {
+		for(int mbfI = 0; mbfI < layerSizes[Variables][layer]; mbfI++) {
 			mbfFile.read(reinterpret_cast<char*>(buf), getMBFSizeInBytes<Variables>());
 			result.layers[layer].bf[mbfI] = deserializeMBF<Variables>(buf);
 		}
@@ -458,15 +458,15 @@ std::pair<std::array<uint64_t, (1 << Variables)>, uint64_t> computeIntervalSize(
 	std::ifstream linkFile(linkName, std::ios::binary);
 	assert(linkFile.is_open());
 
-	LinkBufPtr* offsetBuf = new LinkBufPtr[getMaxLayerSize<Variables>()];
-	LinkedNode* linkBuf = new LinkedNode[getMaxLinkCount<Variables>()];
+	LinkBufPtr* offsetBuf = new LinkBufPtr[getMaxLayerSize(Variables)];
+	LinkedNode* linkBuf = new LinkedNode[getMaxLinkCount(Variables)];
 
 	for(int i = 0; i < nodeLayer; i++) {
-		//getLinkLayer(linkFile, getLayerSize<Variables>(i), offsetBuf, linkBuf);
-		skipLinkLayer(linkFile, getLayerSize<Variables>(i), getLinkCount<Variables>(i)); // before layers
+		//getLinkLayer(linkFile, layerSizes[Variables][i], offsetBuf, linkBuf);
+		skipLinkLayer(linkFile, layerSizes[Variables][i], linkCounts[Variables][i]); // before layers
 	}
 
-	//getLinkLayer(linkFile, getLayerSize<Variables>(nodeLayer-1), offsetBuf, linkBuf); // start layer
+	//getLinkLayer(linkFile, layerSizes[Variables][nodeLayer-1], offsetBuf, linkBuf); // start layer
 
 	SwapperLayers<Variables, int> swapper{};
 	swapper.dest(nodeIndex) += 1;
@@ -479,7 +479,7 @@ std::pair<std::array<uint64_t, (1 << Variables)>, uint64_t> computeIntervalSize(
 	uint64_t intervalSize = 1;
 
 	for(int i = nodeLayer; i < (1 << Variables); i++) {
-		getLinkLayer(linkFile, getLayerSize<Variables>(i), offsetBuf, linkBuf); // downstream layers
+		getLinkLayer(linkFile, layerSizes[Variables][i], offsetBuf, linkBuf); // downstream layers
 
 		//std::cout << "checking layer " << i << "\n";
 

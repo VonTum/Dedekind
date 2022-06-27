@@ -39,7 +39,7 @@ void computeIntervalSizesNaive() {
 			cur.value = total;
 		});
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
-		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << layerSizes[Variables][layer] << " mbfs at " << (timeTaken.count() / 1000.0 / layerSizes[Variables][layer]) << "us per mbf" << std::endl;
 
 		uint64_t deoptimizeTotal = 0;
 		for(auto& item : allMBFs.layers[layer]) {
@@ -70,7 +70,7 @@ void computeIntervalSizesFast() {
 			cur.value = intervalSizeFast(MBF::getBot(), cur.key);
 		});
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
-		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << layerSizes[Variables][layer] << " mbfs at " << (timeTaken.count() / 1000.0 / layerSizes[Variables][layer]) << "us per mbf" << std::endl;
 
 		uint64_t deoptimizeTotal = 0;
 		for(auto& item : allMBFs.layers[layer]) {
@@ -151,7 +151,7 @@ void computeIntervals() {
 			cur.value = computeExtendedIntervalOf(prevLayer, cur.key);
 		}
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
-		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << layerSizes[Variables][layer] << " mbfs at " << (timeTaken.count() / 1000.0 / layerSizes[Variables][layer]) << "us per mbf" << std::endl;
 
 		{
 			std::ofstream intervalsFile(FileName::allIntervals(Variables), std::ios::binary | std::ios::app);
@@ -211,7 +211,7 @@ void computeIntervalsParallel() {
 			cur.value = computeExtendedIntervalOf(prevLayer, cur.key);
 		});
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
-		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(layer) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(layer)) << "us per mbf" << std::endl;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << layerSizes[Variables][layer] << " mbfs at " << (timeTaken.count() / 1000.0 / layerSizes[Variables][layer]) << "us per mbf" << std::endl;
 		
 		{
 			std::ofstream intervalsFile(FileName::allIntervals(Variables), std::ios::binary | std::ios::app);

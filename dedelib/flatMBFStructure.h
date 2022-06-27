@@ -30,7 +30,7 @@ template<unsigned int Variables>
 class FlatMBFStructure {
 public:
 	constexpr static size_t MBF_COUNT = mbfCounts[Variables];
-	constexpr static size_t LINK_COUNT = getTotalLinkCount<Variables>();
+	constexpr static size_t LINK_COUNT = getTotalLinkCount(Variables);
 	
 	
 	const Monotonic<Variables>* mbfs; // sized MBF_COUNT == mbfCounts[Variables]
@@ -39,36 +39,6 @@ public:
 	const NodeOffset* allLinks; // sized LINK_COUNT == getTotalLinkCount<Variables>()
 
 	bool useFlatBufferManagement = false;
-
-	struct CachedOffsets {
-		// these help us to find the nodes of each layer
-		NodeIndex nodeLayerOffsets[(1 << Variables) + 2];
-
-		constexpr CachedOffsets() : nodeLayerOffsets{} {
-			nodeLayerOffsets[0] = 0;
-			for(size_t i = 0; i <= (1 << Variables); i++) {
-				nodeLayerOffsets[i+1] = nodeLayerOffsets[i] + getLayerSize<Variables>(i);
-			}
-		}
-
-		constexpr NodeIndex operator[](size_t i) const {return nodeLayerOffsets[i];}
-	};
-	constexpr static CachedOffsets cachedOffsets = CachedOffsets();
-
-	static int getLayer(NodeIndex nodeIndex) {
-		assert(nodeIndex < mbfCounts[Variables]);
-		for(int layer = 0; layer <= 1 << Variables; layer++) {
-			if(cachedOffsets[layer+1] > nodeIndex) {
-				return layer;
-			}
-		}
-		// unreachable
-		#ifdef __GNUC__
-		__builtin_unreachable();
-		#else
-		assert(false);
-		#endif
-	}
 
 	// these are written by either the generation code, or from a file read / memory map
 	FlatMBFStructure() : mbfs(nullptr), allClassInfos(nullptr), allNodes(nullptr), allLinks(nullptr) {}
@@ -145,7 +115,3 @@ FlatMBFStructure<Variables> readFlatMBFStructure(bool enableMBFs = true, bool en
 
 	return structure;
 }
-
-
-
-

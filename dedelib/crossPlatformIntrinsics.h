@@ -21,16 +21,16 @@ inline int popcnt8(uint8_t x) {
 	return __popcnt16(x);
 }
 #else
-inline int popcnt64(uint64_t x) {
+__always_inline int popcnt64(uint64_t x) {
 	return __builtin_popcountll(x);
 }
-inline int popcnt32(uint32_t x) {
+__always_inline int popcnt32(uint32_t x) {
 	return __builtin_popcountl(x);
 }
-inline int popcnt16(uint16_t x) {
+__always_inline int popcnt16(uint16_t x) {
 	return __builtin_popcount(x);
 }
-inline int popcnt8(uint8_t x) {
+__always_inline int popcnt8(uint8_t x) {
 	return __builtin_popcount(x);
 }
 #endif
@@ -57,16 +57,16 @@ inline int ctz8(uint8_t x) {
 	return static_cast<int>(ret);
 }
 #else
-inline int ctz64(uint64_t x) {
+__always_inline int ctz64(uint64_t x) {
 	return __builtin_ctzll(x);
 }
-inline int ctz32(uint32_t x) {
+__always_inline int ctz32(uint32_t x) {
 	return __builtin_ctzl(x);
 }
-inline int ctz16(uint16_t x) {
+__always_inline int ctz16(uint16_t x) {
 	return __builtin_ctz(x);
 }
-inline int ctz8(uint8_t x) {
+__always_inline int ctz8(uint8_t x) {
 	return __builtin_ctz(x);
 }
 #endif
@@ -93,16 +93,16 @@ inline int clz8(uint8_t x) {
 	return static_cast<int>(ret);
 }
 #else
-inline int clz64(uint64_t x) {
+__always_inline int clz64(uint64_t x) {
 	return __builtin_clzll(x) ^ (sizeof(unsigned long long) * 8 - 1); // gcc can optimize these into a single 'bsr' instruction
 }
-inline int clz32(uint32_t x) {
+__always_inline int clz32(uint32_t x) {
 	return __builtin_clzl(x) ^ (sizeof(unsigned long) * 8 - 1);
 }
-inline int clz16(uint16_t x) {
+__always_inline int clz16(uint16_t x) {
 	return __builtin_clz(x) ^ (sizeof(unsigned int) * 8 - 1);
 }
-inline int clz8(uint8_t x) {
+__always_inline int clz8(uint8_t x) {
 	return __builtin_clz(x) ^ (sizeof(unsigned int) * 8 - 1);
 }
 #endif

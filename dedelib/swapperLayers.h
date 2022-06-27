@@ -4,10 +4,10 @@
 
 template<unsigned int Variables, typename T>
 class SwapperLayers {
-	static constexpr size_t MAX_SIZE = getMaxLayerSize<Variables>();
+	static constexpr size_t MAX_SIZE = getMaxLayerSize(Variables);
 
-	T* sourceList;
-	T* destinationList;
+	T* __restrict__ sourceList;
+	T* __restrict__ destinationList;
 
 	T defaultValue;
 	int currentLayer;
@@ -19,10 +19,10 @@ class SwapperLayers {
 		currentLayer(currentLayer) {}
 public:
 	size_t getSourceLayerSize() const {
-		return getLayerSize<Variables>(currentLayer);
+		return layerSizes[Variables][currentLayer];
 	}
 	size_t getDestinationLayerSize() const {
-		return getLayerSize<Variables>(currentLayer - 1);
+		return layerSizes[Variables][currentLayer - 1];
 	}
 private:
 	void clearSource() {

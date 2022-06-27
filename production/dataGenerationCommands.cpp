@@ -11,6 +11,9 @@
 
 #include "../dedelib/MBFDecomposition.h"
 
+#include <random>
+#include "../dedelib/generators.h"
+
 
 template<unsigned int Variables>
 void runGenAllMBFs() {
@@ -100,12 +103,12 @@ FlatMBFStructure<Variables> convertMBFMapToFlatMBFStructure(const AllMBFMap<Vari
 	NodeIndex curNodeIndex = 0;
 	for(size_t layer = 0; layer <= (1 << Variables); layer++) {
 		std::cout << "Layer " << layer << std::endl;
-		assert(curNodeIndex == FlatMBFStructure<Variables>::cachedOffsets.nodeLayerOffsets[layer]);
+		assert(curNodeIndex == flatNodeLayerOffsets[Variables][layer]);
 
-		NodeIndex firstNodeInDualLayer = FlatMBFStructure<Variables>::cachedOffsets.nodeLayerOffsets[(1 << Variables) - layer];
+		NodeIndex firstNodeInDualLayer = flatNodeLayerOffsets[Variables][(1 << Variables) - layer];
 		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = sourceMap.layers[layer];
 		const BakedMap<Monotonic<Variables>, ExtraData>& dualLayer = sourceMap.layers[(1 << Variables) - layer];
-		for(size_t i = 0; i < getLayerSize<Variables>(layer); i++) {
+		for(size_t i = 0; i < layerSizes[Variables][layer]; i++) {
 			const KeyValue<Monotonic<Variables>, ExtraData>& elem = curLayer[i];
 			mbfs[curNodeIndex] = elem.key;
 			allClassInfos[curNodeIndex].intervalSizeDown = elem.value.intervalSizeToBottom;
@@ -127,10 +130,10 @@ FlatMBFStructure<Variables> convertMBFMapToFlatMBFStructure(const AllMBFMap<Vari
 			curNodeIndex++;
 		}
 	}
-	assert(currentLinkInLayer == getTotalLinkCount<Variables>());
+	assert(currentLinkInLayer == getTotalLinkCount(Variables));
 	// add tails of the buffers, since we use the differences between the current and next elements to mark lists
 	//allNodes[mbfCounts[Variables]].dual = 0xFFFFFFFFFFFFFFFF; // invalid
-	allNodes[mbfCounts[Variables]].downLinks = getTotalLinkCount<Variables>(); // end of the allLinks buffer
+	allNodes[mbfCounts[Variables]].downLinks = getTotalLinkCount(Variables); // end of the allLinks buffer
 
 	FlatMBFStructure<Variables> result;
 	result.mbfs = mbfs;

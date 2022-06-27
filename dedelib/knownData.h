@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cassert>
+
 constexpr unsigned int factorial(unsigned int value) {
 	unsigned int total = 1;
 	for(unsigned int i = 2; i <= value; i++) {
@@ -35,34 +37,11 @@ constexpr size_t getMaxLayerWidth(unsigned int Variables) {
 	return choose(Variables, Variables / 2);
 }
 
-// returns the size of a layer of mbfs
-template<unsigned int Variables>
-constexpr size_t getLayerSize(size_t layer) {
-	if constexpr(Variables == 1) {
-		return layerSizes1[layer];
-	} else if constexpr(Variables == 2) {
-		return layerSizes2[layer];
-	} else if constexpr(Variables == 3) {
-		return layerSizes3[layer];
-	} else if constexpr(Variables == 4) {
-		return layerSizes4[layer];
-	} else if constexpr(Variables == 5) {
-		return layerSizes5[layer];
-	} else if constexpr(Variables == 6) {
-		return layerSizes6[layer];
-	} else if constexpr(Variables == 7) {
-		return layerSizes7[layer];
-	} else {
-		static_assert(Variables <= 7 && Variables != 0, "Not defined for >7");
-	}
+constexpr const size_t* const layerSizes[]{nullptr, layerSizes1, layerSizes2, layerSizes3, layerSizes4, layerSizes5, layerSizes6, layerSizes7};
+
+constexpr size_t getMaxLayerSize(unsigned int Variables) {
+	return layerSizes[Variables][(1 << Variables) / 2];
 }
-
-template<unsigned int Variables>
-constexpr size_t getMaxLayerSize() {
-	return getLayerSize<Variables>((1 << Variables) / 2);
-}
-
-
 
 constexpr size_t linkCounts1[]{1, 1};
 constexpr size_t linkCounts2[]{1, 1, 1, 1};
@@ -72,37 +51,52 @@ constexpr size_t linkCounts5[]{1, 1, 1, 2, 3, 4, 6, 10, 15, 20, 25, 30, 35, 37, 
 constexpr size_t linkCounts6[]{1, 1, 1, 2, 3, 4, 7, 12, 19, 31, 51, 82, 127, 190, 269, 376, 510, 670, 867, 1112, 1405, 1754, 2169, 2650, 3195, 3807, 4456, 5137, 5791, 6368, 6804, 7068, 7068, 6804, 6368, 5791, 5137, 4456, 3807, 3195, 2650, 2169, 1754, 1405, 1112, 867, 670, 510, 376, 269, 190, 127, 82, 51, 31, 19, 12, 7, 4, 3, 2, 1, 1, 1};
 constexpr size_t linkCounts7[]{1, 1, 1, 2, 3, 4, 7, 13, 21, 35, 63, 113, 204, 368, 654, 1143, 1962, 3273, 5335, 8541, 13470, 20929, 32199, 49111, 74334, 111817, 167274, 248888, 368438, 542617, 794726, 1157219, 1674356, 2405346, 3428465, 4844205, 6777795, 9380040, 12824514, 17297834, 22985529, 30048791, 38596505, 48657595, 60160556, 72926502, 86684609, 101101716, 115817231, 130479629, 144772616, 158432622, 171253992, 183090657, 193847879, 203474411, 211951993, 219286796, 225498415, 230615206, 234666381, 237678987, 239674579, 240668898, 240668898, 239674579, 237678987, 234666381, 230615206, 225498415, 219286796, 211951993, 203474411, 193847879, 183090657, 171253992, 158432622, 144772616, 130479629, 115817231, 101101716, 86684609, 72926502, 60160556, 48657595, 38596505, 30048791, 22985529, 17297834, 12824514, 9380040, 6777795, 4844205, 3428465, 2405346, 1674356, 1157219, 794726, 542617, 368438, 248888, 167274, 111817, 74334, 49111, 32199, 20929, 13470, 8541, 5335, 3273, 1962, 1143, 654, 368, 204, 113, 63, 35, 21, 13, 7, 4, 3, 2, 1, 1, 1};
 
-// returns the number of links between layer and layer+1
-template<unsigned int Variables>
-constexpr size_t getLinkCount(size_t layer) {
-	if constexpr(Variables == 1) {
-		return linkCounts1[layer];
-	} else if constexpr(Variables == 2) {
-		return linkCounts2[layer];
-	} else if constexpr(Variables == 3) {
-		return linkCounts3[layer];
-	} else if constexpr(Variables == 4) {
-		return linkCounts4[layer];
-	} else if constexpr(Variables == 5) {
-		return linkCounts5[layer];
-	} else if constexpr(Variables == 6) {
-		return linkCounts6[layer];
-	} else if constexpr(Variables == 7) {
-		return linkCounts7[layer];
-	} else {
-		static_assert(Variables <= 7 && Variables != 0, "Not defined for >7");
-	}
-}
+constexpr const size_t* const linkCounts[]{nullptr, linkCounts1, linkCounts2, linkCounts3, linkCounts4, linkCounts5, linkCounts6, linkCounts7};
 
-template<unsigned int Variables>
-constexpr size_t getMaxLinkCount() {
-	return getLinkCount<Variables>((1 << Variables) / 2);
+constexpr size_t getMaxLinkCount(unsigned int Variables) {
+	return linkCounts[Variables][(1 << Variables) / 2];
 }
-template<unsigned int Variables>
-constexpr size_t getTotalLinkCount() {
+constexpr size_t getTotalLinkCount(unsigned int Variables) {
 	size_t totalLinkCount = 0;
-	for(size_t size = 0; size < (1 << Variables); size++) {
-		totalLinkCount += getLinkCount<Variables>(size);
+	for(size_t size = 0; size < (size_t(1) << Variables); size++) {
+		totalLinkCount += linkCounts[Variables][size];
 	}
 	return totalLinkCount;
+}
+
+template<typename T, std::size_t N>
+struct RunningSum {
+	T data[N+1];
+	template<typename T2>
+	constexpr RunningSum(const T2* sourceData) noexcept : data{} {
+		data[0] = 0;
+		for(size_t i = 0; i < N; i++) {
+			data[i+1] = data[i] + sourceData[i];
+		}
+	}
+	constexpr T operator[](size_t i) const noexcept {return data[i];}
+};
+constexpr const auto flatNodeLayerOffsets1 = RunningSum<uint32_t, 2+1>(layerSizes1);
+constexpr const auto flatNodeLayerOffsets2 = RunningSum<uint32_t, 4+1>(layerSizes2);
+constexpr const auto flatNodeLayerOffsets3 = RunningSum<uint32_t, 8+1>(layerSizes3);
+constexpr const auto flatNodeLayerOffsets4 = RunningSum<uint32_t, 16+1>(layerSizes4);
+constexpr const auto flatNodeLayerOffsets5 = RunningSum<uint32_t, 32+1>(layerSizes5);
+constexpr const auto flatNodeLayerOffsets6 = RunningSum<uint32_t, 64+1>(layerSizes6);
+constexpr const auto flatNodeLayerOffsets7 = RunningSum<uint32_t, 128+1>(layerSizes7);
+
+constexpr const uint32_t* flatNodeLayerOffsets[]{nullptr, flatNodeLayerOffsets1.data, flatNodeLayerOffsets2.data, flatNodeLayerOffsets3.data, flatNodeLayerOffsets4.data, flatNodeLayerOffsets5.data, flatNodeLayerOffsets6.data, flatNodeLayerOffsets7.data};
+
+constexpr int getFlatLayerOfIndex(unsigned int Variables, uint32_t nodeIndex) {
+	assert(nodeIndex < mbfCounts[Variables]);
+	for(int layer = 0; layer <= 1 << Variables; layer++) {
+		if(flatNodeLayerOffsets[Variables][layer+1] > nodeIndex) {
+			return layer;
+		}
+	}
+	// unreachable
+	#ifdef __GNUC__
+	__builtin_unreachable();
+	#else
+	assert(false);
+	#endif
 }

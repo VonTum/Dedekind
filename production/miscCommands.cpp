@@ -118,7 +118,7 @@ void doLinkCount() {
 		int maxNumLinks = 0;
 		size_t maxLinkCount = 0;
 		size_t totalLinks = 0;
-		for(size_t itemInLayer = 0; itemInLayer < getLayerSize<Variables>(layer); itemInLayer++) {
+		for(size_t itemInLayer = 0; itemInLayer < layerSizes[Variables][layer]; itemInLayer++) {
 			std::streamsize numLinks = static_cast<std::streamsize>(linkFile.get());
 			numLinksDistri[numLinks]++;
 			if(numLinks > maxNumLinks) maxNumLinks = numLinks;
@@ -175,13 +175,13 @@ void sampleIntervalSizes() {
 
 	intervalStatsFile << "layer, intervalSize";
 	for(size_t layer = 0; layer < (1 << Variables); layer++) {
-		intervalStatsFile << ", " << getLayerSize<Variables>(layer);
+		intervalStatsFile << ", " << layerSizes[Variables][layer];
 	}
 	intervalStatsFile << ", totalCount\n";
 	intervalStatsFile.close();*/
 	std::default_random_engine generator;
 	for(size_t layer = 49; layer < (1 << Variables); layer++) {
-		std::uniform_int_distribution<unsigned int> random(0, getLayerSize<Variables>(layer) - 1);
+		std::uniform_int_distribution<unsigned int> random(0, layerSizes[Variables][layer] - 1);
 		unsigned int selectedInLayer = random(generator);
 		std::cout << selectedInLayer << "\n";
 		//readAllLinks<Variables>();
