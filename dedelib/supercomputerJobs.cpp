@@ -39,8 +39,6 @@ static std::string computeFilePath(std::string computeFolder, const char* folder
 static void writeJobToFile(const std::string& jobFileName, unsigned int dedekindNumber, const std::vector<std::uint32_t>& topVector) {
 	std::ofstream jobFile(jobFileName, std::ios::binary);
 
-	std::uint32_t jobSize = topVector.size();
-
 	serializeU32(dedekindNumber, jobFile);
 	serializePODVector(topVector, jobFile);
 }

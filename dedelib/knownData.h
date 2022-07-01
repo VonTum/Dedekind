@@ -2,6 +2,8 @@
 
 #include <cassert>
 
+using std::size_t;
+
 constexpr unsigned int factorial(unsigned int value) {
 	unsigned int total = 1;
 	for(unsigned int i = 2; i <= value; i++) {
@@ -64,11 +66,10 @@ constexpr size_t getTotalLinkCount(unsigned int Variables) {
 	return totalLinkCount;
 }
 
-template<typename T, std::size_t N>
+template<typename T, size_t N>
 struct RunningSum {
 	T data[N+1];
-	template<typename T2>
-	constexpr RunningSum(const T2* sourceData) noexcept : data{} {
+	constexpr RunningSum(const T* sourceData) noexcept : data{} {
 		data[0] = 0;
 		for(size_t i = 0; i < N; i++) {
 			data[i+1] = data[i] + sourceData[i];
@@ -76,15 +77,15 @@ struct RunningSum {
 	}
 	constexpr T operator[](size_t i) const noexcept {return data[i];}
 };
-constexpr const auto flatNodeLayerOffsets1 = RunningSum<uint32_t, 2+1>(layerSizes1);
-constexpr const auto flatNodeLayerOffsets2 = RunningSum<uint32_t, 4+1>(layerSizes2);
-constexpr const auto flatNodeLayerOffsets3 = RunningSum<uint32_t, 8+1>(layerSizes3);
-constexpr const auto flatNodeLayerOffsets4 = RunningSum<uint32_t, 16+1>(layerSizes4);
-constexpr const auto flatNodeLayerOffsets5 = RunningSum<uint32_t, 32+1>(layerSizes5);
-constexpr const auto flatNodeLayerOffsets6 = RunningSum<uint32_t, 64+1>(layerSizes6);
-constexpr const auto flatNodeLayerOffsets7 = RunningSum<uint32_t, 128+1>(layerSizes7);
+constexpr const auto flatNodeLayerOffsets1 = RunningSum<size_t, 2+1>(layerSizes1);
+constexpr const auto flatNodeLayerOffsets2 = RunningSum<size_t, 4+1>(layerSizes2);
+constexpr const auto flatNodeLayerOffsets3 = RunningSum<size_t, 8+1>(layerSizes3);
+constexpr const auto flatNodeLayerOffsets4 = RunningSum<size_t, 16+1>(layerSizes4);
+constexpr const auto flatNodeLayerOffsets5 = RunningSum<size_t, 32+1>(layerSizes5);
+constexpr const auto flatNodeLayerOffsets6 = RunningSum<size_t, 64+1>(layerSizes6);
+constexpr const auto flatNodeLayerOffsets7 = RunningSum<size_t, 128+1>(layerSizes7);
 
-constexpr const uint32_t* flatNodeLayerOffsets[]{nullptr, flatNodeLayerOffsets1.data, flatNodeLayerOffsets2.data, flatNodeLayerOffsets3.data, flatNodeLayerOffsets4.data, flatNodeLayerOffsets5.data, flatNodeLayerOffsets6.data, flatNodeLayerOffsets7.data};
+constexpr const size_t* const flatNodeLayerOffsets[]{nullptr, flatNodeLayerOffsets1.data, flatNodeLayerOffsets2.data, flatNodeLayerOffsets3.data, flatNodeLayerOffsets4.data, flatNodeLayerOffsets5.data, flatNodeLayerOffsets6.data, flatNodeLayerOffsets7.data};
 
 constexpr int getFlatLayerOfIndex(unsigned int Variables, uint32_t nodeIndex) {
 	assert(nodeIndex < mbfCounts[Variables]);
@@ -100,3 +101,13 @@ constexpr int getFlatLayerOfIndex(unsigned int Variables, uint32_t nodeIndex) {
 	assert(false);
 	#endif
 }
+
+constexpr const auto flatLinkOffsets1 = RunningSum<size_t, 2>(linkCounts1);
+constexpr const auto flatLinkOffsets2 = RunningSum<size_t, 4>(linkCounts2);
+constexpr const auto flatLinkOffsets3 = RunningSum<size_t, 8>(linkCounts3);
+constexpr const auto flatLinkOffsets4 = RunningSum<size_t, 16>(linkCounts4);
+constexpr const auto flatLinkOffsets5 = RunningSum<size_t, 32>(linkCounts5);
+constexpr const auto flatLinkOffsets6 = RunningSum<size_t, 64>(linkCounts6);
+constexpr const auto flatLinkOffsets7 = RunningSum<size_t, 128>(linkCounts7);
+
+constexpr const size_t* const flatLinkOffsets[]{nullptr, flatLinkOffsets1.data, flatLinkOffsets2.data, flatLinkOffsets3.data, flatLinkOffsets4.data, flatLinkOffsets5.data, flatLinkOffsets6.data, flatLinkOffsets7.data};
