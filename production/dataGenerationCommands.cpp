@@ -11,6 +11,9 @@
 
 #include "../dedelib/MBFDecomposition.h"
 
+#include <random>
+#include "../dedelib/generators.h"
+
 
 template<unsigned int Variables>
 void runGenAllMBFs() {
@@ -100,12 +103,12 @@ FlatMBFStructure<Variables> convertMBFMapToFlatMBFStructure(const AllMBFMap<Vari
 	NodeIndex curNodeIndex = 0;
 	for(size_t layer = 0; layer <= (1 << Variables); layer++) {
 		std::cout << "Layer " << layer << std::endl;
-		assert(curNodeIndex == FlatMBFStructure<Variables>::cachedOffsets.nodeLayerOffsets[layer]);
+		assert(curNodeIndex == flatNodeLayerOffsets[Variables][layer]);
 
-		NodeIndex firstNodeInDualLayer = FlatMBFStructure<Variables>::cachedOffsets.nodeLayerOffsets[(1 << Variables) - layer];
+		NodeIndex firstNodeInDualLayer = flatNodeLayerOffsets[Variables][(1 << Variables) - layer];
 		const BakedMap<Monotonic<Variables>, ExtraData>& curLayer = sourceMap.layers[layer];
 		const BakedMap<Monotonic<Variables>, ExtraData>& dualLayer = sourceMap.layers[(1 << Variables) - layer];
-		for(size_t i = 0; i < getLayerSize<Variables>(layer); i++) {
+		for(size_t i = 0; i < layerSizes[Variables][layer]; i++) {
 			const KeyValue<Monotonic<Variables>, ExtraData>& elem = curLayer[i];
 			mbfs[curNodeIndex] = elem.key;
 			allClassInfos[curNodeIndex].intervalSizeDown = elem.value.intervalSizeToBottom;
@@ -127,10 +130,10 @@ FlatMBFStructure<Variables> convertMBFMapToFlatMBFStructure(const AllMBFMap<Vari
 			curNodeIndex++;
 		}
 	}
-	assert(currentLinkInLayer == getTotalLinkCount<Variables>());
+	assert(currentLinkInLayer == getTotalLinkCount(Variables));
 	// add tails of the buffers, since we use the differences between the current and next elements to mark lists
 	//allNodes[mbfCounts[Variables]].dual = 0xFFFFFFFFFFFFFFFF; // invalid
-	allNodes[mbfCounts[Variables]].downLinks = getTotalLinkCount<Variables>(); // end of the allLinks buffer
+	allNodes[mbfCounts[Variables]].downLinks = getTotalLinkCount(Variables); // end of the allLinks buffer
 
 	FlatMBFStructure<Variables> result;
 	result.mbfs = mbfs;
@@ -149,8 +152,61 @@ void convertMBFMapToFlatMBFStructure() {
 	writeFlatMBFStructure(destinationStructure);
 }
 
-#include <random>
-#include "../dedelib/generators.h"
+template<unsigned int Variables>
+void convertFlatMBFStructureToSourceMBFStructure() {
+	FlatMBFStructure<Variables> mbfStructure = readFlatMBFStructure<Variables>(true, true, true, true);
+	
+	std::uint32_t* resultingFile = new std::uint32_t[getTotalLinkCount(Variables)];
+	std::uint32_t* curItemInFile = resultingFile;
+
+	std::cout << "Link count distribution: " << std::endl;
+
+	size_t numberOfLayers = (1 << Variables) + 1;
+	for(size_t toLayerI = 0; toLayerI < numberOfLayers - 1; toLayerI++) {
+		size_t fromLayerI = toLayerI + 1;
+		size_t fromLayerSize = layerSizes[Variables][fromLayerI];
+		size_t toLayerSize = layerSizes[Variables][toLayerI];
+		std::vector<std::vector<std::uint32_t>> incomingLinks(toLayerSize);
+
+		size_t linksInThisLayer = 0;
+
+		size_t layerOffset = flatNodeLayerOffsets[Variables][fromLayerI];
+
+		const FlatNode* firstFromNode = mbfStructure.allNodes + layerOffset;
+		for(std::uint32_t i = 0; i < fromLayerSize; i++) {
+			std::uint64_t downLinksStart = firstFromNode[i].downLinks;
+			std::uint64_t downLinksEnd = firstFromNode[i+1].downLinks;
+
+			for(const NodeOffset* curDownlink = mbfStructure.allLinks + downLinksStart; curDownlink != mbfStructure.allLinks + downLinksEnd; curDownlink++) {
+				NodeOffset targetNodeI = *curDownlink;
+				assert(targetNodeI < toLayerSize);
+				incomingLinks[targetNodeI].push_back(i);
+				linksInThisLayer++;
+			}
+		}
+
+		std::cout << linksInThisLayer << ", ";
+
+		for(const std::vector<std::uint32_t>& linksVec : incomingLinks) {
+			for(size_t i = 0; i < linksVec.size() - 1; i++) {
+				*curItemInFile++ = linksVec[i];
+			}
+			*curItemInFile++ = linksVec[linksVec.size() - 1] | static_cast<uint32_t>(0x80000000); // Mark end of links
+		}
+	}
+
+	if(curItemInFile != resultingFile + getTotalLinkCount(Variables)) {
+		std::cerr << "Invalid file! Not the correct number of links!" << std::endl;
+		std::terminate();
+	}
+
+	{
+		std::ofstream sourceLinkFile(FileName::mbfStructure(Variables), std::ios::binary);
+		sourceLinkFile.write(reinterpret_cast<const char*>(resultingFile), sizeof(std::uint32_t) * getTotalLinkCount(Variables));
+	} // Close file
+
+	delete[] resultingFile;
+}
 
 void randomizeMBF_LUT7() {
 	constexpr unsigned int Variables = 7;
@@ -186,6 +242,7 @@ void preComputeFiles() {
 	addSymmetriesToIntervalFile<Variables>();
 	convertMBFMapToFlatMBFStructure<Variables>();
 	//flatDPlus1<Variables>();
+	convertFlatMBFStructureToSourceMBFStructure<Variables>();
 }
 
 
@@ -237,6 +294,14 @@ CommandSet dataGenCommands {"Data Generation", {
 	{"convertMBFMapToFlatMBFStructure5", []() {convertMBFMapToFlatMBFStructure<5>(); }},
 	{"convertMBFMapToFlatMBFStructure6", []() {convertMBFMapToFlatMBFStructure<6>(); }},
 	{"convertMBFMapToFlatMBFStructure7", []() {convertMBFMapToFlatMBFStructure<7>(); }},
+
+	{"convertFlatMBFStructureToSourceMBFStructure1", []() {convertFlatMBFStructureToSourceMBFStructure<1>(); }},
+	{"convertFlatMBFStructureToSourceMBFStructure2", []() {convertFlatMBFStructureToSourceMBFStructure<2>(); }},
+	{"convertFlatMBFStructureToSourceMBFStructure3", []() {convertFlatMBFStructureToSourceMBFStructure<3>(); }},
+	{"convertFlatMBFStructureToSourceMBFStructure4", []() {convertFlatMBFStructureToSourceMBFStructure<4>(); }},
+	{"convertFlatMBFStructureToSourceMBFStructure5", []() {convertFlatMBFStructureToSourceMBFStructure<5>(); }},
+	{"convertFlatMBFStructureToSourceMBFStructure6", []() {convertFlatMBFStructureToSourceMBFStructure<6>(); }},
+	{"convertFlatMBFStructureToSourceMBFStructure7", []() {convertFlatMBFStructureToSourceMBFStructure<7>(); }},
 
 	{"randomizeMBF_LUT7", []() {randomizeMBF_LUT7();}},
 

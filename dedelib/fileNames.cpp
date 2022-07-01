@@ -112,7 +112,11 @@ std::string flatNodes(unsigned int Variables) {
 std::string flatLinks(unsigned int Variables) {
 	return makeBasicName(Variables, "flatLinks", ".flatLinks");
 }
+std::string mbfStructure(unsigned int Variables) {
+	return makeBasicName(Variables, "mbfStructure", ".mbfStructure");
+}
 std::string flatMBFsU64(unsigned int Variables) {
 	return makeBasicName(Variables, "flatMBFsRandomized", ".mbfU64");
 }
+
 };

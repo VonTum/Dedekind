@@ -303,7 +303,7 @@ u192 basicSymmetriesPCoeffMethod() {
 
 		//std::cout << total;
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
-		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayerI) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayerI)) << "us per mbf" << std::endl;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << layerSizes[Variables][topLayerI] << " mbfs at " << (timeTaken.count() / 1000.0 / layerSizes[Variables][topLayerI]) << "us per mbf" << std::endl;
 	}
 
 	STATS(std::cout << "Used " << totalPCoeffs << " p-coefficients!\n");
@@ -391,7 +391,7 @@ u192 noCanonizationPCoeffMethod() {
 
 				// simplest first, just iter the whole layer
 				for(size_t index = 0; index < touchedEqClasses.getSourceLayerSize(); index++) {
-					assert(index < getLayerSize<Variables>(belowLayerI));
+					assert(index < layerSizes[Variables][belowLayerI]);
 					BitSet<TOPS_PER_BLOCK> touchedPerMBF = touchedEqClasses.source(index);
 
 					const KeyValue<Monotonic<Variables>, ExtraData>& botKV = belowLayer[index];
@@ -418,14 +418,14 @@ u192 noCanonizationPCoeffMethod() {
 					DownConnection* to = (&botKV + 1)->value.downConnections;
 					
 					for(; from != to; from++) {
-						assert(from->id < getLayerSize<Variables>(belowLayerI - 1));
+						assert(from->id < layerSizes[Variables][belowLayerI - 1]);
 						touchedEqClasses.dest(from->id) |= touchedEqClasses.source(index);
 					}
 				}
 
 				touchedEqClasses.pushNext();
 				// idk what this is for
-				/*if(touchedEqClasses.dirtyDestinationList.size() >= swapperCutoff * getLayerSize<Variables>(belowLayerI)) {
+				/*if(touchedEqClasses.dirtyDestinationList.size() >= swapperCutoff * layerSizes[Variables][belowLayerI]) {
 					belowLayerI--;
 					break;
 				}*/
@@ -472,7 +472,7 @@ u192 noCanonizationPCoeffMethod() {
 			total += totalToAddToTotal;
 		});
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
-		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayerI) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayerI)) << "us per mbf" << std::endl;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << layerSizes[Variables][topLayerI] << " mbfs at " << (timeTaken.count() / 1000.0 / layerSizes[Variables][topLayerI]) << "us per mbf" << std::endl;
 	}
 
 	printHistogramAndPCoeffs(Variables);
@@ -487,14 +487,14 @@ void forEachBelowUsingSwapper(size_t topLayerI, size_t topIndex, const AllMBFMap
 	const BakedMap<Monotonic<Variables>, ExtraData>& topLayer = allIntervalSizesAndDownLinks.layers[topLayerI];
 
 	swapper.resetDownward(topLayerI);
-	assert(swapper.getSourceLayerSize() == getLayerSize<Variables>(topLayerI));
-	assert(swapper.getDestinationLayerSize() == getLayerSize<Variables>(topLayerI - 1));
+	assert(swapper.getSourceLayerSize() == layerSizes[Variables][topLayerI]);
+	assert(swapper.getDestinationLayerSize() == layerSizes[Variables][topLayerI - 1]);
 
 	DownConnection* initialDownConnectionsStart = topLayer[topIndex].value.downConnections;
 	DownConnection* initialDownConnectionsEnd = topLayer[topIndex + 1].value.downConnections;
 
 	for(DownConnection* cur = initialDownConnectionsStart; cur != initialDownConnectionsEnd; ++cur) {
-		assert(cur->id < getLayerSize<Variables>(topLayerI - 1));
+		assert(cur->id < layerSizes[Variables][topLayerI - 1]);
 		swapper.dest(cur->id) = true;
 	}
 
@@ -505,7 +505,7 @@ void forEachBelowUsingSwapper(size_t topLayerI, size_t topIndex, const AllMBFMap
 
 		for(size_t index = 0; index < swapper.getSourceLayerSize(); index++) {
 			if(swapper.source(index) == false) continue;
-			assert(index < getLayerSize<Variables>(belowLayerI));
+			assert(index < layerSizes[Variables][belowLayerI]);
 
 			const KeyValue<Monotonic<Variables>, ExtraData>& botKV = belowLayer[index];
 
@@ -513,7 +513,7 @@ void forEachBelowUsingSwapper(size_t topLayerI, size_t topIndex, const AllMBFMap
 			DownConnection* downConnectionsEnd = belowLayer[index + 1].value.downConnections;
 
 			for(DownConnection* cur = downConnectionsStart; cur != downConnectionsEnd; ++cur) {
-				assert(cur->id < getLayerSize<Variables>(belowLayerI - 1));
+				assert(cur->id < layerSizes[Variables][belowLayerI - 1]);
 				swapper.dest(cur->id) = true;
 			}
 
@@ -565,7 +565,7 @@ u192 pcoeffMethodV2() {
 			subTotal += computePCoeffSum(topLayerI, topIdx, allIntervalSizesAndDownLinks, swapper);
 		}, [](u192& a, u192 b) {a += b; });
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
-		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << getLayerSize<Variables>(topLayerI) << " mbfs at " << (timeTaken.count() / 1000.0 / getLayerSize<Variables>(topLayerI)) << "us per mbf" << std::endl;
+		std::cout << "time taken: " << (timeTaken.count() / 1000000000.0) << "s, " << layerSizes[Variables][topLayerI] << " mbfs at " << (timeTaken.count() / 1000.0 / layerSizes[Variables][topLayerI]) << "us per mbf" << std::endl;
 	}
 
 	printHistogramAndPCoeffs(Variables);
@@ -592,7 +592,7 @@ void pcoeffTimeEstimate() {
 		auto start = std::chrono::high_resolution_clock::now();
 
 		mtx.lock();
-		std::uniform_int_distribution<size_t> distribution(0, getLayerSize<Variables>(topLayerI));
+		std::uniform_int_distribution<size_t> distribution(0, layerSizes[Variables][topLayerI]);
 		size_t selectedIndex = distribution(generator);
 		mtx.unlock();
 
@@ -604,8 +604,8 @@ void pcoeffTimeEstimate() {
 
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
 		double secondsTaken = timeTaken.count() / 1000000000.0;
-		double estTotalSeconds = secondsTaken * getLayerSize<Variables>(topLayerI);
-		std::cout << "time taken: " << secondsTaken << "s for 1 mbf, " << getLayerSize<Variables>(topLayerI) << " mbfs totalling " << estTotalSeconds << " core seconds in total" << std::endl;
+		double estTotalSeconds = secondsTaken * layerSizes[Variables][topLayerI];
+		std::cout << "time taken: " << secondsTaken << "s for 1 mbf, " << layerSizes[Variables][topLayerI] << " mbfs totalling " << estTotalSeconds << " core seconds in total" << std::endl;
 		totalSeconds += estTotalSeconds;
 		mtx.unlock();
 	});
@@ -627,7 +627,7 @@ void pcoeffLayerElementStats(size_t topLayerI) {
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-	std::uniform_int_distribution<size_t> distribution(0, getLayerSize<Variables>(topLayerI));
+	std::uniform_int_distribution<size_t> distribution(0, layerSizes[Variables][topLayerI]);
 	size_t selectedIndex = distribution(generator);
 
 	SwapperLayers<Variables, bool> swapper;
@@ -637,8 +637,8 @@ void pcoeffLayerElementStats(size_t topLayerI) {
 
 	auto timeTaken = std::chrono::high_resolution_clock::now() - start;
 	double secondsTaken = timeTaken.count() / 1000000000.0;
-	double estTotalSeconds = secondsTaken * getLayerSize<Variables>(topLayerI);
-	std::cout << "time taken: " << secondsTaken << "s for 1 mbf, " << getLayerSize<Variables>(topLayerI) << " mbfs totalling " << estTotalSeconds << " core seconds in total" << std::endl;
+	double estTotalSeconds = secondsTaken * layerSizes[Variables][topLayerI];
+	std::cout << "time taken: " << secondsTaken << "s for 1 mbf, " << layerSizes[Variables][topLayerI] << " mbfs totalling " << estTotalSeconds << " core seconds in total" << std::endl;
 	totalSeconds += estTotalSeconds;
 
 	printHistogramAndPCoeffs(Variables);

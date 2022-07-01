@@ -10,7 +10,11 @@
 #include "connectGraph.h"
 #include "threadPool.h"
 
+#include "jobInfo.h"
+
 #define PCOEFF_MULTITHREAD
+
+// Also defined in bottomBufferCreator.h
 #define PCOEFF_DEDUPLICATE
 
 #ifdef PCOEFF_DEDUPLICATE
@@ -38,7 +42,7 @@ void flatDPlus1() {
 template<unsigned int Variables, size_t BatchSize>
 void followNextLayerLinks(const FlatMBFStructure<Variables>& downLinkStructure, SwapperLayers<Variables, BitSet<BatchSize>>& swapper) {
 	int curLayer = swapper.getCurrentLayerDownward();
-	const FlatNode* firstNode = downLinkStructure.allNodes + FlatMBFStructure<Variables>::cachedOffsets[curLayer];
+	const FlatNode* firstNode = downLinkStructure.allNodes + flatNodeLayerOffsets[Variables][curLayer];
 	for(size_t i = 0; i < swapper.getSourceLayerSize(); i++) {
 		BitSet<BatchSize> sourceElem = swapper.source(i);
 		if(sourceElem.isEmpty()) continue; // skip nonreached nodes
@@ -54,50 +58,6 @@ void followNextLayerLinks(const FlatMBFStructure<Variables>& downLinkStructure, 
 	swapper.pushNext();
 }
 
-struct JobInfo {
-	NodeIndex topDual;
-	int topLayer;
-	NodeIndex* bufStart;
-	NodeIndex* bufEnd;
-
-	static constexpr const size_t FIRST_BOT_OFFSET = 2;
-
-	void initialize(NodeIndex top, NodeIndex topDual, int topLayer) {
-		this->topDual = topDual;
-		this->topLayer = topLayer;
-		this->bufEnd = this->bufStart;
-
-		// Add top twice, because FPGA compute expects pairs. 
-		for(size_t i = 0; i < FIRST_BOT_OFFSET; i++) {
-			*bufEnd++ = top | 0x80000000;
-		}
-	} 
-
-	void add(NodeIndex newBot) {
-		*bufEnd++ = newBot;
-	}
-
-	NodeIndex getTop() const {
-		return (*bufStart) & 0x7FFFFFFF;
-	}
-
-	size_t size() const {
-		return bufEnd - bufStart;
-	}
-
-	// Iterates over only the bottoms
-	NodeIndex* begin() const {return bufStart + FIRST_BOT_OFFSET;}
-	NodeIndex* end() const {return bufEnd;}
-
-	size_t getNumberOfBottoms() const {
-		return end() - begin();
-	}
-
-	size_t indexOf(const NodeIndex* ptr) const {
-		return ptr - bufStart;
-	}
-};
-
 template<unsigned int Variables, size_t BatchSize>
 struct JobBatch {
 	JobInfo jobs[BatchSize];
@@ -109,7 +69,7 @@ struct JobBatch {
 			JobInfo& job = jobs[i];
 			NodeIndex top = tops[i];
 			NodeIndex topDual = downLinkStructure.allNodes[top].dual;
-			int topLayer = FlatMBFStructure<Variables>::getLayer(top);
+			int topLayer = getFlatLayerOfIndex(Variables, top);
 			job.initialize(top, topDual, topLayer);
 		}
 		this->jobCount = jobCount;
@@ -154,7 +114,7 @@ void addSourceElementsToJobs(const SwapperLayers<Variables, BitSet<BatchSize>>& 
 
 template<unsigned int Variables, size_t BatchSize>
 void addSourceElementsToJobsWithDeDuplication(const SwapperLayers<Variables, BitSet<BatchSize>>& swapper, JobBatch<Variables, BatchSize>& jobBatch) {
-	NodeIndex firstNodeInLayer = FlatMBFStructure<Variables>::cachedOffsets[swapper.getCurrentLayerDownward()];
+	NodeIndex firstNodeInLayer = flatNodeLayerOffsets[Variables][swapper.getCurrentLayerDownward()];
 	for(NodeOffset i = 0; i < NodeOffset(swapper.getSourceLayerSize()); i++) {
 		BitSet<BatchSize> includedBits = swapper.source(i);
 		if(includedBits.isEmpty()) continue;
@@ -176,7 +136,7 @@ void addSourceElementsToJobsWithDeDuplication(const SwapperLayers<Variables, Bit
 template<unsigned int Variables, size_t BatchSize>
 void initializeSwapper(SwapperLayers<Variables, BitSet<BatchSize>>& swapper, const JobBatch<Variables, BatchSize>& jobBatch) {
 	int curSwapperLayer = swapper.getCurrentLayerDownward();
-	NodeIndex layerStart = FlatMBFStructure<Variables>::cachedOffsets[curSwapperLayer];
+	NodeIndex layerStart = flatNodeLayerOffsets[Variables][curSwapperLayer];
 	for(size_t i = 0; i < jobBatch.jobCount; i++) {
 		if(jobBatch.jobs[i].topLayer == curSwapperLayer) {
 			NodeOffset indexInLayer = jobBatch.jobs[i].getTop() - layerStart;

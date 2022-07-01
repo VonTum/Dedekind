@@ -451,15 +451,15 @@ void permutCheck24TestSet() {
 
 	for(int topLayer = 0; topLayer <= (1 << Variables); topLayer++) {
 		std::cout << "Top " << topLayer << "/" << (1 << Variables) << std::endl;
-		NodeOffset selectedTopIndex = std::uniform_int_distribution<int>(0, getLayerSize<Variables>(topLayer)-1)(generator);
-		Monotonic<Variables> selectedTop = flatMBFs.mbfs[FlatMBFStructure<Variables>::cachedOffsets[topLayer] + selectedTopIndex];
+		NodeOffset selectedTopIndex = std::uniform_int_distribution<int>(0, layerSizes[Variables][topLayer]-1)(generator);
+		Monotonic<Variables> selectedTop = flatMBFs.mbfs[flatNodeLayerOffsets[Variables][topLayer] + selectedTopIndex];
 		permuteRandom(selectedTop, generator);
 		testSetFile << selectedTop.bf.bitset << "_" << selectedTop.bf.bitset << std::endl;
 		// small offset to reduce generation time, by improving the odds that an element below will be picked
 		for(int botLayer = 0; botLayer < topLayer - 2; botLayer++) {
 			while(true) {
-				NodeOffset selectedBotIndex = std::uniform_int_distribution<int>(0, getLayerSize<Variables>(botLayer)-1)(generator);
-				Monotonic<Variables> selectedBot = flatMBFs.mbfs[FlatMBFStructure<Variables>::cachedOffsets[botLayer] + selectedBotIndex];
+				NodeOffset selectedBotIndex = std::uniform_int_distribution<int>(0, layerSizes[Variables][botLayer]-1)(generator);
+				Monotonic<Variables> selectedBot = flatMBFs.mbfs[flatNodeLayerOffsets[Variables][botLayer] + selectedBotIndex];
 
 				if(hasPermutationBelow(selectedTop, selectedBot)) {
 					permuteRandom(selectedBot, generator, 3);

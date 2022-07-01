@@ -71,7 +71,7 @@ void addSymmetriesToIntervalFile() {
 
 		KeyValue<Monotonic<Variables>, ExtraData>* foundLayer = readBufFromFile<Variables, ExtraData>(intervals, layer, [](std::ifstream& is) {ExtraData result; result.intervalSizeToBottom = deserializeU64(is); return result; });
 
-		size_t size = getLayerSize<Variables>(layer);
+		size_t size = layerSizes[Variables][layer];
 		finishIterInParallel(foundLayer, foundLayer + size, [&](KeyValue<Monotonic<Variables>, ExtraData>& kv) {
 			kv.value.symmetries = kv.key.bf.countNonDuplicatePermutations();
 		});
@@ -99,7 +99,7 @@ AllMBFMap<Variables, ExtraData> readAllMBFsMapExtraDownLinks() {
 		BakedMap<Monotonic<Variables>, ExtraData>& upperLayer = map.layers[layerIndex];
 		const BakedMap<Monotonic<Variables>, ExtraData>& lowerLayer = map.layers[layerIndex-1];
 
-		size_t linkCountInLayer = getLinkCount<Variables>(layerIndex-1);
+		size_t linkCountInLayer = linkCounts[Variables][layerIndex-1];
 		DownConnection* downLinksBuf = new DownConnection[linkCountInLayer];
 
 		addDownConnections(upperLayer, lowerLayer, downLinksBuf);
@@ -119,7 +119,7 @@ void computeDPlus1() {
 		auto start = std::chrono::high_resolution_clock::now();
 
 		KeyValue<Monotonic<Variables>, IntervalSymmetry>* foundLayer = readBufFromFile<Variables, IntervalSymmetry>(intervalSymmetries, layer, deserializeExtraData);
-		size_t size = getLayerSize<Variables>(layer);
+		size_t size = layerSizes[Variables][layer];
 
 		for(size_t i = 0; i < size; i++) {
 			totalWork += u128(foundLayer[i].value.intervalSizeToBottom);
