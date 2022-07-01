@@ -43,13 +43,22 @@ inline void benchmarkBottomBufferProduction(const std::string& arg) {
 
 	PCoeffProcessingContext context(Variables, 200, 0);
 
+	
+	const uint32_t* links = loadLinks(Variables);
+
+	size_t SWAPPER_WIDTH = getMaxLayerSize(Variables);
+	uint64_t* swapperA = new uint64_t[SWAPPER_WIDTH];
+	uint64_t* swapperB = new uint64_t[SWAPPER_WIDTH];
+
+	std::cout << "Files loaded. Starting benchmark." << std::endl;
+
 	std::thread loopBack([&](){
 		auto startTime = std::chrono::high_resolution_clock::now();
 		size_t bufferI = 0;
 		while(true) {
 			auto optBuf = context.inputQueue.pop_wait();
 			if(optBuf.has_value()) {
-				double secondsSinceStart = ((std::chrono::high_resolution_clock::now() - startTime).count() * 10e-9);
+				double secondsSinceStart = ((std::chrono::high_resolution_clock::now() - startTime).count() * 1.0e-9);
 				std::cout << "Buffer " << bufferI++ << " received at " << secondsSinceStart << "s" << std::endl;
 				context.inputBufferReturnQueue.push(optBuf.value().bufStart);
 			} else {
@@ -58,7 +67,10 @@ inline void benchmarkBottomBufferProduction(const std::string& arg) {
 		}
 	});
 
-	runBottomBufferCreator(Variables, jobTops, context.inputQueue, context.inputBufferReturnQueue);
+	runBottomBufferCreatorNoAlloc(Variables, jobTops, context.inputQueue, context.inputBufferReturnQueue, links, swapperA, swapperB);
+
+	delete[] swapperA;
+	delete[] swapperB;
 
 	loopBack.join();
 }

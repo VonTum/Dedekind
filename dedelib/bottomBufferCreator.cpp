@@ -128,18 +128,28 @@ static void finalizeBuffer(unsigned int Variables, uint32_t* __restrict & result
 	*resultBuffer++ = uint32_t(0x80000000);*/
 }
 
-void generateBotBuffers(
+static void generateBotBuffers(
 	unsigned int Variables, 
 	uint64_t* __restrict swapperA,
 	uint64_t* __restrict swapperB,
 	uint32_t* __restrict * __restrict resultBuffers,
+	SynchronizedQueue<JobInfo>& outputQueue,
 	const uint32_t* __restrict links,
 	const JobTopInfo* tops,
 	int numberOfTops
 ) {
-	int topLayers[64];
+	JobInfo jobs[64];
+	for(size_t i = 0; i < numberOfTops; i++) {
+		jobs[i].bufStart = resultBuffers[i];
+		jobs[i].topDual = tops[i].topDual;
+	}
 
+	int topLayers[64];
 	int startingLayer = initializeSwapperRun(Variables, swapperA, resultBuffers, tops, topLayers, numberOfTops);
+
+	for(size_t i = 0; i < numberOfTops; i++) {
+		jobs[i].topLayer = topLayers[i];
+	}
 	
 	uint64_t activeMask = numberOfTops == 64 ? 0xFFFFFFFFFFFFFFFF : (uint64_t(1) << numberOfTops) - 1; // Has a 1 for active buffers
 
@@ -170,6 +180,9 @@ void generateBotBuffers(
 			if(tops[idx].topDual < finalizeUpTo) finalizeUpTo = tops[idx].topDual;
 #endif
 			finalizeBuffer(Variables, resultBuffers[idx], finalizeUpTo);
+
+			jobs[idx].bufEnd = resultBuffers[idx];
+			outputQueue.push(jobs[idx]);
 		}
 
 		if(activeMask == 0) break;
@@ -178,8 +191,31 @@ void generateBotBuffers(
 	}
 }
 
-static const uint32_t* loadLinks(unsigned int Variables) {
+const uint32_t* loadLinks(unsigned int Variables) {
 	return readFlatBuffer<uint32_t>(FileName::mbfStructure(Variables), getTotalLinkCount(Variables));
+}
+
+void runBottomBufferCreatorNoAlloc (
+	unsigned int Variables,
+	const std::vector<JobTopInfo>& jobTops,
+	SynchronizedQueue<JobInfo>& outputQueue,
+	SynchronizedStack<uint32_t*>& returnQueue,
+	const uint32_t* links,
+	uint64_t* swapperA,
+	uint64_t* swapperB
+) {
+	uint32_t* buffersEnd[64];
+	for(size_t startingTop = 0; startingTop < jobTops.size(); startingTop += 64) {
+		const JobTopInfo* curJobSet = &jobTops[startingTop];
+
+		size_t numberOfTops = std::min(jobTops.size() - startingTop, size_t(64));
+
+		returnQueue.popN_wait(buffersEnd, numberOfTops);
+
+		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, outputQueue, links, curJobSet, numberOfTops);
+	}
+
+	outputQueue.close();
 }
 
 void runBottomBufferCreator(
@@ -194,34 +230,8 @@ void runBottomBufferCreator(
 	uint64_t* swapperA = new uint64_t[SWAPPER_WIDTH];
 	uint64_t* swapperB = new uint64_t[SWAPPER_WIDTH];
 
-	uint32_t* buffersEnd[64];
-	JobInfo jobs[64];
-	for(size_t startingTop = 0; startingTop < jobTops.size(); startingTop += 64) {
-		const JobTopInfo* curJobSet = &jobTops[startingTop];
-
-		size_t numberOfTops = std::min(jobTops.size() - startingTop, size_t(64));
-
-		returnQueue.popN_wait(buffersEnd, numberOfTops);
-
-		for(size_t i = 0; i < numberOfTops; i++) {
-			jobs[i].bufStart = buffersEnd[i];
-			jobs[i].topDual = curJobSet[i].topDual;
-			jobs[i].topLayer = getFlatLayerOfIndex(Variables, curJobSet[i].top);
-		}
-
-		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, links, curJobSet, numberOfTops);
-
-		for(size_t i = 0; i < numberOfTops; i++) {
-			jobs[i].bufEnd = buffersEnd[i];
-		}
-
-		outputQueue.pushN(jobs, numberOfTops);
-	}
-
-	outputQueue.close();
+	runBottomBufferCreatorNoAlloc(Variables, jobTops, outputQueue, returnQueue, links, swapperA, swapperB);
 
 	delete[] swapperA;
 	delete[] swapperB;
-
-
 }
