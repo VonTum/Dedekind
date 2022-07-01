@@ -17,5 +17,5 @@ void runBottomBufferCreator(
 	unsigned int Variables,
 	const std::vector<JobTopInfo>& jobTops,
 	SynchronizedQueue<JobInfo>& outputQueue,
-	SynchronizedStack<uint32_t*>& returnQueue 
+	SynchronizedStack<uint32_t*>& returnQueue
 );

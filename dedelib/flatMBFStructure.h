@@ -100,13 +100,13 @@ FlatMBFStructure<Variables> readFlatMBFStructure(bool enableMBFs = true, bool en
 	std::thread allNodesThread;
 
 	if(enableMBFs) mbfsThread = std::thread([&structure](){
-		structure.mbfs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), FlatMBFStructure<Variables>::MBF_COUNT);});
+		structure.mbfs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);});
 	if(enableAllClassInfos) allClassInfosThread = std::thread([&structure](){
-		structure.allClassInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), FlatMBFStructure<Variables>::MBF_COUNT);});
+		structure.allClassInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);});
 	if(enableAllNodes) allNodesThread = std::thread([&structure](){
-		structure.allNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), FlatMBFStructure<Variables>::MBF_COUNT + 1);});
+		structure.allNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);});
 	if(enableAllLinks) 
-		structure.allLinks = readFlatBuffer<NodeOffset>(FileName::flatLinks(Variables), FlatMBFStructure<Variables>::LINK_COUNT);
+		structure.allLinks = readFlatBuffer<NodeOffset>(FileName::flatLinks(Variables), getTotalLinkCount(Variables));
 
 	structure.useFlatBufferManagement = true;
 

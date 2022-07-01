@@ -118,8 +118,6 @@ void permuteRandom(Layer<Variables>& layer, RandomEngine& generator, unsigned in
 	permuteRandom<Variables, RandomEngine>(layer.bf, generator, from, to);
 }
 
-
-
 inline u128 genU128() {
 #ifdef _MSC_VER
 	return u128(genU64(), genU64());

@@ -68,5 +68,25 @@ void shuffleBots(NodeIndex* bots, NodeIndex* botsEnd) {
 			bots[numGroups * itemWithinCluster + groupI] = itemsFromCluster[sourceIndex];
 		}
 	}
-} 
+}
 
+std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::vector<NodeIndex>& topIndices) {
+	std::vector<JobTopInfo> topInfos;
+	topInfos.reserve(topIndices.size());
+	for(NodeIndex topIdx : topIndices) {
+		JobTopInfo newInfo;
+		newInfo.top = topIdx;
+		newInfo.topDual = flatNodes[topIdx].dual;
+		topInfos.push_back(newInfo);
+	}
+	return topInfos;
+}
+
+std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sampleCount) {
+	std::vector<NodeIndex> resultingVector;
+	for(int i = 0; i < sampleCount; i++) {
+		double expectedIndex = mbfCounts[Variables] * (i+0.5) / sampleCount;
+		resultingVector.push_back(static_cast<NodeIndex>(expectedIndex));
+	}
+	return resultingVector;
+}
