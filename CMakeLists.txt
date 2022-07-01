@@ -110,8 +110,8 @@ message(STATUS "AOCL_LINK_FLAGS: ${AOCL_LINK_FLAGS}")                     # -L/c
 target_include_directories(fpga_production PRIVATE ${AOCL_INCLUDE_DIRECTORIES})
 # Add linker flags
 
-# target_link_options(fpga_production PRIVATE ${AOCL_LINK_FLAGS})
-target_link_directories(fpga_production PRIVATE /cm/shared/opt/intelFPGA_pro/20.4.0/hld/board/bittware_pcie/s10/linux64/lib /cm/shared/opt/intelFPGA_pro/21.4.0/hld/host/linux64/lib)
+target_link_options(fpga_production PRIVATE ${AOCL_LINK_FLAGS})
+target_link_directories(fpga_production PRIVATE /opt/software/FPGA/IntelFPGA/opencl_sdk/21.4.0/hld/host/linux64/lib)
 
 # Defensive linker flags
 target_link_options(fpga_production PRIVATE -z noexecstack -Wl,-z,relro,-z,now -Wl,-Bsymbolic -pie)
@@ -119,8 +119,9 @@ target_link_options(fpga_production PRIVATE -z noexecstack -Wl,-z,relro,-z,now -
 # target_link_options(fpga_production PRIVATE ${AOCL_LINK_LIBS})
 # Instead of that, which seems to be kaput, we'll have to link manually
 target_link_options(fpga_production PRIVATE -Wl,--no-as-needed)
-target_link_libraries(fpga_production alteracl)
-target_link_libraries(fpga_production bitt_s10_pcie_mmd)
+# target_link_libraries(fpga_production alteracl)
+# target_link_libraries(fpga_production bitt_s10_pcie_mmd)
+target_link_libraries(fpga_production OpenCL)
 target_link_libraries(fpga_production elf)
 
 

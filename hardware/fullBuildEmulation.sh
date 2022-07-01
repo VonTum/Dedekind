@@ -8,7 +8,7 @@
 #SBATCH --mail-type all
 #SBATCH --mail-user lennart.vanhirtum@gmail.com
 
-module load intelFPGA_pro nalla_pcie toolchain/gompi
+source fpgaModules.sh
 
 ./prepareLibrary.sh
 

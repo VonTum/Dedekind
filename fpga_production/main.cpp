@@ -58,7 +58,7 @@ static bool ENABLE_STATISTICS = false;
 static cl_uint SHOW_FRONT = 0;
 static cl_uint SHOW_TAIL = 0;
 static bool USE_DOUBLE_MBF_LUT = 1;
-static double ACTIVITY_MULTIPLIER = 120.0;
+static double ACTIVITY_MULTIPLIER = 180.0;
 
 // OpenCL runtime configuration
 static cl_platform_id platform = NULL;
@@ -196,15 +196,17 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 		cl_uint bufferSize = static_cast<cl_int>(job.size());
 		size_t numberOfBottoms = job.getNumberOfBottoms();
 		NodeIndex topIdx = job.getTop();
-		std::cout << "Grabbed job " << topIdx << " with " << numberOfBottoms << " bottoms" << std::endl;
+		std::cout << "Grabbed job " << topIdx << " with " << numberOfBottoms << " bottoms\nGrabbing output buffer..." << std::endl;
 		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
+		std::cout << "Grabbed output buffer" << std::endl;
 
 		if(ENABLE_SHUFFLE) shuffleBots(job.begin(), job.end());
 
 		constexpr cl_uint JOB_SIZE_ALIGNMENT = 16*32; // Block Size 32, shuffle size 16
 
+		std::cout << "Aligning buffer..." << std::endl;
 		for(; (bufferSize+2) % JOB_SIZE_ALIGNMENT != 0; bufferSize++) {
-			job.bufStart[bufferSize++] = mbfCounts[7] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
+			job.bufStart[bufferSize] = mbfCounts[7] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
 		}
 
 		for(size_t i = 0; i < 2; i++) {
@@ -304,7 +306,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 
 			for(const NodeIndex* curBot = job.begin(); curBot != job.end(); curBot++) {
 				size_t index = job.indexOf(curBot);
-				if(countConnectedSumBuf[index] & 0xE000000000000000 != 0) std::cout << "[ECC ECC]" << std::flush;
+				if((countConnectedSumBuf[index] & 0xE000000000000000) != 0) std::cout << "[ECC ECC]" << std::flush;
 				if(countConnectedSumBuf[index] != countConnectedSumBufCPU[index]) {
 					std::cout << "[!!!!!!!] Mistake found at position " << index << "/" << index << ": ";
 					std::cout << "FPGA: {" << getPCoeffSum(countConnectedSumBuf[index]) << "; " << getPCoeffCount(countConnectedSumBuf[index]) << "} ";

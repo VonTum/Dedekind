@@ -1,4 +1,4 @@
-set_global_assignment -name TOP_LEVEL_ENTITY pcoeffProcessorUnit
+set_global_assignment -name TOP_LEVEL_ENTITY streamingCountConnectedCore
 set_global_assignment -name ORIGINAL_QUARTUS_VERSION 21.4.0
 set_global_assignment -name PROJECT_CREATION_TIME_DATE "17:22:50  MARCH 08, 2022"
 set_global_assignment -name LAST_QUARTUS_VERSION "20.4.0 Pro Edition"
@@ -81,4 +81,13 @@ set_global_assignment -name VERILOG_FILE src/botPermuter.v
 set_global_assignment -name VERILOG_FILE src/botPermuter1234.v
 set_global_assignment -name VERILOG_FILE src/aggregatingPipeline.v
 set_global_assignment -name VERILOG_FILE src/aggregatingPermutePipeline.v
-set_instance_assignment -name PARTITION_COLOUR 4291313151 -to OpenCLFullPermutationPipeline -entity pcoeffProcessorUnit
+set_instance_assignment -name PARTITION_COLOUR 4291313151 -to OpenCLFullPermutationPipeline -entity streamingCountConnectedCore
+set_instance_assignment -name PLACE_REGION "X1 Y1 X20 Y20" -to countConnectedCore|combinatorialComponent|newSeedProductionPipe
+set_instance_assignment -name RESERVE_PLACE_REGION OFF -to countConnectedCore|combinatorialComponent|newSeedProductionPipe
+set_instance_assignment -name CORE_ONLY_PLACE_REGION ON -to countConnectedCore|combinatorialComponent|newSeedProductionPipe
+set_instance_assignment -name REGION_NAME newSeedProductionPipe -to countConnectedCore|combinatorialComponent|newSeedProductionPipe
+set_instance_assignment -name PLACE_REGION "X1 Y1 X20 Y20" -to countConnectedCore|combinatorialComponent|explorationPipe
+set_instance_assignment -name RESERVE_PLACE_REGION OFF -to countConnectedCore|combinatorialComponent|explorationPipe
+set_instance_assignment -name CORE_ONLY_PLACE_REGION ON -to countConnectedCore|combinatorialComponent|explorationPipe
+set_instance_assignment -name REGION_NAME explorationPipe -to countConnectedCore|combinatorialComponent|explorationPipe
+set_instance_assignment -name PARTITION_COLOUR 4288610213 -to streamingCountConnectedCore -entity streamingCountConnectedCore
