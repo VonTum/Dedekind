@@ -198,6 +198,8 @@ std::vector<BetaResult> pcoeffPipeline(const FlatMBFStructure<Variables>& allMBF
 
 	resultProcessingThread.join();
 
+	assert(results.size() == topIndices.size());
+
 	return results;
 }
 

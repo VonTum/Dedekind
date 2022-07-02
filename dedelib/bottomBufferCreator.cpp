@@ -4,6 +4,7 @@
 
 #include "knownData.h"
 
+#include <xmmintrin.h>
 #include <emmintrin.h>
 
 #include <cstring>
@@ -13,6 +14,7 @@
 #include "flatBufferManagement.h"
 #include "fileNames.h"
 
+#include "aligned_alloc.h"
 
 /*
  * Swapper code
@@ -110,6 +112,14 @@ static uint64_t computeNextLayer(
 					_mm_stream_si32(reinterpret_cast<int*>(resultBuffers[idx]++), static_cast<int>(thisValue)); // TODO Compare performance
 			}
 		}
+
+		// Prefetch a bit in advance
+		uint32_t prefetchLinkI = linkI + 256; // PREFETCH OFFSET
+		if(prefetchLinkI < numberOfLinksToLayer) {
+			uint32_t prefetchLink = links[prefetchLinkI];
+			uint32_t prefetchIdx = prefetchLink & uint32_t(0x7FFFFFFF);
+			_mm_prefetch(swapperIn + prefetchIdx, _MM_HINT_T1);
+		} 
 	}
 
 	assert(curNodeI == toLayerSize);
@@ -126,6 +136,25 @@ static void finalizeBuffer(unsigned int Variables, uint32_t* __restrict & result
 		*resultBuffer++ = finalNode;
 	}
 	*resultBuffer++ = uint32_t(0x80000000);*/
+}
+
+static void finalizeMaskBuffers(
+	unsigned int Variables,
+	uint64_t bufferMask,
+	uint32_t nodeOffset, 
+	const JobTopInfo* tops,
+	uint32_t* __restrict * __restrict resultBuffers
+) {
+	while(bufferMask != 0) {
+		int idx = ctz64(bufferMask);
+		bufferMask &= ~(uint64_t(1) << idx);
+
+		uint32_t finalizeUpTo = nodeOffset;
+#ifdef PCOEFF_DEDUPLICATE
+		if(tops[idx].topDual < finalizeUpTo) finalizeUpTo = tops[idx].topDual;
+#endif
+		finalizeBuffer(Variables, resultBuffers[idx], finalizeUpTo);
+	}
 }
 
 static void generateBotBuffers(
@@ -171,24 +200,19 @@ static void generateBotBuffers(
 
 		activeMask &= ~finishedBuffers;
 
-		while(finishedBuffers != 0) {
-			int idx = ctz64(finishedBuffers);
-			finishedBuffers &= ~(uint64_t(1) << idx);
-
-			size_t finalizeUpTo = nodeOffset;
-#ifdef PCOEFF_DEDUPLICATE
-			if(tops[idx].topDual < finalizeUpTo) finalizeUpTo = tops[idx].topDual;
-#endif
-			finalizeBuffer(Variables, resultBuffers[idx], finalizeUpTo);
-
-			jobs[idx].bufEnd = resultBuffers[idx];
-			outputQueue.push(jobs[idx]);
-		}
+		finalizeMaskBuffers(Variables, finishedBuffers, nodeOffset, tops, resultBuffers);
 
 		if(activeMask == 0) break;
 
 		std::swap(swapperA, swapperB);
 	}
+
+	finalizeMaskBuffers(Variables, activeMask, 0, tops, resultBuffers);
+
+	for(int i = 0; i < numberOfTops; i++) {
+		jobs[i].bufEnd = resultBuffers[i];
+	}
+	outputQueue.pushN(jobs, numberOfTops);
 }
 
 const uint32_t* loadLinks(unsigned int Variables) {
@@ -227,11 +251,11 @@ void runBottomBufferCreator(
 	const uint32_t* links = loadLinks(Variables);
 
 	size_t SWAPPER_WIDTH = getMaxLayerSize(Variables);
-	uint64_t* swapperA = new uint64_t[SWAPPER_WIDTH];
-	uint64_t* swapperB = new uint64_t[SWAPPER_WIDTH];
+	uint64_t* swapperA = aligned_mallocT<uint64_t>(SWAPPER_WIDTH, 64);
+	uint64_t* swapperB = aligned_mallocT<uint64_t>(SWAPPER_WIDTH, 64);
 
 	runBottomBufferCreatorNoAlloc(Variables, jobTops, outputQueue, returnQueue, links, swapperA, swapperB);
 
-	delete[] swapperA;
-	delete[] swapperB;
+	aligned_free(swapperA);
+	aligned_free(swapperB);
 }
