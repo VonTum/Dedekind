@@ -153,11 +153,6 @@ std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::ve
 // Requires a Processor function of type void(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& context)
 template<unsigned int Variables, typename Processor>
 std::vector<BetaResult> pcoeffPipeline(const FlatMBFStructure<Variables>& allMBFData, const std::vector<NodeIndex>& topIndices, const Processor& processorFunc, size_t numberOfInputBuffers, size_t numberOfOutputBuffers) {
-	if(numberOfInputBuffers < 64) {
-		std::cerr << "Too few input buffers!" << std::endl;
-		std::abort();
-	}
-	
 	PCoeffProcessingContext context(Variables, numberOfInputBuffers, numberOfOutputBuffers);
 
 	std::vector<BetaResult> results;
@@ -167,7 +162,7 @@ std::vector<BetaResult> pcoeffPipeline(const FlatMBFStructure<Variables>& allMBF
 
 	std::thread inputProducerThread([&]() {
 		try {
-			runBottomBufferCreator(Variables, topInfos, context.inputQueue, context.inputBufferReturnQueue);
+			runBottomBufferCreator(Variables, topInfos, context.inputQueue, context.inputBufferReturnQueue, 8);
 		} catch(const char* errText) {
 			std::cerr << "Error thrown in inputProducerThread: " << errText;
 			exit(-1);

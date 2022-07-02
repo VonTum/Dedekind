@@ -37,6 +37,7 @@ add_library(dedelib
   dedelib/flatPCoeffProcessing.cpp
   dedelib/supercomputerJobs.cpp
   dedelib/bottomBufferCreator.cpp
+  dedelib/threadUtils.cpp
 
   dedelib/bigint/uint128_t.cpp
   dedelib/bigint/uint256_t.cpp

@@ -33,22 +33,17 @@ std::vector<std::string> splitList(const std::string& strList) {
 }
 
 inline void benchmarkBottomBufferProduction(const std::string& arg) {
-	size_t separatorIdx = arg.find_last_of(",");
-	unsigned int Variables = std::stoi(arg.substr(0, separatorIdx));
-	int sampleCount = std::stoi(arg.substr(separatorIdx+1));
+	size_t separatorIdxA = arg.find_first_of(",");
+	size_t separatorIdxB = arg.find_last_of(",");
+	unsigned int Variables = std::stoi(arg.substr(0, separatorIdxA));
+	int sampleCount = std::stoi(arg.substr(separatorIdxA+1, separatorIdxB));
+	int threadCount = std::stoi(arg.substr(separatorIdxB+1));
 
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
 	auto tops = generateRangeSample(Variables, sampleCount);
 	auto jobTops = convertTopInfos(flatNodes, tops);
 
 	PCoeffProcessingContext context(Variables, 200, 0);
-
-	
-	const uint32_t* links = loadLinks(Variables);
-
-	size_t SWAPPER_WIDTH = getMaxLayerSize(Variables);
-	uint64_t* swapperA = new uint64_t[SWAPPER_WIDTH];
-	uint64_t* swapperB = new uint64_t[SWAPPER_WIDTH];
 
 	std::cout << "Files loaded. Starting benchmark." << std::endl;
 
@@ -67,10 +62,7 @@ inline void benchmarkBottomBufferProduction(const std::string& arg) {
 		}
 	});
 
-	runBottomBufferCreatorNoAlloc(Variables, jobTops, context.inputQueue, context.inputBufferReturnQueue, links, swapperA, swapperB);
-
-	delete[] swapperA;
-	delete[] swapperB;
+	runBottomBufferCreator(Variables, jobTops, context.inputQueue, context.inputBufferReturnQueue, threadCount);
 
 	loopBack.join();
 }

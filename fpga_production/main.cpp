@@ -491,7 +491,7 @@ int main(int argc, char** argv) {
 	std::cout << "Took " << std::chrono::duration<double>(kernelInitializedDone - flatMBFLoadDone).count() << "s" << std::endl;
 
 	std::cout << "Pipelining computation for " << topsToProcess.size() << " tops..." << std::endl;
-	std::vector<BetaResult> result = pcoeffPipeline<7>(allMBFData, topsToProcess, fpgaProcessor_FullySerial, 40, 10);
+	std::vector<BetaResult> result = pcoeffPipeline<7>(allMBFData, topsToProcess, fpgaProcessor_FullySerial, 200, 10);
 	std::cout << "Computation Finished!" << std::endl;
 
 	for(const BetaResult& r : result) {

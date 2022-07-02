@@ -10,11 +10,19 @@
 #include <cstring>
 #include <vector>
 #include <algorithm>
+#include <atomic>
+#include <thread>
+#include <chrono>
 
 #include "flatBufferManagement.h"
 #include "fileNames.h"
 
 #include "aligned_alloc.h"
+
+#include "threadUtils.h"
+
+typedef uint8_t swapper_block;
+constexpr int BUFFERS_PER_BATCH = sizeof(swapper_block) * 8;
 
 /*
  * Swapper code
@@ -23,13 +31,13 @@
 // Returns the starting layer aka the highest layer
 static int initializeSwapperRun(
 	unsigned int Variables,
-	uint64_t* __restrict swapper,
+	swapper_block* __restrict swapper,
 	uint32_t* __restrict * __restrict resultBuffers,
 	const JobTopInfo* __restrict tops,
 	int* topLayers,
 	int numberOfTops
 ) {
-	std::memset(swapper, 0, sizeof(uint64_t) * getMaxLayerSize(Variables));
+	std::memset(swapper, 0, sizeof(swapper_block) * getMaxLayerSize(Variables));
 
 	int highestLayer = 0;
 	for(int i = 0; i < numberOfTops; i++) {
@@ -53,7 +61,7 @@ static int initializeSwapperRun(
 
 static void initializeSwapperTops(
 	unsigned int Variables,
-	uint64_t* __restrict swapper,
+	swapper_block* __restrict swapper,
 	int currentLayer,
 	const JobTopInfo* __restrict tops,
 	const int* topLayers,
@@ -62,29 +70,29 @@ static void initializeSwapperTops(
 	for(int topI = 0; topI < numberOfTops; topI++) {
 		if(topLayers[topI] == currentLayer) {
 			uint32_t topIdxInLayer = tops[topI].top - flatNodeLayerOffsets[Variables][currentLayer];
-			swapper[topIdxInLayer] |= uint64_t(1) << topI;
+			swapper[topIdxInLayer] |= swapper_block(1) << topI;
 		}
 	}
 }
 
 // Computes 64 result buffers at a time
-static uint64_t computeNextLayer(
+static swapper_block computeNextLayer(
 	const uint32_t* __restrict links, // Links index from the previous layer to this layer. Last element of a link streak will have a 1 in the 31 bit position. 
 	const JobTopInfo* tops,
-	const uint64_t* __restrict swapperIn,
-	uint64_t* __restrict swapperOut,
+	const swapper_block* __restrict swapperIn,
+	swapper_block* __restrict swapperOut,
 	uint32_t resultIndexOffset,
 	uint32_t numberOfLinksToLayer,
 	uint32_t* __restrict * __restrict resultBuffers,
-	uint64_t activeMask = 0xFFFFFFFFFFFFFFFF // Has a 1 for active buffers
+	swapper_block activeMask = 0xFFFFFFFFFFFFFFFF // Has a 1 for active buffers
 #ifndef NDEBUG
 	,uint32_t fromLayerSize = 0,
 	uint32_t toLayerSize = 0
 #endif
 ) {
-	uint64_t finishedConnections = ~uint64_t(0);
+	swapper_block finishedConnections = ~swapper_block(0);
 
-	uint64_t currentConnectionsIn = 0;
+	swapper_block currentConnectionsIn = 0;
 	uint32_t curNodeI = 0;
 	for(uint32_t linkI = 0; linkI < numberOfLinksToLayer; linkI++) {
 		uint32_t curLink = links[linkI];
@@ -103,7 +111,7 @@ static uint64_t computeNextLayer(
 
 			while(currentConnectionsIn != 0) {
 				int idx = ctz64(currentConnectionsIn);
-				currentConnectionsIn &= ~(uint64_t(1) << idx);
+				currentConnectionsIn &= ~(swapper_block(1) << idx);
 
 #ifdef PCOEFF_DEDUPLICATE
 				if(thisValue < tops[idx].topDual)
@@ -114,12 +122,12 @@ static uint64_t computeNextLayer(
 		}
 
 		// Prefetch a bit in advance
-		uint32_t prefetchLinkI = linkI + 256; // PREFETCH OFFSET
+		/*uint32_t prefetchLinkI = linkI + 512; // PREFETCH OFFSET
 		if(prefetchLinkI < numberOfLinksToLayer) {
 			uint32_t prefetchLink = links[prefetchLinkI];
 			uint32_t prefetchIdx = prefetchLink & uint32_t(0x7FFFFFFF);
-			_mm_prefetch(swapperIn + prefetchIdx, _MM_HINT_T1);
-		} 
+			_mm_prefetch(swapperIn + prefetchIdx, _MM_HINT_T0);
+		}*/
 	}
 
 	assert(curNodeI == toLayerSize);
@@ -140,14 +148,14 @@ static void finalizeBuffer(unsigned int Variables, uint32_t* __restrict & result
 
 static void finalizeMaskBuffers(
 	unsigned int Variables,
-	uint64_t bufferMask,
+	swapper_block bufferMask,
 	uint32_t nodeOffset, 
 	const JobTopInfo* tops,
 	uint32_t* __restrict * __restrict resultBuffers
 ) {
 	while(bufferMask != 0) {
 		int idx = ctz64(bufferMask);
-		bufferMask &= ~(uint64_t(1) << idx);
+		bufferMask &= ~(swapper_block(1) << idx);
 
 		uint32_t finalizeUpTo = nodeOffset;
 #ifdef PCOEFF_DEDUPLICATE
@@ -159,28 +167,28 @@ static void finalizeMaskBuffers(
 
 static void generateBotBuffers(
 	unsigned int Variables, 
-	uint64_t* __restrict swapperA,
-	uint64_t* __restrict swapperB,
+	swapper_block* __restrict swapperA,
+	swapper_block* __restrict swapperB,
 	uint32_t* __restrict * __restrict resultBuffers,
 	SynchronizedQueue<JobInfo>& outputQueue,
 	const uint32_t* __restrict links,
 	const JobTopInfo* tops,
 	int numberOfTops
 ) {
-	JobInfo jobs[64];
+	JobInfo jobs[BUFFERS_PER_BATCH];
 	for(size_t i = 0; i < numberOfTops; i++) {
 		jobs[i].bufStart = resultBuffers[i];
 		jobs[i].topDual = tops[i].topDual;
 	}
 
-	int topLayers[64];
+	int topLayers[BUFFERS_PER_BATCH];
 	int startingLayer = initializeSwapperRun(Variables, swapperA, resultBuffers, tops, topLayers, numberOfTops);
 
 	for(size_t i = 0; i < numberOfTops; i++) {
 		jobs[i].topLayer = topLayers[i];
 	}
 	
-	uint64_t activeMask = numberOfTops == 64 ? 0xFFFFFFFFFFFFFFFF : (uint64_t(1) << numberOfTops) - 1; // Has a 1 for active buffers
+	swapper_block activeMask = numberOfTops == BUFFERS_PER_BATCH ? swapper_block(0xFFFFFFFFFFFFFFFF) : (swapper_block(1) << numberOfTops) - 1; // Has a 1 for active buffers
 
 	for(int toLayer = startingLayer - 1; toLayer >= 0; toLayer--) {
 		initializeSwapperTops(Variables, swapperA, toLayer+1, tops, topLayers, numberOfTops);
@@ -191,8 +199,8 @@ static void generateBotBuffers(
 		assert((thisLayerLinks[numberOfLinksToLayer-1] & uint32_t(0x80000000)) != 0);
 
 		uint32_t nodeOffset = flatNodeLayerOffsets[Variables][toLayer];
-		// Computes 64 result buffers at a time
-		uint64_t finishedBuffers = computeNextLayer(thisLayerLinks, tops, swapperA, swapperB, nodeOffset, numberOfLinksToLayer, resultBuffers, activeMask
+		// Computes BUFFERS_PER_BATCH result buffers at a time
+		swapper_block finishedBuffers = computeNextLayer(thisLayerLinks, tops, swapperA, swapperB, nodeOffset, numberOfLinksToLayer, resultBuffers, activeMask
 #ifndef NDEBUG
 			,layerSizes[Variables][toLayer+1],layerSizes[Variables][toLayer]
 #endif
@@ -219,43 +227,68 @@ const uint32_t* loadLinks(unsigned int Variables) {
 	return readFlatBuffer<uint32_t>(FileName::mbfStructure(Variables), getTotalLinkCount(Variables));
 }
 
-void runBottomBufferCreatorNoAlloc (
+#include <iostream>
+
+static void runBottomBufferCreatorNoAlloc (
 	unsigned int Variables,
-	const std::vector<JobTopInfo>& jobTops,
+	std::atomic<const JobTopInfo*>& curStartingJobTop,
+	const JobTopInfo* jobTopsEnd,
 	SynchronizedQueue<JobInfo>& outputQueue,
 	SynchronizedStack<uint32_t*>& returnQueue,
-	const uint32_t* links,
-	uint64_t* swapperA,
-	uint64_t* swapperB
+	const uint32_t* links
 ) {
-	uint32_t* buffersEnd[64];
-	for(size_t startingTop = 0; startingTop < jobTops.size(); startingTop += 64) {
-		const JobTopInfo* curJobSet = &jobTops[startingTop];
+	size_t SWAPPER_WIDTH = getMaxLayerSize(Variables);
+	swapper_block* swapperA = aligned_mallocT<swapper_block>(SWAPPER_WIDTH, 64);
+	swapper_block* swapperB = aligned_mallocT<swapper_block>(SWAPPER_WIDTH, 64);
 
-		size_t numberOfTops = std::min(jobTops.size() - startingTop, size_t(64));
+	std::cout << "BottomBufferCreator started! " << std::this_thread::get_id() << std::endl;
 
+	while(true) {
+		const JobTopInfo* grabbedTopSet = curStartingJobTop.fetch_add(BUFFERS_PER_BATCH);
+		if(grabbedTopSet >= jobTopsEnd) break;
+
+		int numberOfTops = std::min(int(jobTopsEnd - grabbedTopSet), BUFFERS_PER_BATCH);
+
+		//std::cout << std::this_thread::get_id() << " grabbed " << numberOfTops << " tops!" << std::endl;
+
+		uint32_t* buffersEnd[BUFFERS_PER_BATCH];
 		returnQueue.popN_wait(buffersEnd, numberOfTops);
 
-		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, outputQueue, links, curJobSet, numberOfTops);
+		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, outputQueue, links, grabbedTopSet, numberOfTops);
 	}
 
-	outputQueue.close();
+	aligned_free(swapperA);
+	aligned_free(swapperB);
 }
 
 void runBottomBufferCreator(
 	unsigned int Variables,
 	const std::vector<JobTopInfo>& jobTops,
 	SynchronizedQueue<JobInfo>& outputQueue,
-	SynchronizedStack<uint32_t*>& returnQueue 
+	SynchronizedStack<uint32_t*>& returnQueue,
+	int numberOfThreads
 ) {
+	setCoreComplexAffinity(0);
+
+	std::cout << "[BottomBufferCreator] Loading Links...\n" << std::flush;
+	auto linkLoadStart = std::chrono::high_resolution_clock::now();
 	const uint32_t* links = loadLinks(Variables);
+	double timeTaken = (std::chrono::high_resolution_clock::now() - linkLoadStart).count() * 1.0e-9;
+	std::cout << "[BottomBufferCreator] Finished loading links. Took " + std::to_string(timeTaken) + "s\n" << std::flush;
 
-	size_t SWAPPER_WIDTH = getMaxLayerSize(Variables);
-	uint64_t* swapperA = aligned_mallocT<uint64_t>(SWAPPER_WIDTH, 64);
-	uint64_t* swapperB = aligned_mallocT<uint64_t>(SWAPPER_WIDTH, 64);
+	std::atomic<const JobTopInfo*> jobTopAtomic = &jobTops[0];
+	const JobTopInfo* jobTopEnd = jobTopAtomic.load() + jobTops.size();
 
-	runBottomBufferCreatorNoAlloc(Variables, jobTops, outputQueue, returnQueue, links, swapperA, swapperB);
+	std::vector<std::thread> threads(numberOfThreads - 1);
+	for(int t = 0; t < numberOfThreads - 1; t++) {
+		threads[t] = std::thread([&](){runBottomBufferCreatorNoAlloc(Variables, jobTopAtomic, jobTopEnd, outputQueue, returnQueue, links);});
+		setCoreComplexAffinity(threads[t], t+1);
+	}
+	runBottomBufferCreatorNoAlloc(Variables, jobTopAtomic, jobTopEnd, outputQueue, returnQueue, links);
 
-	aligned_free(swapperA);
-	aligned_free(swapperB);
+	for(std::thread& t : threads) {
+		t.join();
+	}
+
+	outputQueue.close();
 }

@@ -15,19 +15,10 @@ struct JobTopInfo {
 
 const uint32_t* loadLinks(unsigned int Variables);
 
-void runBottomBufferCreatorNoAlloc (
-	unsigned int Variables,
-	const std::vector<JobTopInfo>& jobTops,
-	SynchronizedQueue<JobInfo>& outputQueue,
-	SynchronizedStack<uint32_t*>& returnQueue,
-	const uint32_t* links,
-	uint64_t* swapperA,
-	uint64_t* swapperB
-);
-
 void runBottomBufferCreator(
 	unsigned int Variables,
 	const std::vector<JobTopInfo>& jobTops,
 	SynchronizedQueue<JobInfo>& outputQueue,
-	SynchronizedStack<uint32_t*>& returnQueue
+	SynchronizedStack<uint32_t*>& returnQueue,
+	int numberOfThreads = 1
 );
