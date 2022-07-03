@@ -84,10 +84,10 @@ static swapper_block computeNextLayer(
 	uint32_t resultIndexOffset,
 	uint32_t numberOfLinksToLayer,
 	uint32_t* __restrict * __restrict resultBuffers,
-	swapper_block activeMask = 0xFFFFFFFFFFFFFFFF // Has a 1 for active buffers
+	swapper_block activeMask // Has a 1 for active buffers
 #ifndef NDEBUG
-	,uint32_t fromLayerSize = 0,
-	uint32_t toLayerSize = 0
+	,uint32_t fromLayerSize,
+	uint32_t toLayerSize
 #endif
 ) {
 	swapper_block finishedConnections = ~swapper_block(0);
@@ -176,7 +176,7 @@ static void generateBotBuffers(
 	int numberOfTops
 ) {
 	JobInfo jobs[BUFFERS_PER_BATCH];
-	for(size_t i = 0; i < numberOfTops; i++) {
+	for(int i = 0; i < numberOfTops; i++) {
 		jobs[i].bufStart = resultBuffers[i];
 		jobs[i].topDual = tops[i].topDual;
 	}
@@ -184,7 +184,7 @@ static void generateBotBuffers(
 	int topLayers[BUFFERS_PER_BATCH];
 	int startingLayer = initializeSwapperRun(Variables, swapperA, resultBuffers, tops, topLayers, numberOfTops);
 
-	for(size_t i = 0; i < numberOfTops; i++) {
+	for(int i = 0; i < numberOfTops; i++) {
 		jobs[i].topLayer = topLayers[i];
 	}
 	

@@ -84,7 +84,7 @@ std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::ve
 
 std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sampleCount) {
 	std::vector<NodeIndex> resultingVector;
-	for(int i = 0; i < sampleCount; i++) {
+	for(NodeIndex i = 0; i < sampleCount; i++) {
 		double expectedIndex = mbfCounts[Variables] * (i+0.5) / sampleCount;
 		resultingVector.push_back(static_cast<NodeIndex>(expectedIndex));
 	}

@@ -4,9 +4,7 @@
 
 #include "synchronizedQueue.h"
 
-#include "jobInfo.h"
-
-#define PCOEFF_DEDUPLICATE
+#include "pcoeffClasses.h"
 
 struct JobTopInfo {
 	uint32_t top;

@@ -38,6 +38,8 @@ add_library(dedelib
   dedelib/supercomputerJobs.cpp
   dedelib/bottomBufferCreator.cpp
   dedelib/threadUtils.cpp
+  dedelib/pcoeffClasses.cpp
+  dedelib/resultCollection.cpp
 
   dedelib/bigint/uint128_t.cpp
   dedelib/bigint/uint256_t.cpp

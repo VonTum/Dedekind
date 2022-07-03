@@ -10,22 +10,7 @@
 
 #include "fileNames.h"
 
-#include "jobInfo.h"
-
-typedef uint32_t NodeOffset;
-typedef uint64_t LinkIndex;
-
-struct ClassInfo {
-	uint64_t intervalSizeDown : 48; // log2(2414682040998) == 41.1349703699
-	uint64_t classSize : 16; // log2(5040) == 12.2992080184
-};
-
-struct FlatNode {
-	// dual could be NodeOffset instead of NodeIndex, Requiring only log2(16440466) == 23.9707478566
-	/*NodeIndex*/ uint64_t dual : 30; // log2(490013148) == 28.8682452191
-	/*LinkIndex*/ uint64_t downLinks : 34; // log2(7329014832) == 32.770972138
-	// this second downLinks index marks a list going from this->downLinks to (this+1)->downLinks
-};
+#include "pcoeffClasses.h"
 
 template<unsigned int Variables>
 class FlatMBFStructure {

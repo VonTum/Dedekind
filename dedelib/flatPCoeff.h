@@ -10,12 +10,11 @@
 #include "connectGraph.h"
 #include "threadPool.h"
 
-#include "jobInfo.h"
+#include "pcoeffClasses.h"
+
+#include "resultCollection.h"
 
 #define PCOEFF_MULTITHREAD
-
-// Also defined in bottomBufferCreator.h
-#define PCOEFF_DEDUPLICATE
 
 #ifdef PCOEFF_DEDUPLICATE
 constexpr size_t MAX_BUFSIZE(unsigned int Variables) {
@@ -224,42 +223,6 @@ template<typename TI>
 TI getBitField(TI value, int startAt, int bitWidth) {
 	return (value >> startAt) & ((static_cast<TI>(1) << bitWidth) - static_cast<TI>(1));
 }
-/*
-struct ProcessedPCoeffSum {
-	uint64_t sum : 48;
-	uint64_t count : 16;
-};
-inline ProcessedPCoeffSum produceProcessedPcoeffSumCount(uint64_t pcoeffSum, uint64_t pcoeffCount) {
-	ProcessedPCoeffSum result;
-	result.sum = pcoeffSum;
-	result.count = pcoeffCount;
-	return result;
-}
-
-inline uint64_t getPCoeffSum(ProcessedPCoeffSum input) {
-	return input.sum;
-}
-
-inline uint64_t getPCoeffCount(ProcessedPCoeffSum input) {
-	return input.count;
-}*/
-
-typedef uint64_t ProcessedPCoeffSum;
-
-inline ProcessedPCoeffSum produceProcessedPcoeffSumCount(uint64_t pcoeffSum, uint64_t pcoeffCount) {
-	assert(pcoeffSum < (uint64_t(1) << 48));
-	assert(pcoeffCount < (uint64_t(1) << 13));
-
-	return (pcoeffCount << 48) | pcoeffSum;
-}
-
-inline uint64_t getPCoeffSum(ProcessedPCoeffSum input) {
-	return input & 0x0000FFFFFFFFFFFF;
-}
-
-inline uint64_t getPCoeffCount(ProcessedPCoeffSum input) {
-	return (input & 0x1FFF000000000000) >> 48;
-}
 
 template<unsigned int Variables>
 ProcessedPCoeffSum processPCoeffSum(Monotonic<Variables> top, Monotonic<Variables> bot, BooleanFunction<Variables> graphsBuf[factorial(Variables)]) {
@@ -308,59 +271,6 @@ void processBetasCPU_MultiThread(const FlatMBFStructure<Variables>& downLinkStru
 	});
 }
 
-struct BetaSum {
-	u128 betaSum;
-	
-	// validation data
-	uint64_t countedIntervalSizeDown;
-};
-
-inline BetaSum operator+(BetaSum a, BetaSum b) {
-	return BetaSum{a.betaSum + b.betaSum, a.countedIntervalSizeDown + b.countedIntervalSizeDown};
-}
-inline BetaSum& operator+=(BetaSum& a, BetaSum b) {
-	a.betaSum += b.betaSum;
-	a.countedIntervalSizeDown += b.countedIntervalSizeDown;
-	return a;
-}
-
-// does the necessary math with annotated number of bits, no overflows possible for D(9). 
-template<unsigned int Variables>
-BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount) {
-	constexpr unsigned int VAR_FACTORIAL = factorial(Variables);
-
-	// the multiply is max log2(2^35 * 5040 * 5040) = 59.5984160368 bits long, fits in 64 bits
-	// Compiler optimizes the divide by compile-time constant VAR_FACTORIAL to an imul, much faster!
-	uint64_t deduplicatedTotalPCoeffSum = (pcoeffSum * info.classSize) / VAR_FACTORIAL; 
-	u128 betaTerm = umul128(deduplicatedTotalPCoeffSum, info.intervalSizeDown); // no overflow data loss 64x64->128 bits
-
-	// validation data
-	uint64_t deduplicatedCountedPermutes = (pcoeffCount * info.classSize) / VAR_FACTORIAL;
-
-	return BetaSum{betaTerm, deduplicatedCountedPermutes};
-}
-
-template<unsigned int Variables>
-BetaSum sumOverBetas(const FlatMBFStructure<Variables>& downLinkStructure, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf) {
-	BetaSum total = BetaSum{0,0};
-
-	for(const NodeIndex* cur = idxBuf; cur != bufEnd; cur++) {
-		ClassInfo info = downLinkStructure.allClassInfos[*cur];
-
-		ProcessedPCoeffSum processedPCoeff = *countConnectedSumBuf++;
-
-		if((processedPCoeff & 0x8000000000000000) != uint64_t(0)) {
-			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - idxBuf) << ", value was: " << processedPCoeff << std::endl;
-			throw "ECC ERROR DETECTED!";
-		}
-		uint64_t pcoeffSum = getPCoeffSum(processedPCoeff);
-		uint64_t pcoeffCount = getPCoeffCount(processedPCoeff);
-
-		total += produceBetaTerm<Variables>(info, pcoeffSum, pcoeffCount);
-	}
-	return total;
-}
-
 template<unsigned int Variables, size_t BatchSize>
 void buildJobBatch(const FlatMBFStructure<Variables>& allMBFData, NodeIndex* tops, size_t numberOfTops, JobBatch<Variables, BatchSize>& jobBatch, SwapperLayers<Variables, BitSet<BatchSize>>& swapper) {
 	jobBatch.initialize(allMBFData, tops, numberOfTops);
@@ -369,24 +279,6 @@ void buildJobBatch(const FlatMBFStructure<Variables>& allMBFData, NodeIndex* top
 	computeBuffersDeduplicate(allMBFData, jobBatch, swapper);
 #else
 	computeBuffers(allMBFData, jobBatch, swapper);
-#endif
-}
-
-template<unsigned int Variables>
-BetaSum produceBetaResult(const FlatMBFStructure<Variables>& allMBFData, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf) {
-	// Skip the first element, as it is the top
-	BetaSum jobSum = sumOverBetas(allMBFData, curJob.begin(), curJob.end(), pcoeffSumBuf + JobInfo::FIRST_BOT_OFFSET);
-
-#ifdef PCOEFF_DEDUPLICATE
-	ProcessedPCoeffSum nonDuplicateTopDual = processOneBeta(allMBFData, curJob.getTop(), curJob.topDual);
-
-	ClassInfo info = allMBFData.allClassInfos[curJob.topDual];
-
-	BetaSum nonDuplicateTopDualResult = produceBetaTerm<Variables>(info, getPCoeffSum(nonDuplicateTopDual), getPCoeffCount(nonDuplicateTopDual));
-
-	return jobSum + jobSum + nonDuplicateTopDualResult;
-#else
-	return jobSum;
 #endif
 }
 
@@ -408,47 +300,6 @@ void computeBatchBetaSums(const FlatMBFStructure<Variables>& allMBFData, JobBatc
 		results[i] = produceBetaResult(allMBFData, curJob, pcoeffSumBuf);
 	}
 }
-
-
-struct BetaResult {
-	BetaSum betaSum;
-	NodeIndex topIndex;
-};
-
-class BetaResultCollector {
-	std::vector<BetaSum> allBetaSums;
-	std::vector<bool> hasSeenResult;
-
-public:
-	BetaResultCollector(unsigned int Variables) :
-		allBetaSums(mbfCounts[Variables]),
-		hasSeenResult(mbfCounts[Variables], false) {}
-	
-	void addBetaResult(BetaResult result) {
-		if(hasSeenResult[result.topIndex]) {
-			std::cerr << "Error: Duplicate beta result for topIdx " << result.topIndex << "! Aborting!" << std::endl;
-			std::abort();
-		} else {
-			hasSeenResult[result.topIndex] = true;
-			allBetaSums[result.topIndex] = result.betaSum;
-		}
-	}
-	void addBetaResults(const std::vector<BetaResult>& results) {
-		for(BetaResult r : results) {
-			this->addBetaResult(r);
-		}
-	}
-
-	std::vector<BetaSum> getResultingSums() {
-		for(size_t i = 0; i < hasSeenResult.size(); i++) {
-			if(!hasSeenResult[i]) {
-				std::cerr << "No Result for top index " << i << " computation not complete! Aborting!";
-				std::abort();
-			}
-		}
-		return allBetaSums;
-	}
-};
 
 template<unsigned int Variables>
 u192 computeDedekindNumberFromBetaSums(const FlatMBFStructure<Variables>& allMBFData, const std::vector<BetaSum>& betaSums) {

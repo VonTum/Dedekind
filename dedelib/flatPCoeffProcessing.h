@@ -21,10 +21,7 @@
 
 #include "bottomBufferCreator.h"
 
-struct OutputBuffer {
-	JobInfo originalInputData;
-	ProcessedPCoeffSum* outputBuf;
-};
+#include "resultCollection.h"
 
 class PCoeffProcessingContext {
 public:
@@ -77,27 +74,6 @@ void inputProducer(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessi
 		processingContext.inputQueue.pushN(jobBatch.jobs, numberInThisBatch);
 	}
 	std::cout << "Input processor finished.\n" << std::flush;
-}
-
-template<unsigned int Variables>
-void resultProcessor(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& processingContext, std::vector<BetaResult>& finalResults) {
-	std::cout << "Result processor started.\n" << std::flush;
-	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = processingContext.outputQueue.pop_wait()).has_value(); ) {
-		OutputBuffer outBuf = outputBuffer.value();
-
-		BetaResult curBetaResult;
-		//if constexpr(Variables == 7) std::cout << "Results for job " << outBuf.originalInputData.getTop() << std::endl;
-		curBetaResult.topIndex = outBuf.originalInputData.getTop();
-		curBetaResult.betaSum = produceBetaResult(allMBFData, outBuf.originalInputData, outBuf.outputBuf);
-
-		processingContext.inputBufferReturnQueue.push(outBuf.originalInputData.bufStart);
-		processingContext.outputBufferReturnQueue.push(outBuf.outputBuf);
-
-		finalResults.push_back(curBetaResult);
-		if constexpr(Variables == 7) std::cout << '.' << std::flush;
-		if(finalResults.size() % 1000 == 0) std::cout << std::endl << finalResults.size() << std::endl;
-	}
-	std::cout << "Result processor finished.\n" << std::flush;
 }
 
 // Deterministically shuffles the input bots to get a more uniform mix of bot difficulty
@@ -178,7 +154,7 @@ std::vector<BetaResult> pcoeffPipeline(const FlatMBFStructure<Variables>& allMBF
 	});
 	std::thread resultProcessingThread([&]() {
 		try {
-			resultProcessor<Variables>(allMBFData, context, results);
+			resultProcessor<Variables>(allMBFData, context.outputQueue, context.inputBufferReturnQueue, context.outputBufferReturnQueue, results);
 		} catch(const char* errText) {
 			std::cerr << "Error thrown in resultProcessingThread: " << errText;
 			exit(-1);
