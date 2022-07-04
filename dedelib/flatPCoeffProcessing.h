@@ -152,7 +152,14 @@ std::vector<BetaResult> pcoeffPipeline(const std::vector<NodeIndex>& topIndices,
 		std::vector<JobTopInfo> topInfos = convertTopInfos(nodes, topIndices);
 		return topInfos;
 	});
-
+	std::thread resultProcessingThread([&]() {
+		try {
+			resultProcessor(Variables, context.outputQueue, context.inputBufferReturnQueue, context.outputBufferReturnQueue, results);
+		} catch(const char* errText) {
+			std::cerr << "Error thrown in resultProcessingThread: " << errText;
+			exit(-1);
+		}
+	});
 	std::thread processorThread([&]() {
 		try {
 			const Monotonic<Variables>* allMBFs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
@@ -162,12 +169,15 @@ std::vector<BetaResult> pcoeffPipeline(const std::vector<NodeIndex>& topIndices,
 			exit(-1);
 		}
 	});
-	std::thread resultProcessingThread([&]() {
-		try {
-			resultProcessor(Variables, context.outputQueue, context.inputBufferReturnQueue, context.outputBufferReturnQueue, results);
-		} catch(const char* errText) {
-			std::cerr << "Error thrown in resultProcessingThread: " << errText;
-			exit(-1);
+	
+	std::thread queueWatchdogThread([&](){
+		while(!context.outputQueue.queueHasBeenClose()) {
+			std::cout << "\033[34m[Queues] (" 
+				+ std::to_string(context.inputQueue.size()) + ") -> R(" 
+				+ std::to_string(context.inputBufferReturnQueue.size()) + ") -> ("
+				+ std::to_string(context.outputQueue.size()) + ") -> R(" 
+				+ std::to_string(context.outputBufferReturnQueue.size()) + ")\033[39m\n" << std::flush;
+			std::this_thread::sleep_for(std::chrono::seconds(1));
 		}
 	});
 
@@ -178,6 +188,8 @@ std::vector<BetaResult> pcoeffPipeline(const std::vector<NodeIndex>& topIndices,
 	context.outputQueue.close();
 
 	resultProcessingThread.join();
+	queueWatchdogThread.join();
+
 
 	assert(results.size() == topIndices.size());
 

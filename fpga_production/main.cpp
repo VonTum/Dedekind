@@ -79,7 +79,7 @@ static const size_t lSize = 1;
 
 // Control whether the emulator should be used.
 static bool use_emulator = false;
-
+static std::string kernelFile;
 
 // Function prototypes
 bool init(const char* kernelFile);
@@ -132,21 +132,31 @@ uint64_t getBitRange(uint64_t v, int highestBit, int lowestBit) {
 }*/
 
 void fpgaProcessor_FullySerial(PCoeffProcessingContext& context, const Monotonic<7>* mbfs) {
+	auto startKernelInitialization = std::chrono::system_clock::now();
+	std::cout << "Initializing kernel..." << std::endl;
+	if(!init(kernelFile.c_str())) {
+		exit(-1);
+	}
+	std::cout << "Kernel initialized successfully! ";
+	auto kernelInitializedDone = std::chrono::system_clock::now();
+	std::cout << "Took " << std::chrono::duration<double>(kernelInitializedDone - startKernelInitialization).count() << "s" << std::endl;
+
+
 	auto mbfBufUploadStart = std::chrono::system_clock::now();
 	std::cout << "Uploading mbfLUT buffer..." << std::endl;
 
 	// Can't use MMAP here, memory mapped blocks don't mesh well with OpenCL buffer uploads
-	const uint64_t* mbfsUINT64 = readFlatBufferNoMMAP<uint64_t>(FileName::flatMBFsU64(7), FlatMBFStructure<7>::MBF_COUNT * 2);
+	//const uint64_t* mbfsUINT64 = readFlatBufferNoMMAP<uint64_t>(FileName::flatMBFsU64(7), FlatMBFStructure<7>::MBF_COUNT * 2);
 
 	// Quick fix, apparently __m128 isn't stored as previously thought. Fix better later
-	/*uint64_t* mbfsUINT64 = (uint64_t*) aligned_malloc(mbfCounts[7]*sizeof(Monotonic<7>), 4096);
+	uint64_t* mbfsUINT64 = (uint64_t*) aligned_malloc(mbfCounts[7]*sizeof(Monotonic<7>), 4096);
 	for(size_t i = 0; i < mbfCounts[7]; i++) {
 		Monotonic<7> mbf = mbfs[i];
 		uint64_t upper = _mm_extract_epi64(mbf.bf.bitset.data, 1);
 		uint64_t lower = _mm_extract_epi64(mbf.bf.bitset.data, 0);
 		mbfsUINT64[i*2] = upper;
 		mbfsUINT64[i*2+1] = lower;
-	}*/
+	}
 
 	cl_int status;
 	 // This is allowed, mmap aligns buffers to the nearest page boundary. Usually something like 1024 or 4096 byte alignment > 64
@@ -171,6 +181,8 @@ void fpgaProcessor_FullySerial(PCoeffProcessingContext& context, const Monotonic
 	status = clFinish(queue);
 	checkError(status, "Error while uploading mbfLUT buffer!");
 
+	aligned_free(mbfsUINT64);
+
 	std::optional<std::ofstream> statsFile = {};
 	if(ENABLE_STATISTICS) {
 		statsFile = std::ofstream(FileName::dataPath + "statsFile.csv");
@@ -184,7 +196,6 @@ void fpgaProcessor_FullySerial(PCoeffProcessingContext& context, const Monotonic
 	}
 
 
-	//aligned_free(mbfsUINT64);
 
 	std::cout << "mbfLUT buffer uploaded! ";
 	auto mbfLutBufUploadDone = std::chrono::system_clock::now();
@@ -466,22 +477,12 @@ int main(int argc, char** argv) {
 	for(NodeIndex i : topsToProcess) std::cout << i << ',';
 	std::cout << std::endl;
 
-	std::string kernelFile = "dedekindAccelerator";
+	kernelFile = "dedekindAccelerator";
 
 	if(options.has("kernel")) {
 		kernelFile = options.get<std::string>("kernel");
 		std::cout << "Set Kernel file to: " << kernelFile << "[.aocx]" << std::endl;
 	}
-
-	cl_int status;
-
-	std::cout << "Initializing kernel..." << std::endl;
-	if(!init(kernelFile.c_str())) {
-		return -1;
-	}
-	std::cout << "Kernel initialized successfully! ";
-	auto kernelInitializedDone = std::chrono::system_clock::now();
-	std::cout << "Took " << std::chrono::duration<double>(kernelInitializedDone - flatMBFLoadDone).count() << "s" << std::endl;
 
 	std::cout << "Pipelining computation for " << topsToProcess.size() << " tops..." << std::endl;
 	std::vector<BetaResult> result = pcoeffPipeline<7>(topsToProcess, fpgaProcessor_FullySerial, 200, 10);

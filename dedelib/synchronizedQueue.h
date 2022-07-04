@@ -115,6 +115,19 @@ public:
 #ifndef NDEBUG
 	~SynchronizedQueue() {assert(this->isClosed);}
 #endif
+	// Unprotected. Only use in single-thread context
+	RingQueue<T>& get() {return queue;}
+	const RingQueue<T>& get() const {return queue;}
+
+	bool queueHasBeenClose() {
+		std::lock_guard<std::mutex> lock(mutex);
+		return this->isClosed;
+	}
+
+	size_t size() {
+		std::lock_guard<std::mutex> lock(mutex);
+		return this->queue.size();
+	}
 
 	// Write side
 	void push(T&& item) {
@@ -188,6 +201,11 @@ public:
 	// Unprotected. Only use in single-thread context
 	std::stack<T, std::vector<T>>& get() {return stack;}
 	const std::stack<T, std::vector<T>>& get() const {return stack;}
+
+	size_t size() {
+		std::lock_guard<std::mutex> lock(mutex);
+		return stack.size();
+	}
 
 	// Write side
 	void push(T&& item) {
