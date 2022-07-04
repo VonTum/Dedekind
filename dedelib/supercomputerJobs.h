@@ -25,12 +25,8 @@ void processJob(const std::string& computeFolder, int jobIndex, const std::strin
 	std::string computeID = methodName + "_" + getComputeIdentifier();
 	std::vector<std::uint32_t> topsToProcess = loadJob(Variables + 2, computeFolder, computeID, jobIndex);
 
-	std::cout << "Reading FlatMBFStructure..." << std::endl;
-	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
-	std::cout << "FlatMBFStructure initialized." << std::endl;
-
 	std::cout << "Starting Computation..." << std::endl;
-	std::vector<BetaResult> betaResults = pcoeffPipeline<Variables, Processor>(allMBFData, topsToProcess, processorFunc, 300, 5);
+	std::vector<BetaResult> betaResults = pcoeffPipeline<Variables, Processor>(topsToProcess, processorFunc, 300, 5);
 
 	
 	if(betaResults.size() != topsToProcess.size()) {

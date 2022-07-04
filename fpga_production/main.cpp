@@ -131,7 +131,7 @@ uint64_t getBitRange(uint64_t v, int highestBit, int lowestBit) {
 	std::cout << "Nonzero tally: " << nonZeroCorrects << "/" << nonZeroTotals << std::endl;
 }*/
 
-void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProcessingContext& context) {
+void fpgaProcessor_FullySerial(PCoeffProcessingContext& context, const Monotonic<7>* mbfs) {
 	auto mbfBufUploadStart = std::chrono::system_clock::now();
 	std::cout << "Uploading mbfLUT buffer..." << std::endl;
 
@@ -141,7 +141,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 	// Quick fix, apparently __m128 isn't stored as previously thought. Fix better later
 	/*uint64_t* mbfsUINT64 = (uint64_t*) aligned_malloc(mbfCounts[7]*sizeof(Monotonic<7>), 4096);
 	for(size_t i = 0; i < mbfCounts[7]; i++) {
-		Monotonic<7> mbf = allMBFData.mbfs[i];
+		Monotonic<7> mbf = mbfs[i];
 		uint64_t upper = _mm_extract_epi64(mbf.bf.bitset.data, 1);
 		uint64_t lower = _mm_extract_epi64(mbf.bf.bitset.data, 0);
 		mbfsUINT64[i*2] = upper;
@@ -297,7 +297,7 @@ void fpgaProcessor_FullySerial(const FlatMBFStructure<7>& allMBFData, PCoeffProc
 			ThreadPool pool;
 
 			auto cpuStart = std::chrono::system_clock::now();
-			processBetasCPU_MultiThread(allMBFData, job, countConnectedSumBufCPU.get(), pool);
+			processBetasCPU_MultiThread(mbfs, job, countConnectedSumBufCPU.get(), pool);
 			auto cpuEnd = std::chrono::system_clock::now();
 			double cpuRuntimeSeconds = std::chrono::duration<double>(cpuEnd - cpuStart).count();
 
@@ -475,13 +475,6 @@ int main(int argc, char** argv) {
 
 	cl_int status;
 
-	std::cout << "Loading FlatMBFStructure..." << std::endl;
-	auto flatMBFLoadStart = std::chrono::system_clock::now();
-	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
-	std::cout << "FlatMBFStructure ready. ";
-	auto flatMBFLoadDone = std::chrono::system_clock::now();
-	std::cout << "Took " << std::chrono::duration<double>(flatMBFLoadDone - flatMBFLoadStart).count() << "s" << std::endl;
-
 	std::cout << "Initializing kernel..." << std::endl;
 	if(!init(kernelFile.c_str())) {
 		return -1;
@@ -491,7 +484,7 @@ int main(int argc, char** argv) {
 	std::cout << "Took " << std::chrono::duration<double>(kernelInitializedDone - flatMBFLoadDone).count() << "s" << std::endl;
 
 	std::cout << "Pipelining computation for " << topsToProcess.size() << " tops..." << std::endl;
-	std::vector<BetaResult> result = pcoeffPipeline<7>(allMBFData, topsToProcess, fpgaProcessor_FullySerial, 200, 10);
+	std::vector<BetaResult> result = pcoeffPipeline<7>(topsToProcess, fpgaProcessor_FullySerial, 200, 10);
 	std::cout << "Computation Finished!" << std::endl;
 
 	for(const BetaResult& r : result) {

@@ -42,6 +42,7 @@ static int initializeSwapperRun(
 	int highestLayer = 0;
 	for(int i = 0; i < numberOfTops; i++) {
 		uint32_t curTop = tops[i].top;
+		uint32_t topDual = tops[i].topDual;
 		int layer = getFlatLayerOfIndex(Variables, curTop);
 		if(layer > highestLayer) highestLayer = layer;
 		topLayers[i] = layer;
@@ -50,7 +51,8 @@ static int initializeSwapperRun(
 		*resultBuffers[i]++ = curTop | uint32_t(0x80000000); // Double because the FPGA is double-pumped
 
 #ifdef PCOEFF_DEDUPLICATE
-		if(curTop < tops[i].topDual)
+		*resultBuffers[i]++ = topDual; // Add dual in fixed location. That way it doesn't need to be computed by resultsCollection
+		if(curTop < topDual)
 #endif
 			*resultBuffers[i]++ = curTop;
 	}
@@ -241,7 +243,7 @@ static void runBottomBufferCreatorNoAlloc (
 	swapper_block* swapperA = aligned_mallocT<swapper_block>(SWAPPER_WIDTH, 64);
 	swapper_block* swapperB = aligned_mallocT<swapper_block>(SWAPPER_WIDTH, 64);
 
-	std::cout << "BottomBufferCreator started! " << std::this_thread::get_id() << std::endl;
+	std::cout << "\033[33m[BottomBufferCreator] Thread Started!\033[39m\n" << std::flush;
 
 	while(true) {
 		const JobTopInfo* grabbedTopSet = curStartingJobTop.fetch_add(BUFFERS_PER_BATCH);
@@ -257,27 +259,30 @@ static void runBottomBufferCreatorNoAlloc (
 		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, outputQueue, links, grabbedTopSet, numberOfTops);
 	}
 
+	std::cout << "\033[33m[BottomBufferCreator] Thread Finished!\033[39m\n" << std::flush;
+
 	aligned_free(swapperA);
 	aligned_free(swapperB);
 }
 
 void runBottomBufferCreator(
 	unsigned int Variables,
-	const std::vector<JobTopInfo>& jobTops,
+	std::future<std::vector<JobTopInfo>>& jobTops,
 	SynchronizedQueue<JobInfo>& outputQueue,
 	SynchronizedStack<uint32_t*>& returnQueue,
 	int numberOfThreads
 ) {
 	setCoreComplexAffinity(0);
 
-	std::cout << "[BottomBufferCreator] Loading Links...\n" << std::flush;
+	std::cout << "\033[33m[BottomBufferCreator] Loading Links...\033[39m\n" << std::flush;
 	auto linkLoadStart = std::chrono::high_resolution_clock::now();
 	const uint32_t* links = loadLinks(Variables);
 	double timeTaken = (std::chrono::high_resolution_clock::now() - linkLoadStart).count() * 1.0e-9;
-	std::cout << "[BottomBufferCreator] Finished loading links. Took " + std::to_string(timeTaken) + "s\n" << std::flush;
+	std::cout << "\033[33m[BottomBufferCreator] Finished loading links. Took " + std::to_string(timeTaken) + "s\033[39m\n" << std::flush;
 
-	std::atomic<const JobTopInfo*> jobTopAtomic = &jobTops[0];
-	const JobTopInfo* jobTopEnd = jobTopAtomic.load() + jobTops.size();
+	std::vector<JobTopInfo> jobTopsVec = jobTops.get();
+	std::atomic<const JobTopInfo*> jobTopAtomic = &jobTopsVec[0];
+	const JobTopInfo* jobTopEnd = jobTopAtomic.load() + jobTopsVec.size();
 
 	std::vector<std::thread> threads(numberOfThreads - 1);
 	for(int t = 0; t < numberOfThreads - 1; t++) {
@@ -289,6 +294,7 @@ void runBottomBufferCreator(
 	for(std::thread& t : threads) {
 		t.join();
 	}
+	std::cout << "\033[33m[BottomBufferCreator] All Threads finished! Closing output queue\033[39m\n" << std::flush;
 
 	outputQueue.close();
 }

@@ -5,8 +5,14 @@
 #include <cstddef>
 #include <cassert>
 
-// Also defined in bottomBufferCreator.h
 #define PCOEFF_DEDUPLICATE
+
+#ifdef PCOEFF_DEDUPLICATE
+	constexpr int BUF_BOTTOM_OFFSET = 3; // Two copies of Top and the dual of the top. This dual may not be a valid bottom, so it may have result 0
+	constexpr int TOP_DUAL_INDEX = 2;
+#else
+	constexpr int BUF_BOTTOM_OFFSET = 2; // Two copies of Top
+#endif
 
 typedef uint32_t NodeIndex;
 

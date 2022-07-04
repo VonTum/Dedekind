@@ -233,29 +233,29 @@ ProcessedPCoeffSum processPCoeffSum(Monotonic<Variables> top, Monotonic<Variable
 }
 
 template<unsigned int Variables>
-ProcessedPCoeffSum processOneBeta(const FlatMBFStructure<Variables>& downLinkStructure, NodeIndex topIdx, NodeIndex botIdx) {
-	Monotonic<Variables> top = downLinkStructure.mbfs[topIdx];
-	Monotonic<Variables> bot = downLinkStructure.mbfs[botIdx];
+ProcessedPCoeffSum processOneBeta(const Monotonic<Variables>* mbfs, NodeIndex topIdx, NodeIndex botIdx) {
+	Monotonic<Variables> top = mbfs[topIdx];
+	Monotonic<Variables> bot = mbfs[botIdx];
 
 	BooleanFunction<Variables> graphsBuf[factorial(Variables)];
 	return processPCoeffSum<Variables>(top, bot, graphsBuf);
 }
 
 template<unsigned int Variables>
-void processBetasCPU_SingleThread(const FlatMBFStructure<Variables>& downLinkStructure, const JobInfo& job, ProcessedPCoeffSum* countConnectedSumBuf) {
-	Monotonic<Variables> top = downLinkStructure.mbfs[job.getTop()];
+void processBetasCPU_SingleThread(const Monotonic<Variables>* mbfs, const JobInfo& job, ProcessedPCoeffSum* countConnectedSumBuf) {
+	Monotonic<Variables> top = mbfs[job.getTop()];
 
 	BooleanFunction<Variables> graphsBuf[factorial(Variables)];
 
 	for(const NodeIndex* cur = job.begin(); cur != job.end(); cur++) {
-		Monotonic<Variables> bot = downLinkStructure.mbfs[*cur];
+		Monotonic<Variables> bot = mbfs[*cur];
 		countConnectedSumBuf[job.indexOf(cur)] = processPCoeffSum<Variables>(top, bot, graphsBuf);
 	}
 }
 
 template<unsigned int Variables>
-void processBetasCPU_MultiThread(const FlatMBFStructure<Variables>& downLinkStructure, const JobInfo& job, ProcessedPCoeffSum* countConnectedSumBuf, ThreadPool& threadPool) {
-	Monotonic<Variables> top = downLinkStructure.mbfs[job.getTop()];
+void processBetasCPU_MultiThread(const Monotonic<Variables>* mbfs, const JobInfo& job, ProcessedPCoeffSum* countConnectedSumBuf, ThreadPool& threadPool) {
+	Monotonic<Variables> top = mbfs[job.getTop()];
 
 	std::atomic<const NodeIndex*> i = job.begin();
 	threadPool.doInParallel([&](){
@@ -264,7 +264,7 @@ void processBetasCPU_MultiThread(const FlatMBFStructure<Variables>& downLinkStru
 			const NodeIndex* claimedNodeIndex = i.fetch_add(1);
 			if(claimedNodeIndex >= job.end()) break;
 
-			Monotonic<Variables> bot = downLinkStructure.mbfs[*claimedNodeIndex];
+			Monotonic<Variables> bot = mbfs[*claimedNodeIndex];
 
 			countConnectedSumBuf[job.indexOf(claimedNodeIndex)] = processPCoeffSum<Variables>(top, bot, graphsBuf);
 		}
@@ -292,12 +292,12 @@ void computeBatchBetaSums(const FlatMBFStructure<Variables>& allMBFData, JobBatc
 	for(size_t i = 0; i < jobBatch.jobCount; i++) {
 		const JobInfo& curJob = jobBatch.jobs[i];
 		#ifdef PCOEFF_MULTITHREAD
-		processBetasCPU_MultiThread(allMBFData, curJob, pcoeffSumBuf, threadPool);
+		processBetasCPU_MultiThread(allMBFData.mbfs, curJob, pcoeffSumBuf, threadPool);
 		#else
-		processBetasCPU_SingleThread(allMBFData, curJob, pcoeffSumBuf);
+		processBetasCPU_SingleThread(allMBFData.mbfs, curJob, pcoeffSumBuf);
 		#endif
 
-		results[i] = produceBetaResult(allMBFData, curJob, pcoeffSumBuf);
+		results[i] = produceBetaResult(Variables, allMBFData.allClassInfos, curJob, pcoeffSumBuf);
 	}
 }
 
