@@ -686,21 +686,21 @@ CommandSet miscCommands{"Misc", {
 	{"countValidPermutationSetFraction7_6", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 6); }},
 	{"countValidPermutationSetFraction7_7", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 7); }}
 }, {
-	{"checkIntervalLayers1", [](const std::string& size) {checkIntervalLayers<1>(std::stoi(size)); }},
-	{"checkIntervalLayers2", [](const std::string& size) {checkIntervalLayers<2>(std::stoi(size)); }},
-	{"checkIntervalLayers3", [](const std::string& size) {checkIntervalLayers<3>(std::stoi(size)); }},
-	{"checkIntervalLayers4", [](const std::string& size) {checkIntervalLayers<4>(std::stoi(size)); }},
-	{"checkIntervalLayers5", [](const std::string& size) {checkIntervalLayers<5>(std::stoi(size)); }},
-	{"checkIntervalLayers6", [](const std::string& size) {checkIntervalLayers<6>(std::stoi(size)); }},
-	{"checkIntervalLayers7", [](const std::string& size) {checkIntervalLayers<7>(std::stoi(size)); }},
-	//{"checkIntervalLayers8", [](const std::string& size) {checkIntervalLayers<8>(std::stoi(size)); }},
-	//{"checkIntervalLayers9", [](const std::string& size) {checkIntervalLayers<9>(std::stoi(size)); }}
+	{"checkIntervalLayers1", [](const std::vector<std::string>& size) {checkIntervalLayers<1>(std::stoi(size[0])); }},
+	{"checkIntervalLayers2", [](const std::vector<std::string>& size) {checkIntervalLayers<2>(std::stoi(size[0])); }},
+	{"checkIntervalLayers3", [](const std::vector<std::string>& size) {checkIntervalLayers<3>(std::stoi(size[0])); }},
+	{"checkIntervalLayers4", [](const std::vector<std::string>& size) {checkIntervalLayers<4>(std::stoi(size[0])); }},
+	{"checkIntervalLayers5", [](const std::vector<std::string>& size) {checkIntervalLayers<5>(std::stoi(size[0])); }},
+	{"checkIntervalLayers6", [](const std::vector<std::string>& size) {checkIntervalLayers<6>(std::stoi(size[0])); }},
+	{"checkIntervalLayers7", [](const std::vector<std::string>& size) {checkIntervalLayers<7>(std::stoi(size[0])); }},
+	//{"checkIntervalLayers8", [](const std::vector<std::string>& size) {checkIntervalLayers<8>(std::stoi(size[0])); }},
+	//{"checkIntervalLayers9", [](const std::vector<std::string>& size) {checkIntervalLayers<9>(std::stoi(size[0])); }}
 
-	{"pcoeffLayerElementStats1", [](const std::string& size) {benchPCoeffLayerElementStats<1>(std::stoi(size)); }},
-	{"pcoeffLayerElementStats2", [](const std::string& size) {benchPCoeffLayerElementStats<2>(std::stoi(size)); }},
-	{"pcoeffLayerElementStats3", [](const std::string& size) {benchPCoeffLayerElementStats<3>(std::stoi(size)); }},
-	{"pcoeffLayerElementStats4", [](const std::string& size) {benchPCoeffLayerElementStats<4>(std::stoi(size)); }},
-	{"pcoeffLayerElementStats5", [](const std::string& size) {benchPCoeffLayerElementStats<5>(std::stoi(size)); }},
-	{"pcoeffLayerElementStats6", [](const std::string& size) {benchPCoeffLayerElementStats<6>(std::stoi(size)); }},
-	{"pcoeffLayerElementStats7", [](const std::string& size) {benchPCoeffLayerElementStats<7>(std::stoi(size)); }},
+	{"pcoeffLayerElementStats1", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<1>(std::stoi(size[0])); }},
+	{"pcoeffLayerElementStats2", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<2>(std::stoi(size[0])); }},
+	{"pcoeffLayerElementStats3", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<3>(std::stoi(size[0])); }},
+	{"pcoeffLayerElementStats4", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<4>(std::stoi(size[0])); }},
+	{"pcoeffLayerElementStats5", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<5>(std::stoi(size[0])); }},
+	{"pcoeffLayerElementStats6", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<6>(std::stoi(size[0])); }},
+	{"pcoeffLayerElementStats7", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<7>(std::stoi(size[0])); }}
 }};

@@ -6,67 +6,17 @@
 #include <sstream>
 
 template<unsigned int Variables>
-static void processSuperComputingJob_ST(const std::string& arg) {
-	size_t separatorIdx = arg.find_last_of(",");
-	std::string projectFolderPath = arg.substr(0, separatorIdx);
-	int jobIndex = std::stoi(arg.substr(separatorIdx+1));
+static void processSuperComputingJob_ST(const std::vector<std::string>& args) {
+	std::string projectFolderPath = args[0];
+	int jobIndex = std::stoi(args[1]);
 	processJob<Variables>(projectFolderPath, jobIndex, "cpuST", cpuProcessor_SingleThread<Variables>);
 }
 
 template<unsigned int Variables>
-static void processSuperComputingJob_FMT(const std::string& arg) {
-	size_t separatorIdx = arg.find_last_of(",");
-	std::string projectFolderPath = arg.substr(0, separatorIdx);
-	int jobIndex = std::stoi(arg.substr(separatorIdx+1));
+static void processSuperComputingJob_FMT(const std::vector<std::string>& args) {
+	std::string projectFolderPath = args[0];
+	int jobIndex = std::stoi(args[1]);
 	processJob<Variables>(projectFolderPath, jobIndex, "cpuFMT", cpuProcessor_FineMultiThread<Variables>);
-}
-
-std::vector<std::string> splitList(const std::string& strList) {
-	std::stringstream strStream(strList);
-	std::string segment;
-	std::vector<std::string> results;
-
-	while(std::getline(strStream, segment, ',')) {
-		results.push_back(segment);
-	}
-	return results;
-}
-
-inline void benchmarkBottomBufferProduction(const std::string& arg) {
-	size_t separatorIdxA = arg.find_first_of(",");
-	size_t separatorIdxB = arg.find_last_of(",");
-	unsigned int Variables = std::stoi(arg.substr(0, separatorIdxA));
-	int sampleCount = std::stoi(arg.substr(separatorIdxA+1, separatorIdxB));
-	int threadCount = std::stoi(arg.substr(separatorIdxB+1));
-
-	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
-	auto tops = generateRangeSample(Variables, sampleCount);
-	auto jobTops = convertTopInfos(flatNodes, tops);
-	std::promise<std::vector<JobTopInfo>> jobTopsPromise;
-	jobTopsPromise.set_value(jobTops);
-
-	PCoeffProcessingContext context(Variables, 200, 0);
-
-	std::cout << "Files loaded. Starting benchmark." << std::endl;
-
-	std::thread loopBack([&](){
-		auto startTime = std::chrono::high_resolution_clock::now();
-		size_t bufferI = 0;
-		while(true) {
-			auto optBuf = context.inputQueue.pop_wait();
-			if(optBuf.has_value()) {
-				double secondsSinceStart = ((std::chrono::high_resolution_clock::now() - startTime).count() * 1.0e-9);
-				std::cout << "Buffer " << bufferI++ << " received at " << secondsSinceStart << "s" << std::endl;
-				context.inputBufferReturnQueue.push(optBuf.value().bufStart);
-			} else {
-				break;
-			}
-		}
-	});
-	auto jobTopsFuture = jobTopsPromise.get_future();
-	runBottomBufferCreator(Variables, jobTopsFuture, context.inputQueue, context.inputBufferReturnQueue, threadCount);
-
-	loopBack.join();
 }
 
 CommandSet processingCommands {"Massively parallel Processing Commands", {
@@ -94,8 +44,7 @@ CommandSet processingCommands {"Massively parallel Processing Commands", {
 	{"processDedekindNumber6_FMT", []() {processDedekindNumber<6>(cpuProcessor_FineMultiThread<6>); }},
 	{"processDedekindNumber7_FMT", []() {processDedekindNumber<7>(cpuProcessor_FineMultiThread<7>); }},
 }, {
-	{"initializeSupercomputingProject", [](const std::string& project) {
-		std::vector<std::string> args = splitList(project);
+	{"initializeSupercomputingProject", [](const std::vector<std::string>& args) {
 		std::string projectFolderPath = args[0];
 		unsigned int targetDedekindNumber = std::stoi(args[1]);
 		size_t numberOfJobs = std::stoi(args[2]);
@@ -103,15 +52,13 @@ CommandSet processingCommands {"Massively parallel Processing Commands", {
 		initializeComputeProject(projectFolderPath, targetDedekindNumber, numberOfJobs, topsPerBatch);
 	}},
 
-	{"benchmarkBottomBufferProduction", [](const std::string& arg) {benchmarkBottomBufferProduction(arg);}},
-
-	{"collectAllSupercomputingProjectResults_D3", collectAndProcessResults<1>},
-	{"collectAllSupercomputingProjectResults_D4", collectAndProcessResults<2>},
-	{"collectAllSupercomputingProjectResults_D5", collectAndProcessResults<3>},
-	{"collectAllSupercomputingProjectResults_D6", collectAndProcessResults<4>},
-	{"collectAllSupercomputingProjectResults_D7", collectAndProcessResults<5>},
-	{"collectAllSupercomputingProjectResults_D8", collectAndProcessResults<6>},
-	{"collectAllSupercomputingProjectResults_D9", collectAndProcessResults<7>},
+	{"collectAllSupercomputingProjectResults_D3", [](const std::vector<std::string>& args){collectAndProcessResults<1>(args[0]);}},
+	{"collectAllSupercomputingProjectResults_D4", [](const std::vector<std::string>& args){collectAndProcessResults<2>(args[0]);}},
+	{"collectAllSupercomputingProjectResults_D5", [](const std::vector<std::string>& args){collectAndProcessResults<3>(args[0]);}},
+	{"collectAllSupercomputingProjectResults_D6", [](const std::vector<std::string>& args){collectAndProcessResults<4>(args[0]);}},
+	{"collectAllSupercomputingProjectResults_D7", [](const std::vector<std::string>& args){collectAndProcessResults<5>(args[0]);}},
+	{"collectAllSupercomputingProjectResults_D8", [](const std::vector<std::string>& args){collectAndProcessResults<6>(args[0]);}},
+	{"collectAllSupercomputingProjectResults_D9", [](const std::vector<std::string>& args){collectAndProcessResults<7>(args[0]);}},
 
 	{"processJobCPU1_ST", processSuperComputingJob_ST<1>},
 	{"processJobCPU2_ST", processSuperComputingJob_ST<2>},

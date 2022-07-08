@@ -70,6 +70,12 @@ struct AntiChain {
 		this->bf.forEachPermutation([&func](const BooleanFunction<Variables>& bf) {func(AntiChain(bf)); });
 	}
 
+	// Expects a predicate of the form bool(AntiChain<Variables>)
+	template<typename Predicate>
+	bool hasPermutation(const Predicate& func) const {
+		return this->bf.hasPermutation([&func](const BooleanFunction<Variables>& bf) -> bool {return func(AntiChain(bf));});
+	}
+
 	Layer<Variables> getTopLayer() const {
 		return Layer<Variables>(this->bf.getTopLayer());
 	}
@@ -205,6 +211,12 @@ struct Monotonic {
 	void forEachPermutation(unsigned int fromVar, unsigned int toVar, const Func& func) const {
 		BooleanFunction<Variables> copy = this->bf;
 		copy.forEachPermutation(fromVar, toVar, [&func](const BooleanFunction<Variables>& bf) {func(Monotonic(bf)); });
+	}
+
+	// Expects a predicate of the form bool(Monotonic<Variables>)
+	template<typename Predicate>
+	bool hasPermutation(const Predicate& func) const {
+		return this->bf.hasPermutation([&func](const BooleanFunction<Variables>& bf) -> bool {return func(Monotonic(bf));});
 	}
 
 	bool isEmpty() const {
@@ -382,9 +394,18 @@ Monotonic<Variables> acProd(const Monotonic<Variables>& a, const Monotonic<Varia
 	return acProd(a, b.asAntiChain());
 }
 
+template<unsigned int Variables>
+bool hasPermutationBelow(Monotonic<Variables> top, Monotonic<Variables> bot) {
+	bool foundPermutation = false;
+	Monotonic<Variables> bestPermutation;
+	return bot.hasPermutation([&top, &foundPermutation, &bestPermutation](Monotonic<Variables> permutedBot) -> bool {
+		return permutedBot <= top;
+	});
+}
+
 // if yes, leaves bot in a permutation that was (bot <= top)
 template<unsigned int Variables>
-bool hasPermutationBelow(Monotonic<Variables> top, Monotonic<Variables>& bot, unsigned int fromVar = 0, unsigned int toVar = Variables) {
+bool hasPermutationBelow(Monotonic<Variables> top, Monotonic<Variables>& bot, unsigned int fromVar, unsigned int toVar = Variables) {
 	bool foundPermutation = false;
 	Monotonic<Variables> bestPermutation;
 	bot.forEachPermutation(fromVar, toVar, [&top, &foundPermutation, &bestPermutation](Monotonic<Variables> permutedBot) {
@@ -444,6 +465,12 @@ struct Layer {
 	template<typename Func>
 	void forEachPermutation(const Func& func) const {
 		this->bf.forEachPermutation([&func](const BooleanFunction<Variables>& bf) {func(Layer(bf)); });
+	}
+
+	// Expects a predicate of the form bool(Layer<Variables>)
+	template<typename Predicate>
+	bool hasPermutation(const Predicate& func) const {
+		return this->bf.hasPermutation([&func](const BooleanFunction<Variables>& bf) -> bool {return func(Layer(bf));});
 	}
 
 	// returns the minimally required supporting layer below this layer for it to be monotonic

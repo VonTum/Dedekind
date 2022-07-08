@@ -56,6 +56,7 @@ add_executable(production
   production/dataGenerationCommands.cpp
   production/testSetCommands.cpp
   production/codeGenCommands.cpp
+  production/bottomBufferCommands.cpp
 )
 add_executable(indev
   indev/indev.cpp

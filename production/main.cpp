@@ -1,5 +1,6 @@
 #include <iostream>
 #include <thread>
+#include <sstream>
 
 #include "commands.h"
 
@@ -21,8 +22,8 @@ Correct numbers
 	9: ??????????????????????????????????????????
 */
 
-void listCommands();
-void listFlags() {
+static void listCommands();
+static void listFlags() {
 	std::cout << "--dataDir <dir>: Set data directory" << std::endl;
 
 	std::cout << "-mmap: Use Memory Mapping, Linux-only" << std::endl;
@@ -31,7 +32,7 @@ void listFlags() {
 	std::cout << "-mmap_2MB: Enable Memory Map HugeTLB with page size 2MB, Linux-only, requires hugetlb compatible filesystem" << std::endl;
 	std::cout << "-mmap_1GB: Enable Memory Map HugeTLB with page size 1GB, Linux-only, requires hugetlb compatible filesystem" << std::endl;
 }
-void helpCMD() {
+static void helpCMD() {
 	std::cout << "Commands: " << std::endl;
 	listCommands();
 	std::cout << "Flags: " << std::endl;
@@ -44,15 +45,15 @@ static CommandSet helpCommands{"Help", {
 	{"help", helpCMD}
 }, {}};
 
-static const CommandSet* knownCommandSets[]{&helpCommands, &miscCommands, &dataGenCommands, &flatCommands, &testSetCommands, &processingCommands, &codeGenCommands};
+static const CommandSet* knownCommandSets[]{&helpCommands, &miscCommands, &dataGenCommands, &flatCommands, &testSetCommands, &processingCommands, &codeGenCommands, &bottomBufferCommands};
 
-void listCommands() {
+static void listCommands() {
 	for(const CommandSet* cmdSet : knownCommandSets) {
 		std::cout << cmdSet->name << ":" << std::endl;
-		for(const std::pair<std::string, void(*)()>& cmd : cmdSet->commands) {
+		for(const auto& cmd : cmdSet->commands) {
 			std::cout << "  " << cmd.first << std::endl;
 		}
-		for(const std::pair<std::string, void(*)(const std::string&)>& cmd : cmdSet->commandsWithArg) {
+		for(const auto& cmd : cmdSet->commandsWithArg) {
 			std::cout << "  " << cmd.first << ":<arg>" << std::endl;
 		}
 	}
@@ -73,13 +74,25 @@ inline void runCommandNoArg(const std::string& cmd) {
 	exit(1);
 }
 
+static std::vector<std::string> splitList(const std::string& strList) {
+	std::stringstream strStream(strList);
+	std::string segment;
+	std::vector<std::string> results;
+
+	while(std::getline(strStream, segment, ',')) {
+		results.push_back(segment);
+	}
+	return results;
+}
+
+
 inline void runCommandWithArg(const std::string& cmd, const std::string& arg) {
 	for(const CommandSet* cmdSet : knownCommandSets) {
 		auto foundWithArg = cmdSet->commandsWithArg.find(cmd);
 		if(foundWithArg != cmdSet->commandsWithArg.end()) {
 			std::cout << "running " << cmd.c_str() << "(" << arg.c_str() << ")" << std::endl;
 			TimeTracker timer;
-			(*foundWithArg).second(arg);
+			(*foundWithArg).second(splitList(arg));
 			return;
 		}
 	}

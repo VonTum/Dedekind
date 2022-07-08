@@ -12,9 +12,6 @@
 #include "../dedelib/flatPCoeff.h"
 
 #include <random>
-#include <sstream>
-
-
 
 template<unsigned int Variables>
 void benchmarkSample() {
@@ -477,16 +474,12 @@ void permutCheck24TestSet() {
 
 
 
-/*
-	Parses "38431,31,13854,111,3333" to {38431,31,13854,111,3333}
-*/
-std::vector<size_t> parseSizeList(const std::string& strList) {
-	std::stringstream strStream(strList);
-	std::string segment;
+std::vector<size_t> parseSizeList(const std::vector<std::string>& strList) {
 	std::vector<size_t> resultingCounts;
+	resultingCounts.reserve(strList.size());
 
-	while(std::getline(strStream, segment, ',')) {
-		resultingCounts.push_back(std::stoi(segment));
+	for(const std::string& s : strList) {
+		resultingCounts.push_back(std::stoi(s));
 	}
 
 	return resultingCounts;
@@ -512,22 +505,22 @@ CommandSet testSetCommands{"Test Set Generation", {
 	{"permutCheck24TestSet", []() {permutCheck24TestSet(); }},
 },{
 
-	{"pipelineTestSet1", [](const std::string& size) {pipelineTestSet<1>(std::stoi(size)); }},
-	{"pipelineTestSet2", [](const std::string& size) {pipelineTestSet<2>(std::stoi(size)); }},
-	{"pipelineTestSet3", [](const std::string& size) {pipelineTestSet<3>(std::stoi(size)); }},
-	{"pipelineTestSet4", [](const std::string& size) {pipelineTestSet<4>(std::stoi(size)); }},
-	{"pipelineTestSet5", [](const std::string& size) {pipelineTestSet<5>(std::stoi(size)); }},
-	{"pipelineTestSet6", [](const std::string& size) {pipelineTestSet<6>(std::stoi(size)); }},
-	{"pipelineTestSet7", [](const std::string& size) {pipelineTestSet<7>(std::stoi(size)); }},
+	{"pipelineTestSet1", [](const std::vector<std::string>& size) {pipelineTestSet<1>(std::stoi(size[0])); }},
+	{"pipelineTestSet2", [](const std::vector<std::string>& size) {pipelineTestSet<2>(std::stoi(size[0])); }},
+	{"pipelineTestSet3", [](const std::vector<std::string>& size) {pipelineTestSet<3>(std::stoi(size[0])); }},
+	{"pipelineTestSet4", [](const std::vector<std::string>& size) {pipelineTestSet<4>(std::stoi(size[0])); }},
+	{"pipelineTestSet5", [](const std::vector<std::string>& size) {pipelineTestSet<5>(std::stoi(size[0])); }},
+	{"pipelineTestSet6", [](const std::vector<std::string>& size) {pipelineTestSet<6>(std::stoi(size[0])); }},
+	{"pipelineTestSet7", [](const std::vector<std::string>& size) {pipelineTestSet<7>(std::stoi(size[0])); }},
 
-	{"pipeline6TestSet", [](const std::string& size) {pipelinePackTestSet(std::stoi(size), 4, FileName::pipeline6PackTestSet(7)); }},
-	{"pipeline24PackTestSet", [](const std::string& size) {pipelinePackTestSet(std::stoi(size), 3, FileName::pipeline24PackTestSet(7)); }},
+	{"pipeline6TestSet", [](const std::vector<std::string>& size) {pipelinePackTestSet(std::stoi(size[0]), 4, FileName::pipeline6PackTestSet(7)); }},
+	{"pipeline24PackTestSet", [](const std::vector<std::string>& size) {pipelinePackTestSet(std::stoi(size[0]), 3, FileName::pipeline24PackTestSet(7)); }},
 
-	{"pipeline6TestSetOpenCL", [](const std::string& sizeList) {pipelinePackTestSetForOpenCL(parseSizeList(sizeList), 4, FileName::pipeline6PackTestSetForOpenCLMem(7), FileName::pipeline6PackTestSetForOpenCLCpp(7)); }},
-	{"pipeline24PackTestSetOpenCL", [](const std::string& sizeList) {pipelinePackTestSetForOpenCL(parseSizeList(sizeList), 3, FileName::pipeline24PackTestSetForOpenCLMem(7), FileName::pipeline24PackTestSetForOpenCLCpp(7)); }},
-	{"singleStreamPipelineTestSetOpenCL", [](const std::string& sizeList) {singleStreamPipelineTestSetOpenCL(parseSizeList(sizeList), FileName::singleStreamPipelineTestSetForOpenCLMem(7)); }},
+	{"pipeline6TestSetOpenCL", [](const std::vector<std::string>& sizeList) {pipelinePackTestSetForOpenCL(parseSizeList(sizeList), 4, FileName::pipeline6PackTestSetForOpenCLMem(7), FileName::pipeline6PackTestSetForOpenCLCpp(7)); }},
+	{"pipeline24PackTestSetOpenCL", [](const std::vector<std::string>& sizeList) {pipelinePackTestSetForOpenCL(parseSizeList(sizeList), 3, FileName::pipeline24PackTestSetForOpenCLMem(7), FileName::pipeline24PackTestSetForOpenCLCpp(7)); }},
+	{"singleStreamPipelineTestSetOpenCL", [](const std::vector<std::string>& sizeList) {singleStreamPipelineTestSetOpenCL(parseSizeList(sizeList), FileName::singleStreamPipelineTestSetForOpenCLMem(7)); }},
 
-	{"FullPermutePipelineTestSetOpenCL", [](const std::string& sizeList) {FullPermutePipelineTestSetOpenCL(parseSizeList(sizeList), FileName::FullPermutePipelineTestSetOpenCLMem(7), FileName::FullPermutePipelineTestSetOpenCLCpp(7)); }},
+	{"FullPermutePipelineTestSetOpenCL", [](const std::vector<std::string>& sizeList) {FullPermutePipelineTestSetOpenCL(parseSizeList(sizeList), FileName::FullPermutePipelineTestSetOpenCLMem(7), FileName::FullPermutePipelineTestSetOpenCLCpp(7)); }},
 
-	{"GenTopsFullPermutePipelineTestSetOpenCL", [](const std::string& topList) {GenTopsFullPermutePipelineTestSetOpenCL(parseSizeList(topList), FileName::FullPermutePipelineTestSetOpenCLMem(7), true);}}
+	{"GenTopsFullPermutePipelineTestSetOpenCL", [](const std::vector<std::string>& topList) {GenTopsFullPermutePipelineTestSetOpenCL(parseSizeList(topList), FileName::FullPermutePipelineTestSetOpenCLMem(7), true);}}
 }};

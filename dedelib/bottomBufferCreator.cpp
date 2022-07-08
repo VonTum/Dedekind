@@ -6,6 +6,7 @@
 
 #include <xmmintrin.h>
 #include <emmintrin.h>
+#include <immintrin.h>
 
 #include <cstring>
 #include <vector>
@@ -23,6 +24,9 @@
 
 typedef uint8_t swapper_block;
 constexpr int BUFFERS_PER_BATCH = sizeof(swapper_block) * 8;
+
+#define FPGA_BLOCK_SIZE 32
+#define FPGA_BLOCK_ALIGN (FPGA_BLOCK_SIZE * sizeof(uint32_t))
 
 /*
  * Swapper code
@@ -77,6 +81,29 @@ static void initializeSwapperTops(
 	}
 }
 
+static void optimizeBlockForFPGA(uint32_t* buf) {
+	assert(reinterpret_cast<uintptr_t>(buf) % FPGA_BLOCK_ALIGN == 0);
+	if(__builtin_expect((buf[0] & 0x80000000 == 0), 1)) {
+		uint32_t tmpBuf[32];
+		for(int i = 0; i < 32; i++) {
+			tmpBuf[i] = buf[i];
+		}
+		for(int i = 0; i < 16; i++) {
+			buf[2*i] = buf[i];
+			buf[2*i+1] = buf[i+16];
+		}
+	}
+}
+
+static void addValueToBlockFPGA(uint32_t*__restrict& buf, uint32_t newValue) {
+	*buf = newValue;
+	//_mm_stream_si32(reinterpret_cast<int*>(buf), static_cast<int>(newValue)); // TODO Compare performance
+	buf++;
+	if(__builtin_expect(reinterpret_cast<uintptr_t>(buf) % FPGA_BLOCK_ALIGN == 0, 0)) {
+		optimizeBlockForFPGA(buf - FPGA_BLOCK_SIZE);
+	}
+}
+
 // Computes 64 result buffers at a time
 static swapper_block computeNextLayer(
 	const uint32_t* __restrict links, // Links index from the previous layer to this layer. Last element of a link streak will have a 1 in the 31 bit position. 
@@ -118,8 +145,7 @@ static swapper_block computeNextLayer(
 #ifdef PCOEFF_DEDUPLICATE
 				if(thisValue < tops[idx].topDual)
 #endif
-					//*resultBuffers[idx]++ = thisValue;
-					_mm_stream_si32(reinterpret_cast<int*>(resultBuffers[idx]++), static_cast<int>(thisValue)); // TODO Compare performance
+					addValueToBlockFPGA(resultBuffers[idx], thisValue);
 			}
 		}
 
@@ -138,11 +164,47 @@ static swapper_block computeNextLayer(
 }
 
 static void finalizeBuffer(unsigned int Variables, uint32_t* __restrict & resultBuffer, uint32_t fillUpTo) {
-	for(uint32_t i = 0; i < fillUpTo; i++) {
+	uint32_t curI = 0;
+	if(fillUpTo >= FPGA_BLOCK_SIZE) {
+		uint32_t* __restrict resultBufPtr = resultBuffer;
+		uintptr_t alignOffset = (reinterpret_cast<uintptr_t>(resultBufPtr) / sizeof(uint32_t)) % FPGA_BLOCK_SIZE;
+		if(alignOffset != 0) {
+			uint32_t alignmentElementCount = FPGA_BLOCK_SIZE - alignOffset;
+			fillUpTo = fillUpTo - alignmentElementCount;
+			for(uint32_t i = 0; i < alignmentElementCount; i++) {
+				*resultBuffer++ = fillUpTo + i;
+			}
+			optimizeBlockForFPGA(resultBuffer - FPGA_BLOCK_SIZE);
+		}
+	}
+	// Generate aligned blocks efficiently
+	uint32_t numBlocks = fillUpTo / FPGA_BLOCK_SIZE;
+	if(numBlocks >= 1) {
+		static_assert(FPGA_BLOCK_SIZE == 32);
+		__m256i* dataM = reinterpret_cast<__m256i*>(resultBuffer);
+		__m256i four = _mm256_set1_epi32(4);
+		__m256i v0 = _mm256_set_epi32(19,3,18,2,17,1,16,0);
+		__m256i v1 = _mm256_add_epi32(v0, four);
+		__m256i v2 = _mm256_add_epi32(v1, four);
+		__m256i v3 = _mm256_add_epi32(v2, four);
+		__m256i thirtyTwo = _mm256_slli_epi32(four, 3);
+		for(int blockI = 0; blockI < numBlocks; blockI++) {
+			_mm256_stream_si256(dataM++, v0);
+			_mm256_stream_si256(dataM++, v1);
+			_mm256_stream_si256(dataM++, v2);
+			_mm256_stream_si256(dataM++, v3);
+			v0 = _mm256_add_epi32(v0, thirtyTwo);
+			v1 = _mm256_add_epi32(v1, thirtyTwo);
+			v2 = _mm256_add_epi32(v2, thirtyTwo);
+			v3 = _mm256_add_epi32(v3, thirtyTwo);
+		}
+		resultBuffer += numBlocks * FPGA_BLOCK_SIZE;
+	}
+	for(uint32_t i = numBlocks * FPGA_BLOCK_SIZE; i < fillUpTo; i++) {
 		*resultBuffer++ = i;
 	}
 	/*uint32_t finalNode = mbfCounts[Variables]-1;
-	while(reinterpret_cast<std::uintptr_t>(resultBuffer+2) % 64 != 0) {
+	while(reinterpret_cast<std::uintptr_t>(resultBuffer+2) % FPGA_BLOCK_ALIGN != 0) {
 		*resultBuffer++ = finalNode;
 	}
 	*resultBuffer++ = uint32_t(0x80000000);*/
@@ -281,7 +343,8 @@ void runBottomBufferCreator(
 	std::cout << "\033[33m[BottomBufferCreator] Finished loading links. Took " + std::to_string(timeTaken) + "s\033[39m\n" << std::flush;
 
 	std::vector<JobTopInfo> jobTopsVec = jobTops.get();
-	std::atomic<const JobTopInfo*> jobTopAtomic = &jobTopsVec[0];
+	std::atomic<const JobTopInfo*> jobTopAtomic;
+	jobTopAtomic.store(&jobTopsVec[0]);
 	const JobTopInfo* jobTopEnd = jobTopAtomic.load() + jobTopsVec.size();
 
 	std::vector<std::thread> threads(numberOfThreads - 1);

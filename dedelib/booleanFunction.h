@@ -73,6 +73,36 @@ void forEachPermutationImpl(BooleanFunction<Variables> cur, const Func& func) {
 	}
 }
 
+template<unsigned int Variables, unsigned int Current, typename Predicate>
+bool hasPermutationImpl(BooleanFunction<Variables> cur, const Predicate& func) {
+	if constexpr(Current == Variables - 1) {
+		return func(cur);
+	} else if constexpr(Current == Variables - 2) {
+		if(func(cur)) return true; // 1 2
+		cur.swap(Current, Current + 1);
+		return func(cur); // 2 1
+	} else if constexpr(Current == Variables - 3) {
+		if(func(cur)) return true; // 1 2 3
+		cur.swap(Current, Current + 1);
+		if(func(cur)) return true; // 2 1 3
+		cur.swap(Current, Current + 2);
+		if(func(cur)) return true; // 3 1 2
+		cur.swap(Current, Current + 1);
+		if(func(cur)) return true; // 1 3 2
+		cur.swap(Current, Current + 2);
+		if(func(cur)) return true; // 2 3 1
+		cur.swap(Current, Current + 1);
+		return func(cur); // 3 2 1
+	} else {
+		if(hasPermutationImpl<Variables, Current + 1, Predicate>(cur, func)) return true;
+		for(unsigned int swapping = Current + 1; swapping < Variables; swapping++) {
+			cur.swap(Current, swapping);
+			if(hasPermutationImpl<Variables, Current + 1, Predicate>(cur, func)) return true;
+		}
+		return false;
+	}
+}
+
 template<unsigned int Variables>
 class BooleanFunction {
 	static_assert(Variables >= 1, "Cannot make 0 variable BooleanFunction");
@@ -359,6 +389,12 @@ public:
 	template<typename Func>
 	void forEachPermutation(const Func& func) const {
 		forEachPermutationImpl<Variables, 0, Func>(*this, func);
+	}
+
+	// Expects a predicate of the form bool(BooleanFunction<Variables>)
+	template<typename Predicate>
+	bool hasPermutation(const Predicate& func) const {
+		return hasPermutationImpl<Variables, 0, Predicate>(*this, func);
 	}
 
 	template<size_t Size, typename Func, unsigned int CurVar = 0>
