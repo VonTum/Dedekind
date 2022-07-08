@@ -8,7 +8,7 @@
 #SBATCH --mail-type all
 #SBATCH --mail-user lennart.vanhirtum@gmail.com
 
-source fpgaModules.sh
+source ../fpgaModules.sh
 
 ./prepareLibrary.sh
 
@@ -17,7 +17,7 @@ source fpgaModules.sh
 # -seed=<value>
 # -ecc DOES NOT WORK
 
-aoc -force-single-store-ring -no-interleaving=default dedekindAccelerator.cl -o dedekindAccelerator.aocx -L . -l pcoeffProcessor.aoclib
+aoc -seed=9 -force-single-store-ring -no-interleaving=default dedekindAccelerator.cl -o dedekindAccelerator.aocx -L . -l pcoeffProcessor.aoclib
 
 cp dedekindAccelerator.aocx ../build
 

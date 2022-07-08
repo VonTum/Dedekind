@@ -8,7 +8,7 @@
 #SBATCH --mail-type all
 #SBATCH --mail-user lennart.vanhirtum@gmail.com
 
-source fpgaModules.sh
+source ../fpgaModules.sh
 
 ./prepareLibrary.sh
 
