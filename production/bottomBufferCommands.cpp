@@ -87,9 +87,23 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 					NodeIndex topDual = flatNodes[top].dual;
 					std::cout << "Top=" << top << " received! Dual=" << topDual << std::endl;
 
+					if(loopBackThreadCount == 1) {
+						size_t sampleSize = std::min<size_t>(buf.size(), 70);
+						NodeIndex selectedSampleStart = std::uniform_int_distribution<NodeIndex>(0, buf.size() - sampleSize)(generator);
+						std::cout << "Random buffer sample at offset " << selectedSampleStart << ": " << std::endl;
+						for(size_t i = 0; i < sampleSize; i+=2) {
+							std::cout << buf.bufStart[selectedSampleStart + i] << ' ';
+						}
+						std::cout << std::endl;
+						for(size_t i = 1; i < sampleSize; i+=2) {
+							std::cout << buf.bufStart[selectedSampleStart + i] << ' ';
+						}
+						std::cout << std::endl;
+					}
+
 					for(NodeIndex i : buf) {
 						if(foundBottoms[i]) {
-							std::cout << "  ERROR: Duplicate bottom " << i << std::endl;
+							std::cout << "  \033[31mERROR: Duplicate bottom " << i << std::endl;
 						}
 						foundBottoms[i] = true;
 					}
@@ -106,7 +120,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 						bool correctBottom = hasPermutationBelow(topMBF, botMBF);
 
 						if(foundBottoms[i] != correctBottom) {
-							std::cout << "  ERROR: Incorrect Bottom " << i << (correctBottom ? " should have been included!" : " should NOT have been included!") << std::endl;
+							std::cout << "  \033[31mERROR: Incorrect Bottom " << i << (correctBottom ? " should have been included!" : " should NOT have been included!") << std::endl;
 						}
 					}
 					for(NodeIndex i = checkUpTo; i < mbfCounts[Variables]; i++) {
@@ -115,7 +129,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 						if(i == topDual) continue;
 	#endif
 						if(foundBottoms[i]) {
-							std::cout << "  ERROR: Bottom " << i << " is present but shouldn't be! Above Top/Dual" << std::endl;
+							std::cout << "  \033[31mERROR: Bottom " << i << " is present but shouldn't be! Above Top/Dual" << std::endl;
 						}
 					}
 

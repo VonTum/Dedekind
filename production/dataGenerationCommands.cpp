@@ -170,6 +170,7 @@ void convertFlatMBFStructureToSourceMBFStructure(unsigned int Variables) {
 	std::unique_ptr<int[]> incomingLinksSizes(new int[getMaxLayerSize(Variables)]);
 	for(size_t fromLayerI = numberOfLayers-1; fromLayerI > 0; fromLayerI--) {
 		size_t toLayerI = fromLayerI - 1;
+		std::cout << "To Layer " << toLayerI << std::endl;
 		size_t fromLayerSize = layerSizes[Variables][fromLayerI];
 		size_t toLayerSize = layerSizes[Variables][toLayerI];
 		std::memset(incomingLinksSizes.get(), 0, toLayerSize * sizeof(int));

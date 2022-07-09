@@ -84,13 +84,13 @@ static void initializeSwapperTops(
 static void optimizeBlockForFPGA(uint32_t* buf) {
 	assert(reinterpret_cast<uintptr_t>(buf) % FPGA_BLOCK_ALIGN == 0);
 	if(__builtin_expect(((buf[0] & 0x80000000) == 0), 1)) {
-		uint32_t tmpBuf[32];
-		for(int i = 0; i < 32; i++) {
+		uint32_t tmpBuf[FPGA_BLOCK_SIZE];
+		for(int i = 0; i < FPGA_BLOCK_SIZE; i++) {
 			tmpBuf[i] = buf[i];
 		}
-		for(int i = 0; i < 16; i++) {
-			buf[2*i] = buf[i];
-			buf[2*i+1] = buf[i+16];
+		for(int i = 0; i < FPGA_BLOCK_SIZE/2; i++) {
+			buf[2*i] = tmpBuf[i];
+			buf[2*i+1] = tmpBuf[i+FPGA_BLOCK_SIZE/2];
 		}
 	}
 }
@@ -164,7 +164,7 @@ static swapper_block computeNextLayer(
 	return finishedConnections;
 }
 
-static void finalizeBuffer(unsigned int Variables, uint32_t* __restrict & resultBuffer, uint32_t fillUpTo) {
+static void finalizeBuffer(uint32_t* __restrict & resultBuffer, uint32_t fillUpTo) {
 	uint32_t curI = 0;
 	if(fillUpTo >= FPGA_BLOCK_SIZE) {
 		uint32_t* __restrict resultBufPtr = resultBuffer;
@@ -189,7 +189,7 @@ static void finalizeBuffer(unsigned int Variables, uint32_t* __restrict & result
 		__m256i v2 = _mm256_add_epi32(v1, four);
 		__m256i v3 = _mm256_add_epi32(v2, four);
 		__m256i thirtyTwo = _mm256_slli_epi32(four, 3);
-		for(int blockI = 0; blockI < numBlocks; blockI++) {
+		for(uint32_t blockI = 0; blockI < numBlocks; blockI++) {
 			_mm256_stream_si256(dataM++, v0);
 			_mm256_stream_si256(dataM++, v1);
 			_mm256_stream_si256(dataM++, v2);
@@ -212,7 +212,6 @@ static void finalizeBuffer(unsigned int Variables, uint32_t* __restrict & result
 }
 
 static void finalizeMaskBuffers(
-	unsigned int Variables,
 	swapper_block bufferMask,
 	uint32_t nodeOffset, 
 	const JobTopInfo* tops,
@@ -226,7 +225,7 @@ static void finalizeMaskBuffers(
 #ifdef PCOEFF_DEDUPLICATE
 		if(tops[idx].topDual < finalizeUpTo) finalizeUpTo = tops[idx].topDual;
 #endif
-		finalizeBuffer(Variables, resultBuffers[idx], finalizeUpTo);
+		finalizeBuffer(resultBuffers[idx], finalizeUpTo);
 	}
 }
 
@@ -276,14 +275,14 @@ static void generateBotBuffers(
 
 		activeMask &= ~finishedBuffers;
 
-		finalizeMaskBuffers(Variables, finishedBuffers, nodeOffset, tops, resultBuffers);
+		finalizeMaskBuffers(finishedBuffers, nodeOffset, tops, resultBuffers);
 
 		if(activeMask == 0) break;
 
 		std::swap(swapperA, swapperB);
 	}
 
-	finalizeMaskBuffers(Variables, activeMask, 0, tops, resultBuffers);
+	finalizeMaskBuffers(activeMask, 0, tops, resultBuffers);
 
 	for(int i = 0; i < numberOfTops; i++) {
 		jobs[i].bufEnd = resultBuffers[i];
