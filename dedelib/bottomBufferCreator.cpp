@@ -260,7 +260,7 @@ static void generateBotBuffers(
 		initializeSwapperTops(Variables, swapperA, toLayer+1, tops, topLayers, numberOfTops);
 
 		size_t numberOfLinksToLayer = linkCounts[Variables][toLayer];
-		assert(toLayer == 0 || (thisLayerLinks[-1] & uint32_t(0x80000000)) != 0);
+		assert(toLayer == (1 << Variables) - 1 || (thisLayerLinks[-1] & uint32_t(0x80000000)) != 0);
 		assert((thisLayerLinks[numberOfLinksToLayer-1] & uint32_t(0x80000000)) != 0);
 
 		uint32_t nodeOffset = flatNodeLayerOffsets[Variables][toLayer];

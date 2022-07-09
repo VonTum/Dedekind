@@ -198,23 +198,26 @@ BooleanFunction<Variables>* listPermutationsBelow(const Monotonic<Variables>& to
 }
 
 template<unsigned int Variables>
+uint64_t computePCoeffSum(BooleanFunction<Variables> graph) {
+	eliminateLeavesUp(graph);
+	uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
+
+	if(!graph.isEmpty()) {
+		size_t initialGuessIndex = graph.getLast();
+		BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
+		initialGuess.add(initialGuessIndex);
+		initialGuess = initialGuess.monotonizeDown() & graph;
+		connectCount += countConnectedVeryFast(graph, initialGuess);
+	}
+	return uint64_t(1) << connectCount;
+}
+
+template<unsigned int Variables>
 uint64_t computePCoeffSum(const BooleanFunction<Variables>* graphsBuf, const BooleanFunction<Variables>* graphsBufEnd) {
 	uint64_t totalSum = 0;
 
 	for(; graphsBuf != graphsBufEnd; graphsBuf++) {
-		BooleanFunction<Variables> graph = *graphsBuf;
-
-		eliminateLeavesUp(graph);
-		uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
-
-		if(!graph.isEmpty()) {
-			size_t initialGuessIndex = graph.getLast();
-			BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
-			initialGuess.add(initialGuessIndex);
-			initialGuess = initialGuess.monotonizeDown() & graph;
-			connectCount += countConnectedVeryFast(graph, initialGuess);
-		}
-		totalSum += uint64_t(1) << connectCount;
+		totalSum += computePCoeffSum<Variables>(*graphsBuf);
 	}
 	return totalSum;
 }
@@ -222,6 +225,21 @@ uint64_t computePCoeffSum(const BooleanFunction<Variables>* graphsBuf, const Boo
 template<typename TI>
 TI getBitField(TI value, int startAt, int bitWidth) {
 	return (value >> startAt) & ((static_cast<TI>(1) << bitWidth) - static_cast<TI>(1));
+}
+
+template<unsigned int Variables>
+ProcessedPCoeffSum processPCoeffSum(Monotonic<Variables> top, Monotonic<Variables> bot) {
+	uint64_t pcoeffSum = 0;
+	uint64_t pcoeffCount = 0;
+	bot.forEachPermutation([&](const Monotonic<Variables>& permutedBot) {
+		if(permutedBot <= top) {
+			BooleanFunction<Variables> graph = andnot(top.bf, permutedBot.bf);
+			pcoeffCount++;
+			pcoeffSum += computePCoeffSum<Variables>(graph);
+		}
+	});
+
+	return produceProcessedPcoeffSumCount(pcoeffSum, pcoeffCount);
 }
 
 template<unsigned int Variables>
@@ -237,8 +255,8 @@ ProcessedPCoeffSum processOneBeta(const Monotonic<Variables>* mbfs, NodeIndex to
 	Monotonic<Variables> top = mbfs[topIdx];
 	Monotonic<Variables> bot = mbfs[botIdx];
 
-	BooleanFunction<Variables> graphsBuf[factorial(Variables)];
-	return processPCoeffSum<Variables>(top, bot, graphsBuf);
+	//BooleanFunction<Variables> graphsBuf[factorial(Variables)];
+	return processPCoeffSum<Variables>(top, bot/*, graphsBuf*/);
 }
 
 template<unsigned int Variables>
@@ -257,16 +275,27 @@ template<unsigned int Variables>
 void processBetasCPU_MultiThread(const Monotonic<Variables>* mbfs, const JobInfo& job, ProcessedPCoeffSum* countConnectedSumBuf, ThreadPool& threadPool) {
 	Monotonic<Variables> top = mbfs[job.getTop()];
 
-	std::atomic<const NodeIndex*> i = job.begin();
+	constexpr int NODE_BLOCK_SIZE = Variables >= 7 ? 128 : 16;
+
+	std::atomic<const NodeIndex*> i;
+	i.store(job.begin());
+
 	threadPool.doInParallel([&](){
 		BooleanFunction<Variables> graphsBuf[factorial(Variables)];
 		while(true) {
-			const NodeIndex* claimedNodeIndex = i.fetch_add(1);
-			if(claimedNodeIndex >= job.end()) break;
+			const NodeIndex* claimedNodeBlock = i.fetch_add(NODE_BLOCK_SIZE);
+			if(claimedNodeBlock >= job.end()) break;
 
-			Monotonic<Variables> bot = mbfs[*claimedNodeIndex];
+			const NodeIndex* claimedNodeBlockEnd = claimedNodeBlock + NODE_BLOCK_SIZE;
+			if(claimedNodeBlockEnd >= job.end()) {
+				claimedNodeBlockEnd = job.end();
+			}
 
-			countConnectedSumBuf[job.indexOf(claimedNodeIndex)] = processPCoeffSum<Variables>(top, bot, graphsBuf);
+			for(const NodeIndex* claimedNodeIndex = claimedNodeBlock; claimedNodeIndex != claimedNodeBlockEnd; claimedNodeIndex++) {
+				Monotonic<Variables> bot = mbfs[*claimedNodeIndex];
+
+				countConnectedSumBuf[job.indexOf(claimedNodeIndex)] = processPCoeffSum<Variables>(top, bot, graphsBuf);
+			}
 		}
 	});
 }

@@ -135,7 +135,12 @@ std::vector<BetaResult> pcoeffPipeline(const std::vector<NodeIndex>& topIndices,
 	std::vector<BetaResult> results;
 	results.reserve(topIndices.size());
 
-	std::future<std::vector<JobTopInfo>> topInfosFuture;
+	// Read top infos in parallel, we must prioritize inputProducerThread starts as soon as possible
+	std::future<std::vector<JobTopInfo>> topInfosFuture = std::async(std::launch::async, [&](){
+		const FlatNode* nodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
+		std::vector<JobTopInfo> topInfos = convertTopInfos(nodes, topIndices);
+		return topInfos;
+	});
 
 	std::thread inputProducerThread([&]() {
 		try {
@@ -146,12 +151,6 @@ std::vector<BetaResult> pcoeffPipeline(const std::vector<NodeIndex>& topIndices,
 		}
 	});
 
-	// Read top infos in parallel, we must prioritize inputProducerThread starts as soon as possible
-	topInfosFuture = std::async(std::launch::async, [&](){
-		const FlatNode* nodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
-		std::vector<JobTopInfo> topInfos = convertTopInfos(nodes, topIndices);
-		return topInfos;
-	});
 	std::thread resultProcessingThread([&]() {
 		try {
 			resultProcessor(Variables, context.outputQueue, context.inputBufferReturnQueue, context.outputBufferReturnQueue, results);
