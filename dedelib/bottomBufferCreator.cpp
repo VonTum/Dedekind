@@ -83,7 +83,7 @@ static void initializeSwapperTops(
 
 static void optimizeBlockForFPGA(uint32_t* buf) {
 	assert(reinterpret_cast<uintptr_t>(buf) % FPGA_BLOCK_ALIGN == 0);
-	if(__builtin_expect((buf[0] & 0x80000000 == 0), 1)) {
+	if(__builtin_expect(((buf[0] & 0x80000000) == 0), 1)) {
 		uint32_t tmpBuf[32];
 		for(int i = 0; i < 32; i++) {
 			tmpBuf[i] = buf[i];
@@ -255,6 +255,7 @@ static void generateBotBuffers(
 	
 	swapper_block activeMask = numberOfTops == BUFFERS_PER_BATCH ? swapper_block(0xFFFFFFFFFFFFFFFF) : (swapper_block(1) << numberOfTops) - 1; // Has a 1 for active buffers
 
+	// Reverse order of mbf structure for better memory access pattern
 	const uint32_t* thisLayerLinks = links + flatLinkOffsets[Variables][(1 << Variables) - startingLayer];
 	for(int toLayer = startingLayer - 1; toLayer >= 0; toLayer--) {
 		initializeSwapperTops(Variables, swapperA, toLayer+1, tops, topLayers, numberOfTops);
