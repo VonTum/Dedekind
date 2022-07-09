@@ -14,6 +14,8 @@
 #include <random>
 #include "../dedelib/generators.h"
 
+#include <cstring>
+
 
 template<unsigned int Variables>
 void runGenAllMBFs() {
@@ -152,60 +154,64 @@ void convertMBFMapToFlatMBFStructure() {
 	writeFlatMBFStructure(destinationStructure);
 }
 
-template<unsigned int Variables>
-void convertFlatMBFStructureToSourceMBFStructure() {
-	FlatMBFStructure<Variables> mbfStructure = readFlatMBFStructure<Variables>(true, true, true, true);
+void convertFlatMBFStructureToSourceMBFStructure(unsigned int Variables) {
+	const FlatNode* allNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
+	const uint32_t* allLinks = readFlatBuffer<uint32_t>(FileName::flatLinks(Variables), getTotalLinkCount(Variables));
 	
-	std::uint32_t* resultingFile = new std::uint32_t[getTotalLinkCount(Variables)];
-	std::uint32_t* curItemInFile = resultingFile;
+	std::unique_ptr<uint32_t[]> resultingFile(new uint32_t[getTotalLinkCount(Variables)]);
+	uint32_t* curItemInFile = resultingFile.get();
 
 	std::cout << "Link count distribution: " << std::endl;
 
 	size_t numberOfLayers = (1 << Variables) + 1;
-	for(size_t toLayerI = 0; toLayerI < numberOfLayers - 1; toLayerI++) {
-		size_t fromLayerI = toLayerI + 1;
+
+	size_t maxLayerWidth = getMaxLayerWidth(Variables);
+	std::unique_ptr<uint32_t[]> incomingLinks(new uint32_t[getMaxLayerSize(Variables) * maxLayerWidth]);
+	std::unique_ptr<int[]> incomingLinksSizes(new int[getMaxLayerSize(Variables)]);
+	for(size_t fromLayerI = numberOfLayers-1; fromLayerI > 0; fromLayerI--) {
+		size_t toLayerI = fromLayerI - 1;
 		size_t fromLayerSize = layerSizes[Variables][fromLayerI];
 		size_t toLayerSize = layerSizes[Variables][toLayerI];
-		std::vector<std::vector<std::uint32_t>> incomingLinks(toLayerSize);
+		std::memset(incomingLinksSizes.get(), 0, toLayerSize * sizeof(int));
 
 		size_t linksInThisLayer = 0;
 
 		size_t layerOffset = flatNodeLayerOffsets[Variables][fromLayerI];
 
-		const FlatNode* firstFromNode = mbfStructure.allNodes + layerOffset;
-		for(std::uint32_t i = 0; i < fromLayerSize; i++) {
-			std::uint64_t downLinksStart = firstFromNode[i].downLinks;
-			std::uint64_t downLinksEnd = firstFromNode[i+1].downLinks;
+		const FlatNode* firstFromNode = allNodes + layerOffset;
+		for(uint32_t i = 0; i < fromLayerSize; i++) {
+			uint64_t downLinksStart = firstFromNode[i].downLinks;
+			uint64_t downLinksEnd = firstFromNode[i+1].downLinks;
 
-			for(const NodeOffset* curDownlink = mbfStructure.allLinks + downLinksStart; curDownlink != mbfStructure.allLinks + downLinksEnd; curDownlink++) {
+			for(const NodeOffset* curDownlink = allLinks + downLinksStart; curDownlink != allLinks + downLinksEnd; curDownlink++) {
 				NodeOffset targetNodeI = *curDownlink;
 				assert(targetNodeI < toLayerSize);
-				incomingLinks[targetNodeI].push_back(i);
+				incomingLinks[targetNodeI * maxLayerWidth + incomingLinksSizes[targetNodeI]++] = i;
 				linksInThisLayer++;
 			}
 		}
 
 		std::cout << linksInThisLayer << ", ";
 
-		for(const std::vector<std::uint32_t>& linksVec : incomingLinks) {
-			for(size_t i = 0; i < linksVec.size() - 1; i++) {
-				*curItemInFile++ = linksVec[i];
+		for(size_t i = 0; i < toLayerSize; i++) {
+			const uint32_t* curLinks = incomingLinks.get() + maxLayerWidth * i;
+			int curLinksSize = incomingLinksSizes[i];
+			for(int i = 0; i < curLinksSize - 1; i++) {
+				*curItemInFile++ = curLinks[i];
 			}
-			*curItemInFile++ = linksVec[linksVec.size() - 1] | static_cast<uint32_t>(0x80000000); // Mark end of links
+			*curItemInFile++ = curLinks[curLinksSize - 1] | static_cast<uint32_t>(0x80000000); // Mark end of links
 		}
 	}
 
-	if(curItemInFile != resultingFile + getTotalLinkCount(Variables)) {
+	if(curItemInFile != resultingFile.get() + getTotalLinkCount(Variables)) {
 		std::cerr << "Invalid file! Not the correct number of links!" << std::endl;
 		std::terminate();
 	}
 
 	{
 		std::ofstream sourceLinkFile(FileName::mbfStructure(Variables), std::ios::binary);
-		sourceLinkFile.write(reinterpret_cast<const char*>(resultingFile), sizeof(std::uint32_t) * getTotalLinkCount(Variables));
+		sourceLinkFile.write(reinterpret_cast<const char*>(resultingFile.get()), sizeof(uint32_t) * getTotalLinkCount(Variables));
 	} // Close file
-
-	delete[] resultingFile;
 }
 
 void randomizeMBF_LUT7() {
@@ -242,7 +248,7 @@ void preComputeFiles() {
 	addSymmetriesToIntervalFile<Variables>();
 	convertMBFMapToFlatMBFStructure<Variables>();
 	//flatDPlus1<Variables>();
-	convertFlatMBFStructureToSourceMBFStructure<Variables>();
+	convertFlatMBFStructureToSourceMBFStructure(Variables);
 }
 
 
@@ -295,13 +301,13 @@ CommandSet dataGenCommands {"Data Generation", {
 	{"convertMBFMapToFlatMBFStructure6", []() {convertMBFMapToFlatMBFStructure<6>(); }},
 	{"convertMBFMapToFlatMBFStructure7", []() {convertMBFMapToFlatMBFStructure<7>(); }},
 
-	{"convertFlatMBFStructureToSourceMBFStructure1", []() {convertFlatMBFStructureToSourceMBFStructure<1>(); }},
-	{"convertFlatMBFStructureToSourceMBFStructure2", []() {convertFlatMBFStructureToSourceMBFStructure<2>(); }},
-	{"convertFlatMBFStructureToSourceMBFStructure3", []() {convertFlatMBFStructureToSourceMBFStructure<3>(); }},
-	{"convertFlatMBFStructureToSourceMBFStructure4", []() {convertFlatMBFStructureToSourceMBFStructure<4>(); }},
-	{"convertFlatMBFStructureToSourceMBFStructure5", []() {convertFlatMBFStructureToSourceMBFStructure<5>(); }},
-	{"convertFlatMBFStructureToSourceMBFStructure6", []() {convertFlatMBFStructureToSourceMBFStructure<6>(); }},
-	{"convertFlatMBFStructureToSourceMBFStructure7", []() {convertFlatMBFStructureToSourceMBFStructure<7>(); }},
+	{"convertFlatMBFStructureToSourceMBFStructure1", []() {convertFlatMBFStructureToSourceMBFStructure(1); }},
+	{"convertFlatMBFStructureToSourceMBFStructure2", []() {convertFlatMBFStructureToSourceMBFStructure(2); }},
+	{"convertFlatMBFStructureToSourceMBFStructure3", []() {convertFlatMBFStructureToSourceMBFStructure(3); }},
+	{"convertFlatMBFStructureToSourceMBFStructure4", []() {convertFlatMBFStructureToSourceMBFStructure(4); }},
+	{"convertFlatMBFStructureToSourceMBFStructure5", []() {convertFlatMBFStructureToSourceMBFStructure(5); }},
+	{"convertFlatMBFStructureToSourceMBFStructure6", []() {convertFlatMBFStructureToSourceMBFStructure(6); }},
+	{"convertFlatMBFStructureToSourceMBFStructure7", []() {convertFlatMBFStructureToSourceMBFStructure(7); }},
 
 	{"randomizeMBF_LUT7", []() {randomizeMBF_LUT7();}},
 

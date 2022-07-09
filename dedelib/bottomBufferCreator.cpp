@@ -139,7 +139,8 @@ static swapper_block computeNextLayer(
 			curNodeI++;
 
 			while(currentConnectionsIn != 0) {
-				int idx = ctz64(currentConnectionsIn);
+				static_assert(BUFFERS_PER_BATCH <= 8);
+				int idx = ctz8(currentConnectionsIn);
 				currentConnectionsIn &= ~(swapper_block(1) << idx);
 
 #ifdef PCOEFF_DEDUPLICATE
@@ -254,10 +255,10 @@ static void generateBotBuffers(
 	
 	swapper_block activeMask = numberOfTops == BUFFERS_PER_BATCH ? swapper_block(0xFFFFFFFFFFFFFFFF) : (swapper_block(1) << numberOfTops) - 1; // Has a 1 for active buffers
 
+	const uint32_t* thisLayerLinks = links + flatLinkOffsets[Variables][(1 << Variables) - startingLayer];
 	for(int toLayer = startingLayer - 1; toLayer >= 0; toLayer--) {
 		initializeSwapperTops(Variables, swapperA, toLayer+1, tops, topLayers, numberOfTops);
 
-		const uint32_t* thisLayerLinks = links + flatLinkOffsets[Variables][toLayer];
 		size_t numberOfLinksToLayer = linkCounts[Variables][toLayer];
 		assert(toLayer == 0 || (thisLayerLinks[-1] & uint32_t(0x80000000)) != 0);
 		assert((thisLayerLinks[numberOfLinksToLayer-1] & uint32_t(0x80000000)) != 0);
@@ -269,6 +270,8 @@ static void generateBotBuffers(
 			,layerSizes[Variables][toLayer+1],layerSizes[Variables][toLayer]
 #endif
 		);
+
+		thisLayerLinks += numberOfLinksToLayer;
 
 		activeMask &= ~finishedBuffers;
 
