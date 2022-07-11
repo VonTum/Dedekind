@@ -14,7 +14,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   add_compile_options("$<$<CONFIG:RELEASE>:/O2 /Oi /ot /GL>")
 else()
   add_compile_options(-Wall -Wextra -march=native)
-  
+  add_compile_options(-g -fno-inline)
   # profiling
   # add_compile_options(-g -fno-omit-frame-pointer -fno-inline-small-functions)
   # add_definitions(-DNO_MULTITHREAD)
@@ -77,8 +77,8 @@ add_executable(benchmarks
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 add_executable(fpga_production
   fpga_production/main.cpp
-  # fpga_production/FullPermutePipelineTestSetOpenCL_generated7.cpp
-  # fpga_production/pipeline6PackTestSetForOpenCL_generated7.cpp
+  fpga_production/fpgaBoilerplate.cpp
+
   fpga_production/AOCLUtils/opencl.cpp
   fpga_production/AOCLUtils/options.cpp
 )
