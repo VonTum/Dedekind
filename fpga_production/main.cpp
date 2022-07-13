@@ -54,6 +54,7 @@ static bool ENABLE_STATISTICS = false;
 static cl_uint SHOW_FRONT = 0;
 static cl_uint SHOW_TAIL = 0;
 static double ACTIVITY_MULTIPLIER = 10*60.0;
+static bool THROUGHPUT_MODE = false;
 
 static std::string kernelFile;
 
@@ -97,6 +98,64 @@ uint64_t getBitRange(uint64_t v, int highestBit, int lowestBit) {
 	std::cout << "Total tally: " << corrects << "/" << totals << std::endl;
 	std::cout << "Nonzero tally: " << nonZeroCorrects << "/" << nonZeroTotals << std::endl;
 }*/
+
+
+void fpgaProcessor_Throughput(PCoeffProcessingContext& context, const Monotonic<7>* mbfs) {
+	init(kernelFile.c_str(), mbfs);
+
+	auto prevBufFinished = std::chrono::high_resolution_clock::now();
+
+	std::cout << "FPGA Processor started.\n" << std::flush;
+	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
+		JobInfo& job = jobOpt.value();
+		cl_uint bufferSize = static_cast<cl_int>(job.size());
+		size_t numberOfBottoms = job.getNumberOfBottoms();
+		NodeIndex topIdx = job.getTop();
+		std::cout << "Grabbed job " << topIdx << " with " << numberOfBottoms << " bottoms\nGrabbing output buffer..." << std::endl;
+		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
+		std::cout << "Grabbed output buffer" << std::endl;
+
+		constexpr cl_uint JOB_SIZE_ALIGNMENT = 16*32; // Block Size 32, shuffle size 16
+
+		std::cout << "Aligning buffer..." << std::endl;
+		for(; (bufferSize+2) % JOB_SIZE_ALIGNMENT != 0; bufferSize++) {
+			job.bufStart[bufferSize] = mbfCounts[7] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
+		}
+
+		for(size_t i = 0; i < 2; i++) {
+			job.bufStart[bufferSize++] = 0x80000000; // Tops at the end for stats collection
+		}
+
+		assert(bufferSize % JOB_SIZE_ALIGNMENT == 0);
+		
+		std::cout << "Resulting buffer size: " << bufferSize << std::endl;
+
+		cl_event writeFinished;
+		cl_event kernelFinished;
+		cl_event readFinished;
+
+		cl_int status = clEnqueueWriteBuffer(queue,inputMem,0,0,bufferSize*sizeof(uint32_t),job.bufStart,0,0,&writeFinished);
+		checkError(status, "Failed to enqueue writing to inputMem buffer");
+		clFinish(queue);
+
+		launchKernel(&inputMem, &resultMem, bufferSize, 1, &writeFinished, &kernelFinished);
+		clFinish(queue);
+		
+		status = clEnqueueReadBuffer(queue, resultMem, 0, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 1, &kernelFinished, &readFinished);
+		checkError(status, "Failed to enqueue read buffer resultMem to countConnectedSumBuf");
+
+		status = clFinish(queue);
+		checkError(status, "Failed to Finish reading output buffer");
+
+		auto timeNow = std::chrono::high_resolution_clock::now();
+		double runtimeSeconds = std::chrono::duration<double>(timeNow - prevBufFinished).count();
+		prevBufFinished = timeNow;
+		std::cout << "Finished job " << topIdx << " with " << numberOfBottoms << " bottoms in " << runtimeSeconds << "s since previous, at " << (double(numberOfBottoms)/runtimeSeconds/1000000.0) << "Mbots/s" << std::endl;
+
+		context.outputBufferReturnQueue.push(countConnectedSumBuf);
+		context.inputBufferReturnQueue.push(job.bufStart);
+	}
+}
 
 void fpgaProcessor_FullySerial(PCoeffProcessingContext& context, const Monotonic<7>* mbfs) {
 	init(kernelFile.c_str(), mbfs);
@@ -156,21 +215,18 @@ void fpgaProcessor_FullySerial(PCoeffProcessingContext& context, const Monotonic
 			std::cout << std::endl;
 		}
 
-		cl_int status = clEnqueueWriteBuffer(queue,inputMem[0],0,0,bufferSize*sizeof(uint32_t),job.bufStart,0,0,0);
+		cl_int status = clEnqueueWriteBuffer(queue,inputMem,0,0,bufferSize*sizeof(uint32_t),job.bufStart,0,0,0);
 		checkError(status, "Failed to enqueue writing to inputMem buffer");
-
 		status = clFinish(queue);
-		checkError(status, "Failed to Finish writing inputMem buffer");
 
 		auto kernelStart = std::chrono::system_clock::now();
-		launchKernel(&inputMem[0], &resultMem[0], bufferSize);
-
+		launchKernel(&inputMem, &resultMem, bufferSize, 0, 0, 0);
 		status = clFinish(queue);
-		checkError(status, "Failed to Finish kernel");
+
 		auto kernelEnd = std::chrono::system_clock::now();
 		double runtimeSeconds = std::chrono::duration<double>(kernelEnd - kernelStart).count();
 
-		status = clEnqueueReadBuffer(queue, resultMem[0], 1, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 0, 0, 0);
+		status = clEnqueueReadBuffer(queue, resultMem, 0, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 0, 0, 0);
 		checkError(status, "Failed to enqueue read buffer resultMem to countConnectedSumBuf");
 
 		status = clFinish(queue);
@@ -338,6 +394,10 @@ static std::vector<NodeIndex> parseArgs(int argc, char** argv) {
 		std::cout << "Set tail showing to " << SHOW_TAIL << std::endl;
 	}
 
+	if(options.has("throughput")) {
+		THROUGHPUT_MODE = true;
+	}
+
 	const std::vector<std::string>& argsFromParsedArgs = parsed.args();
 	std::vector<NodeIndex> topsToProcess;
 	if(argsFromParsedArgs.size() >= 1) {
@@ -370,7 +430,7 @@ int main(int argc, char** argv) {
 		std::cout << std::endl;
 
 		std::cout << "Pipelining computation for " << topsToProcess.size() << " tops..." << std::endl;
-		std::vector<BetaResult> result = pcoeffPipeline<7>(topsToProcess, fpgaProcessor_FullySerial, 200, 10);
+		std::vector<BetaResult> result = pcoeffPipeline<7>(topsToProcess, THROUGHPUT_MODE ? fpgaProcessor_Throughput : fpgaProcessor_FullySerial, 200, 10);
 		std::cout << "Computation Finished!" << std::endl;
 
 		for(const BetaResult& r : result) {

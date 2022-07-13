@@ -25,9 +25,12 @@ cl_kernel fullPipelineKernel = NULL;
 cl_program program = NULL;
 cl_mem mbfLUTMemA = NULL;
 cl_mem mbfLUTMemB = NULL;
-cl_mem inputMem[INPUT_BUFFER_COUNT]{NULL};
-cl_mem resultMem[RESULT_BUFFER_COUNT]{NULL};
+cl_mem inputMem = NULL;
+cl_mem resultMem = NULL;
 
+
+static constexpr uint64_t MEMORY_CHANNEL_SIZE = 1024*1024ULL*1024*8;
+static constexpr uint64_t ON_CARD_MAX_BUFFER_SIZE = MEMORY_CHANNEL_SIZE / sizeof(cl_ulong);
 
 
 // Function prototypes
@@ -68,6 +71,8 @@ static void initPlatform() {
 		clGetPlatformInfo(platform, CL_PLATFORM_VERSION, STRING_BUFFER_LEN, char_buffer, NULL);
 		printf("%-40s = %s\n\n", "CL_PLATFORM_VERSION ", char_buffer);
 	}
+
+	
 
 	// Query the available OpenCL devices.
 	scoped_array<cl_device_id> devices;
@@ -115,22 +120,18 @@ void initMBFLUT(const Monotonic<7>* mbfs) {
 	mbfLUTMemB = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_CHANNEL_4_INTELFPGA, mbfCounts[7]*16 /*16 bytes per MBF*/, nullptr, &status);
 	checkError(status, "Failed to create the mbfLUTMemB buffer");
 
-	// Create the input and output buffers
-	for(size_t i = 0; i < INPUT_BUFFER_COUNT; i++) {
-		inputMem[i] = clCreateBuffer(context, CL_MEM_READ_ONLY, MAX_BUFSIZE(7)*sizeof(uint32_t), nullptr, &status);
-		checkError(status, "Failed to create the inputMem buffer");
-	}
-	for(size_t i = 0; i < RESULT_BUFFER_COUNT; i++) {
-		resultMem[i] = clCreateBuffer(context, CL_MEM_WRITE_ONLY, MAX_BUFSIZE(7)*sizeof(uint64_t), nullptr, &status);
-		checkError(status, "Failed to create the resultMem buffer");
-	}
-
 	std::cout << "Uploading MBF LUT...\n" << std::flush;
 
 	status = clEnqueueWriteBuffer(queue,mbfLUTMemA,0,0,mbfCounts[7]*16 /*16 bytes per MBF*/,mbfsUINT64,0,0,0);
 	checkError(status, "Failed to enqueue writing to mbfLUTMemA buffer");
 	status = clEnqueueWriteBuffer(queue,mbfLUTMemB,0,0,mbfCounts[7]*16 /*16 bytes per MBF*/,mbfsUINT64,0,0,0);
 	checkError(status, "Failed to enqueue writing to mbfLUTMemB buffer");
+
+	// Create the input and output buffers
+	inputMem = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_CHANNEL_1_INTELFPGA, ON_CARD_MAX_BUFFER_SIZE*sizeof(uint32_t), nullptr, &status);
+	checkError(status, "Failed to create the inputMem buffer");
+	resultMem = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_CHANNEL_2_INTELFPGA, ON_CARD_MAX_BUFFER_SIZE*sizeof(uint64_t), nullptr, &status);
+	checkError(status, "Failed to create the resultMem buffer");
 
 	status = clFinish(queue);
 	checkError(status, "Error while uploading mbfLUT buffer!");
@@ -196,16 +197,11 @@ static void cleanupBuffers() {
 	if(mbfLUTMemB) {
 		clReleaseMemObject(mbfLUTMemB);
 	}
-
-	for(size_t i = 0; i < INPUT_BUFFER_COUNT; i++) {
-		if(inputMem[i]){
-			clReleaseMemObject(inputMem[i]);
-		}
+	if(inputMem){
+		clReleaseMemObject(inputMem);
 	}
-	for(size_t i = 0; i < RESULT_BUFFER_COUNT; i++) {
-		if(resultMem[i]){
-			clReleaseMemObject(resultMem[i]);
-		}
+	if(resultMem){
+		clReleaseMemObject(resultMem);
 	}
 }
 
@@ -234,11 +230,7 @@ void cleanup() {
 	cleanupContext();
 }
 
-// work group size, can be referred to from enqueueNDRangeKernel
-static const size_t gSize = 1;
-static const size_t lSize = 1;
-
-void launchKernel(cl_mem* input, cl_mem* output, cl_uint bufferSize) {
+void launchKernel(cl_mem* input, cl_mem* output, cl_uint bufferSize, cl_uint numEventsInWaitList, const cl_event* eventWaitlist, cl_event* eventOutput) {
 	// Set the kernel arguments for kernel
 	// The 0th and 1st argument, mbfLUTMemA/B is a constant buffer and remains unchanged throughout a run. 
 	cl_int status = clSetKernelArg(fullPipelineKernel,2,sizeof(cl_mem),input);
@@ -248,7 +240,10 @@ void launchKernel(cl_mem* input, cl_mem* output, cl_uint bufferSize) {
 	status = clSetKernelArg(fullPipelineKernel,4,sizeof(cl_uint),&bufferSize);
 	checkError(status, "Failed to set fullPipelineKernel arg 4:job size");
 
-	status = clEnqueueNDRangeKernel(queue, fullPipelineKernel, 1, NULL, &gSize, &lSize, 0, NULL, NULL);
+	// work group size, can be referred to from enqueueNDRangeKernel
+	static const size_t gSize = 1;
+	static const size_t lSize = 1;
+	status = clEnqueueNDRangeKernel(queue, fullPipelineKernel, 1, NULL, &gSize, &lSize, numEventsInWaitList, eventWaitlist, eventOutput);
 	checkError(status, "Failed to launch fullPipelineKernel");
 	std::cout << "Kernel launched for size " << bufferSize << std::endl;
 }
@@ -260,7 +255,7 @@ void init(const char* kernelFile, const Monotonic<7>* mbfs) {
 	initKernel(kernelFile);
 
 	// Double initialize
-	constexpr int TESTBUF_SIZE = 1 << 15; // ~32000 bottoms
+	/*constexpr int TESTBUF_SIZE = 1 << 15; // ~32000 bottoms
 	uint32_t* testBuf = aligned_mallocT<uint32_t>(TESTBUF_SIZE, 64);
 	testBuf[0] = (TESTBUF_SIZE - 2) | 0x80000000;
 	testBuf[1] = testBuf[0];
@@ -269,13 +264,13 @@ void init(const char* kernelFile, const Monotonic<7>* mbfs) {
 	}
 
 
-	cl_int status = clEnqueueWriteBuffer(queue,inputMem[0],0,0,TESTBUF_SIZE*sizeof(uint32_t),testBuf,0,0,0);
+	cl_int status = clEnqueueWriteBuffer(queue,inputMem,0,0,TESTBUF_SIZE*sizeof(uint32_t),testBuf,0,0,0);
 	checkError(status, "Failed to enqueue writing to testBuf buffer");
 
 	status = clFinish(queue);
 	checkError(status, "Failed to Finish writing testBuf buffer");
 
-	launchKernel(&inputMem[0], &resultMem[0], TESTBUF_SIZE);
+	launchKernel(&inputMem, &resultMem, TESTBUF_SIZE);
 
 	aligned_free(testBuf);
 
@@ -283,7 +278,7 @@ void init(const char* kernelFile, const Monotonic<7>* mbfs) {
 	checkError(status, "Failed to Finish the test kernel");
 
 	cleanupKernel();
-	initKernel(kernelFile);
+	initKernel(kernelFile);*/
 }
 
 
