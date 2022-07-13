@@ -100,8 +100,8 @@ uint64_t getBitRange(uint64_t v, int highestBit, int lowestBit) {
 }*/
 
 
-void fpgaProcessor_Throughput(PCoeffProcessingContext& context, const Monotonic<7>* mbfs) {
-	init(kernelFile.c_str(), mbfs);
+void fpgaProcessor_Throughput(PCoeffProcessingContext& context) {
+	init(kernelFile.c_str());
 
 	auto prevBufFinished = std::chrono::high_resolution_clock::now();
 
@@ -111,9 +111,7 @@ void fpgaProcessor_Throughput(PCoeffProcessingContext& context, const Monotonic<
 		cl_uint bufferSize = static_cast<cl_int>(job.size());
 		size_t numberOfBottoms = job.getNumberOfBottoms();
 		NodeIndex topIdx = job.getTop();
-		std::cout << "Grabbed job " << topIdx << " with " << numberOfBottoms << " bottoms\nGrabbing output buffer..." << std::endl;
-		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
-		std::cout << "Grabbed output buffer" << std::endl;
+		std::cout << "Grabbed job " << topIdx << " with " << numberOfBottoms << " bottoms\n" << std::flush;
 
 		constexpr cl_uint JOB_SIZE_ALIGNMENT = 16*32; // Block Size 32, shuffle size 16
 
@@ -136,11 +134,13 @@ void fpgaProcessor_Throughput(PCoeffProcessingContext& context, const Monotonic<
 
 		cl_int status = clEnqueueWriteBuffer(queue,inputMem,0,0,bufferSize*sizeof(uint32_t),job.bufStart,0,0,&writeFinished);
 		checkError(status, "Failed to enqueue writing to inputMem buffer");
-		clFinish(queue);
 
 		launchKernel(&inputMem, &resultMem, bufferSize, 1, &writeFinished, &kernelFinished);
-		clFinish(queue);
-		
+
+		std::cout << "Grabbing output buffer..." << std::endl;
+		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.alloc_wait(bufferSize);
+		std::cout << "Grabbed output buffer" << std::endl;
+
 		status = clEnqueueReadBuffer(queue, resultMem, 0, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 1, &kernelFinished, &readFinished);
 		checkError(status, "Failed to enqueue read buffer resultMem to countConnectedSumBuf");
 
@@ -152,13 +152,13 @@ void fpgaProcessor_Throughput(PCoeffProcessingContext& context, const Monotonic<
 		prevBufFinished = timeNow;
 		std::cout << "Finished job " << topIdx << " with " << numberOfBottoms << " bottoms in " << runtimeSeconds << "s since previous, at " << (double(numberOfBottoms)/runtimeSeconds/1000000.0) << "Mbots/s" << std::endl;
 
-		context.outputBufferReturnQueue.push(countConnectedSumBuf);
+		context.outputBufferReturnQueue.free(countConnectedSumBuf); // temporary
 		context.inputBufferReturnQueue.push(job.bufStart);
 	}
 }
 
-void fpgaProcessor_FullySerial(PCoeffProcessingContext& context, const Monotonic<7>* mbfs) {
-	init(kernelFile.c_str(), mbfs);
+void fpgaProcessor_FullySerial(PCoeffProcessingContext& context) {
+	init(kernelFile.c_str());
 
 	std::optional<std::ofstream> statsFile = {};
 	if(ENABLE_STATISTICS) {
@@ -178,9 +178,7 @@ void fpgaProcessor_FullySerial(PCoeffProcessingContext& context, const Monotonic
 		cl_uint bufferSize = static_cast<cl_int>(job.size());
 		size_t numberOfBottoms = job.getNumberOfBottoms();
 		NodeIndex topIdx = job.getTop();
-		std::cout << "Grabbed job " << topIdx << " with " << numberOfBottoms << " bottoms\nGrabbing output buffer..." << std::endl;
-		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
-		std::cout << "Grabbed output buffer" << std::endl;
+		std::cout << "Grabbed job " << topIdx << " with " << numberOfBottoms << " bottoms\n" << std::flush;
 
 		if(ENABLE_SHUFFLE) shuffleBots(job.begin(), job.end());
 
@@ -225,6 +223,10 @@ void fpgaProcessor_FullySerial(PCoeffProcessingContext& context, const Monotonic
 
 		auto kernelEnd = std::chrono::system_clock::now();
 		double runtimeSeconds = std::chrono::duration<double>(kernelEnd - kernelStart).count();
+
+		std::cout << "Grabbing output buffer..." << std::endl;
+		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.alloc_wait(bufferSize);
+		std::cout << "Grabbed output buffer" << std::endl;
 
 		status = clEnqueueReadBuffer(queue, resultMem, 0, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 0, 0, 0);
 		checkError(status, "Failed to enqueue read buffer resultMem to countConnectedSumBuf");
@@ -325,7 +327,7 @@ void fpgaProcessor_FullySerial(PCoeffProcessingContext& context, const Monotonic
 		result.outputBuf = countConnectedSumBuf;
 		context.outputQueue.push(result);
 		*/
-		context.outputBufferReturnQueue.push(countConnectedSumBuf);
+		context.outputBufferReturnQueue.free(countConnectedSumBuf); // Temporary
 		context.inputBufferReturnQueue.push(job.bufStart);
 	}
 	std::cout << "FPGA Processor finished.\n" << std::flush;
@@ -430,7 +432,7 @@ int main(int argc, char** argv) {
 		std::cout << std::endl;
 
 		std::cout << "Pipelining computation for " << topsToProcess.size() << " tops..." << std::endl;
-		std::vector<BetaResult> result = pcoeffPipeline<7>(topsToProcess, THROUGHPUT_MODE ? fpgaProcessor_Throughput : fpgaProcessor_FullySerial, 200, 10);
+		std::vector<BetaResult> result = pcoeffPipeline(7, topsToProcess, THROUGHPUT_MODE ? fpgaProcessor_Throughput : fpgaProcessor_FullySerial, 200, 10);
 		std::cout << "Computation Finished!" << std::endl;
 
 		for(const BetaResult& r : result) {

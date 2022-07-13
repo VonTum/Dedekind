@@ -349,7 +349,7 @@ void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::st
 	std::cout << "FlatMBFStructure initialized." << std::endl;
 
 	std::cout << "Starting Computation..." << std::endl;
-	PCoeffProcessingContext context(Variables, topsToProcess.size(), topsToProcess.size());
+	PCoeffProcessingContext context(Variables, topsToProcess.size(), topsToProcess.size(), topsToProcess.size());
 	std::cout << "Input production..." << std::endl;
 	inputProducer<Variables, BatchSize>(allMBFData, context, topsToProcess);
 	std::cout << "Processing..." << std::endl;

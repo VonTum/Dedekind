@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 void* aligned_malloc(size_t size, size_t align) {
+	size = alignUpTo(size, align);
 #ifdef _MSC_VER
 	return _aligned_malloc(size, align);
 #else

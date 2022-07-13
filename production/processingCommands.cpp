@@ -9,14 +9,14 @@ template<unsigned int Variables>
 static void processSuperComputingJob_ST(const std::vector<std::string>& args) {
 	std::string projectFolderPath = args[0];
 	int jobIndex = std::stoi(args[1]);
-	processJob<Variables>(projectFolderPath, jobIndex, "cpuST", cpuProcessor_SingleThread<Variables>);
+	processJob(Variables, projectFolderPath, jobIndex, "cpuST", cpuProcessor_SingleThread<Variables>);
 }
 
 template<unsigned int Variables>
 static void processSuperComputingJob_FMT(const std::vector<std::string>& args) {
 	std::string projectFolderPath = args[0];
 	int jobIndex = std::stoi(args[1]);
-	processJob<Variables>(projectFolderPath, jobIndex, "cpuFMT", cpuProcessor_FineMultiThread<Variables>);
+	processJob(Variables, projectFolderPath, jobIndex, "cpuFMT", cpuProcessor_FineMultiThread<Variables>);
 }
 
 CommandSet processingCommands {"Massively parallel Processing Commands", {

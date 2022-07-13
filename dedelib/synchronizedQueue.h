@@ -260,19 +260,19 @@ public:
 };
 
 
-template<typename T, size_t Align = alignof(T)>
+template<typename T>
 class SynchronizedSlabAllocator {
-	SlabAllocator<T, Align> slabAlloc;
+	SlabAllocator<T> slabAlloc;
 
 	std::mutex mutex;
 	std::condition_variable readyForAlloc;
 public:
 	// Unprotected. Only use in single-thread context
-	SlabAllocator<T, Align>& get() {return slabAlloc;}
-	const SlabAllocator<T, Align>& get() const {return slabAlloc;}
+	SlabAllocator<T>& get() {return slabAlloc;}
+	const SlabAllocator<T>& get() const {return slabAlloc;}
 
 	SynchronizedSlabAllocator() = default;
-	SynchronizedSlabAllocator(size_t slabSize, size_t maxChunks) : slabAlloc(slabSize, maxChunks) {}
+	SynchronizedSlabAllocator(size_t slabSize, size_t maxChunks, size_t align = alignof(T)) : slabAlloc(slabSize, maxChunks, align) {}
 
 	T* alloc_wait(size_t allocSize) {
 		std::unique_lock<std::mutex> lock(mutex);

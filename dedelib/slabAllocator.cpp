@@ -73,6 +73,7 @@ void SlabAddrAllocator::free(uint64_t bufStart) {
 			for(;curChunk != chunksInUseEnd; curChunk++) {
 				curChunk[0] = curChunk[1];
 			}
+			return;
 		}
 	}
 	throw "Chunk not found!";
@@ -82,4 +83,8 @@ void SlabAddrAllocator::shrinkLastAllocation(uint64_t newSize) {
 	uint64_t newChunkEnd = chunksInUseEnd[-1] + newSize;
 	assert(newChunkEnd <= nextReserveAddr);
 	nextReserveAddr = newChunkEnd;
+}
+
+size_t SlabAddrAllocator::getNumberOfChunksInUse() const {
+	return chunksInUseEnd - chunksInUse;
 }

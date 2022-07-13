@@ -14,8 +14,9 @@ extern cl_mem mbfLUTMemA;
 extern cl_mem mbfLUTMemB;
 extern cl_mem inputMem;
 extern cl_mem resultMem;
+extern const Monotonic<7>* mbfs;
 
 void launchKernel(cl_mem* input, cl_mem* output, cl_uint bufferSize, cl_uint numEventsInWaitList = 0, const cl_event* eventWaitlist = NULL, cl_event* eventOutput = NULL);
 
-void init(const char* kernelFile, const Monotonic<7>* mbfs);
+void init(const char* kernelFile);
 void cleanup();

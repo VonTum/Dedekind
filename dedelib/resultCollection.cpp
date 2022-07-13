@@ -66,7 +66,7 @@ void resultProcessor(
 	unsigned int Variables,
 	SynchronizedQueue<OutputBuffer>& outputQueue,
 	SynchronizedStack<NodeIndex*>& inputBufferReturnQueue,
-	SynchronizedStack<ProcessedPCoeffSum*>& outputBufferReturnQueue,
+	SynchronizedSlabAllocator<ProcessedPCoeffSum>& outputBufferReturnQueue,
 	std::vector<BetaResult>& finalResults
 ) {
 	std::cout << "\033[32m[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
@@ -81,7 +81,7 @@ void resultProcessor(
 		curBetaResult.betaSum = produceBetaResult(Variables, mbfClassInfos, outBuf.originalInputData, outBuf.outputBuf);
 
 		inputBufferReturnQueue.push(outBuf.originalInputData.bufStart);
-		outputBufferReturnQueue.push(outBuf.outputBuf);
+		outputBufferReturnQueue.free(outBuf.outputBuf);
 
 		finalResults.push_back(curBetaResult);
 		if(finalResults.size() % 1000 == 0) std::cout << "\033[32m[Result Processor] " + std::to_string(finalResults.size()) + "\033[39m\n" << std::flush;

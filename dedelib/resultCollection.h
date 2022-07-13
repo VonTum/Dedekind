@@ -15,6 +15,6 @@ void resultProcessor(
 	unsigned int Variables,
 	SynchronizedQueue<OutputBuffer>& outputQueue,
 	SynchronizedStack<NodeIndex*>& inputBufferReturnQueue,
-	SynchronizedStack<ProcessedPCoeffSum*>& outputBufferReturnQueue,
+	SynchronizedSlabAllocator<ProcessedPCoeffSum>& outputBufferReturnQueue,
 	std::vector<BetaResult>& finalResults
 );

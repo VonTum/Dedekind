@@ -27,7 +27,7 @@ cl_mem mbfLUTMemA = NULL;
 cl_mem mbfLUTMemB = NULL;
 cl_mem inputMem = NULL;
 cl_mem resultMem = NULL;
-
+const Monotonic<7>* mbfs = nullptr;
 
 static constexpr uint64_t MEMORY_CHANNEL_SIZE = 1024*1024ULL*1024*8;
 static constexpr uint64_t ON_CARD_MAX_BUFFER_SIZE = MEMORY_CHANNEL_SIZE / sizeof(cl_ulong);
@@ -90,9 +90,11 @@ static void initPlatform() {
 	display_device_info(device);
 }
 
-void initMBFLUT(const Monotonic<7>* mbfs) {
+void initMBFLUT() {
 	auto mbfBufPrepareStart = std::chrono::system_clock::now();
 	std::cout << "Preparing mbfLUT buffer..." << std::endl;
+
+	mbfs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
 
 	// Can't use MMAP here, memory mapped blocks don't mesh well with OpenCL buffer uploads
 	//const uint64_t* mbfsUINT64 = readFlatBufferNoMMAP<uint64_t>(FileName::flatMBFsU64(7), FlatMBFStructure<7>::MBF_COUNT * 2);
@@ -248,10 +250,10 @@ void launchKernel(cl_mem* input, cl_mem* output, cl_uint bufferSize, cl_uint num
 	std::cout << "Kernel launched for size " << bufferSize << std::endl;
 }
 
-void init(const char* kernelFile, const Monotonic<7>* mbfs) {
+void init(const char* kernelFile) {
 	initPlatform();
 	initContext();
-	initMBFLUT(mbfs);
+	initMBFLUT();
 	initKernel(kernelFile);
 
 	// Double initialize

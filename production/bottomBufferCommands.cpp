@@ -21,7 +21,7 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 	std::promise<std::vector<JobTopInfo>> jobTopsPromise;
 	jobTopsPromise.set_value(jobTops);
 
-	PCoeffProcessingContext context(Variables, 200, 0);
+	PCoeffProcessingContext context(Variables, 200, 0, 0);
 
 	std::cout << "Files loaded. Starting benchmark." << std::endl;
 
@@ -67,7 +67,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 	std::promise<std::vector<JobTopInfo>> jobTopsPromise;
 	jobTopsPromise.set_value(jobTops);
 
-	PCoeffProcessingContext context(Variables, 200, 0);
+	PCoeffProcessingContext context(Variables, 200, 0, 0);
 
 	std::cout << "Files loaded. Starting test." << std::endl;
 
