@@ -9,6 +9,8 @@
 #include <stack>
 #include <vector>
 
+#include "slabAllocator.h"
+
 template<typename T>
 class RingQueue {
 	T* queueBuffer;
@@ -256,3 +258,43 @@ public:
 		}
 	}
 };
+
+
+template<typename T, size_t Align = alignof(T)>
+class SynchronizedSlabAllocator {
+	SlabAllocator<T, Align> slabAlloc;
+
+	std::mutex mutex;
+	std::condition_variable readyForAlloc;
+public:
+	// Unprotected. Only use in single-thread context
+	SlabAllocator<T, Align>& get() {return slabAlloc;}
+	const SlabAllocator<T, Align>& get() const {return slabAlloc;}
+
+	SynchronizedSlabAllocator() = default;
+	SynchronizedSlabAllocator(size_t slabSize, size_t maxChunks) : slabAlloc(slabSize, maxChunks) {}
+
+	T* alloc_wait(size_t allocSize) {
+		std::unique_lock<std::mutex> lock(mutex);
+		while(true) {
+			T* buf = slabAlloc.alloc(allocSize);
+			if(buf != nullptr) return buf;
+			readyForAlloc.wait(lock);
+		}
+	}
+	void free(const T* allocatedBuf) {
+		{std::lock_guard<std::mutex> lock(mutex);
+			slabAlloc.free(allocatedBuf);
+		}
+		readyForAlloc.notify_all();
+	}
+	void shrinkLastAllocation(uint64_t newSize) {
+		{std::lock_guard<std::mutex> lock(mutex);
+			slabAlloc.shrinkLastAllocation(newSize);
+		}
+	}
+	bool owns(const T* allocatedBuf) const {
+		return slabAlloc.owns(allocatedBuf);
+	}
+};
+
