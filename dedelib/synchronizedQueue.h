@@ -298,3 +298,32 @@ public:
 	}
 };
 
+
+class SynchronizedIndexAllocator {
+	SlabIndexAllocator alloc;
+
+	std::mutex mutex;
+	std::condition_variable readyForAlloc;
+public:
+	// Unprotected. Only use in single-thread context
+	SlabIndexAllocator& get() {return alloc;}
+	const SlabIndexAllocator& get() const {return alloc;}
+
+	SynchronizedIndexAllocator() = default;
+	SynchronizedIndexAllocator(size_t size) : alloc(size) {}
+
+	size_t alloc_wait() {
+		std::unique_lock<std::mutex> lock(mutex);
+		while(true) {
+			size_t result = alloc.alloc();
+			if(result != INVALID_ALLOC) return result;
+			readyForAlloc.wait(lock);
+		}
+	}
+	void free(size_t idx) {
+		{std::lock_guard<std::mutex> lock(mutex);
+			alloc.free(idx);
+		}
+		readyForAlloc.notify_all();
+	}
+};

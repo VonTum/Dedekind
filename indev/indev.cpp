@@ -92,6 +92,11 @@ void computeValidPCoeffFraction(int botFraction = 100) {
 
 
 int main(int argc, const char** argv) {
+	for(int v = 1; v <= 7; v++) {
+		std::cout << "Max Buf Size for " << v << " variables: " << getMaxDeduplicatedBufferSize(v) << std::endl;
+	}
+	return 0;
+
 	std::cout << "Detected " << std::thread::hardware_concurrency() << " threads" << std::endl;
 	{
 		ParsedArgs parsed(argc, argv);

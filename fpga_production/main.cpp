@@ -27,7 +27,6 @@
 #include <cstring>
 #include <thread>
 #include <CL/opencl.h>
-#include <CL/cl_ext_intelfpga.h>
 #include <chrono>
 #include <immintrin.h>
 #include <algorithm>
@@ -100,14 +99,30 @@ uint64_t getBitRange(uint64_t v, int highestBit, int lowestBit) {
 }*/
 
 
+struct FPGAData {
+	JobInfo job;
+	ProcessedPCoeffSum* outBuf;
+	size_t idx;
+	PCoeffProcessingContext* context;
+	SynchronizedIndexAllocator* alloc;
+};
+
 void fpgaProcessor_Throughput(PCoeffProcessingContext& context) {
 	init(kernelFile.c_str());
 
 	auto prevBufFinished = std::chrono::high_resolution_clock::now();
 
+	SynchronizedIndexAllocator fpgaMemAlloc(NUM_BUFFERS);
+	FPGAData storedData[NUM_BUFFERS];
+	for(size_t i = 0; i < NUM_BUFFERS; i++) {
+		storedData[i].idx = i;
+		storedData[i].context = &context;
+		storedData[i].alloc = &fpgaMemAlloc;
+	}
+
 	std::cout << "FPGA Processor started.\n" << std::flush;
 	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
-		JobInfo& job = jobOpt.value();
+		JobInfo job = std::move(jobOpt).value();
 		cl_uint bufferSize = static_cast<cl_int>(job.size());
 		size_t numberOfBottoms = job.getNumberOfBottoms();
 		NodeIndex topIdx = job.getTop();
@@ -128,32 +143,43 @@ void fpgaProcessor_Throughput(PCoeffProcessingContext& context) {
 		
 		std::cout << "Resulting buffer size: " << bufferSize << std::endl;
 
+		size_t selectedBuffer = fpgaMemAlloc.alloc_wait();
+		FPGAData* selectedData = storedData + selectedBuffer;
+
 		cl_event writeFinished;
 		cl_event kernelFinished;
 		cl_event readFinished;
 
-		cl_int status = clEnqueueWriteBuffer(queue,inputMem,0,0,bufferSize*sizeof(uint32_t),job.bufStart,0,0,&writeFinished);
-		checkError(status, "Failed to enqueue writing to inputMem buffer");
+		cl_int status = clEnqueueWriteBuffer(queue,inputMem[selectedBuffer],0,0,bufferSize*sizeof(uint32_t),job.bufStart,0,0,&writeFinished);
+		checkError(status, "Failed to enqueue writing to inputMem[selectedBuffer] buffer");
 
-		launchKernel(&inputMem, &resultMem, bufferSize, 1, &writeFinished, &kernelFinished);
+		launchKernel(&inputMem[selectedBuffer], &resultMem[selectedBuffer], bufferSize, 1, &writeFinished, &kernelFinished);
 
 		std::cout << "Grabbing output buffer..." << std::endl;
 		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.alloc_wait(bufferSize);
 		std::cout << "Grabbed output buffer" << std::endl;
+		
+		selectedData->job = job;
+		selectedData->outBuf = countConnectedSumBuf;
 
-		status = clEnqueueReadBuffer(queue, resultMem, 0, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 1, &kernelFinished, &readFinished);
-		checkError(status, "Failed to enqueue read buffer resultMem to countConnectedSumBuf");
+		status = clEnqueueReadBuffer(queue, resultMem[selectedBuffer], 0, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 1, &kernelFinished, &readFinished);
+		checkError(status, "Failed to enqueue read buffer resultMem[selectedBuffer] to countConnectedSumBuf");
 
-		status = clFinish(queue);
-		checkError(status, "Failed to Finish reading output buffer");
+		clSetEventCallback(readFinished, CL_COMPLETE, [](cl_event ev, cl_int evStatus, void* myData){
+			if(evStatus != CL_COMPLETE) {
+				std::cerr << "Incomplete event!";
+				exit(-1);
+			}
 
-		auto timeNow = std::chrono::high_resolution_clock::now();
-		double runtimeSeconds = std::chrono::duration<double>(timeNow - prevBufFinished).count();
-		prevBufFinished = timeNow;
-		std::cout << "Finished job " << topIdx << " with " << numberOfBottoms << " bottoms in " << runtimeSeconds << "s since previous, at " << (double(numberOfBottoms)/runtimeSeconds/1000000.0) << "Mbots/s" << std::endl;
+			FPGAData* data = static_cast<FPGAData*>(myData);
 
-		context.outputBufferReturnQueue.free(countConnectedSumBuf); // temporary
-		context.inputBufferReturnQueue.push(job.bufStart);
+			std::cout << "Finished job " << data->job.getTop() << " with " << data->job.getNumberOfBottoms() << " bottoms\n" << std::flush;
+
+			data->context->outputBufferReturnQueue.free(data->outBuf); // temporary
+			data->context->inputBufferReturnQueue.push(data->job.bufStart);
+
+			data->alloc->free(data->idx);
+		}, selectedData);
 	}
 }
 
@@ -213,12 +239,12 @@ void fpgaProcessor_FullySerial(PCoeffProcessingContext& context) {
 			std::cout << std::endl;
 		}
 
-		cl_int status = clEnqueueWriteBuffer(queue,inputMem,0,0,bufferSize*sizeof(uint32_t),job.bufStart,0,0,0);
+		cl_int status = clEnqueueWriteBuffer(queue,inputMem[0],0,0,bufferSize*sizeof(uint32_t),job.bufStart,0,0,0);
 		checkError(status, "Failed to enqueue writing to inputMem buffer");
 		status = clFinish(queue);
 
 		auto kernelStart = std::chrono::system_clock::now();
-		launchKernel(&inputMem, &resultMem, bufferSize, 0, 0, 0);
+		launchKernel(&inputMem[0], &resultMem[0], bufferSize, 0, 0, 0);
 		status = clFinish(queue);
 
 		auto kernelEnd = std::chrono::system_clock::now();
@@ -228,7 +254,7 @@ void fpgaProcessor_FullySerial(PCoeffProcessingContext& context) {
 		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.alloc_wait(bufferSize);
 		std::cout << "Grabbed output buffer" << std::endl;
 
-		status = clEnqueueReadBuffer(queue, resultMem, 0, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 0, 0, 0);
+		status = clEnqueueReadBuffer(queue, resultMem[0], 0, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 0, 0, 0);
 		checkError(status, "Failed to enqueue read buffer resultMem to countConnectedSumBuf");
 
 		status = clFinish(queue);
@@ -432,7 +458,7 @@ int main(int argc, char** argv) {
 		std::cout << std::endl;
 
 		std::cout << "Pipelining computation for " << topsToProcess.size() << " tops..." << std::endl;
-		std::vector<BetaResult> result = pcoeffPipeline(7, topsToProcess, THROUGHPUT_MODE ? fpgaProcessor_Throughput : fpgaProcessor_FullySerial, 200, 10);
+		std::vector<BetaResult> result = pcoeffPipeline(7, topsToProcess, THROUGHPUT_MODE ? fpgaProcessor_Throughput : fpgaProcessor_FullySerial, 200, 10, 100);
 		std::cout << "Computation Finished!" << std::endl;
 
 		for(const BetaResult& r : result) {

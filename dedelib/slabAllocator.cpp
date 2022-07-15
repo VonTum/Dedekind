@@ -5,18 +5,18 @@ SlabAddrAllocator::SlabAddrAllocator() noexcept : chunksInUse(nullptr) {
 }
 
 SlabAddrAllocator::SlabAddrAllocator(uint64_t slabSize, size_t maxChunks) : 
-	slabSize(slabSize), nextReserveAddr(0), maxChunks(maxChunks), chunksInUse(new uint64_t[maxChunks]), chunksInUseEnd(chunksInUse) {}
+	slabSize(slabSize), nextReserveAddr(0), chunksInUse(new uint64_t[maxChunks]), chunksInUseEnd(chunksInUse), maxChunks(maxChunks) {}
 
 SlabAddrAllocator::~SlabAddrAllocator() {
 	delete[] chunksInUse;
 }
 
 SlabAddrAllocator::SlabAddrAllocator(SlabAddrAllocator&& other) noexcept :
+	slabSize(other.slabSize), 
 	nextReserveAddr(other.nextReserveAddr), 
 	chunksInUse(other.chunksInUse),
 	chunksInUseEnd(other.chunksInUseEnd),
-	maxChunks(other.maxChunks),
-	slabSize(other.slabSize) {
+	maxChunks(other.maxChunks) {
 	
 	other.chunksInUse = nullptr;
 }

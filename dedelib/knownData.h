@@ -111,3 +111,37 @@ constexpr const auto flatLinkOffsets6 = RunningSum<size_t, 64>(linkCounts6);
 constexpr const auto flatLinkOffsets7 = RunningSum<size_t, 128>(linkCounts7);
 
 constexpr const size_t* const flatLinkOffsets[]{nullptr, flatLinkOffsets1.data, flatLinkOffsets2.data, flatLinkOffsets3.data, flatLinkOffsets4.data, flatLinkOffsets5.data, flatLinkOffsets6.data, flatLinkOffsets7.data};
+
+constexpr inline uint64_t maxBottomsForTopLayer(unsigned int Variables, int layer) {
+	uint64_t totalNodes = 1;
+	uint64_t nodesInThisLayer = 1;
+	uint64_t expansionPerLayer = getMaxLayerWidth(Variables);
+	for(int l = layer - 1; l >= 0; l--) {
+		nodesInThisLayer *= expansionPerLayer;
+		if(nodesInThisLayer > layerSizes[Variables][l]) nodesInThisLayer = layerSizes[Variables][l];
+		totalNodes += nodesInThisLayer;
+	}
+	return totalNodes;
+}
+
+constexpr inline uint64_t maxDeduplicateBottomsForTopLayer(unsigned int Variables, int layer) {
+	int dualLayer = (1 << Variables) - layer;
+	uint64_t totalNodes = 1;
+	uint64_t nodesInThisLayer = 1;
+	uint64_t expansionPerLayer = getMaxLayerWidth(Variables);
+	for(int l = layer - 1; l >= 0; l--) {
+		nodesInThisLayer *= expansionPerLayer;
+		if(nodesInThisLayer > layerSizes[Variables][l]) nodesInThisLayer = layerSizes[Variables][l];
+		if(l <= dualLayer) totalNodes += nodesInThisLayer;
+	}
+	return totalNodes;
+}
+
+constexpr inline uint64_t getMaxDeduplicatedBufferSize(unsigned int Variables) {
+	uint64_t biggestBuffer = 0;
+	for(int layer = 0; layer <= (1 << Variables); layer++) {
+		uint64_t thisLayerMaxBufSize = maxDeduplicateBottomsForTopLayer(Variables, layer);
+		if(thisLayerMaxBufSize > biggestBuffer) biggestBuffer = thisLayerMaxBufSize;
+	}
+	return biggestBuffer;
+}

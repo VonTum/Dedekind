@@ -23,14 +23,11 @@ cl_context context = NULL;
 cl_command_queue queue = NULL;
 cl_kernel fullPipelineKernel = NULL;
 cl_program program = NULL;
-cl_mem mbfLUTMemA = NULL;
-cl_mem mbfLUTMemB = NULL;
-cl_mem inputMem = NULL;
-cl_mem resultMem = NULL;
+static cl_mem mbfLUTMemA = NULL;
+static cl_mem mbfLUTMemB = NULL;
+cl_mem inputMem[NUM_BUFFERS]{NULL};
+cl_mem resultMem[NUM_BUFFERS]{NULL};
 const Monotonic<7>* mbfs = nullptr;
-
-static constexpr uint64_t MEMORY_CHANNEL_SIZE = 1024*1024ULL*1024*8;
-static constexpr uint64_t ON_CARD_MAX_BUFFER_SIZE = MEMORY_CHANNEL_SIZE / sizeof(cl_ulong);
 
 
 // Function prototypes
@@ -90,11 +87,11 @@ static void initPlatform() {
 	display_device_info(device);
 }
 
-void initMBFLUT() {
+void initBuffers() {
 	auto mbfBufPrepareStart = std::chrono::system_clock::now();
 	std::cout << "Preparing mbfLUT buffer..." << std::endl;
 
-	mbfs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+	mbfs = readFlatBuffer<Monotonic<7>>(FileName::flatMBFs(7), mbfCounts[7]);
 
 	// Can't use MMAP here, memory mapped blocks don't mesh well with OpenCL buffer uploads
 	//const uint64_t* mbfsUINT64 = readFlatBufferNoMMAP<uint64_t>(FileName::flatMBFsU64(7), FlatMBFStructure<7>::MBF_COUNT * 2);
@@ -117,9 +114,9 @@ void initMBFLUT() {
 
 	cl_int status;
 	// Create constant mbf Look Up Table data buffer
-	mbfLUTMemA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_CHANNEL_3_INTELFPGA, mbfCounts[7]*16 /*16 bytes per MBF*/, nullptr, &status);
+	mbfLUTMemA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_CHANNEL_1_INTELFPGA, mbfCounts[7]*16 /*16 bytes per MBF*/, nullptr, &status);
 	checkError(status, "Failed to create the mbfLUTMemA buffer");
-	mbfLUTMemB = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_CHANNEL_4_INTELFPGA, mbfCounts[7]*16 /*16 bytes per MBF*/, nullptr, &status);
+	mbfLUTMemB = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_CHANNEL_2_INTELFPGA, mbfCounts[7]*16 /*16 bytes per MBF*/, nullptr, &status);
 	checkError(status, "Failed to create the mbfLUTMemB buffer");
 
 	std::cout << "Uploading MBF LUT...\n" << std::flush;
@@ -130,10 +127,16 @@ void initMBFLUT() {
 	checkError(status, "Failed to enqueue writing to mbfLUTMemB buffer");
 
 	// Create the input and output buffers
-	inputMem = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_CHANNEL_1_INTELFPGA, ON_CARD_MAX_BUFFER_SIZE*sizeof(uint32_t), nullptr, &status);
-	checkError(status, "Failed to create the inputMem buffer");
-	resultMem = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_CHANNEL_2_INTELFPGA, ON_CARD_MAX_BUFFER_SIZE*sizeof(uint64_t), nullptr, &status);
-	checkError(status, "Failed to create the resultMem buffer");
+	for(int i = 0; i < NUM_BUFFERS; i++) {
+		bool even = i % 2 == 0;
+		inputMem[i] = clCreateBuffer(context, CL_MEM_READ_ONLY | (even ? CL_CHANNEL_3_INTELFPGA : CL_CHANNEL_4_INTELFPGA), ON_CARD_MAX_BUFFER_SIZE*sizeof(uint32_t), nullptr, &status);
+		checkError(status, "Failed to create the inputMem buffer");
+	}
+	for(int i = 0; i < NUM_BUFFERS; i++) {
+		bool odd = i % 2 == 1;
+		resultMem[i] = clCreateBuffer(context, CL_MEM_WRITE_ONLY | (odd ? CL_CHANNEL_3_INTELFPGA : CL_CHANNEL_4_INTELFPGA), ON_CARD_MAX_BUFFER_SIZE*sizeof(uint64_t), nullptr, &status);
+		checkError(status, "Failed to create the resultMem buffer");
+	}
 
 	status = clFinish(queue);
 	checkError(status, "Error while uploading mbfLUT buffer!");
@@ -193,17 +196,11 @@ void initKernel(const char* kernelFile) {
 
 
 static void cleanupBuffers() {
-	if(mbfLUTMemA) {
-		clReleaseMemObject(mbfLUTMemA);
-	}
-	if(mbfLUTMemB) {
-		clReleaseMemObject(mbfLUTMemB);
-	}
-	if(inputMem){
-		clReleaseMemObject(inputMem);
-	}
-	if(resultMem){
-		clReleaseMemObject(resultMem);
+	clReleaseMemObject(mbfLUTMemA);
+	clReleaseMemObject(mbfLUTMemB);
+	for(int i = 0; i < NUM_BUFFERS; i++) {
+		clReleaseMemObject(inputMem[i]);
+		clReleaseMemObject(resultMem[i]);
 	}
 }
 
@@ -253,7 +250,7 @@ void launchKernel(cl_mem* input, cl_mem* output, cl_uint bufferSize, cl_uint num
 void init(const char* kernelFile) {
 	initPlatform();
 	initContext();
-	initMBFLUT();
+	initBuffers();
 	initKernel(kernelFile);
 
 	// Double initialize

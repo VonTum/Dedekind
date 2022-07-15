@@ -93,7 +93,7 @@ target_compile_options(fpga_production PRIVATE -fstack-protector -D_FORTIFY_SOUR
 # Very hard to debug!
 target_compile_options(fpga_production PRIVATE "-fPIC")
 
-# /cm/shared/opt/intelFPGA_pro/21.4.0/hld/host/include
+# /opt/software/FPGA/IntelFPGA/opencl_sdk/21.4.0/hld/host/include
 execute_process(COMMAND aocl compile-config OUTPUT_VARIABLE AOCL_COMPILE_CONFIG)
 
 # -Wl,--no-as-needed -lalteracl -lbitt_s10_pcie_mmd -lelf
@@ -108,7 +108,7 @@ string(REGEX REPLACE "\n$" "" AOCL_LINK_LIBS "${AOCL_LINK_LIBS}")
 string(REGEX REPLACE "\n$" "" AOCL_LINK_FLAGS "${AOCL_LINK_FLAGS}")
 
 # Messages, these are the values these commands *should* have. If these change then manual edits are required
-message(STATUS "AOCL_INCLUDE_DIRECTORIES: ${AOCL_INCLUDE_DIRECTORIES}")   # /cm/shared/opt/intelFPGA_pro/21.4.0/hld/host/include
+message(STATUS "AOCL_INCLUDE_DIRECTORIES: ${AOCL_INCLUDE_DIRECTORIES}")   # -I/opt/software/FPGA/IntelFPGA/opencl_sdk/21.4.0/hld/host/include
 message(STATUS "AOCL_LINK_LIBS: ${AOCL_LINK_LIBS}")                       # -Wl,--no-as-needed -lalteracl -lbitt_s10_pcie_mmd -lelf
 message(STATUS "AOCL_LINK_FLAGS: ${AOCL_LINK_FLAGS}")                     # -L/cm/shared/opt/intelFPGA_pro/20.4.0/hld/board/bittware_pcie/s10/linux64/lib -L/cm/shared/opt/intelFPGA_pro/21.4.0/hld/host/linux64/lib
 

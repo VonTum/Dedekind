@@ -80,50 +80,79 @@ public:
 	}
 };
 
-template<typename T>
-class SlabItemAllocator {
+
+class SlabIndexAllocator {
 	bool* isAllocated;
-	T* allocatedData;
 	size_t size;
 public:
-	SlabItemAllocator() noexcept : isAllocated(nullptr), allocatedData(nullptr) {}
-	SlabItemAllocator(size_t size) : isAllocated(new bool[size]), allocatedData(new T[size]), size(size) {
+	SlabIndexAllocator() noexcept : isAllocated(nullptr) {}
+	SlabIndexAllocator(size_t size) : isAllocated(new bool[size]), size(size) {
 		for(size_t i = 0; i < size; i++) {
 			isAllocated[i] = false;
 		}
 	}
-	~SlabItemAllocator() noexcept {
+	~SlabIndexAllocator() noexcept {
 		delete[] isAllocated;
+	}
+
+	SlabIndexAllocator(const SlabIndexAllocator&) = delete;
+	SlabIndexAllocator& operator=(const SlabIndexAllocator&) = delete;
+	SlabIndexAllocator(SlabIndexAllocator&& other) noexcept : isAllocated(other.isAllocated), size(other.size) {
+		other.isAllocated = nullptr;
+	}
+	SlabIndexAllocator& operator=(SlabIndexAllocator&& other) noexcept {
+		std::swap(this->isAllocated, other.isAllocated);
+		std::swap(this->size, other.size);
+		return *this;
+	}
+
+	size_t alloc() noexcept {
+		for(size_t i = 0; i < size; i++) {
+			if(isAllocated[i] == false) {
+				isAllocated[i] = true;
+				return i;
+			}
+		}
+		return INVALID_ALLOC;
+	}
+	void free(size_t idx) noexcept {
+		assert(idx < size);
+		assert(isAllocated[idx]);
+		isAllocated[idx] = false;
+	}
+};
+
+template<typename T>
+class SlabItemAllocator {
+	SlabIndexAllocator indexAlloc;
+	T* allocatedData;
+public:
+	SlabItemAllocator() noexcept : indexAlloc(), allocatedData(nullptr) {}
+	SlabItemAllocator(size_t size) : indexAlloc(size), allocatedData(new T[size]) {}
+	~SlabItemAllocator() noexcept {
 		delete[] allocatedData;
 	}
 
 	SlabItemAllocator(const SlabItemAllocator&) = delete;
 	SlabItemAllocator& operator=(const SlabItemAllocator&) = delete;
-	SlabItemAllocator(SlabItemAllocator&& other) noexcept : isAllocated(other.isAllocated), allocatedData(other.allocatedData), size(other.size) {
-		other.isAllocated(nullptr);
-		other.allocatedData(nullptr);
+	SlabItemAllocator(SlabItemAllocator&& other) noexcept : indexAlloc(std::move(other.indexAlloc)), allocatedData(other.allocatedData) {
+		other.allocatedData = nullptr;
 	}
 	SlabItemAllocator& operator=(SlabItemAllocator&& other) noexcept {
-		std::swap(this->isAllocated, other.isAllocated);
-		std::swap(this->allocatedData, other.allocatedData);
+		this->indexAlloc = std::move(other.indexAlloc);
 		std::swap(this->size, other.size);
 		return *this;
 	}
 
 	T* alloc() noexcept {
-		for(size_t i = 0; i < size; i++) {
-			if(isAllocated[i] == false) {
-				isAllocated[i] = true;
-				return allocatedData + i;
-			}
+		size_t al = indexAlloc.alloc();
+		if(al != INVALID_ALLOC) {
+			return allocatedData + al;
+		} else {
+			return nullptr;
 		}
-		// unreachable
-		assert(false);
 	}
 	void free(const T* v) noexcept {
-		size_t idx = v - allocatedData;
-		assert(idx < size);
-		assert(isAllocated[idx]);
-		isAllocated[idx] = false;
+		this->free(v - indexAlloc);
 	}
 };
