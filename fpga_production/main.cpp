@@ -103,25 +103,30 @@ struct FPGAData {
 	JobInfo job;
 	ProcessedPCoeffSum* outBuf;
 	size_t idx;
-	PCoeffProcessingContext* context;
-	SynchronizedIndexAllocator* alloc;
+	PCoeffProcessingContext* queues;
+	SlabIndexAllocator* alloc;
+	cl_event readFinished;
+	int startAt; // -1 for inactive
 };
 
-void fpgaProcessor_Throughput(PCoeffProcessingContext& context) {
+void fpgaProcessor_Throughput(PCoeffProcessingContext& queues) {
 	init(kernelFile.c_str());
 
-	auto prevBufFinished = std::chrono::high_resolution_clock::now();
+	//cl_event anyJobFinished = clCreateUserEvent(context, NULL);
 
-	SynchronizedIndexAllocator fpgaMemAlloc(NUM_BUFFERS);
+	SlabIndexAllocator fpgaMemAlloc(NUM_BUFFERS);
 	FPGAData storedData[NUM_BUFFERS];
 	for(size_t i = 0; i < NUM_BUFFERS; i++) {
 		storedData[i].idx = i;
-		storedData[i].context = &context;
+		storedData[i].queues = &queues;
 		storedData[i].alloc = &fpgaMemAlloc;
+		storedData[i].startAt = -1;
 	}
 
+	int curBufIdx = 0;
+
 	std::cout << "FPGA Processor started.\n" << std::flush;
-	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
+	for(std::optional<JobInfo> jobOpt; (jobOpt = queues.inputQueue.pop_wait()).has_value(); ) {
 		JobInfo job = std::move(jobOpt).value();
 		cl_uint bufferSize = static_cast<cl_int>(job.size());
 		size_t numberOfBottoms = job.getNumberOfBottoms();
@@ -130,7 +135,7 @@ void fpgaProcessor_Throughput(PCoeffProcessingContext& context) {
 
 		constexpr cl_uint JOB_SIZE_ALIGNMENT = 16*32; // Block Size 32, shuffle size 16
 
-		std::cout << "Aligning buffer..." << std::endl;
+		//std::cout << "Aligning buffer..." << std::endl;
 		for(; (bufferSize+2) % JOB_SIZE_ALIGNMENT != 0; bufferSize++) {
 			job.bufStart[bufferSize] = mbfCounts[7] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
 		}
@@ -141,49 +146,72 @@ void fpgaProcessor_Throughput(PCoeffProcessingContext& context) {
 
 		assert(bufferSize % JOB_SIZE_ALIGNMENT == 0);
 		
-		std::cout << "Resulting buffer size: " << bufferSize << std::endl;
+		//std::cout << "Resulting buffer size: " << bufferSize << std::endl;
 
-		size_t selectedBuffer = fpgaMemAlloc.alloc_wait();
+		
+
+
+		size_t selectedBuffer = fpgaMemAlloc.alloc();
+		while(selectedBuffer == INVALID_ALLOC) {
+			size_t oldestJob;
+			int oldestJobAge = 1 << 30;
+			for(size_t i = 0; i < NUM_BUFFERS; i++) {
+				int jobStart = storedData[i].startAt;
+				if(jobStart != -1 && jobStart < oldestJobAge) {
+					oldestJob = i;
+					oldestJobAge = jobStart;
+				}
+			}
+			clWaitForEvents(1, &storedData[oldestJob].readFinished);
+			selectedBuffer = fpgaMemAlloc.alloc();
+		}
 		FPGAData* selectedData = storedData + selectedBuffer;
 
 		cl_event writeFinished;
 		cl_event kernelFinished;
-		cl_event readFinished;
 
 		cl_int status = clEnqueueWriteBuffer(queue,inputMem[selectedBuffer],0,0,bufferSize*sizeof(uint32_t),job.bufStart,0,0,&writeFinished);
 		checkError(status, "Failed to enqueue writing to inputMem[selectedBuffer] buffer");
 
 		launchKernel(&inputMem[selectedBuffer], &resultMem[selectedBuffer], bufferSize, 1, &writeFinished, &kernelFinished);
 
-		std::cout << "Grabbing output buffer..." << std::endl;
-		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.alloc_wait(bufferSize);
-		std::cout << "Grabbed output buffer" << std::endl;
+		//std::cout << "Grabbing output buffer..." << std::endl;
+		ProcessedPCoeffSum* countConnectedSumBuf = queues.outputBufferReturnQueue.alloc_wait(bufferSize);
+		//std::cout << "Grabbed output buffer" << std::endl;
 		
 		selectedData->job = job;
 		selectedData->outBuf = countConnectedSumBuf;
+		selectedData->startAt = curBufIdx++;
 
-		status = clEnqueueReadBuffer(queue, resultMem[selectedBuffer], 0, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 1, &kernelFinished, &readFinished);
+		status = clEnqueueReadBuffer(queue, resultMem[selectedBuffer], 0, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 1, &kernelFinished, &selectedData->readFinished);
 		checkError(status, "Failed to enqueue read buffer resultMem[selectedBuffer] to countConnectedSumBuf");
 
-		clSetEventCallback(readFinished, CL_COMPLETE, [](cl_event ev, cl_int evStatus, void* myData){
-			if(evStatus != CL_COMPLETE) {
+		clSetEventCallback(selectedData->readFinished, CL_COMPLETE, [](cl_event ev, cl_int evStatus, void* myData){
+			/*if(evStatus != CL_COMPLETE) {
 				std::cerr << "Incomplete event!";
 				exit(-1);
-			}
+			}*/
 
 			FPGAData* data = static_cast<FPGAData*>(myData);
 
 			std::cout << "Finished job " << data->job.getTop() << " with " << data->job.getNumberOfBottoms() << " bottoms\n" << std::flush;
 
-			data->context->outputBufferReturnQueue.free(data->outBuf); // temporary
-			data->context->inputBufferReturnQueue.push(data->job.bufStart);
+			data->queues->outputBufferReturnQueue.free(data->outBuf); // temporary
+			data->queues->inputBufferReturnQueue.push(data->job.bufStart);
+
+			data->startAt = -1;
 
 			data->alloc->free(data->idx);
+			//clSetUserEventStatus(data->anyJobFinished, CL_COMPLETE);
 		}, selectedData);
+
+		std::cout << "Job " << topIdx << " submitted\n" << std::flush;
 	}
+
+	clFinish(queue);
 }
 
-void fpgaProcessor_FullySerial(PCoeffProcessingContext& context) {
+void fpgaProcessor_FullySerial(PCoeffProcessingContext& queues) {
 	init(kernelFile.c_str());
 
 	std::optional<std::ofstream> statsFile = {};
@@ -199,7 +227,7 @@ void fpgaProcessor_FullySerial(PCoeffProcessingContext& context) {
 	}
 
 	std::cout << "FPGA Processor started.\n" << std::flush;
-	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
+	for(std::optional<JobInfo> jobOpt; (jobOpt = queues.inputQueue.pop_wait()).has_value(); ) {
 		JobInfo& job = jobOpt.value();
 		cl_uint bufferSize = static_cast<cl_int>(job.size());
 		size_t numberOfBottoms = job.getNumberOfBottoms();
@@ -251,7 +279,7 @@ void fpgaProcessor_FullySerial(PCoeffProcessingContext& context) {
 		double runtimeSeconds = std::chrono::duration<double>(kernelEnd - kernelStart).count();
 
 		std::cout << "Grabbing output buffer..." << std::endl;
-		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.alloc_wait(bufferSize);
+		ProcessedPCoeffSum* countConnectedSumBuf = queues.outputBufferReturnQueue.alloc_wait(bufferSize);
 		std::cout << "Grabbed output buffer" << std::endl;
 
 		status = clEnqueueReadBuffer(queue, resultMem[0], 0, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 0, 0, 0);
@@ -351,10 +379,10 @@ void fpgaProcessor_FullySerial(PCoeffProcessingContext& context) {
 		OutputBuffer result;
 		result.originalInputData = job;
 		result.outputBuf = countConnectedSumBuf;
-		context.outputQueue.push(result);
+		queues.outputQueue.push(result);
 		*/
-		context.outputBufferReturnQueue.free(countConnectedSumBuf); // Temporary
-		context.inputBufferReturnQueue.push(job.bufStart);
+		queues.outputBufferReturnQueue.free(countConnectedSumBuf); // Temporary
+		queues.inputBufferReturnQueue.push(job.bufStart);
 	}
 	std::cout << "FPGA Processor finished.\n" << std::flush;
 }

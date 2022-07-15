@@ -127,14 +127,14 @@ void initBuffers() {
 	checkError(status, "Failed to enqueue writing to mbfLUTMemB buffer");
 
 	// Create the input and output buffers
-	for(int i = 0; i < NUM_BUFFERS; i++) {
+	for(size_t i = 0; i < NUM_BUFFERS; i++) {
 		bool even = i % 2 == 0;
-		inputMem[i] = clCreateBuffer(context, CL_MEM_READ_ONLY | (even ? CL_CHANNEL_3_INTELFPGA : CL_CHANNEL_4_INTELFPGA), ON_CARD_MAX_BUFFER_SIZE*sizeof(uint32_t), nullptr, &status);
+		inputMem[i] = clCreateBuffer(context, CL_MEM_READ_ONLY | (even ? CL_CHANNEL_3_INTELFPGA : CL_CHANNEL_4_INTELFPGA), BUFFER_SIZE*sizeof(uint32_t), nullptr, &status);
 		checkError(status, "Failed to create the inputMem buffer");
 	}
-	for(int i = 0; i < NUM_BUFFERS; i++) {
+	for(size_t i = 0; i < NUM_BUFFERS; i++) {
 		bool odd = i % 2 == 1;
-		resultMem[i] = clCreateBuffer(context, CL_MEM_WRITE_ONLY | (odd ? CL_CHANNEL_3_INTELFPGA : CL_CHANNEL_4_INTELFPGA), ON_CARD_MAX_BUFFER_SIZE*sizeof(uint64_t), nullptr, &status);
+		resultMem[i] = clCreateBuffer(context, CL_MEM_WRITE_ONLY | (odd ? CL_CHANNEL_3_INTELFPGA : CL_CHANNEL_4_INTELFPGA), BUFFER_SIZE*sizeof(uint64_t), nullptr, &status);
 		checkError(status, "Failed to create the resultMem buffer");
 	}
 
@@ -198,7 +198,7 @@ void initKernel(const char* kernelFile) {
 static void cleanupBuffers() {
 	clReleaseMemObject(mbfLUTMemA);
 	clReleaseMemObject(mbfLUTMemB);
-	for(int i = 0; i < NUM_BUFFERS; i++) {
+	for(size_t i = 0; i < NUM_BUFFERS; i++) {
 		clReleaseMemObject(inputMem[i]);
 		clReleaseMemObject(resultMem[i]);
 	}

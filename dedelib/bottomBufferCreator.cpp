@@ -14,6 +14,8 @@
 #include <atomic>
 #include <thread>
 #include <chrono>
+#include <iostream>
+
 
 #include "flatBufferManagement.h"
 #include "fileNames.h"
@@ -288,13 +290,13 @@ static void generateBotBuffers(
 		jobs[i].bufEnd = resultBuffers[i];
 	}
 	outputQueue.pushN(jobs, numberOfTops);
+
+	std::cout << "\033[33m[BottomBufferCreator] Pushed 8 Buffers\033[39m\n" << std::flush;
 }
 
 const uint32_t* loadLinks(unsigned int Variables) {
 	return readFlatBuffer<uint32_t>(FileName::mbfStructure(Variables), getTotalLinkCount(Variables));
 }
-
-#include <iostream>
 
 static void runBottomBufferCreatorNoAlloc (
 	unsigned int Variables,
