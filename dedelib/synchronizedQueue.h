@@ -121,7 +121,7 @@ public:
 	RingQueue<T>& get() {return queue;}
 	const RingQueue<T>& get() const {return queue;}
 
-	bool queueHasBeenClose() {
+	bool queueHasBeenClosed() {
 		std::lock_guard<std::mutex> lock(mutex);
 		return this->isClosed;
 	}

@@ -18,15 +18,8 @@ constexpr size_t STRING_BUFFER_LEN = 1024;
 
 // OpenCL runtime configuration
 cl_platform_id platform = NULL;
-cl_device_id device = NULL;
-cl_context context = NULL;
-cl_command_queue queue = NULL;
-cl_kernel fullPipelineKernel = NULL;
-cl_program program = NULL;
-static cl_mem mbfLUTMemA = NULL;
-static cl_mem mbfLUTMemB = NULL;
-cl_mem inputMem[NUM_BUFFERS]{NULL};
-cl_mem resultMem[NUM_BUFFERS]{NULL};
+cl_uint numDevices = 0;
+cl_device_id* devices = nullptr;
 const Monotonic<7>* mbfs = nullptr;
 
 
@@ -42,7 +35,7 @@ static void display_device_info( cl_device_id device );
 
 
 /////// HELPER FUNCTIONS ///////
-static void initPlatform() {
+void initPlatform() {
 	if(!setCwdToExeDir()) {
 		std::cerr << "ERROR: setCwdToExeDir\n" << std::flush;
 		exit(-1);
@@ -69,25 +62,22 @@ static void initPlatform() {
 		printf("%-40s = %s\n\n", "CL_PLATFORM_VERSION ", char_buffer);
 	}
 
-	
-
 	// Query the available OpenCL devices.
-	scoped_array<cl_device_id> devices;
-	cl_uint num_devices;
-
-	devices.reset(getDevices(platform, CL_DEVICE_TYPE_ALL, &num_devices));
-
+	devices = new cl_device_id[2]; // Nodes have 2 fpga accelerators
+	cl_int status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 2, devices, &numDevices);
+	checkError(status, "Query for number of devices failed");
+	if(numDevices != 2) {
+		std::cerr << "Error expected 2 devices\n" << std::flush;
+		exit(-1);
+	}
 	// TODO ECC detection, VERY NICE
-	//clSetDeviceExceptionCallbackIntelFPGA(num_devices, devices.get(), )
-
-	// We'll just use the first device.
-	device = devices[0];
+	//clSetDeviceExceptionCallbackIntelFPGA(num_devices, devices, )
 
 	// Display some device information.
-	display_device_info(device);
+	display_device_info(devices[0]);
 }
 
-void initBuffers() {
+const uint64_t* initMBFLUT() {
 	auto mbfBufPrepareStart = std::chrono::system_clock::now();
 	std::cout << "Preparing mbfLUT buffer..." << std::endl;
 
@@ -110,176 +100,14 @@ void initBuffers() {
 	auto mbfPrepareEnd = std::chrono::system_clock::now();
 	std::cout << "Took " << std::chrono::duration<double>(mbfPrepareEnd - mbfBufPrepareStart).count() << "s\n";
 
-	std::cout << "Creating FPGA buffers...\n" << std::flush;
-
-	cl_int status;
-	// Create constant mbf Look Up Table data buffer
-	mbfLUTMemA = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_CHANNEL_1_INTELFPGA, mbfCounts[7]*16 /*16 bytes per MBF*/, nullptr, &status);
-	checkError(status, "Failed to create the mbfLUTMemA buffer");
-	mbfLUTMemB = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_CHANNEL_2_INTELFPGA, mbfCounts[7]*16 /*16 bytes per MBF*/, nullptr, &status);
-	checkError(status, "Failed to create the mbfLUTMemB buffer");
-
-	std::cout << "Uploading MBF LUT...\n" << std::flush;
-
-	status = clEnqueueWriteBuffer(queue,mbfLUTMemA,0,0,mbfCounts[7]*16 /*16 bytes per MBF*/,mbfsUINT64,0,0,0);
-	checkError(status, "Failed to enqueue writing to mbfLUTMemA buffer");
-	status = clEnqueueWriteBuffer(queue,mbfLUTMemB,0,0,mbfCounts[7]*16 /*16 bytes per MBF*/,mbfsUINT64,0,0,0);
-	checkError(status, "Failed to enqueue writing to mbfLUTMemB buffer");
-
-	// Create the input and output buffers
-	for(size_t i = 0; i < NUM_BUFFERS; i++) {
-		bool even = i % 2 == 0;
-		inputMem[i] = clCreateBuffer(context, CL_MEM_READ_ONLY | (even ? CL_CHANNEL_3_INTELFPGA : CL_CHANNEL_4_INTELFPGA), BUFFER_SIZE*sizeof(uint32_t), nullptr, &status);
-		checkError(status, "Failed to create the inputMem buffer");
-	}
-	for(size_t i = 0; i < NUM_BUFFERS; i++) {
-		bool odd = i % 2 == 1;
-		resultMem[i] = clCreateBuffer(context, CL_MEM_WRITE_ONLY | (odd ? CL_CHANNEL_3_INTELFPGA : CL_CHANNEL_4_INTELFPGA), BUFFER_SIZE*sizeof(uint64_t), nullptr, &status);
-		checkError(status, "Failed to create the resultMem buffer");
-	}
-
-	status = clFinish(queue);
-	checkError(status, "Error while uploading mbfLUT buffer!");
-
-	aligned_free(mbfsUINT64);
-
-	std::cout << "MBF LUT uploaded successfully! ";
-	auto mbfUploadDone = std::chrono::system_clock::now();
-	std::cout << "Took " << std::chrono::duration<double>(mbfUploadDone - mbfPrepareEnd).count() << "s\n";
-}
-
-void initContext() {
-	std::cout << "Initializing context..." << std::endl;
-	cl_int status;
-
-	// Create the context.
-	context = clCreateContext(NULL, 1, &device, &oclContextCallback, NULL, &status);
-	checkError(status, "Failed to create context");
-
-	// Create the command queue.
-	//queue = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &status);
-	queue = clCreateCommandQueue(context, device, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, &status);
-	checkError(status, "Failed to create command queue");
-}
-
-void initKernel(const char* kernelFile) {
-	auto startKernelInitialization = std::chrono::system_clock::now();
-	std::cout << "Initializing kernel..." << std::endl;
-
-	// Create the program.
-	std::cout << "Using kernel file " << kernelFile << "[.aocx]" << std::endl;
-	std::string binary_file = getBoardBinaryFile(kernelFile, device);
-	printf("Using AOCX: %s\n", binary_file.c_str());
-	program = createProgramFromBinary(context, binary_file.c_str(), &device, 1);
-
-	cl_int status;
-	// Build the program that was just created.
-	status = clBuildProgram(program, 0, NULL, "", NULL, NULL);
-	checkError(status, "Failed to build program");
-
-	// Create the kernel - name passed in here must match kernel name in the
-	// original CL file, that was compiled into an AOCX file using the AOC tool
-	fullPipelineKernel = clCreateKernel(program, "dedekindAccelerator", &status);
-	checkError(status, "Failed to create dedekindAccelerator");
-
-
-	// Preset the kernel arguments to these constant buffers
-	status = clSetKernelArg(fullPipelineKernel,0,sizeof(cl_mem),&mbfLUTMemA);
-	checkError(status, "Failed to set fullPipelineKernel mbfLUTMemA");
-	status = clSetKernelArg(fullPipelineKernel,1,sizeof(cl_mem),&mbfLUTMemB);
-	checkError(status, "Failed to set fullPipelineKernel mbfLUTMemB");
-
-	std::cout << "Kernel initialized successfully! ";
-	auto kernelInitializedDone = std::chrono::system_clock::now();
-	std::cout << "Took " << std::chrono::duration<double>(kernelInitializedDone - startKernelInitialization).count() << "s\n";
-}
-
-
-static void cleanupBuffers() {
-	clReleaseMemObject(mbfLUTMemA);
-	clReleaseMemObject(mbfLUTMemB);
-	for(size_t i = 0; i < NUM_BUFFERS; i++) {
-		clReleaseMemObject(inputMem[i]);
-		clReleaseMemObject(resultMem[i]);
-	}
-}
-
-static void cleanupKernel() {
-	if(fullPipelineKernel) {
-		clReleaseKernel(fullPipelineKernel);
-	}
-	if(program) {
-		clReleaseProgram(program);
-	}
-}
-
-static void cleanupContext() {
-	if(queue) {
-		clReleaseCommandQueue(queue);
-	}
-	if(context) {
-		clReleaseContext(context);
-	}
+	return mbfsUINT64;
 }
 
 // Free the resources allocated during initialization
 void cleanup() {
-	cleanupBuffers();
-	cleanupKernel();
-	cleanupContext();
+	delete[] devices;
+	freeFlatBuffer(mbfs, mbfCounts[7]);
 }
-
-void launchKernel(cl_mem* input, cl_mem* output, cl_uint bufferSize, cl_uint numEventsInWaitList, const cl_event* eventWaitlist, cl_event* eventOutput) {
-	// Set the kernel arguments for kernel
-	// The 0th and 1st argument, mbfLUTMemA/B is a constant buffer and remains unchanged throughout a run. 
-	cl_int status = clSetKernelArg(fullPipelineKernel,2,sizeof(cl_mem),input);
-	checkError(status, "Failed to set fullPipelineKernel arg 2:inputMem");
-	status = clSetKernelArg(fullPipelineKernel,3,sizeof(cl_mem),output);
-	checkError(status, "Failed to set fullPipelineKernel arg 3:resultMem");
-	status = clSetKernelArg(fullPipelineKernel,4,sizeof(cl_uint),&bufferSize);
-	checkError(status, "Failed to set fullPipelineKernel arg 4:job size");
-
-	// work group size, can be referred to from enqueueNDRangeKernel
-	static const size_t gSize = 1;
-	static const size_t lSize = 1;
-	status = clEnqueueNDRangeKernel(queue, fullPipelineKernel, 1, NULL, &gSize, &lSize, numEventsInWaitList, eventWaitlist, eventOutput);
-	checkError(status, "Failed to launch fullPipelineKernel");
-	std::cout << "Kernel launched for size " << bufferSize << std::endl;
-}
-
-void init(const char* kernelFile) {
-	initPlatform();
-	initContext();
-	initBuffers();
-	initKernel(kernelFile);
-
-	// Double initialize
-	/*constexpr int TESTBUF_SIZE = 1 << 15; // ~32000 bottoms
-	uint32_t* testBuf = aligned_mallocT<uint32_t>(TESTBUF_SIZE, 64);
-	testBuf[0] = (TESTBUF_SIZE - 2) | 0x80000000;
-	testBuf[1] = testBuf[0];
-	for(int i = 0; i < TESTBUF_SIZE - 2; i++) {
-		testBuf[i+2] = i;
-	}
-
-
-	cl_int status = clEnqueueWriteBuffer(queue,inputMem,0,0,TESTBUF_SIZE*sizeof(uint32_t),testBuf,0,0,0);
-	checkError(status, "Failed to enqueue writing to testBuf buffer");
-
-	status = clFinish(queue);
-	checkError(status, "Failed to Finish writing testBuf buffer");
-
-	launchKernel(&inputMem, &resultMem, TESTBUF_SIZE);
-
-	aligned_free(testBuf);
-
-	status = clFinish(queue);
-	checkError(status, "Failed to Finish the test kernel");
-
-	cleanupKernel();
-	initKernel(kernelFile);*/
-}
-
 
 // Helper functions to display parameters returned by OpenCL queries
 static void device_info_ulong( cl_device_id device, cl_device_info param, const char* name) {

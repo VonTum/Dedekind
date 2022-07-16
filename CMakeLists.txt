@@ -79,6 +79,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 add_executable(fpga_production
   fpga_production/main.cpp
   fpga_production/fpgaBoilerplate.cpp
+  fpga_production/fpgaProcessor.cpp
 
   fpga_production/AOCLUtils/opencl.cpp
   fpga_production/AOCLUtils/options.cpp

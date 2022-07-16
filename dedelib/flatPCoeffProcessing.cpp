@@ -15,7 +15,7 @@ PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables, size_t 
 	for(size_t i = 0; i < numberOfInputBuffers; i++) {
 		inputBufferReturnQueue.push(static_cast<NodeIndex*>(aligned_malloc(sizeof(NodeIndex) * MAX_BUFSIZE(Variables), ALLOC_ALIGN)));
 	}
-	std::cout << "Allocated space for at least" << minOutputBuffers << " output buffers." << std::endl;
+	std::cout << "Allocated space for " << minOutputBuffers << ".." << maxOutputBuffers << " output buffers." << std::endl;
 }
 PCoeffProcessingContext::~PCoeffProcessingContext() {
 	std::cout << "Deleting input buffers..." << std::endl;
@@ -127,7 +127,7 @@ std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector
 	});
 	
 	std::thread queueWatchdogThread([&](){
-		while(!context.outputQueue.queueHasBeenClose()) {
+		while(!context.outputQueue.queueHasBeenClosed()) {
 			std::cout << "\033[34m[Queues] (" 
 				+ std::to_string(context.inputQueue.size()) + ") -> R(" 
 				+ std::to_string(context.inputBufferReturnQueue.size()) + ") -> ("
