@@ -3,16 +3,21 @@
 #include <CL/opencl.h>
 
 struct PCoeffKernel {
+	cl_device_id device;
 	cl_context context;
 	cl_program program;
 	cl_command_queue queue;
 	cl_kernel kernel;
 	cl_mem mbfLUTA;
 	cl_mem mbfLUTB;
+	cl_mem* inputMems;
+	cl_mem* resultMems;
+	size_t memCount;
 
 	PCoeffKernel() = default;
 	void init(cl_device_id device, const uint64_t* mbfLUT, const char* kernelFile);
-	void createBuffers(cl_mem* inputMems, cl_mem* outputMems, size_t memCount, size_t bufferSize);
+	void createBuffers(size_t memCount, size_t bufferSize);
+	void resetKernels();
 
 	~PCoeffKernel();
 
@@ -26,22 +31,3 @@ struct PCoeffKernel {
 	cl_event launchKernel(cl_mem input, cl_mem output, cl_uint bufferSize, cl_uint numEventsInWaitList, const cl_event* eventWaitlist);
 	void finish();
 };
-/*
-struct FPGAData {
-	JobInfo job;
-	ProcessedPCoeffSum* outBuf;
-	size_t idx;
-	PCoeffProcessingContext* queues;
-	SlabIndexAllocator* alloc;
-	cl_event readFinished;
-	int startAt; // -1 for inactive
-};
-
-struct PCoeffProcessor {
-	SlabIndexAllocator fpgaMemAlloc(NUM_BUFFERS);
-	FPGAData storedData[NUM_BUFFERS];
-
-	PCoeffProcessor();
-	
-	void submitBatch();
-}*/

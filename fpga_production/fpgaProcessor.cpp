@@ -13,15 +13,16 @@
 using namespace aocl_utils;
 
 void PCoeffKernel::init(cl_device_id device, const uint64_t* mbfLUT, const char* kernelFile) {
+	this->device = device;
 	cl_int status;
 
 	// Create the context.
-	this->context = clCreateContext(NULL, 1, &device, &oclContextCallback, NULL, &status);
+	this->context = clCreateContext(NULL, 1, &this->device, &oclContextCallback, NULL, &status);
 	checkError(status, "Failed to create context");
 
 	// Create the command queue.
 	//queue = clCreateCommandQueue(context, device, CL_QUEUE_PROFILING_ENABLE, &status);
-	this->queue = clCreateCommandQueue(this->context, device, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, &status);
+	this->queue = clCreateCommandQueue(this->context, this->device, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, &status);
 	checkError(status, "Failed to create command queue");
 
 	// Create constant mbf Look Up Table data buffer
@@ -42,9 +43,9 @@ void PCoeffKernel::init(cl_device_id device, const uint64_t* mbfLUT, const char*
 
 	// Create the program.
 	std::cout << "Using kernel file " << kernelFile << "[.aocx]" << std::endl;
-	std::string binary_file = getBoardBinaryFile(kernelFile, device);
+	std::string binary_file = getBoardBinaryFile(kernelFile, this->device);
 	printf("Using AOCX: %s\n", binary_file.c_str());
-	this->program = createProgramFromBinary(context, binary_file.c_str(), &device, 1);
+	this->program = createProgramFromBinary(context, binary_file.c_str(), &this->device, 1);
 
 
 	// Build the program that was just created.
@@ -68,7 +69,10 @@ void PCoeffKernel::init(cl_device_id device, const uint64_t* mbfLUT, const char*
 	std::cout << "Took " << std::chrono::duration<double>(kernelInitializedDone - startKernelInitialization).count() << "s\n";
 }
 
-void PCoeffKernel::createBuffers(cl_mem* inputMems, cl_mem* outputMems, size_t memCount, size_t bufferSize) {
+void PCoeffKernel::createBuffers(size_t memCount, size_t bufferSize) {
+	this->inputMems = new cl_mem[memCount];
+	this->resultMems = new cl_mem[memCount];
+	this->memCount = memCount;
 	cl_int status;
 	// Create the input and output buffers
 	for(size_t i = 0; i < memCount; i++) {
@@ -78,14 +82,24 @@ void PCoeffKernel::createBuffers(cl_mem* inputMems, cl_mem* outputMems, size_t m
 	}
 	for(size_t i = 0; i < memCount; i++) {
 		bool odd = i % 2 == 1;
-		outputMems[i] = clCreateBuffer(this->context, CL_MEM_WRITE_ONLY | (odd ? CL_CHANNEL_3_INTELFPGA : CL_CHANNEL_4_INTELFPGA), bufferSize*sizeof(uint64_t), nullptr, &status);
+		resultMems[i] = clCreateBuffer(this->context, CL_MEM_WRITE_ONLY | (odd ? CL_CHANNEL_3_INTELFPGA : CL_CHANNEL_4_INTELFPGA), bufferSize*sizeof(uint64_t), nullptr, &status);
 		checkError(status, "Failed to create the resultMem buffer");
 	}
+}
+
+void PCoeffKernel::resetKernels() {
+	clResetKernelsIntelFPGA(this->context, 1, &this->device);
 }
 
 PCoeffKernel::~PCoeffKernel() {
 	clReleaseMemObject(mbfLUTA);
 	clReleaseMemObject(mbfLUTB);
+	for(size_t i = 0; i < memCount; i++) {
+		clReleaseMemObject(inputMems[i]);
+		clReleaseMemObject(resultMems[i]);
+	}
+	delete[] inputMems;
+	delete[] resultMems;
 	clReleaseKernel(kernel);
 	clReleaseProgram(program);
 	clReleaseCommandQueue(queue);

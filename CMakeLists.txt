@@ -126,7 +126,7 @@ target_link_options(fpga_production PRIVATE -z noexecstack -Wl,-z,relro,-z,now -
 # target_link_options(fpga_production PRIVATE ${AOCL_LINK_LIBS})
 # Instead of that, which seems to be kaput, we'll have to link manually
 target_link_options(fpga_production PRIVATE -Wl,--no-as-needed)
-# target_link_libraries(fpga_production alteracl)
+target_link_libraries(fpga_production alteracl)
 # target_link_libraries(fpga_production bitt_s10_pcie_mmd)
 target_link_libraries(fpga_production OpenCL)
 target_link_libraries(fpga_production elf)

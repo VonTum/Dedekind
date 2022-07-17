@@ -63,18 +63,25 @@ void initPlatform() {
 	}
 
 	// Query the available OpenCL devices.
-	devices = new cl_device_id[2]; // Nodes have 2 fpga accelerators
-	cl_int status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 2, devices, &numDevices);
-	checkError(status, "Query for number of devices failed");
+	//devices = new cl_device_id[2]; // Nodes have 2 fpga accelerators
+	//cl_int status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 2, devices, &numDevices);
+	devices = getDevices(platform, CL_DEVICE_TYPE_ALL, &numDevices);
 	if(numDevices != 2) {
 		std::cerr << "Error expected 2 devices\n" << std::flush;
 		exit(-1);
 	}
-	// TODO ECC detection, VERY NICE
-	//clSetDeviceExceptionCallbackIntelFPGA(num_devices, devices, )
+
+	// ECC detection, VERY NICE
+	clSetDeviceExceptionCallbackIntelFPGA(numDevices, devices, CL_DEVICE_EXCEPTION_ECC_CORRECTABLE_INTEL | CL_DEVICE_EXCEPTION_ECC_NON_CORRECTABLE_INTEL, 
+		[](CL_EXCEPTION_TYPE_INTEL exception_type, const void* private_info, size_t cb, void* user_data){
+			std::cerr << "[CRC] CRC Error detected in FPGA Fabric!\nException of type " << exception_type << " with cb=" << cb << "! ABORTING!\n" << std::flush;
+			exit(-1);
+		}, NULL /*user_data*/
+	);
 
 	// Display some device information.
 	display_device_info(devices[0]);
+	display_device_info(devices[1]);
 }
 
 const uint64_t* initMBFLUT() {
