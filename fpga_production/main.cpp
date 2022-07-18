@@ -119,22 +119,12 @@ void pushJobIntoKernel(FPGAData* data) {
 	}
 	data->job = std::move(jobOpt).value();
 	JobInfo& job = data->job;
-	cl_uint bufferSize = static_cast<cl_uint>(job.size());
+	cl_uint bufferSize = static_cast<cl_uint>(job.bufferSize());
 	size_t numberOfBottoms = job.getNumberOfBottoms();
 	NodeIndex topIdx = job.getTop();
 	std::cout << "Grabbed job " << topIdx << " with " << numberOfBottoms << " bottoms\n" << std::flush;
 
 	constexpr cl_uint JOB_SIZE_ALIGNMENT = 16*32; // Block Size 32, shuffle size 16
-
-	//std::cout << "Aligning buffer..." << std::endl;
-	for(; (bufferSize+2) % JOB_SIZE_ALIGNMENT != 0; bufferSize++) {
-		job.bufStart[bufferSize] = mbfCounts[7] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
-	}
-
-	for(size_t i = 0; i < 2; i++) {
-		job.bufStart[bufferSize++] = 0x80000000; // Tops at the end for stats collection
-	}
-
 	assert(bufferSize % JOB_SIZE_ALIGNMENT == 0);
 	
 	//std::cout << "Resulting buffer size: " << bufferSize << std::endl;

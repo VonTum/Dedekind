@@ -60,8 +60,8 @@ void cpuProcessor_SingleThread_MBF(PCoeffProcessingContext& context, const Monot
 		JobInfo& job = jobOpt.value();
 
 		//shuffleBots(job.bufStart + 1, job.bufEnd);
-		//std::cout << "Grabbed job of size " << job.size() << '\n' << std::flush;
-		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.alloc_wait(job.size());
+		//std::cout << "Grabbed job of size " << job.bufferSize() << '\n' << std::flush;
+		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.alloc_wait(job.bufferSize());
 		//std::cout << "Grabbed output buffer.\n" << std::flush;
 		processBetasCPU_SingleThread(mbfs, job, countConnectedSumBuf);
 		OutputBuffer result;
@@ -87,7 +87,7 @@ void cpuProcessor_FineMultiThread_MBF(PCoeffProcessingContext& context, const Mo
 	ThreadPool pool;
 	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait()).has_value(); ) {
 		JobInfo& job = jobOpt.value();
-		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.alloc_wait(job.size());
+		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.alloc_wait(job.bufferSize());
 		//shuffleBots(job.bufStart + 1, job.bufEnd);
 		processBetasCPU_MultiThread(mbfs, job, countConnectedSumBuf, pool);
 		OutputBuffer result;

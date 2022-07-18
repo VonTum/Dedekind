@@ -28,7 +28,7 @@ struct JobInfo {
 	NodeIndex* begin() const {return bufStart + 2;}
 	NodeIndex* end() const {return bufEnd;}
 
-	size_t size() const {
+	size_t bufferSize() const {
 		return blockEnd - bufStart;
 	}
 

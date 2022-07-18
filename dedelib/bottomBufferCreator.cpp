@@ -31,8 +31,9 @@
 typedef uint8_t swapper_block;
 constexpr int BUFFERS_PER_BATCH = sizeof(swapper_block) * 8;
 
-#define FPGA_BLOCK_SIZE 32
-#define FPGA_BLOCK_ALIGN (FPGA_BLOCK_SIZE * sizeof(uint32_t))
+constexpr size_t FPGA_BLOCK_SIZE = 32;
+constexpr size_t FPGA_BLOCK_ALIGN = FPGA_BLOCK_SIZE * sizeof(uint32_t);
+constexpr size_t JOB_SIZE_ALIGNMENT = 16 * FPGA_BLOCK_SIZE; // Block Size 32, shuffle size 16
 
 /*
  * Swapper code
@@ -91,10 +92,10 @@ static void optimizeBlockForFPGA(uint32_t* buf) {
 	assert(reinterpret_cast<uintptr_t>(buf) % FPGA_BLOCK_ALIGN == 0);
 	if(__builtin_expect(((buf[0] & 0x80000000) == 0), 1)) {
 		uint32_t tmpBuf[FPGA_BLOCK_SIZE];
-		for(int i = 0; i < FPGA_BLOCK_SIZE; i++) {
+		for(size_t i = 0; i < FPGA_BLOCK_SIZE; i++) {
 			tmpBuf[i] = buf[i];
 		}
-		for(int i = 0; i < FPGA_BLOCK_SIZE/2; i++) {
+		for(size_t i = 0; i < FPGA_BLOCK_SIZE/2; i++) {
 			buf[2*i] = tmpBuf[i];
 			buf[2*i+1] = tmpBuf[i+FPGA_BLOCK_SIZE/2];
 		}
@@ -235,6 +236,20 @@ static void finalizeMaskBuffers(
 	}
 }
 
+static void addJobEndCap(JobInfo& job) {
+	job.blockEnd = job.bufEnd;
+	uintptr_t endAlign = (reinterpret_cast<uintptr_t>(job.blockEnd) / sizeof(uint32_t)) % JOB_SIZE_ALIGNMENT;
+	if(endAlign != 0) {
+		for(; endAlign < JOB_SIZE_ALIGNMENT; endAlign++) {
+			*job.blockEnd++ = mbfCounts[7] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
+		}
+	}
+	assert((reinterpret_cast<uintptr_t>(job.blockEnd) / sizeof(uint32_t)) % FPGA_BLOCK_ALIGN == 0);
+	/*for(size_t i = 0; i < 2; i++) {
+		job.bufStart[bufferSize++] = 0x80000000; // Tops at the end for stats collection
+	}*/
+}
+
 static void generateBotBuffers(
 	unsigned int Variables, 
 	swapper_block* __restrict swapperA,
@@ -287,6 +302,8 @@ static void generateBotBuffers(
 
 	for(int i = 0; i < numberOfTops; i++) {
 		jobs[i].bufEnd = resultBuffers[i];
+
+		addJobEndCap(jobs[i]);
 	}
 	outputQueue.pushN(jobs, numberOfTops);
 

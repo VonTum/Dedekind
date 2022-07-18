@@ -83,8 +83,8 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 					std::cout << "Top=" << top << " received! Dual=" << topDual << std::endl;
 
 					if(loopBackThreadCount == 1) {
-						size_t sampleSize = std::min<size_t>(buf.size(), 70);
-						NodeIndex selectedSampleStart = std::uniform_int_distribution<NodeIndex>(0, buf.size() - sampleSize)(generator);
+						size_t sampleSize = std::min<size_t>(buf.bufferSize(), 70);
+						NodeIndex selectedSampleStart = std::uniform_int_distribution<NodeIndex>(0, buf.bufferSize() - sampleSize)(generator);
 						std::cout << "Random buffer sample at offset " << selectedSampleStart << ": " << std::endl;
 						for(size_t i = 0; i < sampleSize; i+=2) {
 							std::cout << buf.bufStart[selectedSampleStart + i] << ' ';
