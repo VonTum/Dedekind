@@ -4,7 +4,6 @@
 
 #include "knownData.h"
 #include "flatMBFStructure.h"
-#include "swapperLayers.h"
 #include "bitSet.h"
 #include "u192.h"
 #include "connectGraph.h"
@@ -36,154 +35,6 @@ void flatDPlus1() {
 		totalSum += umul128(uint64_t(ci.intervalSizeDown), uint64_t(ci.classSize));
 	}
 	std::cout << "D(" << (Variables+1) << ") = " << totalSum << std::endl;
-}
-
-template<unsigned int Variables, size_t BatchSize>
-void followNextLayerLinks(const FlatMBFStructure<Variables>& downLinkStructure, SwapperLayers<Variables, BitSet<BatchSize>>& swapper) {
-	int curLayer = swapper.getCurrentLayerDownward();
-	const FlatNode* firstNode = downLinkStructure.allNodes + flatNodeLayerOffsets[Variables][curLayer];
-	for(size_t i = 0; i < swapper.getSourceLayerSize(); i++) {
-		BitSet<BatchSize> sourceElem = swapper.source(i);
-		if(sourceElem.isEmpty()) continue; // skip nonreached nodes
-
-		const NodeOffset* sourceNodeDownLinksStart = downLinkStructure.allLinks + firstNode[i].downLinks;
-		const NodeOffset* sourceNodeDownLinksEnd = downLinkStructure.allLinks + firstNode[i+1].downLinks;
-
-		for(const NodeOffset* curDownlink = sourceNodeDownLinksStart; curDownlink != sourceNodeDownLinksEnd; curDownlink++) {
-			swapper.dest(*curDownlink) |= sourceElem;
-		}
-	}
-
-	swapper.pushNext();
-}
-
-template<unsigned int Variables, size_t BatchSize>
-struct JobBatch {
-	JobInfo jobs[BatchSize];
-	size_t jobCount;
-
-	void initialize(const FlatMBFStructure<Variables>& downLinkStructure, NodeIndex* tops, size_t jobCount = BatchSize) {
-		assert(jobCount <= BatchSize);
-		for(size_t i = 0; i < jobCount; i++) {
-			JobInfo& job = jobs[i];
-			NodeIndex top = tops[i];
-			NodeIndex topDual = downLinkStructure.allNodes[top].dual;
-			int topLayer = getFlatLayerOfIndex(Variables, top);
-			job.initialize(top, topDual, topLayer);
-		}
-		this->jobCount = jobCount;
-	}
-
-	int getHighestLayer() const {
-		int highestLayer = jobs[0].topLayer;
-		for(size_t i = 1; i < jobCount; i++){
-			const JobInfo& j = jobs[i];
-			if(j.topLayer > highestLayer) highestLayer = j.topLayer;
-		}
-		return highestLayer;
-	}
-	
-	int getLowestLayer() const {
-		int lowestLayer = jobs[0].topLayer;
-		for(size_t i = 1; i < jobCount; i++){
-			const JobInfo& j = jobs[i];
-			if(j.topLayer < lowestLayer) lowestLayer = j.topLayer;
-		}
-		return lowestLayer;
-	}
-};
-
-template<unsigned int Variables, size_t BatchSize>
-void addSourceElementsToJobs(const SwapperLayers<Variables, BitSet<BatchSize>>& swapper, JobBatch<Variables, BatchSize>& jobBatch) {
-	NodeIndex firstNodeInLayer = FlatMBFStructure<Variables>::cachedOffsets[swapper.getCurrentLayerDownward()];
-	for(NodeOffset i = 0; i < NodeOffset(swapper.getSourceLayerSize()); i++) {
-		BitSet<BatchSize> includedBits = swapper.source(i);
-		if(includedBits.isEmpty()) continue;
-
-		NodeIndex curNodeIndex = firstNodeInLayer + i;
-
-		for(size_t jobIdx = 0; jobIdx < BatchSize; jobIdx++) {
-			if(includedBits.get(jobIdx)) {
-				JobInfo& job = jobBatch.jobs[jobIdx];
-				job.add(curNodeIndex);
-			}
-		}
-	}
-}
-
-template<unsigned int Variables, size_t BatchSize>
-void addSourceElementsToJobsWithDeDuplication(const SwapperLayers<Variables, BitSet<BatchSize>>& swapper, JobBatch<Variables, BatchSize>& jobBatch) {
-	NodeIndex firstNodeInLayer = flatNodeLayerOffsets[Variables][swapper.getCurrentLayerDownward()];
-	for(NodeOffset i = 0; i < NodeOffset(swapper.getSourceLayerSize()); i++) {
-		BitSet<BatchSize> includedBits = swapper.source(i);
-		if(includedBits.isEmpty()) continue;
-
-		NodeIndex curNodeIndex = firstNodeInLayer + i;
-
-		for(size_t jobIdx = 0; jobIdx < BatchSize; jobIdx++) {
-			if(includedBits.get(jobIdx)) {
-				JobInfo& job = jobBatch.jobs[jobIdx];
-				if(job.topDual > curNodeIndex) {// Arbitrary Equivalence Class Ordering for Deduplication
-					job.add(curNodeIndex);
-				}
-			}
-		}
-	}
-}
-
-
-template<unsigned int Variables, size_t BatchSize>
-void initializeSwapper(SwapperLayers<Variables, BitSet<BatchSize>>& swapper, const JobBatch<Variables, BatchSize>& jobBatch) {
-	int curSwapperLayer = swapper.getCurrentLayerDownward();
-	NodeIndex layerStart = flatNodeLayerOffsets[Variables][curSwapperLayer];
-	for(size_t i = 0; i < jobBatch.jobCount; i++) {
-		if(jobBatch.jobs[i].topLayer == curSwapperLayer) {
-			NodeOffset indexInLayer = jobBatch.jobs[i].getTop() - layerStart;
-			swapper.source(indexInLayer).set(i);
-		}
-	}
-}
-
-template<unsigned int Variables, size_t BatchSize>
-void computeBuffers(const FlatMBFStructure<Variables>& downLinkStructure, JobBatch<Variables, BatchSize>& jobBatch, SwapperLayers<Variables, BitSet<BatchSize>>& swapper) {
-	int currentLayer = jobBatch.getHighestLayer();
-
-	swapper.resetDownward(currentLayer);
-
-	for(; ; currentLayer--) {
-		initializeSwapper(swapper, jobBatch);
-
-		addSourceElementsToJobs(swapper, jobBatch);
-
-		if(currentLayer <= 0) break;
-		followNextLayerLinks(downLinkStructure, swapper);
-	}
-
-	assert(!swapper.canPushNext());
-}
-
-template<unsigned int Variables, size_t BatchSize>
-void computeBuffersDeduplicate(const FlatMBFStructure<Variables>& downLinkStructure, JobBatch<Variables, BatchSize>& jobBatch, SwapperLayers<Variables, BitSet<BatchSize>>& swapper) {
-	int currentLayer = jobBatch.getHighestLayer();
-
-	int highestDualLayer = (1 << Variables) - jobBatch.getLowestLayer();
-
-	swapper.resetDownward(currentLayer);
-
-	for(; ; currentLayer--) {
-		initializeSwapper(swapper, jobBatch);
-
-		// this if statement optimizes out a lot of unneccecary memory reading for job elements which won't be 
-		// touched anyways because of deduplication
-		if(currentLayer <= highestDualLayer) { 
-			addSourceElementsToJobsWithDeDuplication(swapper, jobBatch);
-		}
-
-		if(currentLayer <= 0) break;
-		followNextLayerLinks(downLinkStructure, swapper);
-	}
-
-	assert(!swapper.canPushNext());
 }
 
 template<unsigned int Variables>
@@ -300,34 +151,27 @@ void processBetasCPU_MultiThread(const Monotonic<Variables>* mbfs, const JobInfo
 	});
 }
 
-template<unsigned int Variables, size_t BatchSize>
-void buildJobBatch(const FlatMBFStructure<Variables>& allMBFData, NodeIndex* tops, size_t numberOfTops, JobBatch<Variables, BatchSize>& jobBatch, SwapperLayers<Variables, BitSet<BatchSize>>& swapper) {
-	jobBatch.initialize(allMBFData, tops, numberOfTops);
+template<unsigned int Variables>
+void isEvenPlus2() {
+	FlatMBFStructure<Variables> allMBFs = readFlatMBFStructure<Variables>(false, true, true, false);
 
-#ifdef PCOEFF_DEDUPLICATE
-	computeBuffersDeduplicate(allMBFData, jobBatch, swapper);
-#else
-	computeBuffers(allMBFData, jobBatch, swapper);
-#endif
-}
+	bool isEven = true; // 0 is even
+	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
+		uint64_t classSize = allMBFs.allClassInfos[i].classSize;
 
-template<unsigned int Variables, size_t BatchSize>
-void computeBatchBetaSums(const FlatMBFStructure<Variables>& allMBFData, JobBatch<Variables, BatchSize>& jobBatch, ProcessedPCoeffSum* pcoeffSumBuf, BetaSum* results) {
-	
-#ifdef PCOEFF_MULTITHREAD
-	ThreadPool threadPool;
-#endif
+		if(classSize % 2 == 0) continue;
 
-	for(size_t i = 0; i < jobBatch.jobCount; i++) {
-		const JobInfo& curJob = jobBatch.jobs[i];
-		#ifdef PCOEFF_MULTITHREAD
-		processBetasCPU_MultiThread(allMBFData.mbfs, curJob, pcoeffSumBuf, threadPool);
-		#else
-		processBetasCPU_SingleThread(allMBFData.mbfs, curJob, pcoeffSumBuf);
-		#endif
+		uint64_t intervalSizeDown = allMBFs.allClassInfos[i].intervalSizeDown;
+		if(intervalSizeDown % 2 == 0) continue;
 
-		results[i] = produceBetaResult(Variables, allMBFData.allClassInfos, curJob, pcoeffSumBuf);
+		NodeIndex dualI = allMBFs.allNodes[i].dual;
+		uint64_t intervalSizeUp = allMBFs.allClassInfos[dualI].intervalSizeDown;
+		if(intervalSizeUp % 2 == 0) continue;
+
+		isEven = !isEven;
 	}
+
+	std::cout << "D(" << (Variables + 2) << ") is " << (isEven ? "even" : "odd") << std::endl;
 }
 
 template<unsigned int Variables>
@@ -350,80 +194,5 @@ u192 computeDedekindNumberFromBetaSums(const FlatMBFStructure<Variables>& allMBF
 		total += umul192(betaSum.betaSum, topFactor);
 	}
 	return total;
-}
-
-template<unsigned int Variables, size_t BatchSize>
-u192 flatDPlus2() {
-	FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
-	SwapperLayers<Variables, BitSet<BatchSize>> swapper;
-	JobBatch<Variables, BatchSize> jobBatch;
-
-	for(size_t i = 0; i < BatchSize; i++) {
-		jobBatch.jobs[i].bufStart = static_cast<NodeIndex*>(malloc(sizeof(NodeIndex) * MAX_BUFSIZE(Variables)));
-	}
-
-	std::vector<BetaResult> betaResults;
-	betaResults.reserve(mbfCounts[Variables]);
-
-	ProcessedPCoeffSum* pcoeffSumBuf = new ProcessedPCoeffSum[mbfCounts[Variables]];
-
-	for(NodeIndex curIndex = 0; curIndex < mbfCounts[Variables]; curIndex += BatchSize) {
-		std::cout << '.' << std::flush;
-
-		NodeOffset numberToProcess = static_cast<NodeOffset>(std::min(mbfCounts[Variables] - curIndex, BatchSize));
-		
-		NodeIndex indexBuf[BatchSize];
-		for(size_t i = 0; i < numberToProcess; i++) {
-			indexBuf[i] = curIndex + i;
-		}
-
-		buildJobBatch(allMBFData, indexBuf, numberToProcess, jobBatch, swapper);
-
-		BetaSum resultingBetaSums[BatchSize];
-		computeBatchBetaSums(allMBFData, jobBatch, pcoeffSumBuf, resultingBetaSums);
-
-		for(size_t i = 0; i < numberToProcess; i++) {
-			BetaResult newResult;
-			newResult.betaSum = resultingBetaSums[i];
-			newResult.topIndex = jobBatch.jobs[i].getTop();
-			betaResults.push_back(newResult);
-		}
-	}
-	
-	BetaResultCollector collector(Variables);
-	collector.addBetaResults(betaResults);
-
-	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, collector.getResultingSums());
-	std::cout << "D(" << (Variables + 2) << ") = " << dedekindNumber << std::endl;
-
-	for(size_t i = 0; i < BatchSize; i++) {
-		free(jobBatch.jobs[i].bufStart);
-	}
-
-	return dedekindNumber;
-}
-
-
-template<unsigned int Variables>
-void isEvenPlus2() {
-	FlatMBFStructure<Variables> allMBFs = readFlatMBFStructure<Variables>(false, true, true, false);
-
-	bool isEven = true; // 0 is even
-	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
-		uint64_t classSize = allMBFs.allClassInfos[i].classSize;
-
-		if(classSize % 2 == 0) continue;
-
-		uint64_t intervalSizeDown = allMBFs.allClassInfos[i].intervalSizeDown;
-		if(intervalSizeDown % 2 == 0) continue;
-
-		NodeIndex dualI = allMBFs.allNodes[i].dual;
-		uint64_t intervalSizeUp = allMBFs.allClassInfos[dualI].intervalSizeDown;
-		if(intervalSizeUp % 2 == 0) continue;
-
-		isEven = !isEven;
-	}
-
-	std::cout << "D(" << (Variables + 2) << ") is " << (isEven ? "even" : "odd") << std::endl;
 }
 

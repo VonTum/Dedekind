@@ -6,7 +6,6 @@
 #include "funcTypes.h"
 #include "knownData.h"
 #include "serialization.h"
-#include "swapperLayers.h"
 #include <istream>
 #include <fstream>
 #include <string>

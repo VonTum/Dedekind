@@ -64,18 +64,6 @@ void shuffleBots(NodeIndex* bots, NodeIndex* botsEnd) {
 	}
 }
 
-std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::vector<NodeIndex>& topIndices) {
-	std::vector<JobTopInfo> topInfos;
-	topInfos.reserve(topIndices.size());
-	for(NodeIndex topIdx : topIndices) {
-		JobTopInfo newInfo;
-		newInfo.top = topIdx;
-		newInfo.topDual = flatNodes[topIdx].dual;
-		topInfos.push_back(newInfo);
-	}
-	return topInfos;
-}
-
 std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sampleCount) {
 	std::vector<NodeIndex> resultingVector;
 	for(NodeIndex i = 0; i < sampleCount; i++) {
@@ -93,16 +81,9 @@ std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector
 	std::vector<BetaResult> results;
 	results.reserve(topIndices.size());
 
-	// Read top infos in parallel, we must prioritize inputProducerThread starts as soon as possible
-	std::future<std::vector<JobTopInfo>> topInfosFuture = std::async(std::launch::async, [&](){
-		const FlatNode* nodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
-		std::vector<JobTopInfo> topInfos = convertTopInfos(nodes, topIndices);
-		return topInfos;
-	});
-
 	std::thread inputProducerThread([&]() {
 		try {
-			runBottomBufferCreator(Variables, topInfosFuture, context.inputQueue, context.inputBufferReturnQueue, 12);
+			runBottomBufferCreator(Variables, topIndices, context.inputQueue, context.inputBufferReturnQueue, 12);
 		} catch(const char* errText) {
 			std::cerr << "Error thrown in inputProducerThread: " << errText;
 			exit(-1);

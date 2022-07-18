@@ -10,7 +10,6 @@
 
 #include "knownData.h"
 #include "flatMBFStructure.h"
-#include "swapperLayers.h"
 #include "bitSet.h"
 #include "u192.h"
 #include "connectGraph.h"
@@ -50,32 +49,6 @@ public:
 	PCoeffProcessingContext(unsigned int Variables, size_t numberOfInputBuffers, size_t minOutputBuffers, size_t maxOutputBuffers);
 	~PCoeffProcessingContext();
 };
-
-template<unsigned int Variables, size_t BatchSize>
-void inputProducer(const FlatMBFStructure<Variables>& allMBFData, PCoeffProcessingContext& processingContext, const std::vector<NodeIndex>& topsToProcess) {
-	std::cout << "Input processor started. " << topsToProcess.size() << " tops to process!\n" << std::flush;
-	JobBatch<Variables, BatchSize> jobBatch;
-	SwapperLayers<Variables, BitSet<BatchSize>> swapper;
-
-	for(size_t i = 0; i < topsToProcess.size(); i += BatchSize) {
-		size_t numberInThisBatch = std::min(topsToProcess.size() - i, BatchSize);
-
-		NodeIndex* poppedBuffers[BatchSize];
-		processingContext.inputBufferReturnQueue.popN_wait(poppedBuffers, numberInThisBatch);
-
-		for(size_t j = 0; j < numberInThisBatch; j++) {
-			jobBatch.jobs[j].bufStart = poppedBuffers[j];
-		}
-
-		NodeIndex topsForThisBatch[BatchSize];
-		for(size_t j = 0; j < numberInThisBatch; j++) topsForThisBatch[j] = topsToProcess[i + j];
-
-		buildJobBatch(allMBFData, topsForThisBatch, numberInThisBatch, jobBatch, swapper);
-
-		processingContext.inputQueue.pushN(jobBatch.jobs, numberInThisBatch);
-	}
-	std::cout << "Input processor finished.\n" << std::flush;
-}
 
 // Deterministically shuffles the input bots to get a more uniform mix of bot difficulty
 void shuffleBots(NodeIndex* bots, NodeIndex* botsEnd);
@@ -143,8 +116,6 @@ void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context) {
 	cpuProcessor_FineMultiThread_MBF(context, allMBFs);
 	freeFlatBuffer<Monotonic<Variables>>(allMBFs, mbfCounts[Variables]);
 }
-
-std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::vector<NodeIndex>& topIndices);
 
 std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&), size_t numberOfInputBuffers, size_t minOutputBuffers, size_t maxOutputBuffers);
 

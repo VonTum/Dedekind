@@ -8,6 +8,7 @@
 #include "intervalAndSymmetriesMap.h"
 #include "parallelIter.h"
 #include "blockIterator.h"
+#include "swapperLayers.h"
 #include <atomic>
 
 constexpr size_t TOPS_PER_BLOCK = 4;

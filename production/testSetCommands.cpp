@@ -10,6 +10,7 @@
 
 #include "../dedelib/flatMBFStructure.h"
 #include "../dedelib/flatPCoeff.h"
+#include "../dedelib/bottomBufferCreator.h"
 
 #include <random>
 
@@ -307,15 +308,6 @@ void FullPermutePipelineTestSetOpenCL(std::vector<size_t> counts, std::string ou
 
 #include "../dedelib/flatPCoeffProcessing.h"
 
-inline Monotonic<7> readMBFFromU64(const uint64_t* mbfsUINT64, NodeIndex idx) {
-	NodeIndex mbfIndex = idx & 0x7FFFFFFF;
-	uint64_t upper = mbfsUINT64[2*mbfIndex];
-	uint64_t lower = mbfsUINT64[2*mbfIndex+1];
-	Monotonic<7> mbf;
-	mbf.bf.bitset.data = _mm_set_epi64x(upper, lower);
-	return mbf;
-} 
-
 typedef std::uint32_t uint;
 uint bitReverse4(uint v) {
   return ((v & 0x1) << 3) | ((v & 0x2) << 1) | ((v & 0x4) >> 1) | ((v & 0x8) >> 3);
@@ -341,23 +333,20 @@ void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::st
 		topsToProcess.push_back(NodeIndex(topsIn[i]));
 	}
 
-	constexpr size_t Variables = 7;
-	constexpr size_t BatchSize = 8;
-	std::cout << "Reading FlatMBFStructure..." << std::endl;
-	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
-	const uint64_t* mbfsUINT64 = readFlatBufferNoMMAP<uint64_t>(FileName::flatMBFsU64(7), FlatMBFStructure<7>::MBF_COUNT * 2);
-	std::cout << "FlatMBFStructure initialized." << std::endl;
-
+	constexpr unsigned int Variables = 7;
 	std::cout << "Starting Computation..." << std::endl;
 	PCoeffProcessingContext context(Variables, topsToProcess.size(), topsToProcess.size(), topsToProcess.size());
 	std::cout << "Input production..." << std::endl;
-	inputProducer<Variables, BatchSize>(allMBFData, context, topsToProcess);
+
+	runBottomBufferCreator(Variables, topsToProcess, context.inputQueue, context.inputBufferReturnQueue, 1);
 	std::cout << "Processing..." << std::endl;
 	//std::thread cpuThread([&](){cpuProcessor_SingleThread(allMBFData, context);});
 
 	std::cout << "Results..." << std::endl;
 
 	std::ofstream testSet(outFileMem); // plain text file memory file
+
+	const Monotonic<Variables>* mbfs = readFlatBuffer<Monotonic<Variables>>(FileName::allMBFS(Variables), mbfCounts[Variables]);
 
 	std::cout << "Number of tops to process is " << topsToProcess.size() << std::endl;
 	for(NodeIndex currentlyProcessingTopMeThinks : topsToProcess) {
@@ -366,13 +355,13 @@ void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::st
 		NodeIndex top = job.bufStart[0] & 0x7FFFFFFF;
 		size_t jobSize = job.size() & ~size_t(0xF);
 		std::cout << "Processing top " << top << '/' << currentlyProcessingTopMeThinks << " of size " << jobSize << std::endl;
-		Monotonic<Variables> topMBF = readMBFFromU64(mbfsUINT64, top);
+		Monotonic<Variables> topMBF = mbfs[top];
 		for(size_t elementI = 0; elementI < jobSize; elementI++) {
 			size_t selectedElement = shuffle ? shuffleClusters(elementI, jobSize) : elementI;
 			NodeIndex elem = job.bufStart[selectedElement];
 			bool isTop = elementI == 0;
 			//bool isTop = (uint32_t(elem) & 0x80000000) != 0;
-			Monotonic<Variables> botMBF = readMBFFromU64(mbfsUINT64, elem);
+			Monotonic<Variables> botMBF = mbfs[elem];
 			BooleanFunction<Variables> graphsBuf[factorial(Variables)];
 			ProcessedPCoeffSum processed = processPCoeffSum(topMBF, botMBF, graphsBuf);
 

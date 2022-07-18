@@ -248,16 +248,11 @@ static void generateBotBuffers(
 	JobInfo jobs[BUFFERS_PER_BATCH];
 	for(int i = 0; i < numberOfTops; i++) {
 		jobs[i].bufStart = resultBuffers[i];
-		jobs[i].topDual = tops[i].topDual;
 	}
 
 	int topLayers[BUFFERS_PER_BATCH];
 	int startingLayer = initializeSwapperRun(Variables, swapperA, resultBuffers, tops, topLayers, numberOfTops);
 
-	for(int i = 0; i < numberOfTops; i++) {
-		jobs[i].topLayer = topLayers[i];
-	}
-	
 	swapper_block activeMask = numberOfTops == BUFFERS_PER_BATCH ? swapper_block(0xFFFFFFFFFFFFFFFF) : (swapper_block(1) << numberOfTops) - 1; // Has a 1 for active buffers
 
 	// Reverse order of mbf structure for better memory access pattern
@@ -385,7 +380,6 @@ void runBottomBufferCreator(
 		threads[t] = std::thread([&](){runBottomBufferCreatorNoAlloc(Variables, jobTopAtomic, jobTopEnd, outputQueue, returnQueue, links[socket]);});
 		setCoreComplexAffinity(threads[t], t);
 	}
-	//runBottomBufferCreatorNoAlloc(Variables, jobTopAtomic, jobTopEnd, outputQueue, returnQueue, links);
 
 	memcpy(numaLinks[1], numaLinks[0], linkBufMemSize);
 	links[1].store(reinterpret_cast<const uint32_t*>(numaLinks[1]), std::memory_order_relaxed); // Switch to closer buffer
@@ -398,4 +392,46 @@ void runBottomBufferCreator(
 	std::cout << "\033[33m[BottomBufferCreator] All Threads finished! Closing output queue\033[39m\n" << std::flush;
 
 	outputQueue.close();
+}
+
+void runBottomBufferCreator(
+	unsigned int Variables,
+	const std::vector<JobTopInfo>& jobTops,
+	SynchronizedQueue<JobInfo>& outputQueue,
+	SynchronizedStack<uint32_t*>& returnQueue,
+	int numberOfThreads
+) {
+	std::promise<std::vector<JobTopInfo>> jobTopsPromise;
+	jobTopsPromise.set_value(jobTops);
+	std::future<std::vector<JobTopInfo>> jobTopsFuture = jobTopsPromise.get_future();
+	runBottomBufferCreator(Variables, jobTopsFuture, outputQueue, returnQueue, numberOfThreads);
+}
+
+std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::vector<NodeIndex>& topIndices) {
+	std::vector<JobTopInfo> topInfos;
+	topInfos.reserve(topIndices.size());
+	for(NodeIndex topIdx : topIndices) {
+		JobTopInfo newInfo;
+		newInfo.top = topIdx;
+		newInfo.topDual = flatNodes[topIdx].dual;
+		topInfos.push_back(newInfo);
+	}
+	return topInfos;
+}
+
+void runBottomBufferCreator(
+	unsigned int Variables,
+	const std::vector<NodeIndex>& jobTops,
+	SynchronizedQueue<JobInfo>& outputQueue,
+	SynchronizedStack<uint32_t*>& returnQueue,
+	int numberOfThreads
+) {
+	// Read top infos in parallel, we must prioritize inputProducerThread starts as soon as possible
+	std::future<std::vector<JobTopInfo>> topInfosFuture = std::async(std::launch::async, [&](){
+		const FlatNode* nodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
+		std::vector<JobTopInfo> topInfos = convertTopInfos(nodes, jobTops);
+		return topInfos;
+	});
+
+	runBottomBufferCreator(Variables, topInfosFuture, outputQueue, returnQueue, numberOfThreads);
 }

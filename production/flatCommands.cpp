@@ -11,13 +11,14 @@ CommandSet flatCommands {"Flat DataStructure", {
 	{"flatDPlusOne6", []() {flatDPlus1<6>(); }},
 	{"flatDPlusOne7", []() {flatDPlus1<7>(); }},
 
-	{"flatDPlusTwo1", []() {flatDPlus2<1, 32>(); }},
+	// Outdated, use processingCommands
+	/*{"flatDPlusTwo1", []() {flatDPlus2<1, 32>(); }},
 	{"flatDPlusTwo2", []() {flatDPlus2<2, 32>(); }},
 	{"flatDPlusTwo3", []() {flatDPlus2<3, 32>(); }},
 	{"flatDPlusTwo4", []() {flatDPlus2<4, 32>(); }},
 	{"flatDPlusTwo5", []() {flatDPlus2<5, 32>(); }},
 	{"flatDPlusTwo6", []() {flatDPlus2<6, 32>(); }},
-	{"flatDPlusTwo7", []() {flatDPlus2<7, 32>(); }},
+	{"flatDPlusTwo7", []() {flatDPlus2<7, 32>(); }},*/
 	
 	{"isEvenPlusTwo1", []() {isEvenPlus2<1>(); }},
 	{"isEvenPlusTwo2", []() {isEvenPlus2<2>(); }},
