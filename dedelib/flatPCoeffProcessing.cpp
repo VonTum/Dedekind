@@ -102,7 +102,7 @@ std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector
 
 	std::thread inputProducerThread([&]() {
 		try {
-			runBottomBufferCreator(Variables, topInfosFuture, context.inputQueue, context.inputBufferReturnQueue, 8);
+			runBottomBufferCreator(Variables, topInfosFuture, context.inputQueue, context.inputBufferReturnQueue, 12);
 		} catch(const char* errText) {
 			std::cerr << "Error thrown in inputProducerThread: " << errText;
 			exit(-1);

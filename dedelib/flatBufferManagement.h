@@ -16,8 +16,11 @@ extern BufmanagementPageSize BUFMANAGEMENT_MMAP_PAGE_SIZE;
 
 
 void writeFlatVoidBuffer(const void* data, const std::string& fileName, size_t size);
-const void* readFlatVoidBuffer(const std::string& fileName, size_t size);
-const void* readFlatVoidBufferNoMMAP(const std::string& fileName, size_t size);
+void* readFlatVoidBuffer(const std::string& fileName, size_t size);
+void readFlatVoidBufferNoMMAP(const std::string& fileName, size_t size, void* buffer);
+void* readFlatVoidBufferNoMMAP(const std::string& fileName, size_t size);
+void* mmapFlatVoidBuffer(const std::string& fileName, size_t size);
+void munmapFlatVoidBuffer(const void* buf, size_t size);
 void freeFlatVoidBuffer(const void* buffer, size_t size);
 void free_const(const void* buffer);
 
@@ -28,12 +31,12 @@ void writeFlatBuffer(const T* data, const std::string& fileName, size_t size) {
 
 template<typename T>
 const T* readFlatBuffer(const std::string& fileName, size_t size) {
-	return static_cast<const T*>(readFlatVoidBuffer(fileName, sizeof(T) * size));
+	return static_cast<const T*>(readFlatVoidBuffer(fileName.c_str(), sizeof(T) * size));
 }
 
 template<typename T>
 const T* readFlatBufferNoMMAP(const std::string& fileName, size_t size) {
-	return static_cast<const T*>(readFlatVoidBufferNoMMAP(fileName, sizeof(T) * size));
+	return static_cast<const T*>(readFlatVoidBufferNoMMAP(fileName.c_str(), sizeof(T) * size));
 }
 
 template<typename T>

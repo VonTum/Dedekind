@@ -8,6 +8,9 @@
 #include <emmintrin.h>
 #include <immintrin.h>
 
+#include <numa.h>
+#include <sys/mman.h>
+
 #include <cstring>
 #include <vector>
 #include <algorithm>
@@ -294,10 +297,6 @@ static void generateBotBuffers(
 	std::cout << "\033[33m[BottomBufferCreator] Pushed 8 Buffers\033[39m\n" << std::flush;
 }
 
-const uint32_t* loadLinks(unsigned int Variables) {
-	return readFlatBuffer<uint32_t>(FileName::mbfStructure(Variables), getTotalLinkCount(Variables));
-}
-
 static void runBottomBufferCreatorNoAlloc (
 	unsigned int Variables,
 	std::atomic<const JobTopInfo*>& curStartingJobTop,
@@ -332,6 +331,60 @@ static void runBottomBufferCreatorNoAlloc (
 	aligned_free(swapperB);
 }
 
+std::vector<void*> allocDuplicateNUMABuffers(size_t bufSize, int numaNodes, int numaStart = 0) {
+	std::vector<void*> buffers(numaNodes);
+	for(int nn = 0; nn < numaNodes; nn++) {
+		buffers[nn] = numa_alloc_onnode(bufSize, nn + numaStart);
+	}
+	return buffers;
+}
+
+// May overshoot a little but shouldn't be a problem
+void duplicateNUMAData(const void* from, void** buffers, size_t numBuffers, size_t bufferSize) {
+    constexpr size_t BLOCKS_PER_ITER = 8;
+    constexpr size_t ALIGN = BLOCKS_PER_ITER * 32;
+	size_t numBlocks = (bufferSize + ALIGN - 1) / ALIGN;
+	const __m256i* originBuf = reinterpret_cast<const __m256i*>(from);
+	for(size_t blockI = 0; blockI < numBlocks; blockI++) {
+		__m256i blocks[BLOCKS_PER_ITER];
+        for(size_t i = 0; i < BLOCKS_PER_ITER; i++) {
+            blocks[i] = _mm256_stream_load_si256(originBuf + blockI * BLOCKS_PER_ITER + i);
+        }
+
+		for(size_t bufI = 0; bufI < numBuffers; bufI++) {
+			__m256i* targetBuf = reinterpret_cast<__m256i*>(buffers[bufI]);
+            for(size_t i = 0; i < BLOCKS_PER_ITER; i++) {
+			    _mm256_stream_si256(targetBuf + blockI * BLOCKS_PER_ITER + i, blocks[i]);
+            }
+		}
+	}
+}
+
+
+const uint32_t* loadLinks(unsigned int Variables) {
+	return readFlatBuffer<uint32_t>(FileName::mbfStructure(Variables), getTotalLinkCount(Variables));
+}
+
+void loadLinksDuplicateNUMA(unsigned int Variables, const uint32_t** resultBuffers, size_t numaNodeCount) {
+	size_t linkBufSize = getTotalLinkCount(Variables);
+	size_t linkBufMemSize = linkBufSize * sizeof(uint32_t);
+	std::cout << "Allocating links...\n" << std::flush;
+	void* numaLinks[8]; if(numaNodeCount > 8) {std::cerr << "Too many NUMA nodes\n" << std::flush; exit(-1);} // Only have 8 numa nodes available
+	for(size_t numaNode = 0; numaNode < numaNodeCount; numaNode++) {
+		numaLinks[numaNode] = numa_alloc_onnode(linkBufMemSize, numaNode);
+		std::cout << "numaLinks at " << numaLinks[numaNode] << std::endl;
+	}
+	std::cout << "MMAP links...\n" << std::flush;
+	void* linksMMAP = mmapFlatVoidBuffer(FileName::mbfStructure(Variables), linkBufMemSize);
+	madvise(linksMMAP, linkBufMemSize, MADV_SEQUENTIAL);
+	std::cout << "duplicate links...\n" << std::flush;
+	duplicateNUMAData(linksMMAP, numaLinks, numaNodeCount, linkBufMemSize);
+	for(size_t numaNode = 0; numaNode < numaNodeCount; numaNode++) {
+		resultBuffers[numaNode] = reinterpret_cast<const uint32_t*>(numaLinks[numaNode]);
+	}
+}
+
+
 void runBottomBufferCreator(
 	unsigned int Variables,
 	std::future<std::vector<JobTopInfo>>& jobTops,
@@ -339,11 +392,15 @@ void runBottomBufferCreator(
 	SynchronizedStack<uint32_t*>& returnQueue,
 	int numberOfThreads
 ) {
-	setCoreComplexAffinity(0);
+	setCoreComplexAffinity(0); // Far from the cpus we 
 
 	std::cout << "\033[33m[BottomBufferCreator] Loading Links...\033[39m\n" << std::flush;
 	auto linkLoadStart = std::chrono::high_resolution_clock::now();
 	const uint32_t* links = loadLinks(Variables);
+
+	/*int numaNodeCount = (numberOfThreads+1) / 2;
+	const uint32_t* numaLinks[8];
+	loadLinksDuplicateNUMA(Variables, numaLinks, numaNodeCount);*/
 	double timeTaken = (std::chrono::high_resolution_clock::now() - linkLoadStart).count() * 1.0e-9;
 	std::cout << "\033[33m[BottomBufferCreator] Finished loading links. Took " + std::to_string(timeTaken) + "s\033[39m\n" << std::flush;
 
@@ -352,12 +409,15 @@ void runBottomBufferCreator(
 	jobTopAtomic.store(&jobTopsVec[0]);
 	const JobTopInfo* jobTopEnd = jobTopAtomic.load() + jobTopsVec.size();
 
-	std::vector<std::thread> threads(numberOfThreads - 1);
-	for(int t = 0; t < numberOfThreads - 1; t++) {
+	std::vector<std::thread> threads(numberOfThreads);
+	for(int t = 0; t < numberOfThreads; t++) {
+		/*int numaNode = t / 2;
+		std::cout << "Launch thread " << t << " onto NUMA node " << numaNode << std::endl;
+		threads[t] = std::thread([&](){runBottomBufferCreatorNoAlloc(Variables, jobTopAtomic, jobTopEnd, outputQueue, returnQueue, numaLinks[numaNode]);});*/
 		threads[t] = std::thread([&](){runBottomBufferCreatorNoAlloc(Variables, jobTopAtomic, jobTopEnd, outputQueue, returnQueue, links);});
-		setCoreComplexAffinity(threads[t], t+1);
+		setCoreComplexAffinity(threads[t], t);
 	}
-	runBottomBufferCreatorNoAlloc(Variables, jobTopAtomic, jobTopEnd, outputQueue, returnQueue, links);
+	//runBottomBufferCreatorNoAlloc(Variables, jobTopAtomic, jobTopEnd, outputQueue, returnQueue, links);
 
 	for(std::thread& t : threads) {
 		t.join();

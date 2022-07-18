@@ -130,6 +130,8 @@ target_link_libraries(fpga_production alteracl)
 # target_link_libraries(fpga_production bitt_s10_pcie_mmd)
 target_link_libraries(fpga_production OpenCL)
 target_link_libraries(fpga_production elf)
+target_link_libraries(dedelib numa)
+# target_link_libraries(fpga_production numa)
 
 
 target_include_directories(fpga_production PRIVATE fpga_production)
