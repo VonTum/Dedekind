@@ -41,6 +41,7 @@ add_library(dedelib
   dedelib/pcoeffClasses.cpp
   dedelib/resultCollection.cpp
   dedelib/slabAllocator.cpp
+  dedelib/numaMem.cpp
 
   dedelib/bigint/uint128_t.cpp
   dedelib/bigint/uint256_t.cpp
