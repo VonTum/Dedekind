@@ -325,7 +325,7 @@ static void runBottomBufferCreatorNoAlloc (
 	std::cout << "\033[33m[BottomBufferCreator] Thread Started!\033[39m\n" << std::flush;
 
 	while(true) {
-		const JobTopInfo* grabbedTopSet = curStartingJobTop.fetch_add(BUFFERS_PER_BATCH, std::memory_order_relaxed);
+		const JobTopInfo* grabbedTopSet = curStartingJobTop.fetch_add(BUFFERS_PER_BATCH);
 		if(grabbedTopSet >= jobTopsEnd) break;
 
 		int numberOfTops = std::min(int(jobTopsEnd - grabbedTopSet), BUFFERS_PER_BATCH);
@@ -335,7 +335,7 @@ static void runBottomBufferCreatorNoAlloc (
 		uint32_t* buffersEnd[BUFFERS_PER_BATCH];
 		returnQueue.popN_wait(buffersEnd, numberOfTops);
 
-		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, outputQueue, links.load(std::memory_order_relaxed), grabbedTopSet, numberOfTops);
+		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, outputQueue, links.load(), grabbedTopSet, numberOfTops);
 	}
 
 	std::cout << "\033[33m[BottomBufferCreator] Thread Finished!\033[39m\n" << std::flush;
@@ -380,8 +380,8 @@ void runBottomBufferCreator(
 	readFlatVoidBufferNoMMAP(FileName::mbfStructure(Variables), linkBufMemSize, numaLinks[0]);
 
 	std::atomic<const uint32_t*> links[2];
-	links[0].store(reinterpret_cast<const uint32_t*>(numaLinks[0]), std::memory_order_relaxed);
-	links[1].store(reinterpret_cast<const uint32_t*>(numaLinks[0]), std::memory_order_relaxed); // Not a mistake, gets replaced by numaLinks[1] after it is copied
+	links[0].store(reinterpret_cast<const uint32_t*>(numaLinks[0]));
+	links[1].store(reinterpret_cast<const uint32_t*>(numaLinks[0])); // Not a mistake, gets replaced by numaLinks[1] after it is copied
 	
 	double timeTaken = (std::chrono::high_resolution_clock::now() - linkLoadStart).count() * 1.0e-9;
 	std::cout << "\033[33m[BottomBufferCreator] Finished loading links. Took " + std::to_string(timeTaken) + "s\033[39m\n" << std::flush;
@@ -399,7 +399,7 @@ void runBottomBufferCreator(
 	}
 
 	memcpy(numaLinks[1], numaLinks[0], linkBufMemSize);
-	links[1].store(reinterpret_cast<const uint32_t*>(numaLinks[1]), std::memory_order_relaxed); // Switch to closer buffer
+	links[1].store(reinterpret_cast<const uint32_t*>(numaLinks[1])); // Switch to closer buffer
 
 	std::cout << "\033[33m[BottomBufferCreator] Copied Links to second socket buffer\033[39m\n" << std::flush;
 
