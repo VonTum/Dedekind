@@ -25,6 +25,7 @@
 #include "aligned_alloc.h"
 
 #include "threadUtils.h"
+#include <pthread.h>
 
 #include "numaMem.h"
 
@@ -194,68 +195,6 @@ static void addJobEndCap(JobInfo& job) {
 	}*/
 }
 
-
-static swapper_block computeNextLayer(
-	const uint32_t* __restrict links, // Links index from the previous layer to this layer. Last element of a link streak will have a 1 in the 31 bit position. 
-	const JobTopInfo* tops,
-	const swapper_block* __restrict swapperIn,
-	swapper_block* __restrict swapperOut,
-	uint32_t resultIndexOffset,
-	uint32_t numberOfLinksToLayer,
-	uint32_t* __restrict * __restrict resultBuffers,
-	swapper_block activeMask // Has a 1 for active buffers
-#ifndef NDEBUG
-	,uint32_t fromLayerSize,
-	uint32_t toLayerSize
-#endif
-) {
-	swapper_block finishedConnections = ~swapper_block(0);
-
-	swapper_block currentConnectionsIn = 0;
-	uint32_t curNodeI = 0;
-	for(uint32_t linkI = 0; linkI < numberOfLinksToLayer; linkI++) {
-		uint32_t curLink = links[linkI];
-		uint32_t fromIdx = curLink & uint32_t(0x7FFFFFFF);
-		assert(fromIdx < fromLayerSize);
-		currentConnectionsIn |= swapperIn[fromIdx];
-		if((curLink & uint32_t(0x80000000)) != 0) {
-			currentConnectionsIn &= activeMask; // only check currently active ones
-			finishedConnections &= currentConnectionsIn;
-			assert(curNodeI < toLayerSize);
-			swapperOut[curNodeI] = currentConnectionsIn;
-			
-			uint32_t thisValue = resultIndexOffset + curNodeI;
-
-			curNodeI++;
-
-			while(currentConnectionsIn != 0) {
-				static_assert(BUFFERS_PER_BATCH <= 8);
-				int idx = ctz8(currentConnectionsIn);
-				currentConnectionsIn &= ~(swapper_block(1) << idx);
-
-#ifdef PCOEFF_DEDUPLICATE
-				if(thisValue < tops[idx].topDual)
-#endif
-					addValueToBlockFPGA(resultBuffers[idx], thisValue);
-			}
-		}
-
-		// Prefetch a bit in advance
-		if constexpr(PREFETCH_OFFSET > 0) {
-			uint32_t prefetchLinkI = linkI + PREFETCH_OFFSET;
-			uint32_t prefetchLink = links[prefetchLinkI];
-			uint32_t prefetchIdx = prefetchLink & uint32_t(0x7FFFFFFF);
-			_mm_prefetch(swapperIn + prefetchIdx, _MM_HINT_T0);
-		}
-	}
-
-	assert(curNodeI == toLayerSize);
-
-	return finishedConnections;
-}
-
-
-
 static void computeNextLayerLinks (
 	const uint32_t* __restrict links, // Links index from the previous layer to this layer. Last element of a link streak will have a 1 in the 31 bit position. 
 	const swapper_block* __restrict swapperIn,
@@ -356,20 +295,8 @@ static void generateBotBuffers(
 		assert((thisLayerLinks[numberOfLinksToLayer-1] & uint32_t(0x80000000)) != 0);
 
 		uint32_t nodeOffset = flatNodeLayerOffsets[Variables][toLayer];
+
 		// Computes BUFFERS_PER_BATCH result buffers at a time
-		
-		/*swapper_block finishedBuffers = computeNextLayer(thisLayerLinks, tops, swapperA, swapperB, nodeOffset, numberOfLinksToLayer, resultBuffers, activeMask
-#ifndef NDEBUG
-			,layerSizes[Variables][toLayer+1],layerSizes[Variables][toLayer]
-#endif
-		);
-
-
-		activeMask &= ~finishedBuffers;
-
-		finalizeBuffersMasked(finishedBuffers, nodeOffset, tops, resultBuffers);*/
-
-
 		computeNextLayerLinks(thisLayerLinks, swapperA, swapperB, numberOfLinksToLayer
 #ifndef NDEBUG
 			,layerSizes[Variables][toLayer+1],layerSizes[Variables][toLayer]
@@ -377,9 +304,6 @@ static void generateBotBuffers(
 		);
 
 		activeMask = pushSwapperResults(tops, swapperB, nodeOffset, resultBuffers, activeMask, layerSizes[Variables][toLayer]);
-
-
-
 
 		if(activeMask == 0) break;
 
@@ -467,11 +391,32 @@ void runBottomBufferCreator(
 	jobTopAtomic.store(&jobTopsVec[0]);
 	const JobTopInfo* jobTopEnd = jobTopAtomic.load() + jobTopsVec.size();
 
-	std::vector<std::thread> threads(numberOfThreads);
-	for(int t = 0; t < numberOfThreads; t++) {
-		int socket = t / 8;
-		threads[t] = std::thread([&](){runBottomBufferCreatorNoAlloc(Variables, jobTopAtomic, jobTopEnd, outputQueue, returnQueue, links[socket]);});
-		setCoreComplexAffinity(threads[t], t);
+	struct ThreadInfo {
+		unsigned int Variables;
+		std::atomic<const JobTopInfo*>* curStartingJobTop;
+		const JobTopInfo* jobTopsEnd;
+		SynchronizedQueue<JobInfo>* outputQueue;
+		SynchronizedStack<uint32_t*>* returnQueue;
+		std::atomic<const uint32_t*>* links;
+		pthread_t thread;
+	};
+
+	std::unique_ptr<ThreadInfo[]> threads(new ThreadInfo[numberOfThreads]);
+	for(int i = 0; i < numberOfThreads; i++) {
+		int socket = i / 8;
+		ThreadInfo& ti = threads[i];
+		ti.Variables = Variables;
+		ti.curStartingJobTop = &jobTopAtomic;
+		ti.jobTopsEnd = jobTopEnd;
+		ti.outputQueue = &outputQueue;
+		ti.returnQueue = &returnQueue;
+		ti.links = &links[socket];
+		ti.thread = createCoreComplexPThread(i, [](void* data) -> void* {
+			ThreadInfo* ti = (ThreadInfo*) data;
+			runBottomBufferCreatorNoAlloc(ti->Variables, *ti->curStartingJobTop, ti->jobTopsEnd, *ti->outputQueue, *ti->returnQueue, *ti->links);
+			pthread_exit(NULL);
+			return NULL;
+		}, &ti);
 	}
 
 	if(numberOfThreads > 8) {
@@ -481,8 +426,10 @@ void runBottomBufferCreator(
 
 	std::cout << "\033[33m[BottomBufferCreator] Copied Links to second socket buffer\033[39m\n" << std::flush;
 
-	for(std::thread& t : threads) {
-		t.join();
+	for(int i = 0; i < numberOfThreads; i++) {
+		if(pthread_join(threads[i].thread, NULL) != 0) {
+			std::cerr << "[BottomBufferCreator] Error joining pthread" << std::endl;
+		}
 	}
 	std::cout << "\033[33m[BottomBufferCreator] All Threads finished! Closing output queue\033[39m\n" << std::flush;
 
