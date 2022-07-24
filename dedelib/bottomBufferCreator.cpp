@@ -30,6 +30,7 @@
 
 typedef uint8_t swapper_block;
 constexpr int BUFFERS_PER_BATCH = sizeof(swapper_block) * 8;
+constexpr size_t PREFETCH_OFFSET = 48;
 
 constexpr size_t FPGA_BLOCK_SIZE = 32;
 constexpr size_t FPGA_BLOCK_ALIGN = FPGA_BLOCK_SIZE * sizeof(uint32_t);
@@ -111,65 +112,7 @@ static void addValueToBlockFPGA(uint32_t*__restrict& buf, uint32_t newValue) {
 	}
 }
 
-// Computes 64 result buffers at a time
-static swapper_block computeNextLayer(
-	const uint32_t* __restrict links, // Links index from the previous layer to this layer. Last element of a link streak will have a 1 in the 31 bit position. 
-	const JobTopInfo* tops,
-	const swapper_block* __restrict swapperIn,
-	swapper_block* __restrict swapperOut,
-	uint32_t resultIndexOffset,
-	uint32_t numberOfLinksToLayer,
-	uint32_t* __restrict * __restrict resultBuffers,
-	swapper_block activeMask // Has a 1 for active buffers
-#ifndef NDEBUG
-	,uint32_t fromLayerSize,
-	uint32_t toLayerSize
-#endif
-) {
-	swapper_block finishedConnections = ~swapper_block(0);
 
-	swapper_block currentConnectionsIn = 0;
-	uint32_t curNodeI = 0;
-	for(uint32_t linkI = 0; linkI < numberOfLinksToLayer; linkI++) {
-		uint32_t curLink = links[linkI];
-		uint32_t fromIdx = curLink & uint32_t(0x7FFFFFFF);
-		assert(fromIdx < fromLayerSize);
-		currentConnectionsIn |= swapperIn[fromIdx];
-		if((curLink & uint32_t(0x80000000)) != 0) {
-			currentConnectionsIn &= activeMask; // only check currently active ones
-			finishedConnections &= currentConnectionsIn;
-			assert(curNodeI < toLayerSize);
-			swapperOut[curNodeI] = currentConnectionsIn;
-			
-			uint32_t thisValue = resultIndexOffset + curNodeI;
-
-			curNodeI++;
-
-			while(currentConnectionsIn != 0) {
-				static_assert(BUFFERS_PER_BATCH <= 8);
-				int idx = ctz8(currentConnectionsIn);
-				currentConnectionsIn &= ~(swapper_block(1) << idx);
-
-#ifdef PCOEFF_DEDUPLICATE
-				if(thisValue < tops[idx].topDual)
-#endif
-					addValueToBlockFPGA(resultBuffers[idx], thisValue);
-			}
-		}
-
-		// Prefetch a bit in advance
-		/*uint32_t prefetchLinkI = linkI + 512; // PREFETCH OFFSET
-		if(prefetchLinkI < numberOfLinksToLayer) {
-			uint32_t prefetchLink = links[prefetchLinkI];
-			uint32_t prefetchIdx = prefetchLink & uint32_t(0x7FFFFFFF);
-			_mm_prefetch(swapperIn + prefetchIdx, _MM_HINT_T0);
-		}*/
-	}
-
-	assert(curNodeI == toLayerSize);
-
-	return finishedConnections;
-}
 
 static void finalizeBuffer(uint32_t* __restrict & resultBuffer, uint32_t fillUpTo) {
 	uint32_t curI = 0;
@@ -218,14 +161,15 @@ static void finalizeBuffer(uint32_t* __restrict & resultBuffer, uint32_t fillUpT
 	*resultBuffer++ = uint32_t(0x80000000);*/
 }
 
-static void finalizeMaskBuffers(
+static void finalizeBuffersMasked(
 	swapper_block bufferMask,
 	uint32_t nodeOffset, 
 	const JobTopInfo* tops,
 	uint32_t* __restrict * __restrict resultBuffers
 ) {
 	while(bufferMask != 0) {
-		int idx = ctz64(bufferMask);
+		static_assert(BUFFERS_PER_BATCH == 8);
+		int idx = ctz8(bufferMask);
 		bufferMask &= ~(swapper_block(1) << idx);
 
 		uint32_t finalizeUpTo = nodeOffset;
@@ -248,6 +192,138 @@ static void addJobEndCap(JobInfo& job) {
 	/*for(size_t i = 0; i < 2; i++) {
 		job.bufStart[bufferSize++] = 0x80000000; // Tops at the end for stats collection
 	}*/
+}
+
+
+static swapper_block computeNextLayer(
+	const uint32_t* __restrict links, // Links index from the previous layer to this layer. Last element of a link streak will have a 1 in the 31 bit position. 
+	const JobTopInfo* tops,
+	const swapper_block* __restrict swapperIn,
+	swapper_block* __restrict swapperOut,
+	uint32_t resultIndexOffset,
+	uint32_t numberOfLinksToLayer,
+	uint32_t* __restrict * __restrict resultBuffers,
+	swapper_block activeMask // Has a 1 for active buffers
+#ifndef NDEBUG
+	,uint32_t fromLayerSize,
+	uint32_t toLayerSize
+#endif
+) {
+	swapper_block finishedConnections = ~swapper_block(0);
+
+	swapper_block currentConnectionsIn = 0;
+	uint32_t curNodeI = 0;
+	for(uint32_t linkI = 0; linkI < numberOfLinksToLayer; linkI++) {
+		uint32_t curLink = links[linkI];
+		uint32_t fromIdx = curLink & uint32_t(0x7FFFFFFF);
+		assert(fromIdx < fromLayerSize);
+		currentConnectionsIn |= swapperIn[fromIdx];
+		if((curLink & uint32_t(0x80000000)) != 0) {
+			currentConnectionsIn &= activeMask; // only check currently active ones
+			finishedConnections &= currentConnectionsIn;
+			assert(curNodeI < toLayerSize);
+			swapperOut[curNodeI] = currentConnectionsIn;
+			
+			uint32_t thisValue = resultIndexOffset + curNodeI;
+
+			curNodeI++;
+
+			while(currentConnectionsIn != 0) {
+				static_assert(BUFFERS_PER_BATCH <= 8);
+				int idx = ctz8(currentConnectionsIn);
+				currentConnectionsIn &= ~(swapper_block(1) << idx);
+
+#ifdef PCOEFF_DEDUPLICATE
+				if(thisValue < tops[idx].topDual)
+#endif
+					addValueToBlockFPGA(resultBuffers[idx], thisValue);
+			}
+		}
+
+		// Prefetch a bit in advance
+		if constexpr(PREFETCH_OFFSET > 0) {
+			uint32_t prefetchLinkI = linkI + PREFETCH_OFFSET;
+			uint32_t prefetchLink = links[prefetchLinkI];
+			uint32_t prefetchIdx = prefetchLink & uint32_t(0x7FFFFFFF);
+			_mm_prefetch(swapperIn + prefetchIdx, _MM_HINT_T0);
+		}
+	}
+
+	assert(curNodeI == toLayerSize);
+
+	return finishedConnections;
+}
+
+
+
+static void computeNextLayerLinks (
+	const uint32_t* __restrict links, // Links index from the previous layer to this layer. Last element of a link streak will have a 1 in the 31 bit position. 
+	const swapper_block* __restrict swapperIn,
+	swapper_block* __restrict swapperOut,
+	uint32_t numberOfLinksToLayer
+#ifndef NDEBUG
+	,uint32_t fromLayerSize,
+	uint32_t toLayerSize
+#endif
+) {
+	swapper_block currentConnectionsIn = 0;
+	uint32_t curNodeI = 0;
+	for(uint32_t linkI = 0; linkI < numberOfLinksToLayer; linkI++) {
+		uint32_t curLink = links[linkI];
+		uint32_t fromIdx = curLink & uint32_t(0x7FFFFFFF);
+		assert(fromIdx < fromLayerSize);
+		currentConnectionsIn |= swapperIn[fromIdx];
+		if((curLink & uint32_t(0x80000000)) != 0) {
+			assert(curNodeI < toLayerSize);
+			swapperOut[curNodeI] = currentConnectionsIn;
+			currentConnectionsIn = 0;
+			curNodeI++;
+		}
+
+		// Prefetch a bit in advance
+		if constexpr(PREFETCH_OFFSET > 0) {
+			uint32_t prefetchLinkI = linkI + PREFETCH_OFFSET;
+			uint32_t prefetchLink = links[prefetchLinkI];
+			uint32_t prefetchIdx = prefetchLink & uint32_t(0x7FFFFFFF);
+			_mm_prefetch(swapperIn + prefetchIdx, _MM_HINT_T0);
+		}
+	}
+
+	assert(curNodeI == toLayerSize);
+}
+
+
+static swapper_block pushSwapperResults(
+	const JobTopInfo* tops,
+	const swapper_block* __restrict swapper,
+	uint32_t resultIndexOffset,
+	uint32_t* __restrict * __restrict resultBuffers,
+	swapper_block activeMask, // Has a 1 for active buffers
+	uint32_t swapperSize
+) {
+	swapper_block finishedConnections = activeMask;
+
+	for(uint32_t curNodeI = 0; curNodeI < swapperSize; curNodeI++) {	
+		uint32_t thisValue = resultIndexOffset + curNodeI;
+
+		swapper_block currentConnectionsIn = swapper[curNodeI];
+		finishedConnections &= currentConnectionsIn;
+		currentConnectionsIn &= activeMask; // only check currently active ones
+		while(currentConnectionsIn != 0) {
+			static_assert(BUFFERS_PER_BATCH <= 8);
+			int idx = ctz8(currentConnectionsIn);
+			currentConnectionsIn &= ~(swapper_block(1) << idx);
+
+#ifdef PCOEFF_DEDUPLICATE
+			if(thisValue < tops[idx].topDual)
+#endif
+				addValueToBlockFPGA(resultBuffers[idx], thisValue);
+		}
+	}
+
+	finalizeBuffersMasked(finishedConnections, resultIndexOffset, tops, resultBuffers);
+
+	return activeMask & ~finishedConnections;
 }
 
 static void generateBotBuffers(
@@ -281,24 +357,38 @@ static void generateBotBuffers(
 
 		uint32_t nodeOffset = flatNodeLayerOffsets[Variables][toLayer];
 		// Computes BUFFERS_PER_BATCH result buffers at a time
-		swapper_block finishedBuffers = computeNextLayer(thisLayerLinks, tops, swapperA, swapperB, nodeOffset, numberOfLinksToLayer, resultBuffers, activeMask
+		
+		/*swapper_block finishedBuffers = computeNextLayer(thisLayerLinks, tops, swapperA, swapperB, nodeOffset, numberOfLinksToLayer, resultBuffers, activeMask
 #ifndef NDEBUG
 			,layerSizes[Variables][toLayer+1],layerSizes[Variables][toLayer]
 #endif
 		);
 
-		thisLayerLinks += numberOfLinksToLayer;
 
 		activeMask &= ~finishedBuffers;
 
-		finalizeMaskBuffers(finishedBuffers, nodeOffset, tops, resultBuffers);
+		finalizeBuffersMasked(finishedBuffers, nodeOffset, tops, resultBuffers);*/
+
+
+		computeNextLayerLinks(thisLayerLinks, swapperA, swapperB, numberOfLinksToLayer
+#ifndef NDEBUG
+			,layerSizes[Variables][toLayer+1],layerSizes[Variables][toLayer]
+#endif
+		);
+
+		activeMask = pushSwapperResults(tops, swapperB, nodeOffset, resultBuffers, activeMask, layerSizes[Variables][toLayer]);
+
+
+
 
 		if(activeMask == 0) break;
+
+		thisLayerLinks += numberOfLinksToLayer;
 
 		std::swap(swapperA, swapperB);
 	}
 
-	finalizeMaskBuffers(activeMask, 0, tops, resultBuffers);
+	finalizeBuffersMasked(activeMask, 0, tops, resultBuffers);
 
 	for(int i = 0; i < numberOfTops; i++) {
 		jobs[i].bufEnd = resultBuffers[i];
@@ -348,21 +438,6 @@ const uint32_t* loadLinks(unsigned int Variables) {
 	return readFlatBuffer<uint32_t>(FileName::mbfStructure(Variables), getTotalLinkCount(Variables));
 }
 
-void mmapLinksDuplicateNUMA(unsigned int Variables, const uint32_t** resultBuffers, size_t numaNodeCount) {
-	size_t linkBufMemSize = getTotalLinkCount(Variables) * sizeof(uint32_t);
-	std::cout << "Allocating links...\n" << std::flush;
-	void* numaLinks[8];
-	allocSocketBuffers(linkBufMemSize, numaLinks);
-	std::cout << "MMAP links...\n" << std::flush;
-	void* linksMMAP = mmapFlatVoidBuffer(FileName::mbfStructure(Variables), linkBufMemSize);
-	madvise(linksMMAP, linkBufMemSize, MADV_SEQUENTIAL);
-	std::cout << "duplicate links...\n" << std::flush;
-	duplicateNUMAData(linksMMAP, numaLinks, numaNodeCount, linkBufMemSize);
-	for(size_t numaNode = 0; numaNode < numaNodeCount; numaNode++) {
-		resultBuffers[numaNode] = reinterpret_cast<const uint32_t*>(numaLinks[numaNode]);
-	}
-}
-
 void runBottomBufferCreator(
 	unsigned int Variables,
 	std::future<std::vector<JobTopInfo>>& jobTops,
@@ -376,8 +451,9 @@ void runBottomBufferCreator(
 	
 	size_t linkBufMemSize = getTotalLinkCount(Variables) * sizeof(uint32_t);
 	void* numaLinks[2];
-	allocSocketBuffers(linkBufMemSize, numaLinks);
+	allocSocketBuffers(linkBufMemSize + PREFETCH_OFFSET * sizeof(uint32_t), numaLinks);
 	readFlatVoidBufferNoMMAP(FileName::mbfStructure(Variables), linkBufMemSize, numaLinks[0]);
+	memset((char*) numaLinks[0] + linkBufMemSize, 0, PREFETCH_OFFSET * sizeof(uint32_t));
 
 	std::atomic<const uint32_t*> links[2];
 	links[0].store(reinterpret_cast<const uint32_t*>(numaLinks[0]));
@@ -398,8 +474,10 @@ void runBottomBufferCreator(
 		setCoreComplexAffinity(threads[t], t);
 	}
 
-	memcpy(numaLinks[1], numaLinks[0], linkBufMemSize);
-	links[1].store(reinterpret_cast<const uint32_t*>(numaLinks[1])); // Switch to closer buffer
+	if(numberOfThreads > 8) {
+		memcpy(numaLinks[1], numaLinks[0], linkBufMemSize + PREFETCH_OFFSET * sizeof(uint32_t));
+		links[1].store(reinterpret_cast<const uint32_t*>(numaLinks[1])); // Switch to closer buffer
+	}
 
 	std::cout << "\033[33m[BottomBufferCreator] Copied Links to second socket buffer\033[39m\n" << std::flush;
 

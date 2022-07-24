@@ -144,7 +144,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 }
 
 
-CommandSet bottomBufferCommands {"Massively parallel Processing Commands", {}, {
+CommandSet bottomBufferCommands {"Bottom Buffer Commands", {}, {
 	{"benchmarkBottomBufferProduction", benchmarkBottomBufferProduction},
 	{"testBottomBufferProduction1", testBottomBufferProduction<1>},
 	{"testBottomBufferProduction2", testBottomBufferProduction<2>},
