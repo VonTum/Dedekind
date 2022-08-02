@@ -35,26 +35,20 @@ public:
 	size_t getNumberOfChunksInUse() const;
 };
 
+/*
+Does not clean up it's slab on destroy
+*/
 template<typename T>
 class SlabAllocator {
 	SlabAddrAllocator addrAllocator;
-	T* slabStart;
-
 public:
+	T* slabStart;
+	
 	SlabAllocator() noexcept : addrAllocator(), slabStart(nullptr) {}
-	SlabAllocator(size_t slabSize, size_t maxChunks, size_t align = alignof(T)) : addrAllocator(alignUpTo(slabSize, align / sizeof(T)), maxChunks), slabStart(aligned_mallocT<T>(alignUpTo(slabSize, align / sizeof(T)), align)) {}
-	~SlabAllocator() {
-		aligned_free(slabStart);
-	}
-
-	SlabAllocator(const SlabAllocator&) = delete;
-	SlabAllocator& operator=(const SlabAllocator&) = delete;
-	SlabAllocator(SlabAllocator&& other) noexcept : addrAllocator(std::move(other.addrAllocator)), slabStart(other.slabStart) {other.slabStart = nullptr;}
-	SlabAllocator& operator=(SlabAllocator&& other) noexcept {
-		this->addrAllocator = std::move(other.addrAllocator);
-		std::swap(this->slabStart, other.slabStart);
-		return *this;
-	}
+	SlabAllocator(size_t slabSize, size_t maxChunks, T* slab, size_t align = alignof(T)) : 
+		addrAllocator(alignUpTo(slabSize, align / sizeof(T)), maxChunks), slabStart(slab) {}
+	SlabAllocator(size_t slabSize, size_t maxChunks, size_t align = alignof(T)) : 
+		SlabAllocator(slabSize, maxChunks, aligned_mallocT<T>(alignUpTo(slabSize, align / sizeof(T)), align)) {}
 
 	T* alloc(size_t allocSize) {
 		//assert((allocSize * sizeof(T)) % Align == 0);

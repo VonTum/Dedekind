@@ -1,6 +1,5 @@
 #include "numaMem.h"
 
-#include <numa.h>
 #include <string.h>
 #include <xmmintrin.h>
 #include <emmintrin.h>

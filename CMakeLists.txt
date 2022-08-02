@@ -132,6 +132,7 @@ target_link_libraries(fpga_production alteracl)
 target_link_libraries(fpga_production OpenCL)
 target_link_libraries(fpga_production elf)
 target_link_libraries(dedelib numa)
+# target_compile_definitions(dedelib PUBLIC USE_NUMA)
 # target_link_libraries(fpga_production numa)
 
 

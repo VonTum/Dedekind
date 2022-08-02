@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "slabAllocator.h"
+#include "numaMem.h"
+
 
 template<typename T>
 class RingQueue {
@@ -212,14 +214,7 @@ public:
 	// Write side
 	void push(T&& item) {
 		{std::lock_guard<std::mutex> lock(mutex);
-			stack.push(std::move(item));
-		}
-		readyForPop.notify_one();
-	}
-
-	void push(const T& item) {
-		{std::lock_guard<std::mutex> lock(mutex);
-			stack.push(item);
+			stack.push(std::forward(item));
 		}
 		readyForPop.notify_one();
 	}
@@ -327,3 +322,110 @@ public:
 		readyForAlloc.notify_all();
 	}
 };
+
+
+template<typename T>
+class SynchronizedMultiQueue {
+	std::vector<RingQueue<T>> queues;
+	std::mutex mutex;
+	std::condition_variable readyForPop;
+	size_t numStillOpen;
+public:
+	SynchronizedMultiQueue() = default;
+	SynchronizedMultiQueue(size_t numQueues, size_t queueCapacity) : numStillOpen(numQueues) {
+		queues.reserve(numQueues);
+		for(size_t i = 0; i < numQueues; i++) {
+			queues.emplace_back(queueCapacity);
+		}
+	}
+
+
+	// Write side
+	void push(size_t queueIdx, T&& item) {
+		{std::lock_guard<std::mutex> lock(mutex);
+			queues[queueIdx].push(std::forward(item));
+		}
+		readyForPop.notify_one();
+	}
+
+	void pushN(size_t queueIdx, const T* values, size_t count) {
+		{std::lock_guard<std::mutex> lock(mutex);
+			for(size_t i = 0; i < count; i++) {
+				queues[queueIdx].push(values[i]);
+			}
+		}
+		readyForPop.notify_all();
+	}
+
+	// Read side
+	// May wait forever
+	T pop_wait(size_t& lastQueueIdx) {
+		std::unique_lock<std::mutex> lock(mutex);
+		size_t curIdx = lastQueueIdx;
+
+		while(true) {
+			do {
+				if(curIdx == 0) curIdx = this->queues.size();
+				curIdx--;
+
+				if(!this->queues[curIdx].empty()) {
+					lastQueueIdx = curIdx;
+					return this->queues[curIdx].pop();
+				}
+			} while(curIdx != lastQueueIdx);
+			readyForPop.wait(lock);
+			// Try again
+		}
+	}
+};
+
+template<typename T>
+class SynchronizedMultiNUMAAlloc {
+	std::vector<SynchronizedQueue<T>> queues;
+	std::vector<std::pair<T*, T*>> slabs;
+	size_t alignedSubSlabSize;
+
+public:
+	SynchronizedMultiNUMAAlloc(size_t subSlabSize, size_t numSubSlabs, size_t numNUMADomains=1, size_t align) {
+		queues.reserve(numNUMADomains);
+		slabs.reserve(numNUMADomains);
+
+		alignedSubSlabSize = alignUpTo(subSlabSize, align / sizeof(T));
+		for(size_t nn = 0; nn < numNUMADomains; nn++) {
+			T* slab = numa_alloc_T<T>(alignedSubSlabSize * numSubSlabs);
+			slabs.push_back(std::make_pair(slab, slab + alignedSubSlabSize * numSubSlabs));
+			queues.emplace_back(numSubSlabs);
+			RingQueue<T>& q = queues.back().get();
+
+			for(size_t i = 0; i < numSubSlabs; i++) {
+				q.push(slab + alignedSubSlabSize * i);
+			}
+		}
+	}
+
+	~SynchronizedMultiNUMAAlloc() {
+		for(auto& slab : slabs) {
+			numa_free(slab.first);
+		}
+	}
+
+	SynchronizedMultiNUMAAlloc(const SynchronizedMultiNUMAAlloc&) = delete;
+	SynchronizedMultiNUMAAlloc(const SynchronizedMultiNUMAAlloc&&) = delete;
+	SynchronizedMultiNUMAAlloc& operator=(const SynchronizedMultiNUMAAlloc&) = delete;
+	SynchronizedMultiNUMAAlloc& operator=(const SynchronizedMultiNUMAAlloc&&) = delete;
+
+	void allocN_wait(size_t numaNode, T** buffers, size_t count) {
+		queues[numaNode].popN_wait_forever(buffers, count);
+	}
+
+	void free(T* buf) {
+		for(size_t nn = 0; nn < slabs.size(); nn++) {
+			if(buf >= slabs[nn].first && buf < slabs[nn].second) {
+				queues[nn].push(buf);
+				return;
+			}
+		}
+		throw "Could not find allocator for this buffer!";
+	}
+}
+
