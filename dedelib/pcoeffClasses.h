@@ -22,6 +22,7 @@ struct JobInfo {
 	NodeIndex* blockEnd;
 
 	NodeIndex getTop() const {
+		assert((*bufStart & 0x80000000) != 0);
 		return (*bufStart) & 0x7FFFFFFF;
 	}
 

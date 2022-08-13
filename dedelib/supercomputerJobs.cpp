@@ -193,7 +193,7 @@ void processJob(unsigned int Variables, const std::string& computeFolder, int jo
 	std::vector<std::uint32_t> topsToProcess = loadJob(Variables + 2, computeFolder, computeID, jobIndex);
 
 	std::cout << "Starting Computation..." << std::endl;
-	std::vector<BetaResult> betaResults = pcoeffPipeline(Variables, topsToProcess, processorFunc, 300, 5, 50);
+	std::vector<BetaResult> betaResults = pcoeffPipeline(Variables, topsToProcess, processorFunc);
 
 	
 	if(betaResults.size() != topsToProcess.size()) {

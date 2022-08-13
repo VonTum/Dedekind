@@ -19,23 +19,23 @@ std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::ve
 void runBottomBufferCreator(
 	unsigned int Variables,
 	std::future<std::vector<JobTopInfo>>& jobTops,
-	SynchronizedQueue<JobInfo>& outputQueue,
-	SynchronizedStack<uint32_t*>& returnQueue,
+	SynchronizedMultiQueue<JobInfo>& outputQueue,
+	SynchronizedMultiNUMAAlloc<uint32_t>& returnQueue,
 	int numberOfThreads = 1
 );
 
 void runBottomBufferCreator(
 	unsigned int Variables,
 	const std::vector<JobTopInfo>& jobTops,
-	SynchronizedQueue<JobInfo>& outputQueue,
-	SynchronizedStack<uint32_t*>& returnQueue,
+	SynchronizedMultiQueue<JobInfo>& outputQueue,
+	SynchronizedMultiNUMAAlloc<uint32_t>& returnQueue,
 	int numberOfThreads = 1
 );
 
 void runBottomBufferCreator(
 	unsigned int Variables,
 	const std::vector<NodeIndex>& jobTops,
-	SynchronizedQueue<JobInfo>& outputQueue,
-	SynchronizedStack<uint32_t*>& returnQueue,
+	SynchronizedMultiQueue<JobInfo>& outputQueue,
+	SynchronizedMultiNUMAAlloc<uint32_t>& returnQueue,
 	int numberOfThreads
 );

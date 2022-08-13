@@ -65,8 +65,8 @@ const ClassInfo* loadClassInfos(unsigned int Variables) {
 void resultProcessor(
 	unsigned int Variables,
 	SynchronizedQueue<OutputBuffer>& outputQueue,
-	SynchronizedStack<NodeIndex*>& inputBufferReturnQueue,
-	SynchronizedSlabAllocator<ProcessedPCoeffSum>& outputBufferReturnQueue,
+	SynchronizedMultiNUMAAlloc<NodeIndex>& inputBufferReturnQueue,
+	SynchronizedStack<ProcessedPCoeffSum*>& outputBufferReturnQueue,
 	std::vector<BetaResult>& finalResults
 ) {
 	std::cout << "\033[32m[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
@@ -80,8 +80,8 @@ void resultProcessor(
 		curBetaResult.topIndex = outBuf.originalInputData.getTop();
 		curBetaResult.betaSum = produceBetaResult(Variables, mbfClassInfos, outBuf.originalInputData, outBuf.outputBuf);
 
-		inputBufferReturnQueue.push(outBuf.originalInputData.bufStart);
-		outputBufferReturnQueue.free(outBuf.outputBuf);
+		inputBufferReturnQueue.free(std::move(outBuf.originalInputData.bufStart));
+		outputBufferReturnQueue.push(outBuf.outputBuf);
 
 		finalResults.push_back(curBetaResult);
 		if(finalResults.size() % 1000 == 0) std::cout << "\033[32m[Result Processor] " + std::to_string(finalResults.size()) + "\033[39m\n" << std::flush;

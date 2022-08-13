@@ -108,11 +108,12 @@ struct FPGAData {
 	cl_mem resultMem;
 	JobInfo job;
 	cl_event* done;
+	size_t* curBufIdx;
 };
 
 void pushJobIntoKernel(FPGAData* data) {
 	std::cout << "Push job " << reinterpret_cast<uint64_t>(data) % 512 << std::endl;
-	std::optional<JobInfo> jobOpt = data->queues->inputQueue.pop_wait();
+	std::optional<JobInfo> jobOpt = data->queues->inputQueue.pop_wait(*(data->curBufIdx));
 	if(!jobOpt.has_value()) {
 		clSetUserEventStatus(*data->done, CL_COMPLETE);
 		return;
@@ -133,7 +134,7 @@ void pushJobIntoKernel(FPGAData* data) {
 	cl_event kernelFinished = data->kernel->launchKernel(data->inputMem, data->resultMem, bufferSize, 1, &writeFinished);
 
 	//std::cout << "Grabbing output buffer..." << std::endl;
-	ProcessedPCoeffSum* countConnectedSumBuf = data->queues->outputBufferReturnQueue.alloc_wait(bufferSize);
+	ProcessedPCoeffSum* countConnectedSumBuf = data->queues->outputBufferReturnQueue.pop_wait();
 	//std::cout << "Grabbed output buffer" << std::endl;
 	
 	data->outBuf = countConnectedSumBuf;
@@ -150,8 +151,8 @@ void pushJobIntoKernel(FPGAData* data) {
 
 		std::cout << "Finished job " << data->job.getTop() << " with " << data->job.getNumberOfBottoms() << " bottoms\n" << std::flush;
 
-		data->queues->outputBufferReturnQueue.free(data->outBuf); // temporary
-		data->queues->inputBufferReturnQueue.push(data->job.bufStart);
+		data->queues->outputBufferReturnQueue.push(data->outBuf); // temporary
+		data->queues->inputBufferAllocator.free(data->job.bufStart);
 
 		pushJobIntoKernel(data);
 	}, data);
@@ -166,9 +167,11 @@ void fpgaProcessor_Throughput_OnDevices(PCoeffProcessingContext& queues, const u
 	FPGAData storedData[NUM_BUFFERS * DEVICE_COUNT];
 
 	PCoeffKernel kernels[DEVICE_COUNT];
+	size_t queueIdxes[DEVICE_COUNT];
 
 	for(size_t deviceI = 0; deviceI < DEVICE_COUNT; deviceI++) {
 		PCoeffKernel& k = kernels[deviceI];
+		queueIdxes[deviceI] = 0;
 
 		k.init(devices[deviceI], mbfLUT, kernelFile.c_str());
 		k.createBuffers(NUM_BUFFERS, BUFFER_SIZE);
@@ -181,6 +184,7 @@ void fpgaProcessor_Throughput_OnDevices(PCoeffProcessingContext& queues, const u
 			//clSetUserEventStatus(dones[doneI], CL_QUEUED);
 			storedData[doneI].queues = &queues;
 			storedData[doneI].kernel = &k;
+			storedData[doneI].curBufIdx = &queueIdxes[deviceI];
 			storedData[doneI].done = &dones[doneI];
 			storedData[doneI].inputMem = k.inputMems[i];
 			storedData[doneI].resultMem = k.resultMems[i];
@@ -189,7 +193,7 @@ void fpgaProcessor_Throughput_OnDevices(PCoeffProcessingContext& queues, const u
 	}
 
 	std::cout << "\033[31m[FPGA Processor] FPGA Processor started.\033[39m\n" << std::flush;
-	for(size_t bufI = 0; bufI < NUM_BUFFERS * DEVICE_COUNT; bufI++) {
+	for(size_t bufI = 0; bufI < NUM_BUFFERS*DEVICE_COUNT; bufI++) {
 		pushJobIntoKernel(&storedData[bufI]);
 	}
 
@@ -387,8 +391,8 @@ void fpgaProcessor_Throughput(PCoeffProcessingContext& queues) {
 		//result.outputBuf = countConnectedSumBuf;
 		//queues.outputQueue.push(result);
 		
-		queues.outputBufferReturnQueue.free(countConnectedSumBuf); // Temporary
-		queues.inputBufferReturnQueue.push(job.bufStart);
+		queues.outputBufferReturnQueue.push(countConnectedSumBuf); // Temporary
+		queues.inputBufferAllocator.free(job.bufStart);
 	}
 	std::cout << "FPGA Processor finished.\n" << std::flush;
 }*/
@@ -502,8 +506,8 @@ int main(int argc, char** argv) {
 		std::cout << std::endl;
 
 		std::cout << "Pipelining computation for " << topsToProcess.size() << " tops..." << std::endl;
-		std::vector<BetaResult> result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_Throughput, 200, 10, 100);
-		//std::vector<BetaResult> result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_FullySerial, 200, 10, 100);
+		std::vector<BetaResult> result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_Throughput);
+		//std::vector<BetaResult> result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_FullySerial);
 		std::cout << "Computation Finished!" << std::endl;
 
 		for(const BetaResult& r : result) {

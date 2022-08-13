@@ -19,25 +19,27 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 	auto tops = generateRangeSample(Variables, sampleCount);
 	auto jobTops = convertTopInfos(flatNodes, tops);
 
-	PCoeffProcessingContext context(Variables, 200, 0, 0);
+	PCoeffProcessingContext context(Variables, (threadCount+1) / 2, 50, 0);
+	context.outputQueue.close(); // Don't use output queue
 
 	std::cout << "Files loaded. Starting benchmark." << std::endl;
 
 	std::thread loopBack([&](){
 		auto startTime = std::chrono::high_resolution_clock::now();
 		size_t bufferI = 0;
+		size_t queueIdxRotator = 0;
 		while(true) {
-			auto optBuf = context.inputQueue.pop_wait();
+			auto optBuf = context.inputQueue.pop_wait(queueIdxRotator);
 			if(optBuf.has_value()) {
 				double secondsSinceStart = ((std::chrono::high_resolution_clock::now() - startTime).count() * 1.0e-9);
 				std::cout << "Buffer " << bufferI++ << " received at " << secondsSinceStart << "s" << std::endl;
-				context.inputBufferReturnQueue.push(optBuf.value().bufStart);
+				context.inputBufferAllocator.free(optBuf.value().bufStart);
 			} else {
 				break;
 			}
 		}
 	});
-	runBottomBufferCreator(Variables, jobTops, context.inputQueue, context.inputBufferReturnQueue, threadCount);
+	runBottomBufferCreator(Variables, jobTops, context.inputQueue, context.inputBufferAllocator, threadCount);
 
 	loopBack.join();
 }
@@ -52,7 +54,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 	const Monotonic<Variables>* mbfs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
 	std::vector<NodeIndex> tops;
 	std::default_random_engine generator;
-	std::uniform_int_distribution<NodeIndex> dist(0, mbfCounts[Variables]);
+	std::uniform_int_distribution<NodeIndex> dist(0, mbfCounts[Variables] - 1);
 	std::cout << "Tops: ";
 	for(int i = 0; i < sampleCount; i++) {
 		NodeIndex newTop = dist(generator);
@@ -62,7 +64,8 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 	std::cout << std::endl;
 	auto jobTops = convertTopInfos(flatNodes, tops);
 
-	PCoeffProcessingContext context(Variables, 200, 0, 0);
+	PCoeffProcessingContext context(Variables, (threadCount+1) / 2, 50, 0);
+	context.outputQueue.close(); // Don't use output queue
 
 	std::cout << "Files loaded. Starting test." << std::endl;
 
@@ -70,35 +73,40 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 	loopBackThreads.reserve(loopBackThreadCount);
 	for(int i = 0; i < loopBackThreadCount; i++) {
 		std::thread loopBack([&](){
-			size_t bufferI = 0;
 			bool* foundBottoms = new bool[mbfCounts[Variables]];
+			size_t queueIdxRotator = 0;
 			while(true) {
 				std::memset(foundBottoms, 0, mbfCounts[Variables]*sizeof(bool));
-				auto optBuf = context.inputQueue.pop_wait();
+				auto optBuf = context.inputQueue.pop_wait(queueIdxRotator);
 				if(optBuf.has_value()) {
 					auto buf = optBuf.value();
 
 					NodeIndex top = buf.getTop();
 					NodeIndex topDual = flatNodes[top].dual;
-					std::cout << "Top=" << top << " received! Dual=" << topDual << std::endl;
+					std::cout << "Top=" << top << " received! Dual=" << topDual << " bufStart= " << (void*) buf.bufStart << " bufEnd=" << (buf.bufEnd - buf.bufStart) << " blockEnd=" << (buf.blockEnd - buf.bufStart) << std::endl;
+					
 
 					if(loopBackThreadCount == 1) {
-						size_t sampleSize = std::min<size_t>(buf.bufferSize(), 70);
+						size_t sampleSize = std::min<size_t>(buf.bufferSize(), 50);
 						NodeIndex selectedSampleStart = std::uniform_int_distribution<NodeIndex>(0, buf.bufferSize() - sampleSize)(generator);
 						std::cout << "Random buffer sample at offset " << selectedSampleStart << ": " << std::endl;
-						for(size_t i = 0; i < sampleSize; i+=2) {
+						/*for(size_t i = 0; i < sampleSize; i+=2) {
 							std::cout << buf.bufStart[selectedSampleStart + i] << ' ';
 						}
 						std::cout << std::endl;
 						for(size_t i = 1; i < sampleSize; i+=2) {
 							std::cout << buf.bufStart[selectedSampleStart + i] << ' ';
 						}
+						std::cout << std::endl;*/
+						for(size_t i = 0; i < sampleSize; i++) {
+							std::cout << buf.bufStart[selectedSampleStart + i] << ' ';
+						}
 						std::cout << std::endl;
 					}
 
-					for(NodeIndex i : buf) {
+					for(NodeIndex& i : buf) {
 						if(foundBottoms[i]) {
-							std::cout << "  \033[31mERROR: Duplicate bottom " << i << std::endl;
+							std::cout << "  \033[31mERROR: Duplicate bottom " << i << " at position " << (&i - buf.bufStart) << std::endl;
 						}
 						foundBottoms[i] = true;
 					}
@@ -128,7 +136,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 						}
 					}
 
-					context.inputBufferReturnQueue.push(buf.bufStart);
+					context.inputBufferAllocator.free(buf.bufStart);
 				} else {
 					break;
 				}
@@ -136,7 +144,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 		});
 		loopBackThreads.push_back(std::move(loopBack));
 	}
-	runBottomBufferCreator(Variables, jobTops, context.inputQueue, context.inputBufferReturnQueue, threadCount);
+	runBottomBufferCreator(Variables, jobTops, context.inputQueue, context.inputBufferAllocator, threadCount);
 
 	for(std::thread& t : loopBackThreads) {
 		t.join();

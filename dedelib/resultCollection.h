@@ -14,7 +14,7 @@ BetaSum produceBetaResult(unsigned int Variables, const ClassInfo* mbfClassInfos
 void resultProcessor(
 	unsigned int Variables,
 	SynchronizedQueue<OutputBuffer>& outputQueue,
-	SynchronizedStack<NodeIndex*>& inputBufferReturnQueue,
-	SynchronizedSlabAllocator<ProcessedPCoeffSum>& outputBufferReturnQueue,
+	SynchronizedMultiNUMAAlloc<NodeIndex>& inputBufferReturnQueue,
+	SynchronizedStack<ProcessedPCoeffSum*>& outputBufferReturnQueue,
 	std::vector<BetaResult>& finalResults
 );

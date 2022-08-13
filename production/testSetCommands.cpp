@@ -338,7 +338,7 @@ void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::st
 	PCoeffProcessingContext context(Variables, topsToProcess.size(), topsToProcess.size(), topsToProcess.size());
 	std::cout << "Input production..." << std::endl;
 
-	runBottomBufferCreator(Variables, topsToProcess, context.inputQueue, context.inputBufferReturnQueue, 1);
+	runBottomBufferCreator(Variables, topsToProcess, context.inputQueue, context.inputBufferAllocator, 1);
 	std::cout << "Processing..." << std::endl;
 	//std::thread cpuThread([&](){cpuProcessor_SingleThread(allMBFData, context);});
 
@@ -349,9 +349,10 @@ void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::st
 	const Monotonic<Variables>* mbfs = readFlatBuffer<Monotonic<Variables>>(FileName::allMBFS(Variables), mbfCounts[Variables]);
 
 	std::cout << "Number of tops to process is " << topsToProcess.size() << std::endl;
+	size_t queueIdx = 0;
 	for(NodeIndex currentlyProcessingTopMeThinks : topsToProcess) {
 		std::cout << "Waiting for top to process..." << std::endl;
-		JobInfo job = context.inputQueue.pop_wait().value();
+		JobInfo job = context.inputQueue.pop_wait(queueIdx).value();
 		NodeIndex top = job.bufStart[0] & 0x7FFFFFFF;
 		size_t jobSize = job.bufferSize() & ~size_t(0xF);
 		std::cout << "Processing top " << top << '/' << currentlyProcessingTopMeThinks << " of size " << jobSize << std::endl;

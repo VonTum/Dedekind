@@ -6,7 +6,6 @@
 #include <cassert>
 #include <optional>
 #include <memory>
-#include <stack>
 #include <vector>
 
 #include "slabAllocator.h"
@@ -85,14 +84,8 @@ public:
 		delete[] queueBuffer;
 	}
 
-	void push(T&& item) {
+	void push(T item) {
 		*writeHead++ = std::move(item);
-		if(writeHead == queueBufferEnd) writeHead = queueBuffer;
-		assert(writeHead != readHead);
-	}
-
-	void push(const T& item) {
-		*writeHead++ = item;
 		if(writeHead == queueBufferEnd) writeHead = queueBuffer;
 		assert(writeHead != readHead);
 	}
@@ -133,19 +126,16 @@ public:
 		return this->queue.size();
 	}
 
+	size_t capacity() const {
+		return queue.capacity();
+	}
+
+
 	// Write side
-	void push(T&& item) {
+	void push(T item) {
 		{std::lock_guard<std::mutex> lock(mutex);
 			assert(!this->isClosed);
 			queue.push(std::move(item));
-		}
-		readyForPop.notify_one();
-	}
-
-	void push(const T& item) {
-		{std::lock_guard<std::mutex> lock(mutex);
-			assert(!this->isClosed);
-			queue.push(item);
 		}
 		readyForPop.notify_one();
 	}
@@ -197,24 +187,49 @@ public:
 
 template<typename T>
 class SynchronizedStack {
-	std::stack<T, std::vector<T>> stack;
+	std::unique_ptr<T[]> stack;
 	std::mutex mutex;
 	std::condition_variable readyForPop;
 public:
+	size_t sz = 0;
+	size_t cap;
+
+	SynchronizedStack() = default;
+	SynchronizedStack(size_t capacity) : cap(capacity), stack(new T[capacity]) {}
 
 	// Unprotected. Only use in single-thread context
-	std::stack<T, std::vector<T>>& get() {return stack;}
-	const std::stack<T, std::vector<T>>& get() const {return stack;}
+	T* get() {return stack.get();}
+	const T* get() const {return stack.get();}
+
+	T& operator[](size_t i) {return stack[i];}
+	const T& operator[](size_t i) const {return stack[i];}
 
 	size_t size() {
 		std::lock_guard<std::mutex> lock(mutex);
-		return stack.size();
+		return sz;
+	}
+
+	size_t capacity() {
+		std::lock_guard<std::mutex> lock(mutex);
+		return cap;
+	}
+
+	void setCapacity(size_t newCapacity) {
+		std::lock_guard<std::mutex> lock(mutex);
+
+		std::unique_ptr<T[]> newStack(new T[newCapacity]);
+		for(size_t i = 0; i < sz; i++) {
+			newStack[i] = stack[i];
+		}
+
+		stack = std::move(newStack);
+		cap = newCapacity;
 	}
 
 	// Write side
-	void push(T&& item) {
+	void push(T item) {
 		{std::lock_guard<std::mutex> lock(mutex);
-			stack.push(std::forward(item));
+			stack[sz++] = std::move(item);
 		}
 		readyForPop.notify_one();
 	}
@@ -222,7 +237,7 @@ public:
 	void pushN(const T* values, size_t count) {
 		{std::lock_guard<std::mutex> lock(mutex);
 			for(size_t i = 0; i < count; i++) {
-				stack.push(values[i]);
+				stack[sz++] = values[i];
 			}
 		}
 		readyForPop.notify_all();
@@ -232,24 +247,21 @@ public:
 	// May wait forever
 	T pop_wait() {
 		std::unique_lock<std::mutex> lock(mutex);
-		while(this->stack.empty()) {
+		while(sz == 0) {
 			readyForPop.wait(lock);
 		}
-		T result = this->stack.top();
-		this->stack.pop();
-		return result;
+		return stack[--sz];
 	}
 
 	// Pops a number of elements into the provided buffer. 
 	// May wait forever
 	void popN_wait(T* buffer, size_t numberToPop) {
 		std::unique_lock<std::mutex> lock(mutex);
-		while(this->stack.size() < numberToPop) {
+		while(sz < numberToPop) {
 			readyForPop.wait(lock);
 		}
 		for(size_t i = 0; i < numberToPop; i++) {
-			buffer[i] = this->stack.top();
-			this->stack.pop();
+			buffer[i] = std::move(this->stack[--sz]);
 		}
 	}
 };
@@ -323,27 +335,33 @@ public:
 	}
 };
 
-
 template<typename T>
 class SynchronizedMultiQueue {
-	std::vector<RingQueue<T>> queues;
 	std::mutex mutex;
 	std::condition_variable readyForPop;
-	size_t numStillOpen;
+	bool isClosed = false;
 public:
+	std::vector<RingQueue<T>> queues;
 	SynchronizedMultiQueue() = default;
-	SynchronizedMultiQueue(size_t numQueues, size_t queueCapacity) : numStillOpen(numQueues) {
+	SynchronizedMultiQueue(size_t numQueues, size_t queueCapacity) {
 		queues.reserve(numQueues);
 		for(size_t i = 0; i < numQueues; i++) {
 			queues.emplace_back(queueCapacity);
 		}
 	}
 
+	void close() {
+		if(isClosed) throw "Queue already closed!\n";
+		{std::lock_guard<std::mutex> lock(mutex);
+			isClosed = true;
+		}
+		readyForPop.notify_all();
+	}
 
 	// Write side
-	void push(size_t queueIdx, T&& item) {
+	void push(size_t queueIdx, T item) {
 		{std::lock_guard<std::mutex> lock(mutex);
-			queues[queueIdx].push(std::forward(item));
+			queues[queueIdx].push(std::move(item));
 		}
 		readyForPop.notify_one();
 	}
@@ -359,7 +377,7 @@ public:
 
 	// Read side
 	// May wait forever
-	T pop_wait(size_t& lastQueueIdx) {
+	std::optional<T> pop_wait(size_t& lastQueueIdx) {
 		std::unique_lock<std::mutex> lock(mutex);
 		size_t curIdx = lastQueueIdx;
 
@@ -373,6 +391,7 @@ public:
 					return this->queues[curIdx].pop();
 				}
 			} while(curIdx != lastQueueIdx);
+			if(isClosed) return std::nullopt;
 			readyForPop.wait(lock);
 			// Try again
 		}
@@ -381,31 +400,26 @@ public:
 
 template<typename T>
 class SynchronizedMultiNUMAAlloc {
-	std::vector<SynchronizedQueue<T>> queues;
-	std::vector<std::pair<T*, T*>> slabs;
-	size_t alignedSubSlabSize;
-
 public:
-	SynchronizedMultiNUMAAlloc(size_t subSlabSize, size_t numSubSlabs, size_t numNUMADomains=1, size_t align) {
-		queues.reserve(numNUMADomains);
+	std::unique_ptr<SynchronizedStack<T*>[]> queues;
+	std::vector<std::pair<T*, T*>> slabs;
+	SynchronizedMultiNUMAAlloc(size_t subSlabSize, size_t numSubSlabs, size_t numNUMADomains) : queues(new SynchronizedStack<T*>[numNUMADomains]), slabs() {
 		slabs.reserve(numNUMADomains);
 
-		alignedSubSlabSize = alignUpTo(subSlabSize, align / sizeof(T));
 		for(size_t nn = 0; nn < numNUMADomains; nn++) {
-			T* slab = numa_alloc_T<T>(alignedSubSlabSize * numSubSlabs);
-			slabs.push_back(std::make_pair(slab, slab + alignedSubSlabSize * numSubSlabs));
-			queues.emplace_back(numSubSlabs);
-			RingQueue<T>& q = queues.back().get();
-
+			T* slab = numa_alloc_T<T>(subSlabSize * numSubSlabs, nn);
+			slabs.push_back(std::make_pair(slab, slab + subSlabSize * numSubSlabs));
+			queues[nn].setCapacity(numSubSlabs);
 			for(size_t i = 0; i < numSubSlabs; i++) {
-				q.push(slab + alignedSubSlabSize * i);
+				queues[nn][i] = slab + subSlabSize * i;
+				queues[nn].sz = numSubSlabs;
 			}
 		}
 	}
 
 	~SynchronizedMultiNUMAAlloc() {
 		for(auto& slab : slabs) {
-			numa_free(slab.first);
+			numa_free(slab.first, (slab.second - slab.first) * sizeof(T));
 		}
 	}
 
@@ -415,7 +429,7 @@ public:
 	SynchronizedMultiNUMAAlloc& operator=(const SynchronizedMultiNUMAAlloc&&) = delete;
 
 	void allocN_wait(size_t numaNode, T** buffers, size_t count) {
-		queues[numaNode].popN_wait_forever(buffers, count);
+		queues[numaNode].popN_wait(buffers, count);
 	}
 
 	void free(T* buf) {
@@ -427,5 +441,6 @@ public:
 		}
 		throw "Could not find allocator for this buffer!";
 	}
-}
+};
+
 

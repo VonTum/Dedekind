@@ -6,35 +6,41 @@
 // Also alignment is required for openCL buffer sending and receiving methods
 constexpr size_t ALLOC_ALIGN = 1 << 21;
 
-PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables, size_t numberOfInputBuffers, size_t minOutputBuffers, size_t maxOutputBuffers) :
-	inputQueue(numberOfInputBuffers),
-	outputQueue(std::min(numberOfInputBuffers, maxOutputBuffers)),
-	inputBufferReturnQueue(),
-	outputBufferReturnQueue(minOutputBuffers * MAX_BUFSIZE(Variables), maxOutputBuffers, ALLOC_ALIGN) {
-	std::cout << "Allocating " << numberOfInputBuffers << " input buffers." << std::endl;
-	for(size_t i = 0; i < numberOfInputBuffers; i++) {
-		inputBufferReturnQueue.push(static_cast<NodeIndex*>(aligned_malloc(sizeof(NodeIndex) * MAX_BUFSIZE(Variables), ALLOC_ALIGN)));
-	}
-	std::cout << "Allocated space for " << minOutputBuffers << ".." << maxOutputBuffers << " output buffers." << std::endl;
+static size_t getAlignedBufferSize(unsigned int Variables) {
+	return alignUpTo(getMaxDeduplicatedBufferSize(Variables)+20, size_t(32) * 16);
 }
-PCoeffProcessingContext::~PCoeffProcessingContext() {
-	std::cout << "Deleting input buffers..." << std::endl;
-	size_t numFreedInputBuffers = 0;
-	auto& inputBufferReturnStackContainer = inputBufferReturnQueue.get();
-	while(!inputBufferReturnStackContainer.empty()) {
-		aligned_free(inputBufferReturnStackContainer.top());
-		inputBufferReturnStackContainer.pop();
-		numFreedInputBuffers++;
-	}
-	std::cout << "Deleted " << numFreedInputBuffers << " input buffers. " << std::endl;
 
+PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables, size_t numberOfNUMANodes, size_t numberOfInputBuffersPerNUMANode, size_t numOutputBuffers) :
+	inputQueue(numberOfNUMANodes, numberOfInputBuffersPerNUMANode),
+	outputQueue(std::min(numberOfNUMANodes * numberOfInputBuffersPerNUMANode, numOutputBuffers)),
+	inputBufferAllocator(getAlignedBufferSize(Variables), numberOfInputBuffersPerNUMANode, numberOfNUMANodes),
+	outputBufferReturnQueue(numOutputBuffers) {
+	
+	std::cout 
+		<< "Create PCoeffProcessingContext with " 
+		<< Variables 
+		<< " Variables, " 
+		<< numberOfNUMANodes 
+		<< " NUMA nodes, " 
+		<< numberOfInputBuffersPerNUMANode
+		<< " buffers / NUMA node, and "
+		<< numOutputBuffers
+		<< " output buffers" << std::endl;
+
+	std::cout << "Allocating " << numOutputBuffers << " output buffers." << std::endl;
+	for(size_t i = 0; i < numOutputBuffers; i++) {
+		outputBufferReturnQueue.push(static_cast<ProcessedPCoeffSum*>(aligned_malloc(sizeof(ProcessedPCoeffSum) * MAX_BUFSIZE(Variables), ALLOC_ALIGN)));
+	}
+}
+
+PCoeffProcessingContext::~PCoeffProcessingContext() {
 	std::cout << "Deleting output buffers..." << std::endl;
 	size_t numFreedOutputBuffers = 0;
-	auto& outputBufferReturnStackContainer = outputBufferReturnQueue.get();
-	if(outputBufferReturnStackContainer.getNumberOfChunksInUse() != 0) {
-		std::cerr << "ERROR: " << outputBufferReturnStackContainer.getNumberOfChunksInUse() << " output buffers not returned!\n";
-		exit(-1); 
+	for(size_t i = 0; i < outputBufferReturnQueue.sz; i++) {
+		aligned_free(outputBufferReturnQueue[i]);
 	}
+	std::cout << "Deleted " << outputBufferReturnQueue.sz << " output buffers. " << std::endl;
+	std::cout << "Deleting input buffers..." << std::endl;
 }
 
 uint8_t reverseBits(uint8_t index) {
@@ -75,15 +81,16 @@ std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sam
 
 
 
-std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&), size_t numberOfInputBuffers, size_t minOutputBuffers, size_t maxOutputBuffers) {
-	PCoeffProcessingContext context(Variables, numberOfInputBuffers, minOutputBuffers, maxOutputBuffers);
+std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&)) {
+	constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 6;
+	PCoeffProcessingContext context(Variables, (BOTTOM_BUF_CREATOR_COUNT+1) / 2, 50, 20);
 
 	std::vector<BetaResult> results;
 	results.reserve(topIndices.size());
 
 	std::thread inputProducerThread([&]() {
 		try {
-			runBottomBufferCreator(Variables, topIndices, context.inputQueue, context.inputBufferReturnQueue, 12);
+			runBottomBufferCreator(Variables, topIndices, context.inputQueue, context.inputBufferAllocator, BOTTOM_BUF_CREATOR_COUNT);
 		} catch(const char* errText) {
 			std::cerr << "Error thrown in inputProducerThread: " << errText;
 			exit(-1);
@@ -92,7 +99,7 @@ std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector
 
 	std::thread resultProcessingThread([&]() {
 		try {
-			resultProcessor(Variables, context.outputQueue, context.inputBufferReturnQueue, context.outputBufferReturnQueue, results);
+			resultProcessor(Variables, context.outputQueue, context.inputBufferAllocator, context.outputBufferReturnQueue, results);
 		} catch(const char* errText) {
 			std::cerr << "Error thrown in resultProcessingThread: " << errText;
 			exit(-1);
@@ -109,17 +116,22 @@ std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector
 	
 	std::thread queueWatchdogThread([&](){
 		while(!context.outputQueue.queueHasBeenClosed()) {
-			std::cout << "\033[34m[Queues] (" 
-				+ std::to_string(context.inputQueue.size()) + ") -> R(" 
-				+ std::to_string(context.inputBufferReturnQueue.size()) + ") -> ("
-				+ std::to_string(context.outputQueue.size()) + " / " 
-				+ std::to_string(context.outputBufferReturnQueue.get().getNumberOfChunksInUse()) + ")\033[39m\n" << std::flush;
+			std::string totalString = 
+				"\033[34m[Queues] Return(" 
+				+ std::to_string(context.outputQueue.size()) 
+				+ " / " + std::to_string(context.outputBufferReturnQueue.capacity() - context.outputBufferReturnQueue.size()) + ") Input(";
+			for(size_t queueI = 0; queueI < context.inputBufferAllocator.slabs.size(); queueI++) {
+				totalString += std::to_string(context.inputQueue.queues[queueI].size()) + " / " 
+				+ std::to_string(context.inputBufferAllocator.queues[queueI].capacity() - context.inputBufferAllocator.queues[queueI].size()) + ", ";
+			}
+			totalString += ")\033[39m\n";
+			std::cout << totalString << std::flush;
 			std::this_thread::sleep_for(std::chrono::seconds(1));
 		}
 	});
 
 	inputProducerThread.join();
-	context.inputQueue.close();
+	//context.inputQueue.close();
 
 	processorThread.join();
 	context.outputQueue.close();

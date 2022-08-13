@@ -181,12 +181,12 @@ static void finalizeBuffersMasked(
 	}
 }
 
-static void addJobEndCap(JobInfo& job) {
+static void addJobEndCap(unsigned int Variables, JobInfo& job) {
 	job.blockEnd = job.bufEnd;
 	uintptr_t endAlign = (reinterpret_cast<uintptr_t>(job.blockEnd) / sizeof(uint32_t)) % JOB_SIZE_ALIGNMENT;
 	if(endAlign != 0) {
 		for(; endAlign < JOB_SIZE_ALIGNMENT; endAlign++) {
-			*job.blockEnd++ = mbfCounts[7] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
+			*job.blockEnd++ = mbfCounts[Variables] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
 		}
 	}
 	assert((reinterpret_cast<uintptr_t>(job.blockEnd) / sizeof(uint32_t)) % FPGA_BLOCK_ALIGN == 0);
@@ -270,7 +270,8 @@ static void generateBotBuffers(
 	swapper_block* __restrict swapperA,
 	swapper_block* __restrict swapperB,
 	uint32_t* __restrict * __restrict resultBuffers,
-	SynchronizedQueue<JobInfo>& outputQueue,
+	SynchronizedMultiQueue<JobInfo>& outputQueue,
+	size_t NUMAIndex,
 	const uint32_t* __restrict links,
 	const JobTopInfo* tops,
 	int numberOfTops
@@ -317,9 +318,9 @@ static void generateBotBuffers(
 	for(int i = 0; i < numberOfTops; i++) {
 		jobs[i].bufEnd = resultBuffers[i];
 
-		addJobEndCap(jobs[i]);
+		addJobEndCap(Variables, jobs[i]);
 	}
-	outputQueue.pushN(jobs, numberOfTops);
+	outputQueue.pushN(NUMAIndex, jobs, numberOfTops);
 
 	std::cout << "\033[33m[BottomBufferCreator] Pushed 8 Buffers\033[39m\n" << std::flush;
 }
@@ -328,8 +329,9 @@ static void runBottomBufferCreatorNoAlloc (
 	unsigned int Variables,
 	std::atomic<const JobTopInfo*>& curStartingJobTop,
 	const JobTopInfo* jobTopsEnd,
-	SynchronizedQueue<JobInfo>& outputQueue,
-	SynchronizedStack<uint32_t*>& returnQueue,
+	SynchronizedMultiQueue<JobInfo>& outputQueue,
+	size_t NUMAIndex,
+	SynchronizedMultiNUMAAlloc<uint32_t>& returnQueue,
 	std::atomic<const uint32_t*>& links
 ) {
 	size_t SWAPPER_WIDTH = getMaxLayerSize(Variables);
@@ -347,9 +349,9 @@ static void runBottomBufferCreatorNoAlloc (
 		//std::cout << std::this_thread::get_id() << " grabbed " << numberOfTops << " tops!" << std::endl;
 
 		uint32_t* buffersEnd[BUFFERS_PER_BATCH];
-		returnQueue.popN_wait(buffersEnd, numberOfTops);
+		returnQueue.allocN_wait(NUMAIndex, buffersEnd, numberOfTops);
 
-		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, outputQueue, links.load(), grabbedTopSet, numberOfTops);
+		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, outputQueue, NUMAIndex, links.load(), grabbedTopSet, numberOfTops);
 	}
 
 	std::cout << "\033[33m[BottomBufferCreator] Thread Finished!\033[39m\n" << std::flush;
@@ -365,8 +367,8 @@ const uint32_t* loadLinks(unsigned int Variables) {
 void runBottomBufferCreator(
 	unsigned int Variables,
 	std::future<std::vector<JobTopInfo>>& jobTops,
-	SynchronizedQueue<JobInfo>& outputQueue,
-	SynchronizedStack<uint32_t*>& returnQueue,
+	SynchronizedMultiQueue<JobInfo>& outputQueue,
+	SynchronizedMultiNUMAAlloc<uint32_t>& returnQueue,
 	int numberOfThreads
 ) {
 	std::cout << "\033[33m[BottomBufferCreator] Loading Links...\033[39m\n" << std::flush;
@@ -395,8 +397,9 @@ void runBottomBufferCreator(
 		unsigned int Variables;
 		std::atomic<const JobTopInfo*>* curStartingJobTop;
 		const JobTopInfo* jobTopsEnd;
-		SynchronizedQueue<JobInfo>* outputQueue;
-		SynchronizedStack<uint32_t*>* returnQueue;
+		SynchronizedMultiQueue<JobInfo>* outputQueue;
+		size_t coreComplex;
+		SynchronizedMultiNUMAAlloc<uint32_t>* returnQueue;
 		std::atomic<const uint32_t*>* links;
 		pthread_t thread;
 	};
@@ -409,11 +412,12 @@ void runBottomBufferCreator(
 		ti.curStartingJobTop = &jobTopAtomic;
 		ti.jobTopsEnd = jobTopEnd;
 		ti.outputQueue = &outputQueue;
+		ti.coreComplex = i;
 		ti.returnQueue = &returnQueue;
 		ti.links = &links[socket];
 		ti.thread = createCoreComplexPThread(i, [](void* data) -> void* {
 			ThreadInfo* ti = (ThreadInfo*) data;
-			runBottomBufferCreatorNoAlloc(ti->Variables, *ti->curStartingJobTop, ti->jobTopsEnd, *ti->outputQueue, *ti->returnQueue, *ti->links);
+			runBottomBufferCreatorNoAlloc(ti->Variables, *ti->curStartingJobTop, ti->jobTopsEnd, *ti->outputQueue, ti->coreComplex / 2, *ti->returnQueue, *ti->links);
 			pthread_exit(NULL);
 			return NULL;
 		}, &ti);
@@ -439,8 +443,8 @@ void runBottomBufferCreator(
 void runBottomBufferCreator(
 	unsigned int Variables,
 	const std::vector<JobTopInfo>& jobTops,
-	SynchronizedQueue<JobInfo>& outputQueue,
-	SynchronizedStack<uint32_t*>& returnQueue,
+	SynchronizedMultiQueue<JobInfo>& outputQueue,
+	SynchronizedMultiNUMAAlloc<uint32_t>& returnQueue,
 	int numberOfThreads
 ) {
 	std::promise<std::vector<JobTopInfo>> jobTopsPromise;
@@ -464,8 +468,8 @@ std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::ve
 void runBottomBufferCreator(
 	unsigned int Variables,
 	const std::vector<NodeIndex>& jobTops,
-	SynchronizedQueue<JobInfo>& outputQueue,
-	SynchronizedStack<uint32_t*>& returnQueue,
+	SynchronizedMultiQueue<JobInfo>& outputQueue,
+	SynchronizedMultiNUMAAlloc<uint32_t>& returnQueue,
 	int numberOfThreads
 ) {
 	// Read top infos in parallel, we must prioritize inputProducerThread starts as soon as possible

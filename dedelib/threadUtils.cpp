@@ -69,7 +69,7 @@ void setSocketAffinity(int socketI) {
 
 
 
-static pthread_t createPThreadAffinity(cpu_set_t cpuSet, void* (*func)(void*), void* data) {
+static pthread_t createPThreadAffinity(cpu_set_t cpuset, void* (*func)(void*), void* data) {
 	pthread_attr_t pta;
 	pthread_attr_init(&pta);
 	pthread_attr_setaffinity_np(&pta, sizeof(cpu_set_t), &cpuset);
@@ -95,6 +95,6 @@ pthread_t createSocketPThread(int socketI, void* (*func)(void*), void* data) {
 
 pthread_t copyThreadAffinity(void* (*func)(void*), void* data) {
 	cpu_set_t cpuset;
-	pthread_getaffinity(pthread_self(), sizeof(cpu_set_t), &cpuset);
+	pthread_getaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 	return createPThreadAffinity(cpuset, func, data);
 }
