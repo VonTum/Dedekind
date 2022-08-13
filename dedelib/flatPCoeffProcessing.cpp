@@ -82,8 +82,8 @@ std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sam
 
 
 std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&)) {
-	constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 6;
-	PCoeffProcessingContext context(Variables, (BOTTOM_BUF_CREATOR_COUNT+1) / 2, 50, 20);
+	constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 14;
+	PCoeffProcessingContext context(Variables, (BOTTOM_BUF_CREATOR_COUNT+1) / 2, 50, Variables >= 7 ? 20 : 200);
 
 	std::vector<BetaResult> results;
 	results.reserve(topIndices.size());

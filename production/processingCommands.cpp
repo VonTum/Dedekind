@@ -43,6 +43,14 @@ CommandSet processingCommands {"Massively parallel Processing Commands", {
 	{"processDedekindNumber5_FMT", []() {processDedekindNumber<5>(cpuProcessor_FineMultiThread<5>); }},
 	{"processDedekindNumber6_FMT", []() {processDedekindNumber<6>(cpuProcessor_FineMultiThread<6>); }},
 	{"processDedekindNumber7_FMT", []() {processDedekindNumber<7>(cpuProcessor_FineMultiThread<7>); }},
+
+	{"processDedekindNumber1_SMT", []() {processDedekindNumber<1>(cpuProcessor_SuperMultiThread<1>); }},
+	{"processDedekindNumber2_SMT", []() {processDedekindNumber<2>(cpuProcessor_SuperMultiThread<2>); }},
+	{"processDedekindNumber3_SMT", []() {processDedekindNumber<3>(cpuProcessor_SuperMultiThread<3>); }},
+	{"processDedekindNumber4_SMT", []() {processDedekindNumber<4>(cpuProcessor_SuperMultiThread<4>); }},
+	{"processDedekindNumber5_SMT", []() {processDedekindNumber<5>(cpuProcessor_SuperMultiThread<5>); }},
+	{"processDedekindNumber6_SMT", []() {processDedekindNumber<6>(cpuProcessor_SuperMultiThread<6>); }},
+	{"processDedekindNumber7_SMT", []() {processDedekindNumber<7>(cpuProcessor_SuperMultiThread<7>); }},
 }, {
 	{"initializeSupercomputingProject", [](const std::vector<std::string>& args) {
 		std::string projectFolderPath = args[0];

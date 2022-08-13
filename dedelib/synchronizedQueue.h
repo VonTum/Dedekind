@@ -195,7 +195,7 @@ public:
 	size_t cap;
 
 	SynchronizedStack() = default;
-	SynchronizedStack(size_t capacity) : cap(capacity), stack(new T[capacity]) {}
+	SynchronizedStack(size_t capacity) : stack(new T[capacity]), cap(capacity) {}
 
 	// Unprotected. Only use in single-thread context
 	T* get() {return stack.get();}

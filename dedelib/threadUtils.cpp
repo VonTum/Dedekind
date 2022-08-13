@@ -8,7 +8,22 @@
 
 // AMD Milan 7763 architecture
 constexpr int CORE_COMPLEX_SIZE = 8;
+constexpr int CORES_PER_NUMA = 16;
 constexpr int CORES_PER_SOCKET = 64;
+
+
+static size_t getAffinityBlockSize(CPUAffinityType t) {
+	switch(t) {
+	case CPUAffinityType::CORE:
+		return 1;
+	case CPUAffinityType::COMPLEX:
+		return 8;
+	case CPUAffinityType::NUMA_DOMAIN:
+		return 16;
+	case CPUAffinityType::SOCKET:
+		return 64;
+	}
+}
 
 static cpu_set_t createCPUSet(int cpuI, int numCPUs) {
 	cpu_set_t cpuset;
@@ -17,6 +32,14 @@ static cpu_set_t createCPUSet(int cpuI, int numCPUs) {
 		CPU_SET(cpuI + i, &cpuset);
 	}
 	return cpuset;
+}
+cpu_set_t createCPUSet(int cpuI, CPUAffinityType t) {
+	size_t blockSize = getAffinityBlockSize(t);
+	return createCPUSet(cpuI * blockSize, blockSize);
+}
+
+pthread_t createPThreadAffinity(int cpuI, CPUAffinityType t, void* (*func)(void*), void* data) {
+	return createPThreadAffinity(createCPUSet(cpuI, t), func, data);
 }
 
 static void setCPUAffinity(pthread_t pt, int cpuI) {
@@ -69,7 +92,7 @@ void setSocketAffinity(int socketI) {
 
 
 
-static pthread_t createPThreadAffinity(cpu_set_t cpuset, void* (*func)(void*), void* data) {
+pthread_t createPThreadAffinity(cpu_set_t cpuset, void* (*func)(void*), void* data) {
 	pthread_attr_t pta;
 	pthread_attr_init(&pta);
 	pthread_attr_setaffinity_np(&pta, sizeof(cpu_set_t), &cpuset);
