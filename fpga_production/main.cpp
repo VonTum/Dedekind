@@ -169,6 +169,7 @@ void fpgaProcessor_Throughput_OnDevices(PCoeffProcessingContext& queues, const u
 	PCoeffKernel kernels[DEVICE_COUNT];
 	size_t queueIdxes[DEVICE_COUNT];
 
+	std::cout << "\033[31m[FPGA Processor] Initializing Kernels.\033[39m\n" << std::flush;
 	for(size_t deviceI = 0; deviceI < DEVICE_COUNT; deviceI++) {
 		PCoeffKernel& k = kernels[deviceI];
 		queueIdxes[deviceI] = 0;
@@ -189,8 +190,12 @@ void fpgaProcessor_Throughput_OnDevices(PCoeffProcessingContext& queues, const u
 			storedData[doneI].inputMem = k.inputMems[i];
 			storedData[doneI].resultMem = k.resultMems[i];
 		}
-		k.finish();
 	}
+	for(size_t deviceI = 0; deviceI < DEVICE_COUNT; deviceI++) {
+		kernels[deviceI].finish();
+	}
+	std::cout << "\033[31m[FPGA Processor] Performing Dry-Run.\033[39m\n" << std::flush;
+	dryRunKernels(kernels, DEVICE_COUNT);
 
 	std::cout << "\033[31m[FPGA Processor] FPGA Processor started.\033[39m\n" << std::flush;
 	for(size_t bufI = 0; bufI < NUM_BUFFERS*DEVICE_COUNT; bufI++) {

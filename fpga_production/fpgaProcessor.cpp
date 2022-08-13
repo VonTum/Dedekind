@@ -7,6 +7,7 @@
 
 #include <CL/opencl.h>
 #include <CL/cl_ext_intelfpga.h>
+#include "../dedelib/aligned_alloc.h"
 #include "AOCLUtils/aocl_utils.h"
 
 
@@ -138,5 +139,38 @@ cl_event PCoeffKernel::launchKernel(cl_mem input, cl_mem output, cl_uint bufferS
 	return outEvent;
 }
 void PCoeffKernel::finish() {
-	clFinish(this->queue);
+	cl_int status = clFinish(this->queue);
+	checkError(status, "Error PCoeffKernel::finish");
+}
+void PCoeffKernel::reset() {
+	cl_int status = clResetKernelsIntelFPGA(this->context, 1, &this->device);
+	checkError(status, "Error PCoeffKernel::reset");
+}
+
+void dryRunKernels(PCoeffKernel* kernels, size_t numKernels) {
+	size_t dryBufSize = 1048576; // 2^20
+	uint32_t* dryBuf = static_cast<uint32_t*>(aligned_malloc(sizeof(uint32_t) * dryBufSize, 4096));
+
+	uint32_t dryTop = 400000000; // out of mbfCounts[7] == 490013148, high top
+
+	dryBuf[0] = dryTop | 0x80000000;
+	dryBuf[1] = dryTop | 0x80000000;
+
+	// Intersperse the bottoms
+	for(size_t i = 2; i < dryBufSize; i++) {
+		dryBuf[i] = i * dryTop / mbfCounts[7];
+	}
+
+	for(size_t i = 0; i < numKernels; i++) {
+		PCoeffKernel& k = kernels[i];
+		cl_event writeDone = k.writeBuffer(k.inputMems[0], dryBuf, dryBufSize);
+		k.launchKernel(k.inputMems[0], k.resultMems[0], dryBufSize, 1, &writeDone);
+	}
+
+	for(size_t i = 0; i < numKernels; i++) {
+		kernels[i].finish();
+		kernels[i].reset();
+	}
+
+	aligned_free(dryBuf);
 }

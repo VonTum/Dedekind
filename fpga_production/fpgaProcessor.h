@@ -30,4 +30,8 @@ struct PCoeffKernel {
 	cl_event readBuffer(cl_mem mem, uint64_t* resultBuf, size_t size, cl_uint numEventsInWaitList, const cl_event* eventWaitlist);
 	cl_event launchKernel(cl_mem input, cl_mem output, cl_uint bufferSize, cl_uint numEventsInWaitList, const cl_event* eventWaitlist);
 	void finish();
+	void reset(); // Resets the fpga fabric
 };
+
+// Used for proper reset/initialization of the kernel. Memory blocks do not get properly reset it seems. 
+void dryRunKernels(PCoeffKernel* kernels, size_t numKernels);
