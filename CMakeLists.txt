@@ -34,6 +34,7 @@ add_library(dedelib
   dedelib/flatBufferManagement.cpp
   dedelib/configure.cpp
   dedelib/terminalColor.cpp
+  dedelib/processingContext.cpp
   dedelib/flatPCoeffProcessing.cpp
   dedelib/supercomputerJobs.cpp
   dedelib/bottomBufferCreator.cpp

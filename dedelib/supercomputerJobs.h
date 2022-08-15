@@ -20,7 +20,7 @@ std::string getComputeIdentifier();
 std::vector<std::uint32_t> loadJob(unsigned int dedekindNumberProject, const std::string& computeFolder, const std::string& computeID, int jobIndex);
 void saveResults(unsigned int dedekindNumberProject, const std::string& computeFolder, int jobIndex, const std::string& computeID, const std::vector<BetaResult>& betaResults);
 
-void processJob(unsigned int Variables, const std::string& computeFolder, int jobIndex, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&));
+void processJob(unsigned int Variables, const std::string& computeFolder, int jobIndex, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]));
 
 std::vector<BetaSum> collectAllResultFiles(const std::string& computeFolder, unsigned int dedekindNumberProject);
 

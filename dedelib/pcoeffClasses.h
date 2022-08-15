@@ -1,6 +1,7 @@
 #pragma once
 
 #include "u192.h"
+#include "knownData.h"
 #include <cstdint>
 #include <cstddef>
 #include <cassert>
@@ -13,6 +14,18 @@
 #else
 	constexpr int BUF_BOTTOM_OFFSET = 2; // Two copies of Top
 #endif
+
+
+#ifdef PCOEFF_DEDUPLICATE
+constexpr size_t MAX_BUFSIZE(unsigned int Variables) {
+	return mbfCounts[Variables] / 2 + 2;
+}
+#else
+constexpr size_t MAX_BUFSIZE(unsigned int Variables) {
+	return mbfCounts[Variables] + 1;
+}
+#endif
+
 
 typedef uint32_t NodeIndex;
 

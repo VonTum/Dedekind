@@ -15,16 +15,6 @@
 
 #define PCOEFF_MULTITHREAD
 
-#ifdef PCOEFF_DEDUPLICATE
-constexpr size_t MAX_BUFSIZE(unsigned int Variables) {
-	return mbfCounts[Variables] / 2 + 2;
-}
-#else
-constexpr size_t MAX_BUFSIZE(unsigned int Variables) {
-	return mbfCounts[Variables] + 1;
-}
-#endif
-
 template<unsigned int Variables>
 void flatDPlus1() {
 	FlatMBFStructure<Variables> s = readFlatMBFStructure<Variables>(false, true, false, false);

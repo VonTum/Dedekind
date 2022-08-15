@@ -20,7 +20,6 @@ constexpr size_t STRING_BUFFER_LEN = 1024;
 cl_platform_id platform = NULL;
 cl_uint numDevices = 0;
 cl_device_id* devices = nullptr;
-const Monotonic<7>* mbfs = nullptr;
 
 
 // Function prototypes
@@ -84,11 +83,11 @@ void initPlatform() {
 	display_device_info(devices[1]);
 }
 
-const uint64_t* initMBFLUT() {
+const uint64_t* initMBFLUT(const void* voidMBFs) {
 	auto mbfBufPrepareStart = std::chrono::system_clock::now();
 	std::cout << "Preparing mbfLUT buffer..." << std::endl;
 
-	mbfs = readFlatBuffer<Monotonic<7>>(FileName::flatMBFs(7), mbfCounts[7]);
+	const Monotonic<7>* mbfs = static_cast<const Monotonic<7>*>(voidMBFs);
 
 	// Can't use MMAP here, memory mapped blocks don't mesh well with OpenCL buffer uploads
 	//const uint64_t* mbfsUINT64 = readFlatBufferNoMMAP<uint64_t>(FileName::flatMBFsU64(7), FlatMBFStructure<7>::MBF_COUNT * 2);
@@ -113,7 +112,6 @@ const uint64_t* initMBFLUT() {
 // Free the resources allocated during initialization
 void cleanup() {
 	delete[] devices;
-	freeFlatBuffer(mbfs, mbfCounts[7]);
 }
 
 // Helper functions to display parameters returned by OpenCL queries

@@ -436,8 +436,6 @@ void runBottomBufferCreator(
 		}
 	}
 	std::cout << "\033[33m[BottomBufferCreator] All Threads finished! Closing output queue\033[39m\n" << std::flush;
-
-	outputQueue.close();
 }
 
 void runBottomBufferCreator(

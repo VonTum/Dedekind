@@ -188,7 +188,7 @@ std::vector<BetaSum> collectAllResultFiles(const std::string& computeFolder, uns
 }
 
 
-void processJob(unsigned int Variables, const std::string& computeFolder, int jobIndex, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&)) {
+void processJob(unsigned int Variables, const std::string& computeFolder, int jobIndex, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&, const void*[2])) {
 	std::string computeID = methodName + "_" + getComputeIdentifier();
 	std::vector<std::uint32_t> topsToProcess = loadJob(Variables + 2, computeFolder, computeID, jobIndex);
 

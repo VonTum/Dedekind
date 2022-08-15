@@ -13,11 +13,10 @@ constexpr size_t NUM_BUFFERS = 6;
 extern cl_platform_id platform;
 extern cl_uint numDevices;
 extern cl_device_id* devices;
-extern const Monotonic<7>* mbfs;
 
 void launchKernel(cl_mem* input, cl_mem* output, cl_uint bufferSize, cl_uint numEventsInWaitList = 0, const cl_event* eventWaitlist = NULL, cl_event* eventOutput = NULL);
 
 void initPlatform();
-const uint64_t* initMBFLUT();
+const uint64_t* initMBFLUT(const void* voidMBFs);
 void init(const char* kernelFile);
 void cleanup();

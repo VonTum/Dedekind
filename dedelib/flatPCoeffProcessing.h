@@ -23,34 +23,7 @@
 
 #include "bottomBufferCreator.h"
 
-#include "resultCollection.h"
-
-class PCoeffProcessingContext {
-public:
-	/*
-		This is a closed-loop buffer circulation system. 
-		Buffers are allocated once at the start of the program, 
-		and are then passed from module to module. 
-		There are two classes of buffers in circulation:
-			- NodeIndex* buffers: These contain the MBF indices 
-				                  of the bottoms that correspond
-								  to the top, which is the first
-								  element. 
-			- ProcessedPCoeffSum* buffers:  These contain the results 
-								            of processPCoeffSum on
-								            each of the inputs. 
-	*/
-	SynchronizedMultiQueue<JobInfo> inputQueue;
-
-	SynchronizedQueue<OutputBuffer> outputQueue;
-
-	// Return queues are implemented as stacks, to try and reuse recently retired buffers more often, to improve cache coherency. 
-	SynchronizedMultiNUMAAlloc<NodeIndex> inputBufferAllocator;
-	SynchronizedStack<ProcessedPCoeffSum*> outputBufferReturnQueue;
-
-	PCoeffProcessingContext(unsigned int Variables, size_t numberOfNUMANodes, size_t numberOfInputBuffersPerNUMANode, size_t numOutputBuffers);
-	~PCoeffProcessingContext();
-};
+#include "processingContext.h"
 
 // Deterministically shuffles the input bots to get a more uniform mix of bot difficulty
 void shuffleBots(NodeIndex* bots, NodeIndex* botsEnd);
@@ -103,16 +76,10 @@ void cpuProcessor_FineMultiThread_MBF(PCoeffProcessingContext& context, const Mo
 }
 
 template<unsigned int Variables>
-void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context) {
+void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void* mbfs[2]) {
 	// Assume 16 core complexes of 8 cores each
 	constexpr int CORE_COMPLEX_COUNT = 16;
 	constexpr int CORES_PER_COMPLEX = 8;
-
-	void* numaMBFBuffers[2];
-	size_t mbfBufSize = sizeof(Monotonic<Variables>) * mbfCounts[Variables];
-	allocSocketBuffers(mbfBufSize, numaMBFBuffers);
-	readFlatVoidBufferNoMMAP(FileName::flatMBFs(Variables), mbfBufSize, numaMBFBuffers[0]);
-	memcpy(numaMBFBuffers[1], numaMBFBuffers[0], mbfBufSize);
 
 	struct ProcessorData {
 		PCoeffProcessingContext* context;
@@ -122,12 +89,12 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context) {
 	pthread_t complexMainThreads[CORE_COMPLEX_COUNT];
 	ProcessorData procData[2];
 	procData[0].context = &context;
-	procData[0].mbfs = static_cast<const Monotonic<Variables>*>(numaMBFBuffers[0]);
+	procData[0].mbfs = static_cast<const Monotonic<Variables>*>(mbfs[0]);
 	procData[1].context = &context;
-	procData[1].mbfs = static_cast<const Monotonic<Variables>*>(numaMBFBuffers[1]);
+	procData[1].mbfs = static_cast<const Monotonic<Variables>*>(mbfs[1]);
 
-	cpuProcessor_FineMultiThread_MBF<Variables>(context, procData[1].mbfs);
-	return;
+	/*cpuProcessor_FineMultiThread_MBF<Variables>(context, procData[1].mbfs);
+	return;*/
 
 	auto processorFunc = [](void* voidData) -> void* {
 		ThreadPool threadPool(CORES_PER_COMPLEX);
@@ -162,27 +129,21 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context) {
 }
 
 template<unsigned int Variables>
-void cpuProcessor_SingleThread(PCoeffProcessingContext& context) {
-	const Monotonic<Variables>* allMBFs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
-	cpuProcessor_SingleThread_MBF(context, allMBFs);
-	freeFlatBuffer<Monotonic<Variables>>(allMBFs, mbfCounts[Variables]);
+void cpuProcessor_SingleThread(PCoeffProcessingContext& context, const void* mbfs[2]) {
+	cpuProcessor_SingleThread_MBF(context, static_cast<const Monotonic<Variables>*>(mbfs[0]));
 }
 template<unsigned int Variables>
-void cpuProcessor_CoarseMultiThread(PCoeffProcessingContext& context) {
-	const Monotonic<Variables>* allMBFs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
-	cpuProcessor_CoarseMultiThread_MBF(context, allMBFs);
-	freeFlatBuffer<Monotonic<Variables>>(allMBFs, mbfCounts[Variables]);
+void cpuProcessor_CoarseMultiThread(PCoeffProcessingContext& context, const void* mbfs[2]) {
+	cpuProcessor_CoarseMultiThread_MBF(context, static_cast<const Monotonic<Variables>*>(mbfs[0]));
 }
 template<unsigned int Variables>
-void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context) {
-	const Monotonic<Variables>* allMBFs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
-	cpuProcessor_FineMultiThread_MBF(context, allMBFs);
-	freeFlatBuffer<Monotonic<Variables>>(allMBFs, mbfCounts[Variables]);
+void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context, const void* mbfs[2]) {
+	cpuProcessor_FineMultiThread_MBF(context, static_cast<const Monotonic<Variables>*>(mbfs[0]));
 }
 
-std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&));
+std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*) = [](const OutputBuffer&, const void*){});
 
-// Requires a Processor function of type void(PCoeffProcessingContext& context)
+// Requires a Processor function of type void(PCoeffProcessingContext& context, const void* mbfsNUMA[2])
 template<unsigned int Variables, typename Processor>
 void processDedekindNumber(const Processor& processorFunc) {
 	std::vector<NodeIndex> topsToProcess;

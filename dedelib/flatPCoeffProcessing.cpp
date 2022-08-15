@@ -1,47 +1,6 @@
 #include "flatPCoeffProcessing.h"
 
-#include "aligned_alloc.h"
-
-// Try for at least 2MB huge pages
-// Also alignment is required for openCL buffer sending and receiving methods
-constexpr size_t ALLOC_ALIGN = 1 << 21;
-
-static size_t getAlignedBufferSize(unsigned int Variables) {
-	return alignUpTo(getMaxDeduplicatedBufferSize(Variables)+20, size_t(32) * 16);
-}
-
-PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables, size_t numberOfNUMANodes, size_t numberOfInputBuffersPerNUMANode, size_t numOutputBuffers) :
-	inputQueue(numberOfNUMANodes, numberOfInputBuffersPerNUMANode),
-	outputQueue(std::min(numberOfNUMANodes * numberOfInputBuffersPerNUMANode, numOutputBuffers)),
-	inputBufferAllocator(getAlignedBufferSize(Variables), numberOfInputBuffersPerNUMANode, numberOfNUMANodes),
-	outputBufferReturnQueue(numOutputBuffers) {
-	
-	std::cout 
-		<< "Create PCoeffProcessingContext with " 
-		<< Variables 
-		<< " Variables, " 
-		<< numberOfNUMANodes 
-		<< " NUMA nodes, " 
-		<< numberOfInputBuffersPerNUMANode
-		<< " buffers / NUMA node, and "
-		<< numOutputBuffers
-		<< " output buffers" << std::endl;
-
-	std::cout << "Allocating " << numOutputBuffers << " output buffers." << std::endl;
-	for(size_t i = 0; i < numOutputBuffers; i++) {
-		outputBufferReturnQueue.push(static_cast<ProcessedPCoeffSum*>(aligned_malloc(sizeof(ProcessedPCoeffSum) * MAX_BUFSIZE(Variables), ALLOC_ALIGN)));
-	}
-}
-
-PCoeffProcessingContext::~PCoeffProcessingContext() {
-	std::cout << "Deleting output buffers..." << std::endl;
-	size_t numFreedOutputBuffers = 0;
-	for(size_t i = 0; i < outputBufferReturnQueue.sz; i++) {
-		aligned_free(outputBufferReturnQueue[i]);
-	}
-	std::cout << "Deleted " << outputBufferReturnQueue.sz << " output buffers. " << std::endl;
-	std::cout << "Deleting input buffers..." << std::endl;
-}
+#include "resultCollection.h"
 
 uint8_t reverseBits(uint8_t index) {
 	index = ((index & 0b00001111) << 4) | ((index & 0b11110000) >> 4); // swap 4,4
@@ -81,33 +40,35 @@ std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sam
 
 
 
-std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&)) {
-	constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 14;
-	PCoeffProcessingContext context(Variables, (BOTTOM_BUF_CREATOR_COUNT+1) / 2, 50, Variables >= 7 ? 20 : 200);
-
-	std::vector<BetaResult> results;
-	results.reserve(topIndices.size());
+std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*)) {
+	constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 16;
+	constexpr size_t NUM_RESULT_VALIDATORS = 16;
+	PCoeffProcessingContext context(Variables, (BOTTOM_BUF_CREATOR_COUNT+1) / 2, 50, Variables >= 7 ? 60 : 200);
 
 	std::thread inputProducerThread([&]() {
 		try {
 			runBottomBufferCreator(Variables, topIndices, context.inputQueue, context.inputBufferAllocator, BOTTOM_BUF_CREATOR_COUNT);
+			context.inputQueue.close();
 		} catch(const char* errText) {
 			std::cerr << "Error thrown in inputProducerThread: " << errText;
 			exit(-1);
 		}
 	});
 
-	std::thread resultProcessingThread([&]() {
-		try {
-			resultProcessor(Variables, context.outputQueue, context.inputBufferAllocator, context.outputBufferReturnQueue, results);
-		} catch(const char* errText) {
-			std::cerr << "Error thrown in resultProcessingThread: " << errText;
-			exit(-1);
-		}
-	});
+	// load the MBF buffers for processor and result verifier
+	void* numaMBFBuffers[2];
+	size_t mbfSize = (1 << (Variables > 3 ? Variables-3 : 0)); // sizeof(Monotonic<Variables>)
+	size_t mbfBufSize = mbfSize * mbfCounts[Variables];
+	allocSocketBuffers(mbfBufSize, numaMBFBuffers);
+	readFlatVoidBufferNoMMAP(FileName::flatMBFs(Variables), mbfBufSize, numaMBFBuffers[1]);
+	memcpy(numaMBFBuffers[0], numaMBFBuffers[1], mbfBufSize);
+
+	const void* constMBFs[2]{numaMBFBuffers[0], numaMBFBuffers[1]};
+
 	std::thread processorThread([&]() {
 		try {
-			processorFunc(context);
+			processorFunc(context, constMBFs);
+			context.outputQueue.close();
 		} catch(const char* errText) {
 			std::cerr << "Error thrown in processorThread: " << errText;
 			exit(-1);
@@ -130,13 +91,11 @@ std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector
 		}
 	});
 
+	//std::vector<BetaResult> results = resultProcessor(Variables, context, topIndices.size());
+	std::vector<BetaResult> results = NUMAResultProcessorWithValidator(Variables, context, topIndices.size(), NUM_RESULT_VALIDATORS, validator, constMBFs);
+
 	inputProducerThread.join();
-	//context.inputQueue.close();
-
 	processorThread.join();
-	context.outputQueue.close();
-
-	resultProcessingThread.join();
 	queueWatchdogThread.join();
 
 
@@ -144,4 +103,3 @@ std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector
 
 	return results;
 }
-

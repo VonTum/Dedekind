@@ -215,9 +215,9 @@ void fpgaProcessor_Throughput_OnDevices(PCoeffProcessingContext& queues, const u
 	std::cout << "\033[31m[FPGA Processor] Exit!\033[39m\n" << std::flush;
 }
 
-void fpgaProcessor_Throughput(PCoeffProcessingContext& queues) {
+void fpgaProcessor_Throughput(PCoeffProcessingContext& queues, const void* mbfs[2]) {
 	initPlatform();
-	const uint64_t* mbfLUT = initMBFLUT();
+	const uint64_t* mbfLUT = initMBFLUT(mbfs[0]);
 
 	std::cout << "\033[31m[FPGA Processor] Creating FPGA Processors for " + std::to_string(numDevices) + " devices!\033[39m\n" << std::flush;
 
