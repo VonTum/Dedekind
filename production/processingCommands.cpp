@@ -3,6 +3,10 @@
 #include "../dedelib/flatPCoeffProcessing.h"
 #include "../dedelib/supercomputerJobs.h"
 
+#include "../dedelib/pcoeffValidator.h"
+#include "../dedelib/threadPool.h"
+#include "../dedelib/pcoeffClasses.h"
+
 #include <sstream>
 
 template<unsigned int Variables>
@@ -17,6 +21,11 @@ static void processSuperComputingJob_FMT(const std::vector<std::string>& args) {
 	std::string projectFolderPath = args[0];
 	int jobIndex = std::stoi(args[1]);
 	processJob(Variables, projectFolderPath, jobIndex, "cpuFMT", cpuProcessor_FineMultiThread<Variables>);
+}
+
+template<unsigned int Variables>
+void processDedekindNumberWithValidator(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2])) {
+	processDedekindNumber<Variables>(processorFunc, threadPoolBufferValidator<Variables>);
 }
 
 CommandSet processingCommands {"Massively parallel Processing Commands", {
@@ -51,6 +60,14 @@ CommandSet processingCommands {"Massively parallel Processing Commands", {
 	{"processDedekindNumber5_SMT", []() {processDedekindNumber<5>(cpuProcessor_SuperMultiThread<5>); }},
 	{"processDedekindNumber6_SMT", []() {processDedekindNumber<6>(cpuProcessor_SuperMultiThread<6>); }},
 	{"processDedekindNumber7_SMT", []() {processDedekindNumber<7>(cpuProcessor_SuperMultiThread<7>); }},
+
+	{"processDedekindNumber1_FMT_Validated", []() {processDedekindNumberWithValidator<1>(cpuProcessor_FineMultiThread<1>); }},
+	{"processDedekindNumber2_FMT_Validated", []() {processDedekindNumberWithValidator<2>(cpuProcessor_FineMultiThread<2>); }},
+	{"processDedekindNumber3_FMT_Validated", []() {processDedekindNumberWithValidator<3>(cpuProcessor_FineMultiThread<3>); }},
+	{"processDedekindNumber4_FMT_Validated", []() {processDedekindNumberWithValidator<4>(cpuProcessor_FineMultiThread<4>); }},
+	{"processDedekindNumber5_FMT_Validated", []() {processDedekindNumberWithValidator<5>(cpuProcessor_FineMultiThread<5>); }},
+	{"processDedekindNumber6_FMT_Validated", []() {processDedekindNumberWithValidator<6>(cpuProcessor_FineMultiThread<6>); }},
+	{"processDedekindNumber7_FMT_Validated", []() {processDedekindNumberWithValidator<7>(cpuProcessor_FineMultiThread<7>); }},
 }, {
 	{"initializeSupercomputingProject", [](const std::vector<std::string>& args) {
 		std::string projectFolderPath = args[0];

@@ -141,11 +141,10 @@ void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context, const void* 
 	cpuProcessor_FineMultiThread_MBF(context, static_cast<const Monotonic<Variables>*>(mbfs[0]));
 }
 
-std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*) = [](const OutputBuffer&, const void*){});
+std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = [](const OutputBuffer&, const void*, ThreadPool&){});
 
-// Requires a Processor function of type void(PCoeffProcessingContext& context, const void* mbfsNUMA[2])
-template<unsigned int Variables, typename Processor>
-void processDedekindNumber(const Processor& processorFunc) {
+template<unsigned int Variables>
+void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = [](const OutputBuffer&, const void*, ThreadPool&){}) {
 	std::vector<NodeIndex> topsToProcess;
 	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
 		topsToProcess.push_back(i);
@@ -154,7 +153,7 @@ void processDedekindNumber(const Processor& processorFunc) {
 	shuffleBots(&topsToProcess[0], (&topsToProcess[0]) + topsToProcess.size());
 
 	std::cout << "Starting Computation..." << std::endl;
-	std::vector<BetaResult> betaResults = pcoeffPipeline(Variables, topsToProcess, processorFunc);
+	std::vector<BetaResult> betaResults = pcoeffPipeline(Variables, topsToProcess, processorFunc, validator);
 
 	BetaResultCollector collector(Variables);
 	collector.addBetaResults(betaResults);

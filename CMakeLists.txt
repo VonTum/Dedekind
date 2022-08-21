@@ -36,6 +36,7 @@ add_library(dedelib
   dedelib/terminalColor.cpp
   dedelib/processingContext.cpp
   dedelib/flatPCoeffProcessing.cpp
+  dedelib/pcoeffValidator.cpp
   dedelib/supercomputerJobs.cpp
   dedelib/bottomBufferCreator.cpp
   dedelib/threadUtils.cpp

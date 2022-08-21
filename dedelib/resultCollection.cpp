@@ -6,10 +6,14 @@
 #include "fileNames.h"
 #include "processingContext.h"
 #include "threadUtils.h"
+#include "threadPool.h"
 
 #include <iostream>
 #include <string>
 #include <atomic>
+
+constexpr int MAX_VALIDATOR_COUNT = 16;
+constexpr size_t NUM_VALIDATOR_THREADS_PER_COMPLEX = 8;
 
 // does the necessary math with annotated number of bits, no overflows possible for D(9). 
 BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount) {
@@ -70,14 +74,15 @@ void resultprocessingThread(
 	const ClassInfo* mbfClassInfos,
 	PCoeffProcessingContext& context,
 	std::atomic<BetaResult*>& resultPtr,
-	void(*validator)(const OutputBuffer&, const void*),
+	void(*validator)(const OutputBuffer&, const void*, ThreadPool&),
 	const void* validatorData
 ) {
 	std::cout << "\033[32m[Result Processor] Result processor Thread started.\033[39m\n" << std::flush;
+	ThreadPool pool(NUM_VALIDATOR_THREADS_PER_COMPLEX);
 	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = context.outputQueue.pop_wait()).has_value(); ) {
 		OutputBuffer outBuf = outputBuffer.value();
 
-		validator(outBuf, validatorData);
+		validator(outBuf, validatorData, pool);
 
 		BetaResult curBetaResult;
 		//if constexpr(Variables == 7) std::cout << "Results for job " << outBuf.originalInputData.getTop() << std::endl;
@@ -105,7 +110,7 @@ std::vector<BetaResult> resultProcessor(
 	std::vector<BetaResult> finalResults(numResults);
 	std::atomic<BetaResult*> finalResultPtr;
 	finalResultPtr.store(&finalResults[0]);
-	resultprocessingThread(Variables, mbfClassInfos, context, finalResultPtr, [](const OutputBuffer&, const void*){}, nullptr);
+	resultprocessingThread(Variables, mbfClassInfos, context, finalResultPtr, [](const OutputBuffer&, const void*, ThreadPool&){}, nullptr);
 
 	std::cout << "\033[32m[Result Processor] Result processor finished.\033[39m\n" << std::flush;
 	return finalResults;
@@ -116,7 +121,7 @@ std::vector<BetaResult> NUMAResultProcessorWithValidator(
 	PCoeffProcessingContext& context,
 	size_t numResults,
 	size_t numValidators,
-	void(*validator)(const OutputBuffer&, const void*),
+	void(*validator)(const OutputBuffer&, const void*, ThreadPool&),
 	const void* mbfs[2]
 ) {
 	std::cout << "\033[32m[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
@@ -129,14 +134,12 @@ std::vector<BetaResult> NUMAResultProcessorWithValidator(
 	std::atomic<BetaResult*> finalResultPtr;
 	finalResultPtr.store(&finalResults[0]);
 
-	constexpr int MAX_VALIDATOR_COUNT = 16;
-
 	struct ThreadData {
 		unsigned int Variables;
 		PCoeffProcessingContext* context;
 		const ClassInfo* mbfClassInfos;
 		std::atomic<BetaResult*>* finalResultPtr;
-		void(*validator)(const OutputBuffer&, const void*);
+		void(*validator)(const OutputBuffer&, const void*, ThreadPool&);
 		const void* mbfs;
 	};
 	ThreadData datas[2];

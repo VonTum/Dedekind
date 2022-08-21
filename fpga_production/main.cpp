@@ -38,6 +38,7 @@
 #include "../dedelib/flatPCoeffProcessing.h"
 #include "../dedelib/knownData.h"
 #include "../dedelib/configure.h"
+#include "../dedelib/pcoeffValidator.h"
 
 #include "fpgaBoilerplate.h"
 #include "fpgaProcessor.h"
@@ -53,6 +54,7 @@ static bool ENABLE_COMPARE = false;
 static bool ENABLE_STATISTICS = false;
 static cl_uint SHOW_FRONT = 0;
 static cl_uint SHOW_TAIL = 0;
+static bool USE_VALIDATOR = false;
 static double ACTIVITY_MULTIPLIER = 10*60.0;
 static bool THROUGHPUT_MODE = false;
 
@@ -123,12 +125,12 @@ void pushJobIntoKernel(FPGAData* data) {
 	cl_uint bufferSize = static_cast<cl_uint>(job.bufferSize());
 	size_t numberOfBottoms = job.getNumberOfBottoms();
 	NodeIndex topIdx = job.getTop();
-	std::cout << "Grabbed job " << topIdx << " with " << numberOfBottoms << " bottoms\n" << std::flush;
+	std::cout << "Grabbed job " + std::to_string(topIdx) + " with " + std::to_string(numberOfBottoms) + " bottoms\n" << std::flush;
 
 	constexpr cl_uint JOB_SIZE_ALIGNMENT = 16*32; // Block Size 32, shuffle size 16
 	assert(bufferSize % JOB_SIZE_ALIGNMENT == 0);
 	
-	//std::cout << "Resulting buffer size: " << bufferSize << std::endl;
+	//std::cout << "Resulting buffer size: " + std::to_string(bufferSize) + "\n" << std::flush;
 
 	cl_event writeFinished = data->kernel->writeBuffer(data->inputMem, job.bufStart, bufferSize);
 	cl_event kernelFinished = data->kernel->launchKernel(data->inputMem, data->resultMem, bufferSize, 1, &writeFinished);
@@ -149,15 +151,20 @@ void pushJobIntoKernel(FPGAData* data) {
 
 		FPGAData* data = static_cast<FPGAData*>(myData);
 
-		std::cout << "Finished job " << data->job.getTop() << " with " << data->job.getNumberOfBottoms() << " bottoms\n" << std::flush;
+		std::cout << "Finished job " + std::to_string(data->job.getTop()) + " with " + std::to_string(data->job.getNumberOfBottoms()) + " bottoms\n" << std::flush;
 
-		data->queues->outputBufferReturnQueue.push(data->outBuf); // temporary
-		data->queues->inputBufferAllocator.free(data->job.bufStart);
+		/*data->queues->outputBufferReturnQueue.push(data->outBuf); // temporary
+		data->queues->inputBufferAllocator.free(data->job.bufStart);*/
+
+		OutputBuffer result;
+		result.originalInputData = std::move(data->job);
+		result.outputBuf = data->outBuf;
+		data->queues->outputQueue.push(result);
 
 		pushJobIntoKernel(data);
 	}, data);
 
-	std::cout << "Job " << topIdx << " submitted\n" << std::flush;
+	std::cout << "Job " + std::to_string(topIdx) + " submitted\n" << std::flush;
 }
 
 constexpr size_t DEVICE_COUNT = 2;
@@ -465,6 +472,11 @@ static std::vector<NodeIndex> parseArgs(int argc, char** argv) {
 		std::cout << "Set tail showing to " << SHOW_TAIL << std::endl;
 	}
 
+	if(options.has("validate")) {
+		USE_VALIDATOR = true;
+		std::cout << "Enabled Validator" << std::endl;
+	}
+
 	if(options.has("throughput")) {
 		THROUGHPUT_MODE = true;
 	}
@@ -511,7 +523,13 @@ int main(int argc, char** argv) {
 		std::cout << std::endl;
 
 		std::cout << "Pipelining computation for " << topsToProcess.size() << " tops..." << std::endl;
-		std::vector<BetaResult> result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_Throughput);
+		auto validatorFunc = NO_VALIDATOR;
+		if(USE_VALIDATOR) {
+			std::cout << "Using Validator!" << std::endl;
+			validatorFunc = threadPoolBufferValidator<7>;
+		}
+		std::vector<BetaResult> result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_Throughput, validatorFunc);
+		
 		//std::vector<BetaResult> result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_FullySerial);
 		std::cout << "Computation Finished!" << std::endl;
 

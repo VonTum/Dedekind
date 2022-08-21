@@ -9,6 +9,8 @@
 
 #include "processingContext.h"
 
+#include "threadPool.h"
+
 BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount);
 
 BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf);
@@ -27,6 +29,6 @@ std::vector<BetaResult> NUMAResultProcessorWithValidator(
 	PCoeffProcessingContext& context,
 	size_t numResults,
 	size_t numValidators,
-	void(*validator)(const OutputBuffer&, const void*),
+	void(*validator)(const OutputBuffer&, const void*, ThreadPool&),
 	const void* mbfs[2]
 );

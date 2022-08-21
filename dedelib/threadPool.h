@@ -153,6 +153,22 @@ public:
 		threadsFinished.wait(selfLock, [this]() -> bool {return threadsWorking == 0; });
 		selfLock.unlock();
 	}
+
+	// this work function may only return once all work has been completed
+	template<typename MainThreadFunc>
+	void doInParallel(std::function<void()>&& work, MainThreadFunc mainThreadFunc) {
+		funcToRun = std::move(work);
+		std::unique_lock<std::mutex> selfLock(mtx); // locks mtx
+		shouldStart = true;
+		selfLock.unlock();
+		threadStarter.notify_all();// all threads start running
+		mainThreadFunc();
+		funcToRun();
+		selfLock.lock();
+		shouldStart = false;
+		threadsFinished.wait(selfLock, [this]() -> bool {return threadsWorking == 0; });
+		selfLock.unlock();
+	}
 };
 
 typedef PThreadPool ThreadPool;
