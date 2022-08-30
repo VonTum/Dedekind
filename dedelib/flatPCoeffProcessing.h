@@ -141,7 +141,7 @@ void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context, const void* 
 	cpuProcessor_FineMultiThread_MBF(context, static_cast<const Monotonic<Variables>*>(mbfs[0]));
 }
 
-std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = [](const OutputBuffer&, const void*, ThreadPool&){});
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = [](const OutputBuffer&, const void*, ThreadPool&){});
 
 template<unsigned int Variables>
 void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = [](const OutputBuffer&, const void*, ThreadPool&){}) {
@@ -153,10 +153,10 @@ void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& contex
 	shuffleBots(&topsToProcess[0], (&topsToProcess[0]) + topsToProcess.size());
 
 	std::cout << "Starting Computation..." << std::endl;
-	std::vector<BetaResult> betaResults = pcoeffPipeline(Variables, topsToProcess, processorFunc, validator);
+	ResultProcessorOutput betaResults = pcoeffPipeline(Variables, topsToProcess, processorFunc, validator);
 
 	BetaResultCollector collector(Variables);
-	collector.addBetaResults(betaResults);
+	collector.addBetaResults(betaResults.results);
 
 	std::cout << "Reading FlatMBFStructure..." << std::endl;
 	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();

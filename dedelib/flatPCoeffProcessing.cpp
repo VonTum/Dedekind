@@ -40,7 +40,7 @@ std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sam
 
 
 
-std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
 	constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 16;
 	constexpr size_t NUM_RESULT_VALIDATORS = 16;
 	PCoeffProcessingContext context(Variables, (BOTTOM_BUF_CREATOR_COUNT+1) / 2, 50, Variables >= 7 ? 60 : 200);
@@ -92,14 +92,14 @@ std::vector<BetaResult> pcoeffPipeline(unsigned int Variables, const std::vector
 	});
 
 	//std::vector<BetaResult> results = resultProcessor(Variables, context, topIndices.size());
-	std::vector<BetaResult> results = NUMAResultProcessorWithValidator(Variables, context, topIndices.size(), NUM_RESULT_VALIDATORS, validator, constMBFs);
+	ResultProcessorOutput results = NUMAResultProcessorWithValidator(Variables, context, topIndices.size(), NUM_RESULT_VALIDATORS, validator, constMBFs);
 
 	inputProducerThread.join();
 	processorThread.join();
 	queueWatchdogThread.join();
 
 
-	assert(results.size() == topIndices.size());
+	assert(results.results.size() == topIndices.size());
 
 	return results;
 }

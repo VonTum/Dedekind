@@ -7,10 +7,14 @@
 #include "processingContext.h"
 #include "threadUtils.h"
 #include "threadPool.h"
+#include "numaMem.h"
+
 
 #include <iostream>
 #include <string>
 #include <atomic>
+
+#include <string.h>
 
 constexpr int MAX_VALIDATOR_COUNT = 16;
 constexpr size_t NUM_VALIDATOR_THREADS_PER_COMPLEX = 8;
@@ -28,6 +32,12 @@ BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount
 	return BetaSum{betaTerm, deduplicatedCountedPermutes};
 }
 
+BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff) {
+	uint64_t pcoeffSum = getPCoeffSum(processedPCoeff);
+	uint64_t pcoeffCount = getPCoeffCount(processedPCoeff);
+	return produceBetaTerm(info, pcoeffSum, pcoeffCount);
+}
+
 BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf) {
 	BetaSum total = BetaSum{0,0};
 
@@ -40,10 +50,8 @@ BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, co
 			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - idxBuf) << ", value was: " << processedPCoeff << std::endl;
 			throw "ECC ERROR DETECTED!";
 		}
-		uint64_t pcoeffSum = getPCoeffSum(processedPCoeff);
-		uint64_t pcoeffCount = getPCoeffCount(processedPCoeff);
 
-		total += produceBetaTerm(info, pcoeffSum, pcoeffCount);
+		total += produceBetaTerm(info, processedPCoeff);
 	}
 	return total;
 }
@@ -75,7 +83,9 @@ void resultprocessingThread(
 	PCoeffProcessingContext& context,
 	std::atomic<BetaResult*>& resultPtr,
 	void(*validator)(const OutputBuffer&, const void*, ThreadPool&),
-	const void* validatorData
+	const void* validatorData,
+	ValidationData* validationData,
+	std::mutex& validationDataMutex
 ) {
 	std::cout << "\033[32m[Result Processor] Result processor Thread started.\033[39m\n" << std::flush;
 	ThreadPool pool(NUM_VALIDATOR_THREADS_PER_COMPLEX);
@@ -98,7 +108,7 @@ void resultprocessingThread(
 	std::cout << "\033[32m[Result Processor] Result processor Thread finished.\033[39m\n" << std::flush;
 }
 
-std::vector<BetaResult> resultProcessor(
+ResultProcessorOutput resultProcessor(
 	unsigned int Variables,
 	PCoeffProcessingContext& context,
 	size_t numResults
@@ -107,16 +117,20 @@ std::vector<BetaResult> resultProcessor(
 	const ClassInfo* mbfClassInfos = loadClassInfos(Variables);
 	std::cout << "\033[32m[Result Processor] Finished Loading ClassInfos. Result processor started.\033[39m\n" << std::flush;
 
-	std::vector<BetaResult> finalResults(numResults);
+	ResultProcessorOutput result;
+	result.results.resize(numResults);
 	std::atomic<BetaResult*> finalResultPtr;
-	finalResultPtr.store(&finalResults[0]);
-	resultprocessingThread(Variables, mbfClassInfos, context, finalResultPtr, [](const OutputBuffer&, const void*, ThreadPool&){}, nullptr);
+	finalResultPtr.store(&result.results[0]);
+
+	result.validationBuffer = new ValidationData[VALIDATION_BUFFER_SIZE(Variables)];
+	std::mutex validationMutex;
+	resultprocessingThread(Variables, mbfClassInfos, context, finalResultPtr, [](const OutputBuffer&, const void*, ThreadPool&){}, nullptr, result.validationBuffer, validationMutex);
 
 	std::cout << "\033[32m[Result Processor] Result processor finished.\033[39m\n" << std::flush;
-	return finalResults;
+	return result;
 }
 
-std::vector<BetaResult> NUMAResultProcessorWithValidator(
+ResultProcessorOutput NUMAResultProcessorWithValidator(
 	unsigned int Variables,
 	PCoeffProcessingContext& context,
 	size_t numResults,
@@ -130,9 +144,16 @@ std::vector<BetaResult> NUMAResultProcessorWithValidator(
 
 	std::cout << "\033[32m[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
 
-	std::vector<BetaResult> finalResults(numResults);
+	ResultProcessorOutput result;
+	result.results.resize(numResults);
 	std::atomic<BetaResult*> finalResultPtr;
-	finalResultPtr.store(&finalResults[0]);
+	finalResultPtr.store(&result.results[0]);
+
+	void* validationBuffers[2];
+	size_t validationBufferSize = sizeof(ValidationData) * VALIDATION_BUFFER_SIZE(Variables);
+	allocSocketBuffers(validationBufferSize, validationBuffers);
+	memset(validationBuffers[0], 0, validationBufferSize);
+	memset(validationBuffers[1], 0, validationBufferSize);
 
 	struct ThreadData {
 		unsigned int Variables;
@@ -141,6 +162,8 @@ std::vector<BetaResult> NUMAResultProcessorWithValidator(
 		std::atomic<BetaResult*>* finalResultPtr;
 		void(*validator)(const OutputBuffer&, const void*, ThreadPool&);
 		const void* mbfs;
+		ValidationData* validationBuffer;
+		std::mutex validationBufferMutex;
 	};
 	ThreadData datas[2];
 	for(int i = 0; i < 2; i++) {
@@ -150,11 +173,12 @@ std::vector<BetaResult> NUMAResultProcessorWithValidator(
 		datas[i].finalResultPtr = &finalResultPtr;
 		datas[i].validator = validator;
 		datas[i].mbfs = mbfs[i];
+		datas[i].validationBuffer = static_cast<ValidationData*>(validationBuffers[i]);
 	}
 
 	auto threadFunc = [](void* voidData) -> void* {
 		ThreadData* tData = (ThreadData*) voidData;
-		resultprocessingThread(tData->Variables, tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validator, tData->mbfs);
+		resultprocessingThread(tData->Variables, tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validator, tData->mbfs, tData->validationBuffer, tData->validationBufferMutex);
 		pthread_exit(nullptr);
 		return nullptr;
 	};
@@ -170,5 +194,35 @@ std::vector<BetaResult> NUMAResultProcessorWithValidator(
 	}
 
 	std::cout << "\033[32m[Result Processor] Result processor finished.\033[39m\n" << std::flush;
-	return finalResults;
+
+	for(size_t i = 0; i < VALIDATION_BUFFER_SIZE(Variables); i++) {
+		datas[0].validationBuffer[i].dualBetaSum += datas[1].validationBuffer[i].dualBetaSum;
+	}
+
+	numa_free_T(datas[1].validationBuffer, VALIDATION_BUFFER_SIZE(Variables));
+
+	result.validationBuffer = datas[0].validationBuffer;
+
+	return result;
 }
+
+
+
+
+
+ValidationBuffer::ValidationBuffer(size_t numElems, const char* numaInterleave) : dualBetas(numa_alloc_interleaved_T<BetaSum>(numElems, numaInterleave), numElems) {}
+	
+void ValidationBuffer::addValidationData(const OutputBuffer& outBuf, ClassInfo topInfo) {
+	uint64_t intervalSizeDown = topInfo.intervalSizeDown;
+	uint64_t classSize = topInfo.classSize;
+	this->mutex.lock();
+	ProcessedPCoeffSum* curPCoeffResult = outBuf.outputBuf;
+	for(NodeIndex* curBot = outBuf.originalInputData.bufStart + BUF_BOTTOM_OFFSET; curBot != outBuf.originalInputData.bufEnd; curBot++) {
+		BetaSum dualBeta = produceBetaTerm(topInfo, *curPCoeffResult);
+
+		curPCoeffResult++;
+	}
+	this->mutex.unlock();
+}
+
+

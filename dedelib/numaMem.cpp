@@ -5,14 +5,16 @@
 #include <emmintrin.h>
 #include <immintrin.h>
 
-void allocSocketBuffers(size_t bufSize, void* socketBuffers[2]) {
-	struct bitmask* nodeMask0 = numa_parse_nodestring("0-3");
-	socketBuffers[0] = numa_alloc_interleaved_subset(bufSize, nodeMask0);
-	numa_free_nodemask(nodeMask0);
+void* allocInterleaved(size_t bufSize, const char* nodeString) {
+	struct bitmask* nodeMask = numa_parse_nodestring(nodeString);
+	void* result = numa_alloc_interleaved_subset(bufSize, nodeMask);
+	numa_free_nodemask(nodeMask);
+	return result;
+}
 
-	struct bitmask* nodeMask1 = numa_parse_nodestring("4-7");
-	socketBuffers[1] = numa_alloc_interleaved_subset(bufSize, nodeMask1);
-	numa_free_nodemask(nodeMask1);
+void allocSocketBuffers(size_t bufSize, void* socketBuffers[2]) {
+	socketBuffers[0] = allocInterleaved(bufSize, "0-3");
+	socketBuffers[1] = allocInterleaved(bufSize, "4-7");
 }
 
 void allocCoreComplexBuffers(size_t bufSize, void* buffers[8]) {

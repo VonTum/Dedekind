@@ -130,3 +130,16 @@ public:
 };
 
 
+struct ValidationData {
+	BetaSum dualBetaSum;
+};
+
+#ifndef PCOEFF_DEDUPLICATE
+static_assert(false);
+#endif
+
+struct ResultProcessorOutput {
+	std::vector<BetaResult> results;
+	ValidationData* validationBuffer;
+};
+

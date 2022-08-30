@@ -528,12 +528,12 @@ int main(int argc, char** argv) {
 			std::cout << "Using Validator!" << std::endl;
 			validatorFunc = threadPoolBufferValidator<7>;
 		}
-		std::vector<BetaResult> result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_Throughput, validatorFunc);
+		ResultProcessorOutput result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_Throughput, validatorFunc);
 		
-		//std::vector<BetaResult> result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_FullySerial);
+		//ResultProcessorOutput result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_FullySerial);
 		std::cout << "Computation Finished!" << std::endl;
 
-		for(const BetaResult& r : result) {
+		for(const BetaResult& r : result.results) {
 			std::cout << r.topIndex << ": " << r.betaSum.betaSum << ", " << r.betaSum.countedIntervalSizeDown << std::endl;
 		}
 		

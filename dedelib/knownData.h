@@ -21,7 +21,7 @@ constexpr unsigned int choose(unsigned int from, unsigned int count) {
 	return total;
 }
 
-constexpr size_t mbfCounts[]{2, 3, 5, 10, 30, 210, 16353, 490013148};
+constexpr size_t mbfCounts[]{2, 3, 5, 10, 30, 210, 16353, 490013148, 1392195548889993358}; /*R(8) = 1392195548889993358 cf arXiv:2108.13997 */
 constexpr size_t MAX_EXPANSION = 40; // greater than 35, which is the max for 7, leave some leeway
 
 constexpr size_t dedekindNumbers[]{2, 3, 6, 20, 168, 7581, 7828354, 2414682040998/*, 56130437228687557907788, ??????????????????????????????????????????*/}; //need bigint for D(8)
