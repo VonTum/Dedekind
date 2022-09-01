@@ -20,7 +20,7 @@ constexpr int MAX_VALIDATOR_COUNT = 16;
 constexpr size_t NUM_VALIDATOR_THREADS_PER_COMPLEX = 8;
 
 // does the necessary math with annotated number of bits, no overflows possible for D(9). 
-BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount) {
+static BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount) {
 	// the multiply is max log2(2^35 * 5040 * 5040) = 59.5984160368 bits long, fits in 64 bits
 	// Compiler optimizes the divide by compile-time constant VAR_FACTORIAL to an imul, much faster!
 	uint64_t deduplicatedTotalPCoeffSum = pcoeffSum * info.classSize; 
@@ -32,13 +32,13 @@ BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount
 	return BetaSum{betaTerm, deduplicatedCountedPermutes};
 }
 
-BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff) {
+static BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff) {
 	uint64_t pcoeffSum = getPCoeffSum(processedPCoeff);
 	uint64_t pcoeffCount = getPCoeffCount(processedPCoeff);
 	return produceBetaTerm(info, pcoeffSum, pcoeffCount);
 }
 
-BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf) {
+static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf) {
 	BetaSum total = BetaSum{0,0};
 
 	for(const NodeIndex* cur = idxBuf; cur != bufEnd; cur++) {
@@ -56,8 +56,40 @@ BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, co
 	return total;
 }
 
+static BetaSum sumOverBetasWithValidationBuffer(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf, ClassInfo topClassInfo, ValidationData* validationData) {
+	BetaSum total = BetaSum{0,0};
 
-BetaSum produceBetaResult(unsigned int Variables, const ClassInfo* mbfClassInfos, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf) {
+	for(const NodeIndex* cur = idxBuf; cur != bufEnd; cur++) {
+		ClassInfo info = mbfClassInfos[*cur];
+
+		ProcessedPCoeffSum processedPCoeff = *countConnectedSumBuf++;
+
+		if((processedPCoeff & 0x8000000000000000) != uint64_t(0)) {
+			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - idxBuf) << ", value was: " << processedPCoeff << std::endl;
+			throw "ECC ERROR DETECTED!";
+		}
+
+		total += produceBetaTerm(info, processedPCoeff);
+		
+		BetaSum dualBeta = produceBetaTerm(topClassInfo, processedPCoeff);
+
+		validationData[*cur].dualBetaSum += dualBeta;
+	}
+	return total;
+}
+
+struct DeduplicatedResult {
+	BetaSum bufferSum;
+	BetaSum dualResult;
+
+	BetaSum merge(unsigned int Variables) const;
+};
+
+BetaSum DeduplicatedResult::merge(unsigned int Variables) const {
+	return (bufferSum + bufferSum + dualResult) / factorial(Variables);
+}
+
+static BetaSum produceBetaResult(unsigned int Variables, const ClassInfo* mbfClassInfos, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf) {
 	// Skip the first elements, as it is the top
 	BetaSum jobSum = sumOverBetas(mbfClassInfos, curJob.bufStart + BUF_BOTTOM_OFFSET, curJob.end(), pcoeffSumBuf + BUF_BOTTOM_OFFSET);
 
@@ -71,6 +103,24 @@ BetaSum produceBetaResult(unsigned int Variables, const ClassInfo* mbfClassInfos
 	jobSum = jobSum + jobSum + nonDuplicateTopDualResult;
 #endif
 	return jobSum / factorial(Variables);
+}
+
+static DeduplicatedResult produceBetaResultWithValidation(unsigned int Variables, const ClassInfo* mbfClassInfos, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf, ValidationData* validationData, std::mutex& validationMutex) {
+	// Skip the first elements, as it is the top
+
+	ClassInfo info = mbfClassInfos[curJob.bufStart[TOP_DUAL_INDEX]];
+
+	DeduplicatedResult result;
+
+	validationMutex.lock();
+	result.bufferSum = sumOverBetasWithValidationBuffer(mbfClassInfos, curJob.bufStart + BUF_BOTTOM_OFFSET, curJob.end(), pcoeffSumBuf + BUF_BOTTOM_OFFSET, info, validationData);
+	validationMutex.unlock();
+
+	ProcessedPCoeffSum nonDuplicateTopDual = pcoeffSumBuf[TOP_DUAL_INDEX]; // Index of dual
+
+	result.dualResult = produceBetaTerm(info, getPCoeffSum(nonDuplicateTopDual), getPCoeffCount(nonDuplicateTopDual));
+
+	return result;
 }
 
 const ClassInfo* loadClassInfos(unsigned int Variables) {
@@ -97,7 +147,8 @@ void resultprocessingThread(
 		BetaResult curBetaResult;
 		//if constexpr(Variables == 7) std::cout << "Results for job " << outBuf.originalInputData.getTop() << std::endl;
 		curBetaResult.topIndex = outBuf.originalInputData.getTop();
-		curBetaResult.betaSum = produceBetaResult(Variables, mbfClassInfos, outBuf.originalInputData, outBuf.outputBuf);
+		DeduplicatedResult dedupResult = produceBetaResultWithValidation(Variables, mbfClassInfos, outBuf.originalInputData, outBuf.outputBuf, validationData, validationDataMutex);
+		curBetaResult.betaSum = dedupResult.merge(Variables);
 
 		context.inputBufferAllocator.free(std::move(outBuf.originalInputData.bufStart));
 		context.outputBufferReturnQueue.push(outBuf.outputBuf);

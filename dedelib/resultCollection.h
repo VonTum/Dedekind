@@ -20,13 +20,6 @@ constexpr size_t VALIDATION_BUFFER_SIZE(unsigned int Variables) {
 	return mbfCounts[Variables];
 }
 
-BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount);
-BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff);
-
-BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf);
-
-BetaSum produceBetaResult(unsigned int Variables, const ClassInfo* mbfClassInfos, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf);
-
 ResultProcessorOutput resultProcessor(
 	unsigned int Variables,
 	PCoeffProcessingContext& context,
