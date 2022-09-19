@@ -1,6 +1,7 @@
 #include "flatPCoeffProcessing.h"
 
 #include "resultCollection.h"
+#include <string.h>
 
 uint8_t reverseBits(uint8_t index) {
 	index = ((index & 0b00001111) << 4) | ((index & 0b11110000) >> 4); // swap 4,4

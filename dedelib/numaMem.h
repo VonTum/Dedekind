@@ -3,17 +3,17 @@
 #include <stddef.h>
 #include <cassert>
 
-//#ifndef NO_NUMA
+#ifdef USE_NUMA
 #include <numa.h>
-/*#else
+#else
 #include "aligned_alloc.h"
-inline void numa_free(void* ptr) {
+inline void numa_free(void* ptr, size_t size) {
 	aligned_free(ptr);
 }
-inline void* numa_alloc_onnode(size_t size) {
+inline void* numa_alloc_onnode(size_t size, int numaNode) {
 	aligned_malloc(size, 4096); // numa alloc alignment
 }
-#endif*/
+#endif
 
 void* allocInterleaved(size_t bufSize, const char* nodeString);
 void allocSocketBuffers(size_t bufSize, void* socketBuffers[2]);

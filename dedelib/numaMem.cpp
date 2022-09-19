@@ -6,10 +6,14 @@
 #include <immintrin.h>
 
 void* allocInterleaved(size_t bufSize, const char* nodeString) {
+#ifdef USE_NUMA
 	struct bitmask* nodeMask = numa_parse_nodestring(nodeString);
 	void* result = numa_alloc_interleaved_subset(bufSize, nodeMask);
 	numa_free_nodemask(nodeMask);
 	return result;
+#else
+	return aligned_malloc(bufSize, 4096); // numa alloc alignment
+#endif
 }
 
 void allocSocketBuffers(size_t bufSize, void* socketBuffers[2]) {

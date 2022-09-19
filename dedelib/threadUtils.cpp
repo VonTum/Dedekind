@@ -93,15 +93,22 @@ void setSocketAffinity(int socketI) {
 
 
 pthread_t createPThreadAffinity(cpu_set_t cpuset, void* (*func)(void*), void* data) {
+	pthread_t thread;
+#ifdef USE_NUMA
 	pthread_attr_t pta;
 	pthread_attr_init(&pta);
 	pthread_attr_setaffinity_np(&pta, sizeof(cpu_set_t), &cpuset);
-	pthread_t thread;
 	if(pthread_create(&thread, &pta, func, data) != 0) {
 		std::cerr << "Error creating thread!" << std::endl;
 		exit(-1);
 	}
 	pthread_attr_destroy(&pta);
+#else
+	if(pthread_create(&thread, nullptr, func, data) != 0) {
+		std::cerr << "Error creating thread!" << std::endl;
+		exit(-1);
+	}
+#endif
 	return thread;
 }
 
