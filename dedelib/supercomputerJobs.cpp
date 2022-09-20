@@ -169,7 +169,7 @@ std::vector<BetaResult> readResultsFile(unsigned int dedekindNumberProject, cons
 	return result;
 }
 
-std::vector<BetaSum> collectAllResultFiles(const std::string& computeFolder, unsigned int dedekindNumberProject) {
+std::vector<BetaSumPair> collectAllResultFiles(const std::string& computeFolder, unsigned int dedekindNumberProject) {
 	BetaResultCollector collector(dedekindNumberProject - 2);
 
 	std::string resultsDirectory = computeFolderPath(computeFolder, "results");

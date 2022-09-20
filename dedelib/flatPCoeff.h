@@ -165,14 +165,15 @@ void isEvenPlus2() {
 }
 
 template<unsigned int Variables>
-u192 computeDedekindNumberFromBetaSums(const FlatMBFStructure<Variables>& allMBFData, const std::vector<BetaSum>& betaSums) {
+u192 computeDedekindNumberFromBetaSums(const FlatMBFStructure<Variables>& allMBFData, const std::vector<BetaSumPair>& betaSums) {
 	if(betaSums.size() != mbfCounts[Variables]) {
 		std::cerr << "Incorrect number of beta sums! Aborting!" << std::endl;
 		std::abort();
 	}
 	u192 total = 0;
 	for(size_t i = 0; i < betaSums.size(); i++) {
-		BetaSum betaSum = betaSums[i];
+		BetaSumPair bPair = betaSums[i];
+		BetaSum betaSum = bPair.getBetaSum<Variables>();
 		ClassInfo topInfo = allMBFData.allClassInfos[i];
 		
 		// invalid for DEDUPLICATION

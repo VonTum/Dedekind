@@ -13,7 +13,7 @@ void BetaResultCollector::addBetaResult(BetaResult result) {
 		std::abort();
 	} else {
 		hasSeenResult[result.topIndex] = true;
-		allBetaSums[result.topIndex] = result.betaSum;
+		allBetaSums[result.topIndex] = result.dataForThisTop;
 	}
 }
 void BetaResultCollector::addBetaResults(const std::vector<BetaResult>& results) {
@@ -22,7 +22,7 @@ void BetaResultCollector::addBetaResults(const std::vector<BetaResult>& results)
 	}
 }
 
-std::vector<BetaSum> BetaResultCollector::getResultingSums() {
+std::vector<BetaSumPair> BetaResultCollector::getResultingSums() {
 	for(size_t i = 0; i < hasSeenResult.size(); i++) {
 		if(!hasSeenResult[i]) {
 			std::cerr << "No Result for top index " << i << " computation not complete! Aborting!";

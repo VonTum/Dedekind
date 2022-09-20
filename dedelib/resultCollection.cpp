@@ -57,20 +57,19 @@ BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, co
 }
 
 
-BetaSum produceBetaResult(unsigned int Variables, const ClassInfo* mbfClassInfos, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf) {
+BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf) {
 	// Skip the first elements, as it is the top
-	BetaSum jobSum = sumOverBetas(mbfClassInfos, curJob.bufStart + BUF_BOTTOM_OFFSET, curJob.end(), pcoeffSumBuf + BUF_BOTTOM_OFFSET);
+	BetaSumPair result;
+	result.betaSum = sumOverBetas(mbfClassInfos, curJob.bufStart + BUF_BOTTOM_OFFSET, curJob.end(), pcoeffSumBuf + BUF_BOTTOM_OFFSET);
 
 #ifdef PCOEFF_DEDUPLICATE
 	ProcessedPCoeffSum nonDuplicateTopDual = pcoeffSumBuf[TOP_DUAL_INDEX]; // Index of dual
 
 	ClassInfo info = mbfClassInfos[curJob.bufStart[TOP_DUAL_INDEX]];
 
-	BetaSum nonDuplicateTopDualResult = produceBetaTerm(info, getPCoeffSum(nonDuplicateTopDual), getPCoeffCount(nonDuplicateTopDual));
-
-	jobSum = jobSum + jobSum + nonDuplicateTopDualResult;
+	result.betaSumDualDedup = produceBetaTerm(info, getPCoeffSum(nonDuplicateTopDual), getPCoeffCount(nonDuplicateTopDual));
 #endif
-	return jobSum / factorial(Variables);
+	return result;
 }
 
 const ClassInfo* loadClassInfos(unsigned int Variables) {
@@ -78,7 +77,6 @@ const ClassInfo* loadClassInfos(unsigned int Variables) {
 }
 
 void resultprocessingThread(
-	unsigned int Variables,
 	const ClassInfo* mbfClassInfos,
 	PCoeffProcessingContext& context,
 	std::atomic<BetaResult*>& resultPtr,
@@ -97,7 +95,7 @@ void resultprocessingThread(
 		BetaResult curBetaResult;
 		//if constexpr(Variables == 7) std::cout << "Results for job " << outBuf.originalInputData.getTop() << std::endl;
 		curBetaResult.topIndex = outBuf.originalInputData.getTop();
-		curBetaResult.betaSum = produceBetaResult(Variables, mbfClassInfos, outBuf.originalInputData, outBuf.outputBuf);
+		curBetaResult.dataForThisTop = produceBetaResult(mbfClassInfos, outBuf.originalInputData, outBuf.outputBuf);
 
 		context.inputBufferAllocator.free(std::move(outBuf.originalInputData.bufStart));
 		context.outputBufferReturnQueue.push(outBuf.outputBuf);
@@ -124,7 +122,7 @@ ResultProcessorOutput resultProcessor(
 
 	result.validationBuffer = new ValidationData[VALIDATION_BUFFER_SIZE(Variables)];
 	std::mutex validationMutex;
-	resultprocessingThread(Variables, mbfClassInfos, context, finalResultPtr, [](const OutputBuffer&, const void*, ThreadPool&){}, nullptr, result.validationBuffer, validationMutex);
+	resultprocessingThread(mbfClassInfos, context, finalResultPtr, [](const OutputBuffer&, const void*, ThreadPool&){}, nullptr, result.validationBuffer, validationMutex);
 
 	std::cout << "\033[32m[Result Processor] Result processor finished.\033[39m\n" << std::flush;
 	return result;
@@ -156,7 +154,6 @@ ResultProcessorOutput NUMAResultProcessorWithValidator(
 	memset(validationBuffers[1], 0, validationBufferSize);
 
 	struct ThreadData {
-		unsigned int Variables;
 		PCoeffProcessingContext* context;
 		const ClassInfo* mbfClassInfos;
 		std::atomic<BetaResult*>* finalResultPtr;
@@ -167,7 +164,6 @@ ResultProcessorOutput NUMAResultProcessorWithValidator(
 	};
 	ThreadData datas[2];
 	for(int i = 0; i < 2; i++) {
-		datas[i].Variables = Variables;
 		datas[i].context = &context;
 		datas[i].mbfClassInfos = mbfClassInfos;
 		datas[i].finalResultPtr = &finalResultPtr;
@@ -178,7 +174,7 @@ ResultProcessorOutput NUMAResultProcessorWithValidator(
 
 	auto threadFunc = [](void* voidData) -> void* {
 		ThreadData* tData = (ThreadData*) voidData;
-		resultprocessingThread(tData->Variables, tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validator, tData->mbfs, tData->validationBuffer, tData->validationBufferMutex);
+		resultprocessingThread(tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validator, tData->mbfs, tData->validationBuffer, tData->validationBufferMutex);
 		pthread_exit(nullptr);
 		return nullptr;
 	};

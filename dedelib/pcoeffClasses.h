@@ -112,23 +112,28 @@ struct OutputBuffer {
 	ProcessedPCoeffSum* outputBuf;
 };
 
+struct BetaSumPair {
+	BetaSum betaSum;
+	BetaSum betaSumDualDedup;
+	template<unsigned int Variables>
+	BetaSum getBetaSum() const {return (betaSum + betaSum + betaSumDualDedup) / factorial(Variables);}
+};
 
 struct BetaResult {
-	BetaSum betaSum;
+	BetaSumPair dataForThisTop;
 	NodeIndex topIndex;
 };
 
 class BetaResultCollector {
-	std::vector<BetaSum> allBetaSums;
+	std::vector<BetaSumPair> allBetaSums;
 	std::vector<bool> hasSeenResult;
 
 public:
 	BetaResultCollector(unsigned int Variables);
 	void addBetaResult(BetaResult result);
 	void addBetaResults(const std::vector<BetaResult>& results);
-	std::vector<BetaSum> getResultingSums();
+	std::vector<BetaSumPair> getResultingSums();
 };
-
 
 struct ValidationData {
 	BetaSum dualBetaSum;
