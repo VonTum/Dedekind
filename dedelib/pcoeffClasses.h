@@ -103,8 +103,14 @@ inline BetaSum& operator+=(BetaSum& a, BetaSum b) {
 	a.countedIntervalSizeDown += b.countedIntervalSizeDown;
 	return a;
 }
+inline BetaSum operator*(BetaSum a, uint32_t b) {
+	return BetaSum{a.betaSum * b, a.countedIntervalSizeDown * b};
+}
 inline BetaSum operator/(BetaSum a, uint32_t b) {
 	return BetaSum{a.betaSum / b, a.countedIntervalSizeDown / b};
+}
+inline BetaSum operator%(BetaSum a, uint32_t b) {
+	return BetaSum{a.betaSum % b, a.countedIntervalSizeDown % b};
 }
 
 struct OutputBuffer {
@@ -115,8 +121,8 @@ struct OutputBuffer {
 struct BetaSumPair {
 	BetaSum betaSum;
 	BetaSum betaSumDualDedup;
-	template<unsigned int Variables>
-	BetaSum getBetaSum() const {return (betaSum + betaSum + betaSumDualDedup) / factorial(Variables);}
+	BetaSum getBetaSum(unsigned int Variables) const;
+	BetaSum getBetaSumPlusValidationTerm(unsigned int Variables, BetaSum validationTerm) const;
 };
 
 struct BetaResult {

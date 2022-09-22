@@ -104,3 +104,30 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<N
 
 	return results;
 }
+
+
+std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const FlatNode* allMBFNodes, const ClassInfo* allClassInfos, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf) {
+	std::unique_ptr<u128[]> finalResults(new u128[mbfCounts[Variables]]);
+
+	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+		uint32_t dualNode = allMBFNodes[i].dual;
+		ValidationData validationTerm = validationBuf[dualNode];
+
+		/*std::cout << "Validation " << i << "(dual " << dualNode <<  "): betaSum=" << validationTerm.dualBetaSum.betaSum << ", intervalSizeUp=" << validationTerm.dualBetaSum.countedIntervalSizeDown << std::endl;
+		std::cout << "    betaSum: betaSum=" << betaSums[i].betaSum.betaSum << ", intervalSizeDown=" << betaSums[i].betaSum.countedIntervalSizeDown << std::endl;
+		std::cout << "    dedup:   betaSum=" << betaSums[i].betaSumDualDedup.betaSum << ", count=" << betaSums[i].betaSumDualDedup.countedIntervalSizeDown << std::endl;*/
+		
+		BetaSum totalSumForThisTop = betaSums[i].getBetaSumPlusValidationTerm(Variables, validationTerm.dualBetaSum);
+
+		if(totalSumForThisTop.countedIntervalSizeDown != allClassInfos[i].intervalSizeDown) {
+			std::cerr << "Incorrect total interval size down for top " << i << " should be " << allClassInfos[i].intervalSizeDown << " but found " << totalSumForThisTop.countedIntervalSizeDown << "! Aborting!" << std::endl;
+			std::abort();
+		}
+
+		finalResults[i] = totalSumForThisTop.betaSum;
+	}
+
+	std::cout << "\033[35m[Validation] All interval sizes checked, no errors found!\033[39m\n" << std::flush;
+
+	return finalResults;
+}

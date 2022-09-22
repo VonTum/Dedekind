@@ -31,3 +31,24 @@ std::vector<BetaSumPair> BetaResultCollector::getResultingSums() {
 	}
 	return allBetaSums;
 }
+
+static BetaSum safeDiv(BetaSum sum, uint32_t divisor) {
+	BetaSum totalModSum = sum % divisor;
+	if(totalModSum.countedIntervalSizeDown != 0) {
+		std::cerr << "BetaSum count not safely divisible by " << divisor << "! Aborting!";
+		std::abort();
+	}
+	if(totalModSum.betaSum != 0) {
+		std::cerr << "BetaSum sum not safely divisible by " << divisor << "! Aborting!";
+		std::abort();
+	}
+	return sum / divisor;
+}
+BetaSum BetaSumPair::getBetaSum(unsigned int Variables) const {
+	BetaSum totalSum = betaSum + betaSum + betaSumDualDedup;
+	return safeDiv(totalSum, factorial(Variables));
+}
+BetaSum BetaSumPair::getBetaSumPlusValidationTerm(unsigned int Variables, BetaSum validationTerm) const {
+	BetaSum totalSum = betaSum + validationTerm + betaSumDualDedup;
+	return safeDiv(totalSum, factorial(Variables));
+}

@@ -38,7 +38,8 @@ BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff) {
 	return produceBetaTerm(info, pcoeffSum, pcoeffCount);
 }
 
-BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf) {
+// Does not take validation buffer
+static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf) {
 	BetaSum total = BetaSum{0,0};
 
 	for(const NodeIndex* cur = idxBuf; cur != bufEnd; cur++) {
@@ -48,7 +49,7 @@ BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, co
 
 		if((processedPCoeff & 0x8000000000000000) != uint64_t(0)) {
 			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - idxBuf) << ", value was: " << processedPCoeff << std::endl;
-			throw "ECC ERROR DETECTED!";
+			std::abort();
 		}
 
 		total += produceBetaTerm(info, processedPCoeff);
@@ -56,11 +57,40 @@ BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, co
 	return total;
 }
 
+// Takes validation buffer
+static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf, ClassInfo topDualClassInfo, ValidationData* validationBuf) {
+	BetaSum total = BetaSum{0,0};
 
-BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf) {
+	for(const NodeIndex* cur = idxBuf; cur != bufEnd; cur++) {
+		ClassInfo info = mbfClassInfos[*cur];
+
+		ProcessedPCoeffSum processedPCoeff = *countConnectedSumBuf++;
+
+		if((processedPCoeff & 0x8000000000000000) != uint64_t(0)) {
+			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - idxBuf) << ", value was: " << processedPCoeff << std::endl;
+			std::abort();
+		}
+
+		total += produceBetaTerm(info, processedPCoeff);
+
+		// This is the sum to be added to the top "inv(bot)", because we deduplicated it off from that top
+		validationBuf[*cur].dualBetaSum += produceBetaTerm(topDualClassInfo, processedPCoeff);
+	}
+	return total;
+}
+
+// Optionally takes a buffer for validation data
+static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf, ValidationData* validationBuf = nullptr) {
 	// Skip the first elements, as it is the top
 	BetaSumPair result;
-	result.betaSum = sumOverBetas(mbfClassInfos, curJob.bufStart + BUF_BOTTOM_OFFSET, curJob.end(), pcoeffSumBuf + BUF_BOTTOM_OFFSET);
+	if(validationBuf != nullptr) {
+		NodeIndex topDualIdx = curJob.bufStart[TOP_DUAL_INDEX];
+		ClassInfo topDualClassInfo = mbfClassInfos[topDualIdx];	
+
+		result.betaSum = sumOverBetas(mbfClassInfos, curJob.bufStart + BUF_BOTTOM_OFFSET, curJob.end(), pcoeffSumBuf + BUF_BOTTOM_OFFSET, topDualClassInfo, validationBuf);
+	} else {
+		result.betaSum = sumOverBetas(mbfClassInfos, curJob.bufStart + BUF_BOTTOM_OFFSET, curJob.end(), pcoeffSumBuf + BUF_BOTTOM_OFFSET);
+	}
 
 #ifdef PCOEFF_DEDUPLICATE
 	ProcessedPCoeffSum nonDuplicateTopDual = pcoeffSumBuf[TOP_DUAL_INDEX]; // Index of dual
@@ -95,7 +125,10 @@ void resultprocessingThread(
 		BetaResult curBetaResult;
 		//if constexpr(Variables == 7) std::cout << "Results for job " << outBuf.originalInputData.getTop() << std::endl;
 		curBetaResult.topIndex = outBuf.originalInputData.getTop();
-		curBetaResult.dataForThisTop = produceBetaResult(mbfClassInfos, outBuf.originalInputData, outBuf.outputBuf);
+
+		validationDataMutex.lock();
+		curBetaResult.dataForThisTop = produceBetaResult(mbfClassInfos, outBuf.originalInputData, outBuf.outputBuf, validationData);
+		validationDataMutex.unlock();
 
 		context.inputBufferAllocator.free(std::move(outBuf.originalInputData.bufStart));
 		context.outputBufferReturnQueue.push(outBuf.outputBuf);

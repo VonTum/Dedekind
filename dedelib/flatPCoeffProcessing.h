@@ -143,6 +143,8 @@ void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context, const void* 
 
 ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = [](const OutputBuffer&, const void*, ThreadPool&){});
 
+std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const FlatNode* allMBFNodes, const ClassInfo* allClassInfos, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf);
+
 template<unsigned int Variables>
 void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = [](const OutputBuffer&, const void*, ThreadPool&){}) {
 	std::vector<NodeIndex> topsToProcess;
@@ -163,9 +165,15 @@ void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& contex
 	std::cout << "FlatMBFStructure initialized." << std::endl;
 
 	std::cout << "Computation finished." << std::endl;
-	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, collector.getResultingSums());
-
+	std::vector<BetaSumPair> sortedBetaSumPairs = collector.getResultingSums();
+	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, sortedBetaSumPairs);
 	std::cout << "D(" << (Variables + 2) << ") = " << dedekindNumber << std::endl;
+
+	std::unique_ptr<u128[]> perTopSubResult = mergeResultsAndValidationForFinalBuffer(Variables, allMBFData.allNodes, allMBFData.allClassInfos, sortedBetaSumPairs, betaResults.validationBuffer);
+	
+
+	u192 dedekindNumberFromValidator = computeDedekindNumberFromStandardBetaTopSums(allMBFData, perTopSubResult.get());
+	std::cout << "D(" << (Variables + 2) << ") (validator) = " << dedekindNumberFromValidator << std::endl;
 }
 
 std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sampleCount);

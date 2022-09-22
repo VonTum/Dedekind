@@ -73,7 +73,7 @@ CommandSet processingCommands {"Massively parallel Processing Commands", {
 		std::string projectFolderPath = args[0];
 		unsigned int targetDedekindNumber = std::stoi(args[1]);
 		size_t numberOfJobs = std::stoi(args[2]);
-		size_t topsPerBatch = args.size() >= 4 ? std::stoi(args[3]) : 128;
+		size_t topsPerBatch = args.size() >= 4 ? std::stoi(args[3]) : 8;
 		initializeComputeProject(projectFolderPath, targetDedekindNumber, numberOfJobs, topsPerBatch);
 	}},
 
