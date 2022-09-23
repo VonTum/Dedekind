@@ -16,6 +16,7 @@ static size_t getAlignedBufferSize(unsigned int Variables) {
 PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables, size_t numInputBuffers, size_t numOutputBuffers) :
 	inputQueue(8, numInputBuffers),
 	outputQueue(std::min(numInputBuffers, numOutputBuffers)),
+	validationQueue(std::min(numInputBuffers, numOutputBuffers)),
 	inputBufferAllocator(getAlignedBufferSize(Variables), numInputBuffers / 8, 8),
 	outputBufferReturnQueue(getAlignedBufferSize(Variables), numOutputBuffers / 2, 2, true) {
 	

@@ -3,6 +3,12 @@
 #include "resultCollection.h"
 #include <string.h>
 
+constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 16;
+constexpr size_t NUM_RESULT_VALIDATORS = 16;
+constexpr int MAX_VALIDATOR_COUNT = 16;
+constexpr size_t NUM_VALIDATOR_THREADS_PER_COMPLEX = 5;
+
+
 uint8_t reverseBits(uint8_t index) {
 	index = ((index & 0b00001111) << 4) | ((index & 0b11110000) >> 4); // swap 4,4
 	index = ((index & 0b00110011) << 2) | ((index & 0b11001100) >> 2); // swap 2,2
@@ -39,11 +45,27 @@ std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sam
 	return resultingVector;
 }
 
+// Expects mbfs0 to be stored in memory of socket0, and mbfs1 to have memory of socket1
+void validatorThread(
+	void(*validator)(const OutputBuffer&, const void*, ThreadPool&), 
+	PCoeffProcessingContext& context, 
+	int numaNode,
+	const void* validatorData
+) {
+	std::cout << "\033[35m[Validation] Validator thread " + std::to_string(numaNode) + " started\033[39m\n" << std::flush;
+	ThreadPool pool(NUM_VALIDATOR_THREADS_PER_COMPLEX);
+	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = context.validationQueue.pop_wait()).has_value(); ) {
+		OutputBuffer outBuf = outputBuffer.value();
 
+		validator(outBuf, validatorData, pool);
+
+		context.inputBufferAllocator.free(std::move(outBuf.originalInputData.bufStart));
+		context.outputBufferReturnQueue.free(std::move(outBuf.outputBuf));
+	}
+	std::cout << "\033[35m[Validation] Validator thread " + std::to_string(numaNode) + " exited\033[39m\n" << std::flush;
+}
 
 ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
-	constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 16;
-	constexpr size_t NUM_RESULT_VALIDATORS = 16;
 	PCoeffProcessingContext context(Variables, 400, Variables >= 7 ? 60 : 200);
 
 	std::thread inputProducerThread([&]() {
@@ -80,7 +102,8 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<N
 		while(!context.outputQueue.queueHasBeenClosed()) {
 			std::string totalString = "\033[34m[Queues] Return(";
 			for(size_t queueI = 0; queueI < context.outputBufferReturnQueue.slabCount; queueI++) {
-				totalString += std::to_string(context.outputQueue.size()) + " / " /*TODO*/
+				totalString += std::to_string(context.outputQueue.size()) + " / "
+				 + std::to_string(context.validationQueue.size()) + " / "
 				 + std::to_string(context.outputBufferReturnQueue.queues[queueI].freeSpace()) + ", ";
 			}
 			totalString += ") Input(";
@@ -94,8 +117,28 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<N
 		}
 	});
 
-	//std::vector<BetaResult> results = resultProcessor(Variables, context, topIndices.size());
-	ResultProcessorOutput results = NUMAResultProcessorWithValidator(Variables, context, topIndices.size(), NUM_RESULT_VALIDATORS, validator, constMBFs);
+	struct ValidatorThreadData{
+		void(*validator)(const OutputBuffer&, const void*, ThreadPool&);
+		PCoeffProcessingContext* context;
+		int numaNode;
+		void* mbfs;
+	};
+	ValidatorThreadData validatorDatas[16];
+	for(int i = 0; i < 16; i++) {
+		int socket = i / 8;
+		validatorDatas[i].validator = validator;
+		validatorDatas[i].context = &context;
+		validatorDatas[i].numaNode = i / 2;
+		validatorDatas[i].mbfs = numaMBFBuffers[socket];
+	}
+	PThreadsSpread validatorThreads(16, CPUAffinityType::COMPLEX, validatorDatas, [](void* data) -> void* {
+		ValidatorThreadData* validatorData = (ValidatorThreadData*) data;
+		validatorThread(validatorData->validator, *validatorData->context, validatorData->numaNode, validatorData->mbfs);
+		pthread_exit(nullptr);
+		return nullptr;
+	});
+
+	ResultProcessorOutput results = NUMAResultProcessor(Variables, context, topIndices.size());
 
 	inputProducerThread.join();
 	processorThread.join();

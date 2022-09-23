@@ -22,6 +22,8 @@ public:
 
 	SynchronizedQueue<OutputBuffer> outputQueue;
 
+	SynchronizedQueue<OutputBuffer> validationQueue;
+
 	// Return queues are implemented as stacks, to try and reuse recently retired buffers more often, to improve cache coherency. 
 	SynchronizedMultiNUMAAlloc<NodeIndex> inputBufferAllocator;
 	SynchronizedMultiNUMAAlloc<ProcessedPCoeffSum> outputBufferReturnQueue;

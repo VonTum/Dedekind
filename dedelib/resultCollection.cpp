@@ -16,9 +16,6 @@
 
 #include <string.h>
 
-constexpr int MAX_VALIDATOR_COUNT = 16;
-constexpr size_t NUM_VALIDATOR_THREADS_PER_COMPLEX = 8;
-
 // does the necessary math with annotated number of bits, no overflows possible for D(9). 
 BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount) {
 	// the multiply is max log2(2^35 * 5040 * 5040) = 59.5984160368 bits long, fits in 64 bits
@@ -102,44 +99,36 @@ static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const JobIn
 	return result;
 }
 
-const ClassInfo* loadClassInfos(unsigned int Variables) {
+static const ClassInfo* loadClassInfos(unsigned int Variables) {
 	return readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
 }
 
-void resultprocessingThread(
+static void resultprocessingThread(
 	const ClassInfo* mbfClassInfos,
 	PCoeffProcessingContext& context,
 	std::atomic<BetaResult*>& resultPtr,
-	void(*validator)(const OutputBuffer&, const void*, ThreadPool&),
-	const void* validatorData,
-	ValidationData* validationData,
-	std::mutex& validationDataMutex
+	ValidationData* validationData
 ) {
 	std::cout << "\033[32m[Result Processor] Result processor Thread started.\033[39m\n" << std::flush;
-	ThreadPool pool(NUM_VALIDATOR_THREADS_PER_COMPLEX);
 	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = context.outputQueue.pop_wait()).has_value(); ) {
 		OutputBuffer outBuf = outputBuffer.value();
-
-		validator(outBuf, validatorData, pool);
 
 		BetaResult curBetaResult;
 		//if constexpr(Variables == 7) std::cout << "Results for job " << outBuf.originalInputData.getTop() << std::endl;
 		curBetaResult.topIndex = outBuf.originalInputData.getTop();
 
-		validationDataMutex.lock();
 		curBetaResult.dataForThisTop = produceBetaResult(mbfClassInfos, outBuf.originalInputData, outBuf.outputBuf, validationData);
-		validationDataMutex.unlock();
 
-		context.inputBufferAllocator.free(std::move(outBuf.originalInputData.bufStart));
-		context.outputBufferReturnQueue.free(std::move(outBuf.outputBuf));
+		context.validationQueue.push(outBuf);
 
-		BetaResult* allocatedSlot = resultPtr.fetch_add(1, std::memory_order_relaxed);
+		BetaResult* allocatedSlot = resultPtr.fetch_add(1);
 		*allocatedSlot = std::move(curBetaResult);
 	}
+	context.validationQueue.close();
 	std::cout << "\033[32m[Result Processor] Result processor Thread finished.\033[39m\n" << std::flush;
 }
 
-ResultProcessorOutput resultProcessor(
+ResultProcessorOutput NUMAResultProcessor(
 	unsigned int Variables,
 	PCoeffProcessingContext& context,
 	size_t numResults
@@ -147,33 +136,6 @@ ResultProcessorOutput resultProcessor(
 	std::cout << "\033[32m[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
 	const ClassInfo* mbfClassInfos = loadClassInfos(Variables);
 	std::cout << "\033[32m[Result Processor] Finished Loading ClassInfos. Result processor started.\033[39m\n" << std::flush;
-
-	ResultProcessorOutput result;
-	result.results.resize(numResults);
-	std::atomic<BetaResult*> finalResultPtr;
-	finalResultPtr.store(&result.results[0]);
-
-	result.validationBuffer = new ValidationData[VALIDATION_BUFFER_SIZE(Variables)];
-	std::mutex validationMutex;
-	resultprocessingThread(mbfClassInfos, context, finalResultPtr, [](const OutputBuffer&, const void*, ThreadPool&){}, nullptr, result.validationBuffer, validationMutex);
-
-	std::cout << "\033[32m[Result Processor] Result processor finished.\033[39m\n" << std::flush;
-	return result;
-}
-
-ResultProcessorOutput NUMAResultProcessorWithValidator(
-	unsigned int Variables,
-	PCoeffProcessingContext& context,
-	size_t numResults,
-	size_t numValidators,
-	void(*validator)(const OutputBuffer&, const void*, ThreadPool&),
-	const void* mbfs[2]
-) {
-	std::cout << "\033[32m[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
-	const ClassInfo* mbfClassInfos = loadClassInfos(Variables);
-	std::cout << "\033[32m[Result Processor] Finished Loading ClassInfos. Result processor started.\033[39m\n" << std::flush;
-
-	std::cout << "\033[32m[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
 
 	ResultProcessorOutput result;
 	result.results.resize(numResults);
@@ -190,36 +152,23 @@ ResultProcessorOutput NUMAResultProcessorWithValidator(
 		PCoeffProcessingContext* context;
 		const ClassInfo* mbfClassInfos;
 		std::atomic<BetaResult*>* finalResultPtr;
-		void(*validator)(const OutputBuffer&, const void*, ThreadPool&);
-		const void* mbfs;
 		ValidationData* validationBuffer;
-		std::mutex validationBufferMutex;
 	};
 	ThreadData datas[2];
 	for(int i = 0; i < 2; i++) {
 		datas[i].context = &context;
 		datas[i].mbfClassInfos = mbfClassInfos;
 		datas[i].finalResultPtr = &finalResultPtr;
-		datas[i].validator = validator;
-		datas[i].mbfs = mbfs[i];
 		datas[i].validationBuffer = static_cast<ValidationData*>(validationBuffers[i]);
 	}
 
-	auto threadFunc = [](void* voidData) -> void* {
-		ThreadData* tData = (ThreadData*) voidData;
-		resultprocessingThread(tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validator, tData->mbfs, tData->validationBuffer, tData->validationBufferMutex);
-		pthread_exit(nullptr);
-		return nullptr;
-	};
-
-	pthread_t validatorThreads[MAX_VALIDATOR_COUNT];
-	for(size_t i = 0; i < numValidators; i++) {
-		int socketIdx = i / 8;
-		validatorThreads[i] = createCoreComplexPThread(i, threadFunc, (void*) &datas[socketIdx]);
-	}
-
-	for(size_t i = 0; i < numValidators; i++) {
-		pthread_join(validatorThreads[i], nullptr);
+	{// Scope so that the result processing threads exit before continuing
+		PThreadsSpread threads(2, CPUAffinityType::SOCKET, datas, [](void* voidData) -> void* {
+			ThreadData* tData = (ThreadData*) voidData;
+			resultprocessingThread(tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validationBuffer);
+			pthread_exit(nullptr);
+			return nullptr;
+		});
 	}
 
 	std::cout << "\033[32m[Result Processor] Result processor finished.\033[39m\n" << std::flush;
