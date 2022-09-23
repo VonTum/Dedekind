@@ -335,7 +335,7 @@ void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::st
 
 	constexpr unsigned int Variables = 7;
 	std::cout << "Starting Computation..." << std::endl;
-	PCoeffProcessingContext context(Variables, topsToProcess.size(), topsToProcess.size(), topsToProcess.size());
+	PCoeffProcessingContext context(Variables, topsToProcess.size(), topsToProcess.size());
 	std::cout << "Input production..." << std::endl;
 
 	runBottomBufferCreator(Variables, topsToProcess, context.inputQueue, context.inputBufferAllocator, 1);

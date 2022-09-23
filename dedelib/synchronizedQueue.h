@@ -101,7 +101,7 @@ public:
 template<typename T>
 class SynchronizedQueue {
 	RingQueue<T> queue;
-	std::mutex mutex;
+	mutable std::mutex mutex;
 	std::condition_variable readyForPop;
 	bool isClosed = false;
 public:
@@ -116,12 +116,12 @@ public:
 	RingQueue<T>& get() {return queue;}
 	const RingQueue<T>& get() const {return queue;}
 
-	bool queueHasBeenClosed() {
+	bool queueHasBeenClosed() const {
 		std::lock_guard<std::mutex> lock(mutex);
 		return this->isClosed;
 	}
 
-	size_t size() {
+	size_t size() const {
 		std::lock_guard<std::mutex> lock(mutex);
 		return this->queue.size();
 	}
@@ -130,6 +130,10 @@ public:
 		return queue.capacity();
 	}
 
+	size_t freeSpace() const {
+		std::lock_guard<std::mutex> lock(mutex);
+		return queue.capacity() - this->queue.size();
+	}
 
 	// Write side
 	void push(T item) {
@@ -188,7 +192,7 @@ public:
 template<typename T>
 class SynchronizedStack {
 	std::unique_ptr<T[]> stack;
-	std::mutex mutex;
+	mutable std::mutex mutex;
 	std::condition_variable readyForPop;
 public:
 	size_t sz = 0;
@@ -204,14 +208,19 @@ public:
 	T& operator[](size_t i) {return stack[i];}
 	const T& operator[](size_t i) const {return stack[i];}
 
-	size_t size() {
+	size_t size() const {
 		std::lock_guard<std::mutex> lock(mutex);
 		return sz;
 	}
 
-	size_t capacity() {
+	size_t capacity() const {
 		std::lock_guard<std::mutex> lock(mutex);
 		return cap;
+	}
+
+	size_t freeSpace() const {
+		std::lock_guard<std::mutex> lock(mutex);
+		return cap - sz;
 	}
 
 	void setCapacity(size_t newCapacity) {
@@ -402,13 +411,13 @@ template<typename T>
 class SynchronizedMultiNUMAAlloc {
 public:
 	std::unique_ptr<SynchronizedStack<T*>[]> queues;
-	std::vector<std::pair<T*, T*>> slabs;
-	SynchronizedMultiNUMAAlloc(size_t subSlabSize, size_t numSubSlabs, size_t numNUMADomains) : queues(new SynchronizedStack<T*>[numNUMADomains]), slabs() {
-		slabs.reserve(numNUMADomains);
-
+	std::unique_ptr<std::pair<T*, T*>[]> slabs;
+	size_t slabCount;
+	SynchronizedMultiNUMAAlloc(size_t subSlabSize, size_t numSubSlabs, size_t numNUMADomains, bool socketDomains = false) : queues(new SynchronizedStack<T*>[numNUMADomains]), slabs(new std::pair<T*, T*>[numNUMADomains]), slabCount(numNUMADomains) {
+		size_t totalSlabSize = subSlabSize * numSubSlabs;
 		for(size_t nn = 0; nn < numNUMADomains; nn++) {
-			T* slab = numa_alloc_T<T>(subSlabSize * numSubSlabs, nn);
-			slabs.push_back(std::make_pair(slab, slab + subSlabSize * numSubSlabs));
+			T* slab = socketDomains ? numa_alloc_socket_T<T>(totalSlabSize, nn) : numa_alloc_T<T>(totalSlabSize, nn);
+			slabs[nn] = std::make_pair(slab, slab + totalSlabSize);
 			queues[nn].setCapacity(numSubSlabs);
 			for(size_t i = 0; i < numSubSlabs; i++) {
 				queues[nn][i] = slab + subSlabSize * i;
@@ -418,7 +427,8 @@ public:
 	}
 
 	~SynchronizedMultiNUMAAlloc() {
-		for(auto& slab : slabs) {
+		for(size_t i = 0; i < slabCount; i++) {
+			std::pair<T*, T*>& slab = slabs[i];
 			numa_free(slab.first, (slab.second - slab.first) * sizeof(T));
 		}
 	}
@@ -433,7 +443,7 @@ public:
 	}
 
 	void free(T* buf) {
-		for(size_t nn = 0; nn < slabs.size(); nn++) {
+		for(size_t nn = 0; nn < slabCount; nn++) {
 			if(buf >= slabs[nn].first && buf < slabs[nn].second) {
 				queues[nn].push(buf);
 				return;

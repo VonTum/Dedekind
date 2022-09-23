@@ -44,7 +44,7 @@ std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sam
 ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
 	constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 16;
 	constexpr size_t NUM_RESULT_VALIDATORS = 16;
-	PCoeffProcessingContext context(Variables, (BOTTOM_BUF_CREATOR_COUNT+1) / 2, 50, Variables >= 7 ? 60 : 200);
+	PCoeffProcessingContext context(Variables, 400, Variables >= 7 ? 60 : 200);
 
 	std::thread inputProducerThread([&]() {
 		try {
@@ -78,13 +78,15 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<N
 	
 	std::thread queueWatchdogThread([&](){
 		while(!context.outputQueue.queueHasBeenClosed()) {
-			std::string totalString = 
-				"\033[34m[Queues] Return(" 
-				+ std::to_string(context.outputQueue.size()) 
-				+ " / " + std::to_string(context.outputBufferReturnQueue.capacity() - context.outputBufferReturnQueue.size()) + ") Input(";
-			for(size_t queueI = 0; queueI < context.inputBufferAllocator.slabs.size(); queueI++) {
+			std::string totalString = "\033[34m[Queues] Return(";
+			for(size_t queueI = 0; queueI < context.outputBufferReturnQueue.slabCount; queueI++) {
+				totalString += std::to_string(context.outputQueue.size()) + " / " /*TODO*/
+				 + std::to_string(context.outputBufferReturnQueue.queues[queueI].freeSpace()) + ", ";
+			}
+			totalString += ") Input(";
+			for(size_t queueI = 0; queueI < context.inputBufferAllocator.slabCount; queueI++) {
 				totalString += std::to_string(context.inputQueue.queues[queueI].size()) + " / " 
-				+ std::to_string(context.inputBufferAllocator.queues[queueI].capacity() - context.inputBufferAllocator.queues[queueI].size()) + ", ";
+				+ std::to_string(context.inputBufferAllocator.queues[queueI].freeSpace()) + ", ";
 			}
 			totalString += ")\033[39m\n";
 			std::cout << totalString << std::flush;

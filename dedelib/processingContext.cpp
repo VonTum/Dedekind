@@ -13,35 +13,22 @@ static size_t getAlignedBufferSize(unsigned int Variables) {
 	return alignUpTo(getMaxDeduplicatedBufferSize(Variables)+20, size_t(32) * 16);
 }
 
-PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables, size_t numberOfNUMANodes, size_t numberOfInputBuffersPerNUMANode, size_t numOutputBuffers) :
-	inputQueue(numberOfNUMANodes, numberOfInputBuffersPerNUMANode),
-	outputQueue(std::min(numberOfNUMANodes * numberOfInputBuffersPerNUMANode, numOutputBuffers)),
-	inputBufferAllocator(getAlignedBufferSize(Variables), numberOfInputBuffersPerNUMANode, numberOfNUMANodes),
-	outputBufferReturnQueue(numOutputBuffers) {
+PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables, size_t numInputBuffers, size_t numOutputBuffers) :
+	inputQueue(8, numInputBuffers),
+	outputQueue(std::min(numInputBuffers, numOutputBuffers)),
+	inputBufferAllocator(getAlignedBufferSize(Variables), numInputBuffers / 8, 8),
+	outputBufferReturnQueue(getAlignedBufferSize(Variables), numOutputBuffers / 2, 2, true) {
 	
 	std::cout 
 		<< "Create PCoeffProcessingContext with " 
 		<< Variables 
 		<< " Variables, " 
-		<< numberOfNUMANodes 
-		<< " NUMA nodes, " 
-		<< numberOfInputBuffersPerNUMANode
+		<< numInputBuffers
 		<< " buffers / NUMA node, and "
 		<< numOutputBuffers
 		<< " output buffers" << std::endl;
-
-	std::cout << "Allocating " << numOutputBuffers << " output buffers." << std::endl;
-	for(size_t i = 0; i < numOutputBuffers; i++) {
-		outputBufferReturnQueue.push(static_cast<ProcessedPCoeffSum*>(aligned_malloc(sizeof(ProcessedPCoeffSum) * MAX_BUFSIZE(Variables), ALLOC_ALIGN)));
-	}
 }
 
 PCoeffProcessingContext::~PCoeffProcessingContext() {
-	std::cout << "Deleting output buffers..." << std::endl;
-	size_t numFreedOutputBuffers = 0;
-	for(size_t i = 0; i < outputBufferReturnQueue.sz; i++) {
-		aligned_free(outputBufferReturnQueue[i]);
-	}
-	std::cout << "Deleted " << outputBufferReturnQueue.sz << " output buffers. " << std::endl;
-	std::cout << "Deleting input buffers..." << std::endl;
+	std::cout << "Destroy PCoeffProcessingContext, Deleting input and output buffers..." << std::endl;
 }

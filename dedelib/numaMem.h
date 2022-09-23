@@ -6,13 +6,8 @@
 #ifdef USE_NUMA
 #include <numa.h>
 #else
-#include "aligned_alloc.h"
-inline void numa_free(void* ptr, size_t size) {
-	aligned_free(ptr);
-}
-inline void* numa_alloc_onnode(size_t size, int numaNode) {
-	aligned_malloc(size, 4096); // numa alloc alignment
-}
+void numa_free(void* ptr, size_t size);
+void* numa_alloc_onnode(size_t size, int numaNode);
 #endif
 
 void* allocInterleaved(size_t bufSize, const char* nodeString);
@@ -28,6 +23,13 @@ T* numa_alloc_T(size_t bufSize, size_t numaNode) {
 template<typename T>
 T* numa_alloc_interleaved_T(size_t bufSize, const char* nodeString) {
 	return (T*) allocInterleaved(bufSize * sizeof(T), nodeString);
+}
+
+template<typename T>
+T* numa_alloc_socket_T(size_t bufSize, unsigned int socket) {
+	assert(socket < 2);
+	const char* sockets[]{"0-3", "4-7"};
+	return (T*) allocInterleaved(bufSize * sizeof(T), sockets[socket]);
 }
 
 template<typename T>

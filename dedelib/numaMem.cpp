@@ -5,6 +5,16 @@
 #include <emmintrin.h>
 #include <immintrin.h>
 
+#ifndef USE_NUMA
+#include "aligned_alloc.h"
+void numa_free(void* ptr, size_t size) {
+	aligned_free(ptr);
+}
+void* numa_alloc_onnode(size_t size, int numaNode) {
+	return aligned_malloc(size, 4096); // numa alloc alignment
+}
+#endif
+
 void* allocInterleaved(size_t bufSize, const char* nodeString) {
 #ifdef USE_NUMA
 	struct bitmask* nodeMask = numa_parse_nodestring(nodeString);

@@ -131,7 +131,7 @@ void resultprocessingThread(
 		validationDataMutex.unlock();
 
 		context.inputBufferAllocator.free(std::move(outBuf.originalInputData.bufStart));
-		context.outputBufferReturnQueue.push(outBuf.outputBuf);
+		context.outputBufferReturnQueue.free(std::move(outBuf.outputBuf));
 
 		BetaResult* allocatedSlot = resultPtr.fetch_add(1, std::memory_order_relaxed);
 		*allocatedSlot = std::move(curBetaResult);
@@ -213,12 +213,12 @@ ResultProcessorOutput NUMAResultProcessorWithValidator(
 	};
 
 	pthread_t validatorThreads[MAX_VALIDATOR_COUNT];
-	for(int i = 0; i < numValidators; i++) {
+	for(size_t i = 0; i < numValidators; i++) {
 		int socketIdx = i / 8;
 		validatorThreads[i] = createCoreComplexPThread(i, threadFunc, (void*) &datas[socketIdx]);
 	}
 
-	for(int i = 0; i < numValidators; i++) {
+	for(size_t i = 0; i < numValidators; i++) {
 		pthread_join(validatorThreads[i], nullptr);
 	}
 
@@ -234,24 +234,3 @@ ResultProcessorOutput NUMAResultProcessorWithValidator(
 
 	return result;
 }
-
-
-
-
-
-ValidationBuffer::ValidationBuffer(size_t numElems, const char* numaInterleave) : dualBetas(numa_alloc_interleaved_T<BetaSum>(numElems, numaInterleave), numElems) {}
-	
-void ValidationBuffer::addValidationData(const OutputBuffer& outBuf, ClassInfo topInfo) {
-	uint64_t intervalSizeDown = topInfo.intervalSizeDown;
-	uint64_t classSize = topInfo.classSize;
-	this->mutex.lock();
-	ProcessedPCoeffSum* curPCoeffResult = outBuf.outputBuf;
-	for(NodeIndex* curBot = outBuf.originalInputData.bufStart + BUF_BOTTOM_OFFSET; curBot != outBuf.originalInputData.bufEnd; curBot++) {
-		BetaSum dualBeta = produceBetaTerm(topInfo, *curPCoeffResult);
-
-		curPCoeffResult++;
-	}
-	this->mutex.unlock();
-}
-
-

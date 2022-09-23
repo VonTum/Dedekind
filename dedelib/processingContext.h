@@ -24,8 +24,8 @@ public:
 
 	// Return queues are implemented as stacks, to try and reuse recently retired buffers more often, to improve cache coherency. 
 	SynchronizedMultiNUMAAlloc<NodeIndex> inputBufferAllocator;
-	SynchronizedStack<ProcessedPCoeffSum*> outputBufferReturnQueue;
+	SynchronizedMultiNUMAAlloc<ProcessedPCoeffSum> outputBufferReturnQueue;
 
-	PCoeffProcessingContext(unsigned int Variables, size_t numberOfNUMANodes, size_t numberOfInputBuffersPerNUMANode, size_t numOutputBuffers);
+	PCoeffProcessingContext(unsigned int Variables, size_t numInputBuffers, size_t numOutputBuffers);
 	~PCoeffProcessingContext();
 };

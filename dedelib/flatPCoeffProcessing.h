@@ -31,13 +31,13 @@ void shuffleBots(NodeIndex* bots, NodeIndex* botsEnd);
 template<unsigned int Variables>
 void cpuProcessor_SingleThread_MBF(PCoeffProcessingContext& context, const Monotonic<Variables>* mbfs) {
 	std::cout << "SingleThread CPU Processor started.\n" << std::flush;
-	size_t inputQueueRotation = 0;
-	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait(inputQueueRotation)).has_value(); ) {
+	size_t lastNUMANode = 0;
+	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait(lastNUMANode)).has_value(); ) {
 		JobInfo& job = jobOpt.value();
 
 		//shuffleBots(job.bufStart + 1, job.bufEnd);
 		//std::cout << "Grabbed job of size " << job.bufferSize() << '\n' << std::flush;
-		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
+		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.queues[lastNUMANode / 4].pop_wait();
 		//std::cout << "Grabbed output buffer.\n" << std::flush;
 		processBetasCPU_SingleThread(mbfs, job, countConnectedSumBuf);
 		OutputBuffer result;
@@ -61,10 +61,10 @@ template<unsigned int Variables>
 void cpuProcessor_FineMultiThread_MBF(PCoeffProcessingContext& context, const Monotonic<Variables>* mbfs) {
 	std::cout << "Fine MultiThread CPU Processor started.\n" << std::flush;
 	ThreadPool pool;
-	size_t inputQueueRotation = 0;
-	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait(inputQueueRotation)).has_value(); ) {
+	size_t lastNUMANode = 0;
+	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait(lastNUMANode)).has_value(); ) {
 		JobInfo& job = jobOpt.value();
-		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
+		ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.queues[lastNUMANode / 4].pop_wait();
 		//shuffleBots(job.bufStart + 1, job.bufEnd);
 		processBetasCPU_MultiThread(mbfs, job, countConnectedSumBuf, pool);
 		OutputBuffer result;
@@ -102,10 +102,10 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void*
 		ProcessorData* procData = (ProcessorData*) voidData;
 		PCoeffProcessingContext& context = *procData->context;
 
-		size_t inputQueueRotation = 0;
-		for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait(inputQueueRotation)).has_value(); ) {
+		size_t lastNUMANode = 0;
+		for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait(lastNUMANode)).has_value(); ) {
 			JobInfo& job = jobOpt.value();
-			ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.pop_wait();
+			ProcessedPCoeffSum* countConnectedSumBuf = context.outputBufferReturnQueue.queues[lastNUMANode / 4].pop_wait();
 			//shuffleBots(job.bufStart + 1, job.bufEnd);
 			processBetasCPU_MultiThread(procData->mbfs, job, countConnectedSumBuf, threadPool);
 			OutputBuffer result;

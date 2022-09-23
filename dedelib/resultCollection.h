@@ -38,16 +38,3 @@ ResultProcessorOutput NUMAResultProcessorWithValidator(
 	void(*validator)(const OutputBuffer&, const void*, ThreadPool&),
 	const void* mbfs[2]
 );
-
-
-
-class ValidationBuffer {
-	NUMAArray<BetaSum> dualBetas;
-	std::mutex mutex;
-	
-public:
-	ValidationBuffer(size_t numElems, const char* numaInterleave);
-	
-	void addValidationData(const OutputBuffer& outBuf, ClassInfo topInfo);
-};
-
