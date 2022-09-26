@@ -22,11 +22,11 @@ void saveResults(unsigned int dedekindNumberProject, const std::string& computeF
 
 void processJob(unsigned int Variables, const std::string& computeFolder, int jobIndex, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]));
 
-std::vector<BetaSum> collectAllResultFiles(const std::string& computeFolder, unsigned int dedekindNumberProject);
+std::vector<BetaSumPair> collectAllResultFiles(const std::string& computeFolder, unsigned int dedekindNumberProject);
 
 template<unsigned int Variables>
 void collectAndProcessResults(const std::string& computeFolder) {
-	std::vector<BetaSum> allResults = collectAllResultFiles(computeFolder, Variables + 2);
+	std::vector<BetaSumPair> allResults = collectAllResultFiles(computeFolder, Variables + 2);
 
 	std::cout << "Reading FlatMBFStructure..." << std::endl;
 	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();

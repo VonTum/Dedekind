@@ -212,10 +212,9 @@ void fpgaProcessor_Throughput_OnDevices(PCoeffProcessingContext& queues, const u
 	std::cout << "\033[31m[FPGA Processor] Initial jobs submitted!\033[39m\n" << std::flush;
 	
 	std::thread t0([&](){checkError(clWaitForEvents(NUM_BUFFERS * 1, dones), "clWaitForEvents error 0000000000000000000");});
-	std::thread t1([&](){checkError(clWaitForEvents(NUM_BUFFERS * 1, dones + NUM_BUFFERS), "clWaitForEvents error 1111111111111111111");});
+	checkError(clWaitForEvents(NUM_BUFFERS * 1, dones + NUM_BUFFERS), "clWaitForEvents error 1111111111111111111");
 
 	t0.join();
-	t1.join();
 	//kernels[1].finish();
 	//cl_int status = clWaitForEvents(NUM_BUFFERS * 1, dones);
 	//checkError(status, "clWaitForEvents error");

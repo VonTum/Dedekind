@@ -165,14 +165,29 @@ void isEvenPlus2() {
 }
 
 template<unsigned int Variables>
-u192 computeDedekindNumberFromBetaSums(const FlatMBFStructure<Variables>& allMBFData, const std::vector<BetaSum>& betaSums) {
+u192 computeDedekindNumberFromStandardBetaTopSums(const FlatMBFStructure<Variables>& allMBFData, const u128* topSums) {
+	u192 total = 0;
+
+	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+		ClassInfo topDualInfo = allMBFData.allClassInfos[allMBFData.allNodes[i].dual];
+		uint64_t topIntervalSizeUp = topDualInfo.intervalSizeDown;
+		uint64_t topFactor = topIntervalSizeUp * topDualInfo.classSize; // max log2(2414682040998*5040) = 53.4341783883
+		total += umul192(topSums[i], topFactor);
+	}
+
+	return total;
+}
+
+template<unsigned int Variables>
+u192 computeDedekindNumberFromBetaSums(const FlatMBFStructure<Variables>& allMBFData, const std::vector<BetaSumPair>& betaSums) {
 	if(betaSums.size() != mbfCounts[Variables]) {
 		std::cerr << "Incorrect number of beta sums! Aborting!" << std::endl;
 		std::abort();
 	}
 	u192 total = 0;
 	for(size_t i = 0; i < betaSums.size(); i++) {
-		BetaSum betaSum = betaSums[i];
+		BetaSumPair bPair = betaSums[i];
+		BetaSum betaSum = bPair.getBetaSum(Variables);
 		ClassInfo topInfo = allMBFData.allClassInfos[i];
 		
 		// invalid for DEDUPLICATION

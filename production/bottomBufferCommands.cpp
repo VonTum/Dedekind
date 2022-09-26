@@ -19,8 +19,8 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 	auto tops = generateRangeSample(Variables, sampleCount);
 	auto jobTops = convertTopInfos(flatNodes, tops);
 
-	PCoeffProcessingContext context(Variables, (threadCount+1) / 2, 50, 0);
-	context.outputQueue.close(); // Don't use output queue
+	PCoeffProcessingContext context(Variables, 400, 0);
+	//context.outputQueue.close(); // Don't use output queue
 
 	std::cout << "Files loaded. Starting benchmark." << std::endl;
 
@@ -33,13 +33,13 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 			if(optBuf.has_value()) {
 				double secondsSinceStart = ((std::chrono::high_resolution_clock::now() - startTime).count() * 1.0e-9);
 				std::cout << "Buffer " << bufferI++ << " received at " << secondsSinceStart << "s" << std::endl;
-				context.inputBufferAllocator.free(optBuf.value().bufStart);
+				context.free(optBuf.value().bufStart);
 			} else {
 				break;
 			}
 		}
 	});
-	runBottomBufferCreator(Variables, jobTops, context.inputQueue, context.inputBufferAllocator, threadCount);
+	runBottomBufferCreator(Variables, jobTops, context, threadCount);
 
 	loopBack.join();
 }
@@ -64,8 +64,8 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 	std::cout << std::endl;
 	auto jobTops = convertTopInfos(flatNodes, tops);
 
-	PCoeffProcessingContext context(Variables, (threadCount+1) / 2, 50, 0);
-	context.outputQueue.close(); // Don't use output queue
+	PCoeffProcessingContext context(Variables, 400, 0);
+	//context.outputQueue.close(); // Don't use output queue
 
 	std::cout << "Files loaded. Starting test." << std::endl;
 
@@ -136,7 +136,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 						}
 					}
 
-					context.inputBufferAllocator.free(buf.bufStart);
+					context.free(buf.bufStart);
 				} else {
 					break;
 				}
@@ -144,7 +144,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 		});
 		loopBackThreads.push_back(std::move(loopBack));
 	}
-	runBottomBufferCreator(Variables, jobTops, context.inputQueue, context.inputBufferAllocator, threadCount);
+	runBottomBufferCreator(Variables, jobTops, context, threadCount);
 
 	for(std::thread& t : loopBackThreads) {
 		t.join();

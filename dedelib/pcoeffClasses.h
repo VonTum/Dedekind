@@ -103,8 +103,14 @@ inline BetaSum& operator+=(BetaSum& a, BetaSum b) {
 	a.countedIntervalSizeDown += b.countedIntervalSizeDown;
 	return a;
 }
+inline BetaSum operator*(BetaSum a, uint32_t b) {
+	return BetaSum{a.betaSum * b, a.countedIntervalSizeDown * b};
+}
 inline BetaSum operator/(BetaSum a, uint32_t b) {
 	return BetaSum{a.betaSum / b, a.countedIntervalSizeDown / b};
+}
+inline BetaSum operator%(BetaSum a, uint32_t b) {
+	return BetaSum{a.betaSum % b, a.countedIntervalSizeDown % b};
 }
 
 struct OutputBuffer {
@@ -112,23 +118,28 @@ struct OutputBuffer {
 	ProcessedPCoeffSum* outputBuf;
 };
 
+struct BetaSumPair {
+	BetaSum betaSum;
+	BetaSum betaSumDualDedup;
+	BetaSum getBetaSum(unsigned int Variables) const;
+	BetaSum getBetaSumPlusValidationTerm(unsigned int Variables, BetaSum validationTerm) const;
+};
 
 struct BetaResult {
-	BetaSum betaSum;
+	BetaSumPair dataForThisTop;
 	NodeIndex topIndex;
 };
 
 class BetaResultCollector {
-	std::vector<BetaSum> allBetaSums;
+	std::vector<BetaSumPair> allBetaSums;
 	std::vector<bool> hasSeenResult;
 
 public:
 	BetaResultCollector(unsigned int Variables);
 	void addBetaResult(BetaResult result);
 	void addBetaResults(const std::vector<BetaResult>& results);
-	std::vector<BetaSum> getResultingSums();
+	std::vector<BetaSumPair> getResultingSums();
 };
-
 
 struct ValidationData {
 	BetaSum dualBetaSum;

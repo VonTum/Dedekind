@@ -172,3 +172,26 @@ public:
 };
 
 typedef PThreadPool ThreadPool;
+
+class PThreadsSpread {
+	std::vector<pthread_t> threads;
+public:
+	template<typename T>
+	PThreadsSpread(size_t threadCount, CPUAffinityType affinity, T* datas, void*(*func)(void*), size_t threadsPerData = 1) : threads(threadCount) {
+		for(size_t i = 0; i < threadCount; i++) {
+			size_t selectedDataIdx = i / threadsPerData;
+			T* selectedData = &datas[selectedDataIdx];
+			this->threads[i] = createPThreadAffinity(i, affinity, func, (void*) selectedData);
+		}
+	}
+	void join() {
+		for(pthread_t& item : threads) {
+			pthread_join(item, NULL);
+		}
+		this->threads.clear();
+	}
+	~PThreadsSpread() {
+		this->join();
+	}
+};
+
