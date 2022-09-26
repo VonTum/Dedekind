@@ -26,6 +26,7 @@
 
 #include "threadUtils.h"
 #include <pthread.h>
+#include "threadPool.h"
 
 #include "numaMem.h"
 
@@ -116,7 +117,6 @@ static void addValueToBlockFPGA(uint32_t*__restrict& buf, uint32_t newValue) {
 
 
 static void finalizeBuffer(uint32_t* __restrict & resultBuffer, uint32_t fillUpTo) {
-	uint32_t curI = 0;
 	if(fillUpTo >= FPGA_BLOCK_SIZE) {
 		uint32_t* __restrict resultBufPtr = resultBuffer;
 		uintptr_t alignOffset = (reinterpret_cast<uintptr_t>(resultBufPtr) / sizeof(uint32_t)) % FPGA_BLOCK_SIZE;
@@ -329,9 +329,8 @@ static void runBottomBufferCreatorNoAlloc (
 	unsigned int Variables,
 	std::atomic<const JobTopInfo*>& curStartingJobTop,
 	const JobTopInfo* jobTopsEnd,
-	SynchronizedMultiQueue<JobInfo>& outputQueue,
+	PCoeffProcessingContext& context,
 	size_t NUMAIndex,
-	SynchronizedMultiNUMAAlloc<uint32_t>& returnQueue,
 	std::atomic<const uint32_t*>& links
 ) {
 	size_t SWAPPER_WIDTH = getMaxLayerSize(Variables);
@@ -339,6 +338,8 @@ static void runBottomBufferCreatorNoAlloc (
 	swapper_block* swapperB = aligned_mallocT<swapper_block>(SWAPPER_WIDTH, 64);
 
 	std::cout << "\033[33m[BottomBufferCreator] Thread Started!\033[39m\n" << std::flush;
+
+	PCoeffProcessingContextEighth& subContext = *context.numaQueues[NUMAIndex];
 
 	while(true) {
 		const JobTopInfo* grabbedTopSet = curStartingJobTop.fetch_add(BUFFERS_PER_BATCH);
@@ -349,9 +350,9 @@ static void runBottomBufferCreatorNoAlloc (
 		//std::cout << std::this_thread::get_id() << " grabbed " << numberOfTops << " tops!" << std::endl;
 
 		uint32_t* buffersEnd[BUFFERS_PER_BATCH];
-		returnQueue.allocN_wait(NUMAIndex, buffersEnd, numberOfTops);
+		subContext.inputBufferAlloc.popN_wait(buffersEnd, numberOfTops);
 
-		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, outputQueue, NUMAIndex, links.load(), grabbedTopSet, numberOfTops);
+		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, context.inputQueue, NUMAIndex, links.load(), grabbedTopSet, numberOfTops);
 	}
 
 	std::cout << "\033[33m[BottomBufferCreator] Thread Finished!\033[39m\n" << std::flush;
@@ -367,8 +368,7 @@ const uint32_t* loadLinks(unsigned int Variables) {
 void runBottomBufferCreator(
 	unsigned int Variables,
 	std::future<std::vector<JobTopInfo>>& jobTops,
-	SynchronizedMultiQueue<JobInfo>& outputQueue,
-	SynchronizedMultiNUMAAlloc<uint32_t>& returnQueue,
+	PCoeffProcessingContext& context,
 	int numberOfThreads
 ) {
 	std::cout << "\033[33m[BottomBufferCreator] Loading Links...\033[39m\n" << std::flush;
@@ -397,31 +397,31 @@ void runBottomBufferCreator(
 		unsigned int Variables;
 		std::atomic<const JobTopInfo*>* curStartingJobTop;
 		const JobTopInfo* jobTopsEnd;
-		SynchronizedMultiQueue<JobInfo>* outputQueue;
-		size_t coreComplex;
-		SynchronizedMultiNUMAAlloc<uint32_t>* returnQueue;
+		PCoeffProcessingContext* context;
+		size_t numaNode;
 		std::atomic<const uint32_t*>* links;
-		pthread_t thread;
 	};
 
-	std::unique_ptr<ThreadInfo[]> threads(new ThreadInfo[numberOfThreads]);
-	for(int i = 0; i < numberOfThreads; i++) {
-		int socket = i / 8;
-		ThreadInfo& ti = threads[i];
+	auto threadFunc = [](void* data) -> void* {
+		ThreadInfo* ti = (ThreadInfo*) data;
+		runBottomBufferCreatorNoAlloc(ti->Variables, *ti->curStartingJobTop, ti->jobTopsEnd, *ti->context, ti->numaNode, *ti->links);
+		pthread_exit(NULL);
+		return NULL;
+	};
+
+	ThreadInfo threadDatas[8];
+	for(int numaNode = 0; numaNode < 8; numaNode++) {
+		int socket = numaNode / 4;
+		ThreadInfo& ti = threadDatas[numaNode];
 		ti.Variables = Variables;
 		ti.curStartingJobTop = &jobTopAtomic;
 		ti.jobTopsEnd = jobTopEnd;
-		ti.outputQueue = &outputQueue;
-		ti.coreComplex = i;
-		ti.returnQueue = &returnQueue;
+		ti.context = &context;
+		ti.numaNode = numaNode;
 		ti.links = &links[socket];
-		ti.thread = createCoreComplexPThread(i, [](void* data) -> void* {
-			ThreadInfo* ti = (ThreadInfo*) data;
-			runBottomBufferCreatorNoAlloc(ti->Variables, *ti->curStartingJobTop, ti->jobTopsEnd, *ti->outputQueue, ti->coreComplex / 2, *ti->returnQueue, *ti->links);
-			pthread_exit(NULL);
-			return NULL;
-		}, &ti);
 	}
+
+	PThreadsSpread threads(numberOfThreads, CPUAffinityType::COMPLEX, threadDatas, threadFunc, 2);
 
 	if(numberOfThreads > 8) {
 		memcpy(numaLinks[1], numaLinks[0], linkBufMemSize + PREFETCH_OFFSET * sizeof(uint32_t));
@@ -430,25 +430,21 @@ void runBottomBufferCreator(
 
 	std::cout << "\033[33m[BottomBufferCreator] Copied Links to second socket buffer\033[39m\n" << std::flush;
 
-	for(int i = 0; i < numberOfThreads; i++) {
-		if(pthread_join(threads[i].thread, NULL) != 0) {
-			std::cerr << "[BottomBufferCreator] Error joining pthread" << std::endl;
-		}
-	}
+	threads.join();
+
 	std::cout << "\033[33m[BottomBufferCreator] All Threads finished! Closing output queue\033[39m\n" << std::flush;
 }
 
 void runBottomBufferCreator(
 	unsigned int Variables,
 	const std::vector<JobTopInfo>& jobTops,
-	SynchronizedMultiQueue<JobInfo>& outputQueue,
-	SynchronizedMultiNUMAAlloc<uint32_t>& returnQueue,
+	PCoeffProcessingContext& context,
 	int numberOfThreads
 ) {
 	std::promise<std::vector<JobTopInfo>> jobTopsPromise;
 	jobTopsPromise.set_value(jobTops);
 	std::future<std::vector<JobTopInfo>> jobTopsFuture = jobTopsPromise.get_future();
-	runBottomBufferCreator(Variables, jobTopsFuture, outputQueue, returnQueue, numberOfThreads);
+	runBottomBufferCreator(Variables, jobTopsFuture, context, numberOfThreads);
 }
 
 std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::vector<NodeIndex>& topIndices) {
@@ -466,8 +462,7 @@ std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::ve
 void runBottomBufferCreator(
 	unsigned int Variables,
 	const std::vector<NodeIndex>& jobTops,
-	SynchronizedMultiQueue<JobInfo>& outputQueue,
-	SynchronizedMultiNUMAAlloc<uint32_t>& returnQueue,
+	PCoeffProcessingContext& context,
 	int numberOfThreads
 ) {
 	// Read top infos in parallel, we must prioritize inputProducerThread starts as soon as possible
@@ -477,5 +472,5 @@ void runBottomBufferCreator(
 		return topInfos;
 	});
 
-	runBottomBufferCreator(Variables, topInfosFuture, outputQueue, returnQueue, numberOfThreads);
+	runBottomBufferCreator(Variables, topInfosFuture, context, numberOfThreads);
 }

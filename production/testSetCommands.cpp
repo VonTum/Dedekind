@@ -338,7 +338,7 @@ void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::st
 	PCoeffProcessingContext context(Variables, topsToProcess.size(), topsToProcess.size());
 	std::cout << "Input production..." << std::endl;
 
-	runBottomBufferCreator(Variables, topsToProcess, context.inputQueue, context.inputBufferAllocator, 1);
+	runBottomBufferCreator(Variables, topsToProcess, context, 1);
 	std::cout << "Processing..." << std::endl;
 	//std::thread cpuThread([&](){cpuProcessor_SingleThread(allMBFData, context);});
 

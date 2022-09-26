@@ -46,23 +46,22 @@ std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sam
 }
 
 // Expects mbfs0 to be stored in memory of socket0, and mbfs1 to have memory of socket1
-void validatorThread(
+static void validatorThread(
 	void(*validator)(const OutputBuffer&, const void*, ThreadPool&), 
-	PCoeffProcessingContext& context, 
-	int numaNode,
+	PCoeffProcessingContextEighth& context,
 	const void* validatorData
 ) {
-	std::cout << "\033[35m[Validation] Validator thread " + std::to_string(numaNode) + " started\033[39m\n" << std::flush;
+	//std::cout << "\033[35m[Validation] Validator thread " + std::to_string(numaNode) + " started\033[39m\n" << std::flush;
 	ThreadPool pool(NUM_VALIDATOR_THREADS_PER_COMPLEX);
 	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = context.validationQueue.pop_wait()).has_value(); ) {
 		OutputBuffer outBuf = outputBuffer.value();
 
 		validator(outBuf, validatorData, pool);
 
-		context.inputBufferAllocator.free(std::move(outBuf.originalInputData.bufStart));
-		context.outputBufferReturnQueue.free(std::move(outBuf.outputBuf));
+		context.inputBufferAlloc.push(outBuf.originalInputData.bufStart);
+		context.resultBufferAlloc.push(outBuf.outputBuf);
 	}
-	std::cout << "\033[35m[Validation] Validator thread " + std::to_string(numaNode) + " exited\033[39m\n" << std::flush;
+	//std::cout << "\033[35m[Validation] Validator thread " + std::to_string(numaNode) + " exited\033[39m\n" << std::flush;
 }
 
 ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
@@ -70,7 +69,7 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<N
 
 	std::thread inputProducerThread([&]() {
 		try {
-			runBottomBufferCreator(Variables, topIndices, context.inputQueue, context.inputBufferAllocator, BOTTOM_BUF_CREATOR_COUNT);
+			runBottomBufferCreator(Variables, topIndices, context, BOTTOM_BUF_CREATOR_COUNT);
 			context.inputQueue.close();
 		} catch(const char* errText) {
 			std::cerr << "Error thrown in inputProducerThread: " << errText;
@@ -91,7 +90,9 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<N
 	std::thread processorThread([&]() {
 		try {
 			processorFunc(context, constMBFs);
-			context.outputQueue.close();
+			for(int numaNode = 0; numaNode < 8; numaNode++) {
+				context.numaQueues[numaNode]->outputQueue.close();
+			}
 		} catch(const char* errText) {
 			std::cerr << "Error thrown in processorThread: " << errText;
 			exit(-1);
@@ -99,19 +100,20 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<N
 	});
 	
 	std::thread queueWatchdogThread([&](){
-		while(!context.outputQueue.queueHasBeenClosed()) {
-			std::string totalString = "\033[34m[Queues] Return(";
-			for(size_t queueI = 0; queueI < context.outputBufferReturnQueue.slabCount; queueI++) {
-				totalString += std::to_string(context.outputQueue.size()) + " / "
-				 + std::to_string(context.validationQueue.size()) + " / "
-				 + std::to_string(context.outputBufferReturnQueue.queues[queueI].freeSpace()) + ", ";
+		while(!context.inputQueue.isClosed) {
+			std::string totalString = "\033[34m[Queues]:";
+			for(int numaNode = 0; numaNode < 8; numaNode++) {
+				PCoeffProcessingContextEighth& subContext = *context.numaQueues[numaNode];
+
+				totalString += "\n" + std::to_string(numaNode)
+				 + "> i:" + std::to_string(context.inputQueue.queues[numaNode].size())
+				 + " o:" + std::to_string(subContext.outputQueue.size())
+				 + " v:" + std::to_string(subContext.validationQueue.size())
+				 + " / i:" + std::to_string(subContext.inputBufferAlloc.freeSpace())
+				 + " r:" + std::to_string(subContext.resultBufferAlloc.freeSpace());
 			}
-			totalString += ") Input(";
-			for(size_t queueI = 0; queueI < context.inputBufferAllocator.slabCount; queueI++) {
-				totalString += std::to_string(context.inputQueue.queues[queueI].size()) + " / " 
-				+ std::to_string(context.inputBufferAllocator.queues[queueI].freeSpace()) + ", ";
-			}
-			totalString += ")\033[39m\n";
+			totalString += "\033[39m\n";
+
 			std::cout << totalString << std::flush;
 			std::this_thread::sleep_for(std::chrono::seconds(1));
 		}
@@ -119,21 +121,18 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<N
 
 	struct ValidatorThreadData{
 		void(*validator)(const OutputBuffer&, const void*, ThreadPool&);
-		PCoeffProcessingContext* context;
-		int numaNode;
+		PCoeffProcessingContextEighth* context;
 		void* mbfs;
 	};
 	ValidatorThreadData validatorDatas[16];
 	for(int i = 0; i < 16; i++) {
-		int socket = i / 8;
 		validatorDatas[i].validator = validator;
-		validatorDatas[i].context = &context;
-		validatorDatas[i].numaNode = i / 2;
-		validatorDatas[i].mbfs = numaMBFBuffers[socket];
+		validatorDatas[i].context = context.numaQueues[i / 2].ptr;
+		validatorDatas[i].mbfs = numaMBFBuffers[i / 8];
 	}
 	PThreadsSpread validatorThreads(16, CPUAffinityType::COMPLEX, validatorDatas, [](void* data) -> void* {
 		ValidatorThreadData* validatorData = (ValidatorThreadData*) data;
-		validatorThread(validatorData->validator, *validatorData->context, validatorData->numaNode, validatorData->mbfs);
+		validatorThread(validatorData->validator, *validatorData->context, validatorData->mbfs);
 		pthread_exit(nullptr);
 		return nullptr;
 	});

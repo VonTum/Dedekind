@@ -26,12 +26,18 @@ void* allocInterleaved(size_t bufSize, const char* nodeString) {
 #endif
 }
 
+void* numa_alloc_onsocket(size_t size, unsigned int socket) {
+	assert(socket < 2);
+	const char* sockets[]{"0-3", "4-7"};
+	return allocInterleaved(size, sockets[socket]);
+}
+
 void allocSocketBuffers(size_t bufSize, void* socketBuffers[2]) {
 	socketBuffers[0] = allocInterleaved(bufSize, "0-3");
 	socketBuffers[1] = allocInterleaved(bufSize, "4-7");
 }
 
-void allocCoreComplexBuffers(size_t bufSize, void* buffers[8]) {
+void allocNumaNodeBuffers(size_t bufSize, void* buffers[8]) {
 	for(int nn = 0; nn < 8; nn++) {
 		buffers[nn] = numa_alloc_onnode(bufSize, nn);
 	}

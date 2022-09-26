@@ -348,8 +348,8 @@ template<typename T>
 class SynchronizedMultiQueue {
 	std::mutex mutex;
 	std::condition_variable readyForPop;
-	bool isClosed = false;
 public:
+	bool isClosed = false;
 	std::vector<RingQueue<T>> queues;
 	SynchronizedMultiQueue() = default;
 	SynchronizedMultiQueue(size_t numQueues, size_t queueCapacity) {
@@ -405,6 +405,19 @@ public:
 			// Try again
 		}
 	}
+
+	// Read side
+	// May wait forever
+	std::optional<T> pop_specific_wait(size_t queueIdx) {
+		std::unique_lock<std::mutex> lock(mutex);
+
+		while(queues[queueIdx].empty()) {
+			if(isClosed) return std::nullopt;
+			readyForPop.wait(lock);
+			// Try again
+		}
+		return queues[queueIdx].pop();
+	}
 };
 
 template<typename T>
@@ -413,7 +426,7 @@ public:
 	std::unique_ptr<SynchronizedStack<T*>[]> queues;
 	std::unique_ptr<std::pair<T*, T*>[]> slabs;
 	size_t slabCount;
-	SynchronizedMultiNUMAAlloc(size_t subSlabSize, size_t numSubSlabs, size_t numNUMADomains, bool socketDomains = false) : queues(new SynchronizedStack<T*>[numNUMADomains]), slabs(new std::pair<T*, T*>[numNUMADomains]), slabCount(numNUMADomains) {
+	SynchronizedMultiNUMAAlloc(size_t subSlabSize, size_t numSubSlabs, size_t numNUMADomains, size_t NUMAOffset, bool socketDomains = false) : queues(new SynchronizedStack<T*>[numNUMADomains]), slabs(new std::pair<T*, T*>[numNUMADomains]), slabCount(numNUMADomains) {
 		size_t totalSlabSize = subSlabSize * numSubSlabs;
 		for(size_t nn = 0; nn < numNUMADomains; nn++) {
 			T* slab = socketDomains ? numa_alloc_socket_T<T>(totalSlabSize, nn) : numa_alloc_T<T>(totalSlabSize, nn);

@@ -186,8 +186,7 @@ public:
 	}
 	void join() {
 		for(pthread_t& item : threads) {
-			void* result;
-			pthread_join(item, &result);
+			pthread_join(item, NULL);
 		}
 		this->threads.clear();
 	}

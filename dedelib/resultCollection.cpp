@@ -105,7 +105,7 @@ static const ClassInfo* loadClassInfos(unsigned int Variables) {
 
 static void resultprocessingThread(
 	const ClassInfo* mbfClassInfos,
-	PCoeffProcessingContext& context,
+	PCoeffProcessingContextEighth& context,
 	std::atomic<BetaResult*>& resultPtr,
 	ValidationData* validationData
 ) {
@@ -134,7 +134,11 @@ ResultProcessorOutput NUMAResultProcessor(
 	size_t numResults
 ) {
 	std::cout << "\033[32m[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
-	const ClassInfo* mbfClassInfos = loadClassInfos(Variables);
+	void* numaClassInfos[2];
+	size_t classInfoBufferSize = mbfCounts[Variables] * sizeof(ClassInfo);
+	allocSocketBuffers(classInfoBufferSize, numaClassInfos);
+	readFlatVoidBufferNoMMAP(FileName::flatClassInfo(Variables), classInfoBufferSize, numaClassInfos[0]);
+	memcpy(numaClassInfos[1], numaClassInfos[0], classInfoBufferSize);
 	std::cout << "\033[32m[Result Processor] Finished Loading ClassInfos. Result processor started.\033[39m\n" << std::flush;
 
 	ResultProcessorOutput result;
@@ -142,29 +146,30 @@ ResultProcessorOutput NUMAResultProcessor(
 	std::atomic<BetaResult*> finalResultPtr;
 	finalResultPtr.store(&result.results[0]);
 
-	void* validationBuffers[2];
+	void* validationBuffers[8];
 	size_t validationBufferSize = sizeof(ValidationData) * VALIDATION_BUFFER_SIZE(Variables);
-	allocSocketBuffers(validationBufferSize, validationBuffers);
-	memset(validationBuffers[0], 0, validationBufferSize);
-	memset(validationBuffers[1], 0, validationBufferSize);
+	allocNumaNodeBuffers(validationBufferSize, validationBuffers);
 
 	struct ThreadData {
-		PCoeffProcessingContext* context;
+		size_t validationBufferSize;
+		PCoeffProcessingContextEighth* context;
 		const ClassInfo* mbfClassInfos;
 		std::atomic<BetaResult*>* finalResultPtr;
 		ValidationData* validationBuffer;
 	};
-	ThreadData datas[2];
-	for(int i = 0; i < 2; i++) {
-		datas[i].context = &context;
-		datas[i].mbfClassInfos = mbfClassInfos;
+	ThreadData datas[8];
+	for(int i = 0; i < 8; i++) {
+		datas[i].validationBufferSize = validationBufferSize;
+		datas[i].context = context.numaQueues[i].ptr;
+		datas[i].mbfClassInfos = static_cast<const ClassInfo*>(numaClassInfos[i / 4]);
 		datas[i].finalResultPtr = &finalResultPtr;
 		datas[i].validationBuffer = static_cast<ValidationData*>(validationBuffers[i]);
 	}
 
 	{// Scope so that the result processing threads exit before continuing
-		PThreadsSpread threads(2, CPUAffinityType::SOCKET, datas, [](void* voidData) -> void* {
+		PThreadsSpread threads(8, CPUAffinityType::NUMA_DOMAIN, datas, [](void* voidData) -> void* {
 			ThreadData* tData = (ThreadData*) voidData;
+			memset(static_cast<void*>(tData->validationBuffer), 0, tData->validationBufferSize);
 			resultprocessingThread(tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validationBuffer);
 			pthread_exit(nullptr);
 			return nullptr;
@@ -174,10 +179,17 @@ ResultProcessorOutput NUMAResultProcessor(
 	std::cout << "\033[32m[Result Processor] Result processor finished.\033[39m\n" << std::flush;
 
 	for(size_t i = 0; i < VALIDATION_BUFFER_SIZE(Variables); i++) {
-		datas[0].validationBuffer[i].dualBetaSum += datas[1].validationBuffer[i].dualBetaSum;
+		for(int otherNode = 1; otherNode < 8; otherNode++) {
+			datas[0].validationBuffer[i].dualBetaSum += datas[otherNode].validationBuffer[i].dualBetaSum;
+		}
 	}
 
-	numa_free_T(datas[1].validationBuffer, VALIDATION_BUFFER_SIZE(Variables));
+	for(int i = 0; i < 2; i++) {
+		numa_free(numaClassInfos[i], classInfoBufferSize);
+	}
+	for(int otherNode = 1; otherNode < 8; otherNode++) {
+		numa_free(validationBuffers[otherNode], validationBufferSize);
+	}
 
 	result.validationBuffer = datas[0].validationBuffer;
 
