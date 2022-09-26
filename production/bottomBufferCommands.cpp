@@ -19,7 +19,7 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 	auto tops = generateRangeSample(Variables, sampleCount);
 	auto jobTops = convertTopInfos(flatNodes, tops);
 
-	PCoeffProcessingContext context(Variables, 400, 0);
+	PCoeffProcessingContext context(Variables);
 	//context.outputQueue.close(); // Don't use output queue
 
 	std::cout << "Files loaded. Starting benchmark." << std::endl;
@@ -64,7 +64,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 	std::cout << std::endl;
 	auto jobTops = convertTopInfos(flatNodes, tops);
 
-	PCoeffProcessingContext context(Variables, 400, 0);
+	PCoeffProcessingContext context(Variables);
 	//context.outputQueue.close(); // Don't use output queue
 
 	std::cout << "Files loaded. Starting test." << std::endl;

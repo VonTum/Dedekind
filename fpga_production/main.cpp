@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <random>
 #include <fstream>
+#include <optional>
 #include "AOCLUtils/aocl_utils.h"
 
 #include "../dedelib/toString.h"
@@ -114,7 +115,6 @@ struct FPGAData {
 };
 
 void pushJobIntoKernel(FPGAData* data) {
-	std::cout << "Push job " << reinterpret_cast<uint64_t>(data) % 512 << std::endl;
 	std::optional<JobInfo> jobOpt = data->queues->inputQueue.pop_wait(*(data->curBufIdx));
 	if(!jobOpt.has_value()) {
 		clSetUserEventStatus(*data->done, CL_COMPLETE);
@@ -135,8 +135,9 @@ void pushJobIntoKernel(FPGAData* data) {
 	cl_event writeFinished = data->kernel->writeBuffer(data->inputMem, job.bufStart, bufferSize);
 	cl_event kernelFinished = data->kernel->launchKernel(data->inputMem, data->resultMem, bufferSize, 1, &writeFinished);
 
+	PCoeffProcessingContextEighth& numaQueue = data->queues->getNUMAForBuf(job.bufStart);
 	//std::cout << "Grabbing output buffer..." << std::endl;
-	ProcessedPCoeffSum* countConnectedSumBuf = data->queues->outputBufferReturnQueue.pop_wait();
+	ProcessedPCoeffSum* countConnectedSumBuf = numaQueue.resultBufferAlloc.pop_wait();
 	//std::cout << "Grabbed output buffer" << std::endl;
 	
 	data->outBuf = countConnectedSumBuf;
@@ -153,13 +154,11 @@ void pushJobIntoKernel(FPGAData* data) {
 
 		std::cout << "Finished job " + std::to_string(data->job.getTop()) + " with " + std::to_string(data->job.getNumberOfBottoms()) + " bottoms\n" << std::flush;
 
-		/*data->queues->outputBufferReturnQueue.push(data->outBuf); // temporary
-		data->queues->inputBufferAllocator.free(data->job.bufStart);*/
-
 		OutputBuffer result;
 		result.originalInputData = std::move(data->job);
 		result.outputBuf = data->outBuf;
-		data->queues->outputQueue.push(result);
+		PCoeffProcessingContextEighth& numaQueue = data->queues->getNUMAForBuf(result.originalInputData.bufStart);
+		numaQueue.outputQueue.push(result);
 
 		pushJobIntoKernel(data);
 	}, data);
@@ -231,182 +230,6 @@ void fpgaProcessor_Throughput(PCoeffProcessingContext& queues, const void* mbfs[
 
 	std::cout << "\033[31m[FPGA Processor] All FPGA Processors done!\033[39m\n" << std::flush;
 }
-
-/*void fpgaProcessor_FullySerial(PCoeffProcessingContext& queues) {
-	init(kernelFile.c_str());
-
-	std::optional<std::ofstream> statsFile = {};
-	if(ENABLE_STATISTICS) {
-		statsFile = std::ofstream(FileName::dataPath + "statsFile.csv");
-		std::ofstream& statsf = statsFile.value();
-
-		statsf << "TopIdx,BotCount,Total Permutations,Permutations Per Bot,Runtime,Total Cycles,Occupation,Bots/s";
-
-		for(int i = 0; i <= 5040; i++) {
-			statsf << ',' << i;
-		}
-	}
-
-	std::cout << "FPGA Processor started.\n" << std::flush;
-	for(std::optional<JobInfo> jobOpt; (jobOpt = queues.inputQueue.pop_wait()).has_value(); ) {
-		JobInfo& job = jobOpt.value();
-		cl_uint bufferSize = static_cast<cl_int>(job.size());
-		size_t numberOfBottoms = job.getNumberOfBottoms();
-		NodeIndex topIdx = job.getTop();
-		std::cout << "Grabbed job " << topIdx << " with " << numberOfBottoms << " bottoms\n" << std::flush;
-
-		if(ENABLE_SHUFFLE) shuffleBots(job.begin(), job.end());
-
-		constexpr cl_uint JOB_SIZE_ALIGNMENT = 16*32; // Block Size 32, shuffle size 16
-
-		std::cout << "Aligning buffer..." << std::endl;
-		for(; (bufferSize+2) % JOB_SIZE_ALIGNMENT != 0; bufferSize++) {
-			job.bufStart[bufferSize] = mbfCounts[7] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
-		}
-
-		for(size_t i = 0; i < 2; i++) {
-			job.bufStart[bufferSize++] = 0x80000000; // Tops at the end for stats collection
-		}
-
-		assert(bufferSize % JOB_SIZE_ALIGNMENT == 0);
-		
-		std::cout << "Resulting buffer size: " << bufferSize << std::endl;
-
-		if(SHOW_TAIL != 0) {
-			std::cout << "Tail: " << std::endl;
-			for(cl_uint i = std::max(bufferSize - SHOW_TAIL, cl_uint(0)); i < bufferSize + 5; i++) { // Look a bit past the end of the job, for fuller picture
-				std::cout << job.bufStart[i] << ',';
-			}
-			std::cout << std::endl;
-		}
-
-		if(SHOW_FRONT != 0) {
-			std::cout << "Front: " << std::endl;
-			for(cl_uint i = 0; i < SHOW_FRONT; i++) {
-				std::cout << job.bufStart[i] << ',';
-			}
-			std::cout << std::endl;
-		}
-
-		cl_int status = clEnqueueWriteBuffer(queue,inputMem[0],0,0,bufferSize*sizeof(uint32_t),job.bufStart,0,0,0);
-		checkError(status, "Failed to enqueue writing to inputMem buffer");
-		status = clFinish(queue);
-
-		auto kernelStart = std::chrono::system_clock::now();
-		launchKernel(&inputMem[0], &resultMem[0], bufferSize, 0, 0, 0);
-		status = clFinish(queue);
-
-		auto kernelEnd = std::chrono::system_clock::now();
-		double runtimeSeconds = std::chrono::duration<double>(kernelEnd - kernelStart).count();
-
-		std::cout << "Grabbing output buffer..." << std::endl;
-		ProcessedPCoeffSum* countConnectedSumBuf = queues.outputBufferReturnQueue.alloc_wait(bufferSize);
-		std::cout << "Grabbed output buffer" << std::endl;
-
-		status = clEnqueueReadBuffer(queue, resultMem[0], 0, 0, bufferSize*sizeof(uint64_t), countConnectedSumBuf, 0, 0, 0);
-		checkError(status, "Failed to enqueue read buffer resultMem to countConnectedSumBuf");
-
-		status = clFinish(queue);
-		checkError(status, "Failed to Finish reading output buffer");
-
-		std::cout << "Finished job " << topIdx << " with " << numberOfBottoms << " bottoms in " << runtimeSeconds << "s, at " << (double(numberOfBottoms)/runtimeSeconds/1000000.0) << "Mbots/s" << std::endl;
-
-		// Use final dummy top to get proper occupation reading
-		uint64_t debugA = countConnectedSumBuf[bufferSize-2];
-		uint64_t debugB = countConnectedSumBuf[bufferSize-1];
-		uint64_t activityData = getBitField(debugB, 32, 31);
-		uint64_t cycleData = getBitField(debugB, 0, 32);
-
-		uint64_t realCycles = cycleData << 9;
-		uint64_t realActivity = activityData << 15;
-
-		uint64_t ivalidCycles = getBitField(debugA, 48, 16) << 16;
-		uint64_t ireadyCycles = getBitField(debugA, 32, 16) << 16;
-		uint64_t ovalidCycles = getBitField(debugA, 16, 16) << 16;
-		uint64_t oreadyCycles = getBitField(debugA, 0, 16) << 16;
-
-		double occupation = realActivity / (ACTIVITY_MULTIPLIER * realCycles);
-
-		std::cout << "Took " << realCycles << " cycles at " << (realCycles / runtimeSeconds / 1000000.0) << " Mcycles/s" << std::endl;
-		std::cout << realActivity << " activity" << std::endl;
-		std::cout << "Occupation: " << occupation * 100.0 << "%" << std::endl;
-		std::cout << "Port fractions: ";
-		std::cout << "ivalid: " << ivalidCycles * 100.0 / realCycles << "% ";
-		std::cout << "iready: " << ireadyCycles * 100.0 / realCycles << "% ";
-		std::cout << "ovalid: " << ovalidCycles * 100.0 / realCycles << "% ";
-		std::cout << "oready: " << oreadyCycles * 100.0 / realCycles << "% " << std::endl;
-
-		if(ENABLE_COMPARE) {
-			std::cout << "Starting MultiThread CPU comparison..." << std::endl;
-			std::unique_ptr<uint64_t[]> countConnectedSumBufCPU = std::make_unique<uint64_t[]>(job.size());
-			ThreadPool pool;
-
-			auto cpuStart = std::chrono::system_clock::now();
-			processBetasCPU_MultiThread(mbfs, job, countConnectedSumBufCPU.get(), pool);
-			auto cpuEnd = std::chrono::system_clock::now();
-			double cpuRuntimeSeconds = std::chrono::duration<double>(cpuEnd - cpuStart).count();
-
-			std::cout << "CPU processing completed. Took " << cpuRuntimeSeconds << "s, at " << (double(numberOfBottoms)/cpuRuntimeSeconds/1000000.0) << "Mbots/s" << std::endl;
-			std::cout << "Kernel speedup of " << (cpuRuntimeSeconds / runtimeSeconds) << "x" << std::endl;
-
-			for(const NodeIndex* curBot = job.begin(); curBot != job.end(); curBot++) {
-				size_t index = job.indexOf(curBot);
-				if((countConnectedSumBuf[index] & 0xE000000000000000) != 0) std::cout << "[ECC ECC]" << std::flush;
-				if(countConnectedSumBuf[index] != countConnectedSumBufCPU[index]) {
-					std::cout << "[!!!!!!!] Mistake found at position " << index << "/" << index << ": ";
-					std::cout << "FPGA: {" << getPCoeffSum(countConnectedSumBuf[index]) << "; " << getPCoeffCount(countConnectedSumBuf[index]) << "} ";
-					std::cout << "CPU: {" << getPCoeffSum(countConnectedSumBufCPU[index]) << "; " << getPCoeffCount(countConnectedSumBufCPU[index]) << "} " << std::endl;
-				}
-			}
-			std::cout << "All " << numberOfBottoms << " elements checked!" << std::endl;
-		}
-
-		if(ENABLE_STATISTICS) {
-			std::ofstream& statsf = statsFile.value();
-
-			// statsf << "TopIdx,BotCount,Total Permutations,Permutations Per Bot,Runtime,Total Cycles,Occupation,Bots/s";
-
-			uint64_t permutationBreakdown[5041];
-			for(uint64_t& item : permutationBreakdown) item = 0;
-
-			for(const NodeIndex* cur = job.begin(); cur != job.end(); cur++) {
-				uint64_t pcoeffCount = getPCoeffCount(countConnectedSumBuf[job.indexOf(cur)]);
-
-				permutationBreakdown[pcoeffCount]++;
-			}
-			uint64_t totalPermutations = 0;
-			for(size_t i = 0; i <= 5040; i++) {
-				totalPermutations += i * permutationBreakdown[i];
-			}
-
-			statsf << topIdx << ',';
-			statsf << numberOfBottoms << ',';
-			statsf << totalPermutations << ',';
-			statsf << double(totalPermutations) / numberOfBottoms << ',';
-			statsf << runtimeSeconds << ',';
-			statsf << realCycles << ',';
-			statsf << occupation << ',';
-			statsf << double(numberOfBottoms)/runtimeSeconds;
-
-			for(int i = 0; i <= 5040; i++) {
-				statsf << ',' << permutationBreakdown[i]++;
-			}
-
-			statsf << std::endl;
-		}
-
-		// Comment out, result processor is *really* slow for some godforsaken reason. IT'S JUST MULTIPLIES!
-		
-		//OutputBuffer result;
-		//result.originalInputData = job;
-		//result.outputBuf = countConnectedSumBuf;
-		//queues.outputQueue.push(result);
-		
-		queues.outputBufferReturnQueue.push(countConnectedSumBuf); // Temporary
-		queues.inputBufferAllocator.free(job.bufStart);
-	}
-	std::cout << "FPGA Processor finished.\n" << std::flush;
-}*/
 
 /*
 	Parses "38431,31,13854,111,3333" to {38431,31,13854,111,3333}
@@ -533,7 +356,8 @@ int main(int argc, char** argv) {
 		std::cout << "Computation Finished!" << std::endl;
 
 		for(const BetaResult& r : result.results) {
-			std::cout << r.topIndex << ": " << r.betaSum.betaSum << ", " << r.betaSum.countedIntervalSizeDown << std::endl;
+			BetaSumPair bsp = r.dataForThisTop;
+			std::cout << r.topIndex << ": " << bsp.betaSum.betaSum << ", " << bsp.betaSum.countedIntervalSizeDown << std::endl;
 		}
 		
 		// Free the resources allocated

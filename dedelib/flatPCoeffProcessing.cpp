@@ -3,6 +3,8 @@
 #include "resultCollection.h"
 #include <string.h>
 
+#include "latch.h"
+
 constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 16;
 constexpr size_t NUM_RESULT_VALIDATORS = 16;
 constexpr int MAX_VALIDATOR_COUNT = 16;
@@ -65,11 +67,13 @@ static void validatorThread(
 }
 
 ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
-	PCoeffProcessingContext context(Variables, 400, Variables >= 7 ? 60 : 200);
+	PCoeffProcessingContext context(Variables);
+
+	Latch processingHasStarted(1); // BottomBufferCreator and (not) processor
 
 	std::thread inputProducerThread([&]() {
 		try {
-			runBottomBufferCreator(Variables, topIndices, context, BOTTOM_BUF_CREATOR_COUNT);
+			runBottomBufferCreator(Variables, topIndices, context, BOTTOM_BUF_CREATOR_COUNT, &processingHasStarted);
 			context.inputQueue.close();
 		} catch(const char* errText) {
 			std::cerr << "Error thrown in inputProducerThread: " << errText;
@@ -99,6 +103,9 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<N
 		}
 	});
 	
+	processingHasStarted.wait();
+	std::cout << "Basic initialization has started, begin processing!\n" << std::flush;
+
 	std::thread queueWatchdogThread([&](){
 		while(!context.inputQueue.isClosed) {
 			std::string totalString = "\033[34m[Queues]:";

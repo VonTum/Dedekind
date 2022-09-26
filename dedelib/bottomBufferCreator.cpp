@@ -27,6 +27,7 @@
 #include "threadUtils.h"
 #include <pthread.h>
 #include "threadPool.h"
+#include "latch.h"
 
 #include "numaMem.h"
 
@@ -369,7 +370,8 @@ void runBottomBufferCreator(
 	unsigned int Variables,
 	std::future<std::vector<JobTopInfo>>& jobTops,
 	PCoeffProcessingContext& context,
-	int numberOfThreads
+	int numberOfThreads,
+	Latch* hasStarted
 ) {
 	std::cout << "\033[33m[BottomBufferCreator] Loading Links...\033[39m\n" << std::flush;
 	auto linkLoadStart = std::chrono::high_resolution_clock::now();
@@ -423,6 +425,10 @@ void runBottomBufferCreator(
 
 	PThreadsSpread threads(numberOfThreads, CPUAffinityType::COMPLEX, threadDatas, threadFunc, 2);
 
+	if(hasStarted != nullptr) {
+		hasStarted->notify();
+	}
+
 	if(numberOfThreads > 8) {
 		memcpy(numaLinks[1], numaLinks[0], linkBufMemSize + PREFETCH_OFFSET * sizeof(uint32_t));
 		links[1].store(reinterpret_cast<const uint32_t*>(numaLinks[1])); // Switch to closer buffer
@@ -439,12 +445,13 @@ void runBottomBufferCreator(
 	unsigned int Variables,
 	const std::vector<JobTopInfo>& jobTops,
 	PCoeffProcessingContext& context,
-	int numberOfThreads
+	int numberOfThreads,
+	Latch* hasStarted
 ) {
 	std::promise<std::vector<JobTopInfo>> jobTopsPromise;
 	jobTopsPromise.set_value(jobTops);
 	std::future<std::vector<JobTopInfo>> jobTopsFuture = jobTopsPromise.get_future();
-	runBottomBufferCreator(Variables, jobTopsFuture, context, numberOfThreads);
+	runBottomBufferCreator(Variables, jobTopsFuture, context, numberOfThreads, hasStarted);
 }
 
 std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::vector<NodeIndex>& topIndices) {
@@ -463,7 +470,8 @@ void runBottomBufferCreator(
 	unsigned int Variables,
 	const std::vector<NodeIndex>& jobTops,
 	PCoeffProcessingContext& context,
-	int numberOfThreads
+	int numberOfThreads,
+	Latch* hasStarted
 ) {
 	// Read top infos in parallel, we must prioritize inputProducerThread starts as soon as possible
 	std::future<std::vector<JobTopInfo>> topInfosFuture = std::async(std::launch::async, [&](){
@@ -472,5 +480,5 @@ void runBottomBufferCreator(
 		return topInfos;
 	});
 
-	runBottomBufferCreator(Variables, topInfosFuture, context, numberOfThreads);
+	runBottomBufferCreator(Variables, topInfosFuture, context, numberOfThreads, hasStarted);
 }

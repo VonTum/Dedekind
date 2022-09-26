@@ -146,7 +146,7 @@ target_link_libraries(fpga_production pthread)
 endif()
 
 if(DEFINED USE_NUMA)
-message(WARNING "USING NUMA")
+message(STATUS "USING NUMA")
 target_compile_definitions(dedelib PUBLIC USE_NUMA)
 target_link_libraries(dedelib numa)
 # target_link_libraries(fpga_production numa)
