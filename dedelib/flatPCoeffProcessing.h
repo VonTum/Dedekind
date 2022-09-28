@@ -99,14 +99,22 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void*
 	}
 
 	auto processorFunc = [](void* voidData) -> void* {
+		ProcessorData* procData = (ProcessorData*) voidData;
+
+		setThreadName(("Processor " + std::to_string(procData->numaNode)).c_str());
 		ThreadPool threadPool(CORES_PER_COMPLEX);
 
-		ProcessorData* procData = (ProcessorData*) voidData;
 		PCoeffProcessingContext& context = *procData->context;
 
 		int numaNode = procData->numaNode;
 		PCoeffProcessingContextEighth& numaQueue = *context.numaQueues[numaNode];
-		for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_specific_wait(numaNode)).has_value(); ) {
+
+		constexpr size_t BATCHER_SIZE = Variables < 7 ? 8 : 1;
+		PopBatcher<JobInfo, BATCHER_SIZE> batcher;
+		auto batchPopFunc = [&](JobInfo* buf) -> size_t {
+			return context.inputQueue.popN_specific_wait(buf, BATCHER_SIZE, numaNode);
+		};
+		for(std::optional<JobInfo> jobOpt; (jobOpt = batcher.pop_wait(batchPopFunc)).has_value(); ) {
 			JobInfo& job = jobOpt.value();
 			ProcessedPCoeffSum* countConnectedSumBuf = numaQueue.resultBufferAlloc.pop_wait();
 			//shuffleBots(job.bufStart + 1, job.bufEnd);
@@ -122,6 +130,7 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void*
 	};
 
 	PThreadsSpread coreComplexThreads(CORE_COMPLEX_COUNT, CPUAffinityType::COMPLEX, procData, processorFunc, 2);
+	coreComplexThreads.join();
 }
 
 template<unsigned int Variables>
@@ -137,12 +146,14 @@ void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context, const void* 
 	cpuProcessor_FineMultiThread_MBF(context, static_cast<const Monotonic<Variables>*>(mbfs[0]));
 }
 
-ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = [](const OutputBuffer&, const void*, ThreadPool&){});
+void loadNUMA_MBFs(unsigned int Variables, const void* mbfs[2]);
+
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = nullptr);
 
 std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const FlatNode* allMBFNodes, const ClassInfo* allClassInfos, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf);
 
 template<unsigned int Variables>
-void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = [](const OutputBuffer&, const void*, ThreadPool&){}) {
+void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = nullptr) {
 	std::vector<NodeIndex> topsToProcess;
 	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
 		topsToProcess.push_back(i);

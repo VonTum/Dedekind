@@ -53,6 +53,7 @@ static bool SHOW_ALL = false;
 static bool ENABLE_SHUFFLE = false;
 static bool ENABLE_COMPARE = false;
 static bool ENABLE_STATISTICS = false;
+static bool ONLY_KERNEL = false; // For debugging, only initializes the FPGA kernel
 static cl_uint SHOW_FRONT = 0;
 static cl_uint SHOW_TAIL = 0;
 static bool USE_VALIDATOR = false;
@@ -152,7 +153,7 @@ void pushJobIntoKernel(FPGAData* data) {
 
 		FPGAData* data = static_cast<FPGAData*>(myData);
 
-		std::cout << "Finished job " + std::to_string(data->job.getTop()) + " with " + std::to_string(data->job.getNumberOfBottoms()) + " bottoms\n" << std::flush;
+		//std::cout << "Finished job " + std::to_string(data->job.getTop()) + " with " + std::to_string(data->job.getNumberOfBottoms()) + " bottoms\n" << std::flush;
 
 		OutputBuffer result;
 		result.originalInputData = std::move(data->job);
@@ -163,7 +164,7 @@ void pushJobIntoKernel(FPGAData* data) {
 		pushJobIntoKernel(data);
 	}, data);
 
-	std::cout << "Job " + std::to_string(topIdx) + " submitted\n" << std::flush;
+	//std::cout << "Job " + std::to_string(topIdx) + " submitted\n" << std::flush;
 }
 
 constexpr size_t DEVICE_COUNT = 2;
@@ -197,6 +198,7 @@ void fpgaProcessor_Throughput_OnDevices(PCoeffProcessingContext& queues, const u
 			storedData[doneI].resultMem = k.resultMems[i];
 		}
 	}
+	std::cout << "\033[31m[FPGA Processor] Waiting for intialization finish.\033[39m\n" << std::flush;
 	for(size_t deviceI = 0; deviceI < DEVICE_COUNT; deviceI++) {
 		kernels[deviceI].finish();
 	}
@@ -303,6 +305,10 @@ static std::vector<NodeIndex> parseArgs(int argc, char** argv) {
 		THROUGHPUT_MODE = true;
 	}
 
+	if(options.has("onlyKernel")) {
+		ONLY_KERNEL = true;
+	}
+
 	const std::vector<std::string>& argsFromParsedArgs = parsed.args();
 	std::vector<NodeIndex> topsToProcess;
 	if(argsFromParsedArgs.size() >= 1) {
@@ -336,9 +342,22 @@ static std::vector<NodeIndex> parseArgs(int argc, char** argv) {
 	return topsToProcess;
 }
 
+void justProcessorInitializationMain() {
+	PCoeffProcessingContext context(7);
+
+	const void* mbfs[2];
+	loadNUMA_MBFs(7, mbfs);
+
+	fpgaProcessor_Throughput(context, mbfs);
+}
+
 // Entry point.
 int main(int argc, char** argv) {
 	std::vector<NodeIndex> topsToProcess = parseArgs(argc, argv);
+	if(ONLY_KERNEL) {
+		justProcessorInitializationMain();
+		return 0;
+	}
 	try {
 		std::cout << "Processing tops: ";
 		for(NodeIndex i : topsToProcess) std::cout << i << ',';

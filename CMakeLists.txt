@@ -45,6 +45,7 @@ add_library(dedelib
   dedelib/resultCollection.cpp
   dedelib/slabAllocator.cpp
   dedelib/numaMem.cpp
+  dedelib/threadPool.cpp
 
   dedelib/bigint/uint128_t.cpp
   dedelib/bigint/uint256_t.cpp
@@ -149,7 +150,6 @@ if(DEFINED USE_NUMA)
 message(STATUS "USING NUMA")
 target_compile_definitions(dedelib PUBLIC USE_NUMA)
 target_link_libraries(dedelib numa)
-# target_link_libraries(fpga_production numa)
 else()
 message(WARNING "NOT USING NUMA")
 endif()

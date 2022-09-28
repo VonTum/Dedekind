@@ -156,6 +156,7 @@ ResultProcessorOutput NUMAResultProcessor(
 		const ClassInfo* mbfClassInfos;
 		std::atomic<BetaResult*>* finalResultPtr;
 		ValidationData* validationBuffer;
+		int numaNode;
 	};
 	ThreadData datas[8];
 	for(int i = 0; i < 8; i++) {
@@ -164,17 +165,18 @@ ResultProcessorOutput NUMAResultProcessor(
 		datas[i].mbfClassInfos = static_cast<const ClassInfo*>(numaClassInfos[i / 4]);
 		datas[i].finalResultPtr = &finalResultPtr;
 		datas[i].validationBuffer = static_cast<ValidationData*>(validationBuffers[i]);
+		datas[i].numaNode = i;
 	}
 
-	{// Scope so that the result processing threads exit before continuing
-		PThreadsSpread threads(8, CPUAffinityType::NUMA_DOMAIN, datas, [](void* voidData) -> void* {
-			ThreadData* tData = (ThreadData*) voidData;
-			memset(static_cast<void*>(tData->validationBuffer), 0, tData->validationBufferSize);
-			resultprocessingThread(tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validationBuffer);
-			pthread_exit(nullptr);
-			return nullptr;
-		});
-	}
+	PThreadsSpread threads(8, CPUAffinityType::NUMA_DOMAIN, datas, [](void* voidData) -> void* {
+		ThreadData* tData = (ThreadData*) voidData;
+		setThreadName(("Result Processor " + std::to_string(tData->numaNode)).c_str());
+		memset(static_cast<void*>(tData->validationBuffer), 0, tData->validationBufferSize);
+		resultprocessingThread(tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validationBuffer);
+		pthread_exit(nullptr);
+		return nullptr;
+	});
+	threads.join();
 
 	std::cout << "\033[32m[Result Processor] Result processor finished.\033[39m\n" << std::flush;
 

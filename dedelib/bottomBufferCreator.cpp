@@ -406,6 +406,7 @@ void runBottomBufferCreator(
 
 	auto threadFunc = [](void* data) -> void* {
 		ThreadInfo* ti = (ThreadInfo*) data;
+		setThreadName(("InputProducer " + std::to_string(ti->numaNode)).c_str());
 		runBottomBufferCreatorNoAlloc(ti->Variables, *ti->curStartingJobTop, ti->jobTopsEnd, *ti->context, ti->numaNode, *ti->links);
 		pthread_exit(NULL);
 		return NULL;

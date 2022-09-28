@@ -32,6 +32,15 @@ void setStackToBufferParts(SynchronizedStack<T*>& target, T* bufMemory, size_t p
 }
 
 PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables) : inputQueue(8, NUM_INPUT_BUFFERS_PER_NODE) {
+	std::cout 
+		<< "Create PCoeffProcessingContext in 8 parts with " 
+		<< Variables 
+		<< " Variables, " 
+		<< NUM_INPUT_BUFFERS_PER_NODE * 8
+		<< " buffers / NUMA node, and "
+		<< NUM_RESULT_BUFFERS_PER_NODE * 8
+		<< " result buffers\n" << std::flush;
+
 	size_t alignedBufSize = getAlignedBufferSize(Variables);
 	for(int numaNode = 0; numaNode < 8; numaNode++) {
 		this->numaInputMemory[numaNode] = NUMAArray<NodeIndex>::alloc_onnode(alignedBufSize * NUM_INPUT_BUFFERS_PER_NODE, numaNode);
@@ -42,14 +51,7 @@ PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables) : input
 		setStackToBufferParts(this->numaQueues[numaNode]->resultBufferAlloc, this->numaResultMemory[numaNode].buf, alignedBufSize, NUM_RESULT_BUFFERS_PER_NODE);
 	}
 
-	std::cout 
-		<< "Create PCoeffProcessingContext in 8 parts with " 
-		<< Variables 
-		<< " Variables, " 
-		<< NUM_INPUT_BUFFERS_PER_NODE * 8
-		<< " buffers / NUMA node, and "
-		<< NUM_RESULT_BUFFERS_PER_NODE * 8
-		<< " result buffers" << std::endl;
+	std::cout << "Finished PCoeffProcessingContext\n" << std::flush;
 }
 
 PCoeffProcessingContext::~PCoeffProcessingContext() {

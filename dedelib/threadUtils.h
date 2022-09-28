@@ -23,6 +23,9 @@ void setCoreComplexAffinity(std::thread& th, int coreComplex);
 void setSocketAffinity(int socketI);
 void setSocketAffinity(std::thread& th, int socketI);
 
+void setThreadName(const char* name);
+void setThreadName(std::thread& t, const char* name);
+
 pthread_t createCPUPThread(int cpuI, void* (*func)(void*), void* data);
 pthread_t createCoreComplexPThread(int coreComplex, void* (*func)(void*), void* data);
 pthread_t createSocketPThread(int socketI, void* (*func)(void*), void* data);

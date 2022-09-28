@@ -91,6 +91,14 @@ void setSocketAffinity(int socketI) {
 }
 
 
+void setThreadName(const char* name) {
+	pthread_setname_np(pthread_self(), name);
+}
+
+void setThreadName(std::thread& t, const char* name) {
+	pthread_setname_np(t.native_handle(), name);
+}
+
 
 pthread_t createPThreadAffinity(cpu_set_t cpuset, void* (*func)(void*), void* data) {
 	pthread_t thread;

@@ -407,7 +407,6 @@ public:
 	}
 
 	// Read side
-	// May wait forever
 	std::optional<T> pop_specific_wait(size_t queueIdx) {
 		std::unique_lock<std::mutex> lock(mutex);
 
@@ -417,6 +416,30 @@ public:
 			// Try again
 		}
 		return queues[queueIdx].pop();
+	}
+
+	// Read side
+	// Return number of elements popped
+	size_t popN_specific_wait(T* buf, size_t targetPopCount, size_t queueIdx) {
+		RingQueue<T>& selectedQueue = this->queues[queueIdx];
+
+		std::unique_lock<std::mutex> lock(mutex);
+
+		while(selectedQueue.size() < targetPopCount) {
+			size_t queueSize = selectedQueue.size();
+			if(isClosed) {
+				for(size_t i = 0; i < queueSize; i++) {
+					buf[i] = selectedQueue.pop();
+				}
+				return queueSize;
+			}
+			readyForPop.wait(lock);
+			// Try again
+		}
+		for(size_t i = 0; i < targetPopCount; i++) {
+			buf[i] = selectedQueue.pop();
+		}
+		return targetPopCount;
 	}
 };
 
@@ -466,4 +489,27 @@ public:
 	}
 };
 
-
+/*
+Helper class to reduce contention on the mutex of a read queue, pops a batch of elements at a time instead of one by one
+*/
+template<typename T, size_t BatchSize>
+class PopBatcher {
+	T stored[BatchSize];
+	size_t storedCount = 0;
+public:
+	/* Expects a function of the form size_t(T buf[BatchSize])
+		It should return the number of elements popped, and write that number of elements to buf. 
+		The Batch Popping function returning 0 elements mean the queue is closed, and then this function will also return nullopt
+	*/
+	template<typename BatchPopFunc>
+	std::optional<T> pop_wait(BatchPopFunc& f) {
+		if(storedCount == 0) {
+			storedCount = f(stored); // Read a new batch
+		}
+		if(storedCount == 0) {
+			return std::nullopt;
+		} else {
+			return std::move(stored[--storedCount]);
+		}
+	}
+};

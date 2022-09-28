@@ -123,8 +123,10 @@ void processBetasCPU_MultiThread(const Monotonic<Variables>* mbfs, const JobInfo
 
 	threadPool.doInParallel([&](){
 		BooleanFunction<Variables> graphsBuf[factorial(Variables)];
+		const NodeIndex* nextNodeBlock = i.fetch_add(NODE_BLOCK_SIZE);
 		while(true) {
-			const NodeIndex* claimedNodeBlock = i.fetch_add(NODE_BLOCK_SIZE, std::memory_order_relaxed);
+			const NodeIndex* claimedNodeBlock = nextNodeBlock;
+			nextNodeBlock = i.fetch_add(NODE_BLOCK_SIZE); // Fetch the next node block earlier, as not to bottleneck
 			if(claimedNodeBlock >= job.end()) break;
 
 			const NodeIndex* claimedNodeBlockEnd = claimedNodeBlock + NODE_BLOCK_SIZE;
