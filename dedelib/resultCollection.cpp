@@ -95,6 +95,8 @@ static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const JobIn
 	ClassInfo info = mbfClassInfos[curJob.bufStart[TOP_DUAL_INDEX]];
 
 	result.betaSumDualDedup = produceBetaTerm(info, getPCoeffSum(nonDuplicateTopDual), getPCoeffCount(nonDuplicateTopDual));
+#else
+	result.betaSumDualDedup = BetaSum{0, 0};
 #endif
 	return result;
 }
@@ -157,6 +159,7 @@ ResultProcessorOutput NUMAResultProcessor(
 		std::atomic<BetaResult*>* finalResultPtr;
 		ValidationData* validationBuffer;
 		int numaNode;
+		unsigned int Variables;
 	};
 	ThreadData datas[8];
 	for(int i = 0; i < 8; i++) {
@@ -166,6 +169,7 @@ ResultProcessorOutput NUMAResultProcessor(
 		datas[i].finalResultPtr = &finalResultPtr;
 		datas[i].validationBuffer = static_cast<ValidationData*>(validationBuffers[i]);
 		datas[i].numaNode = i;
+		datas[i].Variables = Variables;
 	}
 
 	PThreadsSpread threads(8, CPUAffinityType::NUMA_DOMAIN, datas, [](void* voidData) -> void* {

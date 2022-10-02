@@ -24,6 +24,13 @@ static void processSuperComputingJob_FMT(const std::vector<std::string>& args) {
 }
 
 template<unsigned int Variables>
+static void processSuperComputingJob_SMT(const std::vector<std::string>& args) {
+	std::string projectFolderPath = args[0];
+	int jobIndex = std::stoi(args[1]);
+	processJob(Variables, projectFolderPath, jobIndex, "cpuSMT", cpuProcessor_SuperMultiThread<Variables>);
+}
+
+template<unsigned int Variables>
 void processDedekindNumberWithValidator(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2])) {
 	processDedekindNumber<Variables>(processorFunc, threadPoolBufferValidator<Variables>);
 }
@@ -74,7 +81,17 @@ CommandSet processingCommands {"Massively parallel Processing Commands", {
 		unsigned int targetDedekindNumber = std::stoi(args[1]);
 		size_t numberOfJobs = std::stoi(args[2]);
 		size_t topsPerBatch = args.size() >= 4 ? std::stoi(args[3]) : 8;
-		initializeComputeProject(projectFolderPath, targetDedekindNumber, numberOfJobs, topsPerBatch);
+		initializeComputeProject(targetDedekindNumber - 2, projectFolderPath, numberOfJobs, topsPerBatch);
+	}},
+
+	{"initializeValidationFiles", [](const std::vector<std::string>& args) {
+		std::string projectFolderPath = args[0];
+		unsigned int targetDedekindNumber = std::stoi(args[1]);
+		std::vector<std::string> validationComputeIDs;
+		for(size_t i = 2; i < args.size(); i++) {
+			validationComputeIDs.push_back(args[i]);
+		}
+		initializeValidationFiles(targetDedekindNumber - 2, projectFolderPath, validationComputeIDs);
 	}},
 
 	{"collectAllSupercomputingProjectResults_D3", [](const std::vector<std::string>& args){collectAndProcessResults<1>(args[0]);}},
@@ -100,4 +117,12 @@ CommandSet processingCommands {"Massively parallel Processing Commands", {
 	{"processJobCPU5_FMT", processSuperComputingJob_FMT<5>},
 	{"processJobCPU6_FMT", processSuperComputingJob_FMT<6>},
 	{"processJobCPU7_FMT", processSuperComputingJob_FMT<7>},
+
+	{"processJobCPU1_SMT", processSuperComputingJob_SMT<1>},
+	{"processJobCPU2_SMT", processSuperComputingJob_SMT<2>},
+	{"processJobCPU3_SMT", processSuperComputingJob_SMT<3>},
+	{"processJobCPU4_SMT", processSuperComputingJob_SMT<4>},
+	{"processJobCPU5_SMT", processSuperComputingJob_SMT<5>},
+	{"processJobCPU6_SMT", processSuperComputingJob_SMT<6>},
+	{"processJobCPU7_SMT", processSuperComputingJob_SMT<7>},
 }};

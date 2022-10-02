@@ -16,8 +16,13 @@
 
 #include "numaMem.h"
 
+// The values after the halfway point are 0, we do not store these in the results file and buffers
 constexpr size_t VALIDATION_BUFFER_SIZE(unsigned int Variables) {
+#ifdef PCOEFF_DEDUPLICATE
+	return flatNodeLayerOffsets[Variables][(1 << Variables) / 2 + 1];
+#else
 	return mbfCounts[Variables];
+#endif
 }
 
 BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount);
@@ -28,4 +33,3 @@ ResultProcessorOutput NUMAResultProcessor(
 	PCoeffProcessingContext& context,
 	size_t numResults
 );
-

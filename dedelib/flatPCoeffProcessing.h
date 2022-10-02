@@ -153,6 +153,22 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<N
 std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const FlatNode* allMBFNodes, const ClassInfo* allClassInfos, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf);
 
 template<unsigned int Variables>
+void computeFinalDedekindNumberFromGatheredResults(const std::vector<BetaSumPair>& sortedBetaSumPairs, const ValidationData* validationBuffer) {
+	std::cout << "Reading FlatMBFStructure..." << std::endl;
+	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
+	std::cout << "FlatMBFStructure initialized." << std::endl;
+
+	std::cout << "Computation finished." << std::endl;
+	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, sortedBetaSumPairs);
+	std::cout << "D(" << (Variables + 2) << ") = " << dedekindNumber << std::endl;
+
+	std::unique_ptr<u128[]> perTopSubResult = mergeResultsAndValidationForFinalBuffer(Variables, allMBFData.allNodes, allMBFData.allClassInfos, sortedBetaSumPairs, validationBuffer);
+	
+	u192 dedekindNumberFromValidator = computeDedekindNumberFromStandardBetaTopSums(allMBFData, perTopSubResult.get());
+	std::cout << "D(" << (Variables + 2) << ") (validator) = " << dedekindNumberFromValidator << std::endl;
+}
+
+template<unsigned int Variables>
 void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = nullptr) {
 	std::vector<NodeIndex> topsToProcess;
 	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
@@ -167,20 +183,7 @@ void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& contex
 	BetaResultCollector collector(Variables);
 	collector.addBetaResults(betaResults.results);
 
-	std::cout << "Reading FlatMBFStructure..." << std::endl;
-	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
-	std::cout << "FlatMBFStructure initialized." << std::endl;
-
-	std::cout << "Computation finished." << std::endl;
-	std::vector<BetaSumPair> sortedBetaSumPairs = collector.getResultingSums();
-	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, sortedBetaSumPairs);
-	std::cout << "D(" << (Variables + 2) << ") = " << dedekindNumber << std::endl;
-
-	std::unique_ptr<u128[]> perTopSubResult = mergeResultsAndValidationForFinalBuffer(Variables, allMBFData.allNodes, allMBFData.allClassInfos, sortedBetaSumPairs, betaResults.validationBuffer);
-	
-
-	u192 dedekindNumberFromValidator = computeDedekindNumberFromStandardBetaTopSums(allMBFData, perTopSubResult.get());
-	std::cout << "D(" << (Variables + 2) << ") (validator) = " << dedekindNumberFromValidator << std::endl;
+	computeFinalDedekindNumberFromGatheredResults<Variables>(collector.getResultingSums(), betaResults.validationBuffer);
 }
 
 std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sampleCount);

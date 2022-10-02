@@ -200,14 +200,27 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<N
 std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const FlatNode* allMBFNodes, const ClassInfo* allClassInfos, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf) {
 	std::unique_ptr<u128[]> finalResults(new u128[mbfCounts[Variables]]);
 
+	size_t validationBufferNonZeroSize = VALIDATION_BUFFER_SIZE(Variables);
+
 	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
 		uint32_t dualNode = allMBFNodes[i].dual;
-		ValidationData validationTerm = validationBuf[dualNode];
+		ValidationData validationTerm;
+		if(dualNode < validationBufferNonZeroSize) {
+			validationTerm = validationBuf[dualNode];
+		} else {
+			validationTerm.dualBetaSum.betaSum = 0;
+			validationTerm.dualBetaSum.countedIntervalSizeDown = 0;
+		}
 
-		/*std::cout << "Validation " << i << "(dual " << dualNode <<  "): betaSum=" << validationTerm.dualBetaSum.betaSum << ", intervalSizeUp=" << validationTerm.dualBetaSum.countedIntervalSizeDown << std::endl;
-		std::cout << "    betaSum: betaSum=" << betaSums[i].betaSum.betaSum << ", intervalSizeDown=" << betaSums[i].betaSum.countedIntervalSizeDown << std::endl;
-		std::cout << "    dedup:   betaSum=" << betaSums[i].betaSumDualDedup.betaSum << ", count=" << betaSums[i].betaSumDualDedup.countedIntervalSizeDown << std::endl;*/
-		
+		/*std::cout << i
+		 << ": (" << validationTerm.dualBetaSum.betaSum
+		 << " ; " << validationTerm.dualBetaSum.countedIntervalSizeDown
+		 << ") : (" << betaSums[i].betaSum.betaSum
+		 << " ; " << betaSums[i].betaSum.countedIntervalSizeDown
+		 << ") : (" << betaSums[i].betaSumDualDedup.betaSum
+		 << " ; " << betaSums[i].betaSumDualDedup.countedIntervalSizeDown
+		 << ")\n" << std::flush;*/
+
 		BetaSum totalSumForThisTop = betaSums[i].getBetaSumPlusValidationTerm(Variables, validationTerm.dualBetaSum);
 
 		if(totalSumForThisTop.countedIntervalSizeDown != allClassInfos[i].intervalSizeDown) {
