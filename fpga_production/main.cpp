@@ -233,9 +233,25 @@ void fpgaProcessor_Throughput(PCoeffProcessingContext& queues, const void* mbfs[
 	std::cout << "\033[31m[FPGA Processor] All FPGA Processors done!\033[39m\n" << std::flush;
 }
 
+
+#include "../dedelib/supercomputerJobs.h"
+
+// Supercomputing entry point.
+int main(int argc, char** argv) {
+	if(argc != 3) {
+		std::cerr << "Usage: " << argv[0] << " <computeFolder> <jobID>\n" << std::flush;
+		return -1;
+	}
+	std::string computeFolder(argv[1]);
+	std::string jobID(argv[1]);
+
+	processJob(7, computeFolder, jobID, "fpga", fpgaProcessor_Throughput);
+	return 0;
+}
+
+
 /*
-	Parses "38431,31,13854,111,3333" to {38431,31,13854,111,3333}
-*/
+// Parses "38431,31,13854,111,3333" to {38431,31,13854,111,3333}
 template<typename IntT>
 static std::vector<IntT> parseIntList(const std::string& strList) {
 	std::stringstream strStream(strList);
@@ -351,7 +367,7 @@ void justProcessorInitializationMain() {
 	fpgaProcessor_Throughput(context, mbfs);
 }
 
-// Entry point.
+// Testing entry point.
 int main(int argc, char** argv) {
 	std::vector<NodeIndex> topsToProcess = parseArgs(argc, argv);
 	if(ONLY_KERNEL) {
@@ -400,4 +416,4 @@ int main(int argc, char** argv) {
 		std::cerr << "ERROR:" << text << std::endl;
 	}
 	return 0;
-}
+}*/

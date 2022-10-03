@@ -12,22 +12,22 @@
 template<unsigned int Variables>
 static void processSuperComputingJob_ST(const std::vector<std::string>& args) {
 	std::string projectFolderPath = args[0];
-	int jobIndex = std::stoi(args[1]);
-	processJob(Variables, projectFolderPath, jobIndex, "cpuST", cpuProcessor_SingleThread<Variables>);
+	std::string jobID = args[1];
+	processJob(Variables, projectFolderPath, jobID, "cpuST", cpuProcessor_SingleThread<Variables>);
 }
 
 template<unsigned int Variables>
 static void processSuperComputingJob_FMT(const std::vector<std::string>& args) {
 	std::string projectFolderPath = args[0];
-	int jobIndex = std::stoi(args[1]);
-	processJob(Variables, projectFolderPath, jobIndex, "cpuFMT", cpuProcessor_FineMultiThread<Variables>);
+	std::string jobID = args[1];
+	processJob(Variables, projectFolderPath, jobID, "cpuFMT", cpuProcessor_FineMultiThread<Variables>);
 }
 
 template<unsigned int Variables>
 static void processSuperComputingJob_SMT(const std::vector<std::string>& args) {
 	std::string projectFolderPath = args[0];
-	int jobIndex = std::stoi(args[1]);
-	processJob(Variables, projectFolderPath, jobIndex, "cpuSMT", cpuProcessor_SuperMultiThread<Variables>);
+	std::string jobID = args[1];
+	processJob(Variables, projectFolderPath, jobID, "cpuSMT", cpuProcessor_SuperMultiThread<Variables>);
 }
 
 template<unsigned int Variables>

@@ -23,8 +23,8 @@ static std::string getComputeIdentifier() {
 	return std::string(hostNameData);
 }
 
-static std::string computeFileName(unsigned int jobIndex, const std::string& extention) {
-	std::string result = "j" + std::to_string(jobIndex) + extention;
+static std::string computeFileName(const std::string& jobID, const std::string& extention) {
+	std::string result = "j" + jobID + extention;
 	return result;
 }
 
@@ -35,8 +35,8 @@ static std::string computeFolderPath(std::string computeFolder, const char* fold
 	return computeFolder;
 }
 
-static std::string computeFilePath(std::string computeFolder, const char* folder, unsigned int jobIndex, const std::string& extention) {
-	return computeFolderPath(computeFolder, folder) + computeFileName(jobIndex, extention);
+static std::string computeFilePath(std::string computeFolder, const char* folder, const std::string& jobID, const std::string& extention) {
+	return computeFolderPath(computeFolder, folder) + computeFileName(jobID, extention);
 }
 
 static std::string getValidationFilePath(std::string computeFolder, const std::string& computeID) {
@@ -329,23 +329,23 @@ void initializeComputeProject(unsigned int Variables, std::string computeFolder,
 			}
 		}
 
-		writeJobToFile(Variables, computeFilePath(computeFolder, "jobs", jobI, ".job"), topIndices);
+		writeJobToFile(Variables, computeFilePath(computeFolder, "jobs", std::to_string(jobI), ".job"), topIndices);
 	}
 
 	std::cout << "Generated " << numberOfJobs << " job files of ~" << (numberOfMBFsToProcess / numberOfJobs) << " MBFs per job." << std::endl;
 }
 
-static std::vector<JobTopInfo> loadJob(unsigned int Variables, const std::string& computeFolder, const std::string& computeID, int jobIndex) {
-	std::string jobFile = computeFilePath(computeFolder, "jobs", jobIndex, ".job");
-	std::string workingFile = computeFilePath(computeFolder, "working", jobIndex, "_" + computeID + ".job");
-	std::string resultsFile = computeFilePath(computeFolder, "results", jobIndex, "_" + computeID + ".results");
+static std::vector<JobTopInfo> loadJob(unsigned int Variables, const std::string& computeFolder, const std::string& computeID, const std::string& jobID) {
+	std::string jobFile = computeFilePath(computeFolder, "jobs", jobID, ".job");
+	std::string workingFile = computeFilePath(computeFolder, "working", jobID, "_" + computeID + ".job");
+	std::string resultsFile = computeFilePath(computeFolder, "results", jobID, "_" + computeID + ".results");
 	
 	if(std::filesystem::exists(workingFile)) {
-		std::cerr << "Temporary file (" << workingFile << ") already exists! Job " << jobIndex << " is already running!";
+		std::cerr << "Temporary file (" << workingFile << ") already exists! Job " << jobID << " is already running!";
 		std::abort();
 	}
 	if(std::filesystem::exists(resultsFile)) {
-		std::cerr << "Results file (" << resultsFile << ") already exists! Job " << jobIndex << " has already terminated!";
+		std::cerr << "Results file (" << resultsFile << ") already exists! Job " << jobID << " has already terminated!";
 		std::abort();
 	}
 	std::filesystem::rename(jobFile, workingFile); // Throws filesystem::filesystem_error on error
@@ -399,17 +399,17 @@ static void addValidationDataToFile(unsigned int Variables, const std::string& c
 
 
 
-static void saveResults(unsigned int Variables, const std::string& computeFolder, int jobIndex, const std::string& computeID, const std::vector<BetaResult>& betaResults) {
-	std::string workingFile = computeFilePath(computeFolder, "working", jobIndex, "_" + computeID + ".job");
-	std::string finishedFile = computeFilePath(computeFolder, "finished", jobIndex, "_" + computeID + ".job");
-	std::string resultsFile = computeFilePath(computeFolder, "results", jobIndex, "_" + computeID + ".results");
+static void saveResults(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& computeID, const std::vector<BetaResult>& betaResults) {
+	std::string workingFile = computeFilePath(computeFolder, "working", jobID, "_" + computeID + ".job");
+	std::string finishedFile = computeFilePath(computeFolder, "finished", jobID, "_" + computeID + ".job");
+	std::string resultsFile = computeFilePath(computeFolder, "results", jobID, "_" + computeID + ".results");
 
 	if(std::filesystem::exists(finishedFile)) {
-		std::cerr << "Results file (" << finishedFile << ") already exists! Job " << jobIndex << " has already terminated!";
+		std::cerr << "Results file (" << finishedFile << ") already exists! Job " << jobID << " has already terminated!";
 		std::abort();
 	}
 	if(std::filesystem::exists(resultsFile)) {
-		std::cerr << "Results file (" << resultsFile << ") already exists! Job " << jobIndex << " has already terminated!";
+		std::cerr << "Results file (" << resultsFile << ") already exists! Job " << jobID << " has already terminated!";
 		std::abort();
 	}
 	
@@ -422,11 +422,11 @@ static void saveResults(unsigned int Variables, const std::string& computeFolder
 	// At this point the job is committed and finished!
 }
 
-void processJob(unsigned int Variables, const std::string& computeFolder, int jobIndex, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&, const void*[2])) {
+void processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&, const void*[2])) {
 	std::string computeID = methodName + "_" + getComputeIdentifier();
 	checkValidationFileExists(computeFolder, computeID);
 
-	std::future<std::vector<JobTopInfo>> topsToProcessFuture = std::async(loadJob, Variables, computeFolder, computeID, jobIndex);
+	std::future<std::vector<JobTopInfo>> topsToProcessFuture = std::async(loadJob, Variables, computeFolder, computeID, jobID);
 
 	std::cout << "Starting Computation..." << std::endl;
 	
@@ -453,7 +453,7 @@ void processJob(unsigned int Variables, const std::string& computeFolder, int jo
 
 	addValidationDataToFile(Variables, computeFolder, computeID, pipelineOutput);
 
-	saveResults(Variables, computeFolder, jobIndex, computeID, betaResults);
+	saveResults(Variables, computeFolder, jobID, computeID, betaResults);
 }
 
 
