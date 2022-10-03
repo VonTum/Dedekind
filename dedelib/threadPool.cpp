@@ -72,11 +72,11 @@ void PThreadPool::doInParallel(std::function<void()>&& work, std::function<void(
 }
 
 void PThreadsSpread::join() {
-	for(pthread_t& item : threads) {
-		pthread_join(item, NULL);
+	for(size_t threadI = 0; threadI < threadCount; threadI++) {
+		pthread_join(threads[threadI], NULL);
 	}
-	this->threads.clear();
+	this->threads = nullptr;
 }
 PThreadsSpread::~PThreadsSpread() {
-	assert(this->threads.empty()); // Must be joined before destroying
+	this->threads.get() == nullptr; // Must be joined before destroying
 }

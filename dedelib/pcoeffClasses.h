@@ -154,3 +154,7 @@ struct ResultProcessorOutput {
 	ValidationData* validationBuffer;
 };
 
+struct JobTopInfo {
+	uint32_t top;
+	uint32_t topDual;
+};

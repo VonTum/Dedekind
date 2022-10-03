@@ -40,6 +40,8 @@ public:
 
 	SynchronizedMultiQueue<JobInfo> inputQueue;
 
+	size_t numTops; // Synchronizes on the latch
+
 	PCoeffProcessingContext(unsigned int Variables);
 	~PCoeffProcessingContext();
 

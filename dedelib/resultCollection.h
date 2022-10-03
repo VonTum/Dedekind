@@ -30,6 +30,5 @@ BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff);
 
 ResultProcessorOutput NUMAResultProcessor(
 	unsigned int Variables,
-	PCoeffProcessingContext& context,
-	size_t numResults
+	PCoeffProcessingContext& context
 );

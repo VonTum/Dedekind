@@ -259,11 +259,18 @@ void initializeValidationFiles(unsigned int Variables, std::string computeFolder
 	std::cout << "Finished generating all validation files!\n" << std::flush;
 }
 
-static void writeJobToFile(unsigned int Variables, const std::string& jobFileName, const std::vector<std::uint32_t>& topVector) {
+static void writeJobToFile(unsigned int Variables, const std::string& jobFileName, const std::vector<JobTopInfo>& topVector) {
 	std::ofstream jobFile(jobFileName, std::ios::binary);
 
 	serializeU32(Variables, jobFile);
 	serializePODVector(topVector, jobFile);
+}
+
+static void addJobTop(std::vector<JobTopInfo>& jobVector, NodeIndex newTop, const FlatNode* flatNodes) {
+	JobTopInfo newVal;
+	newVal.top = newTop;
+	newVal.topDual = flatNodes[newTop].dual;
+	jobVector.push_back(std::move(newVal));
 }
 
 void initializeComputeProject(unsigned int Variables, std::string computeFolder, size_t numberOfJobs, size_t topsPerBatch) {
@@ -298,25 +305,27 @@ void initializeComputeProject(unsigned int Variables, std::string computeFolder,
 
 	std::cout << "Generating " << numberOfJobs << " job files of ~" << (numberOfMBFsToProcess / numberOfJobs) << " MBFs per job..." << std::endl;
 
+	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
+
 	size_t currentBatchIndex = 0;
 	for(size_t jobI = 0; jobI < numberOfJobs; jobI++) {
 		size_t jobsLeft = numberOfJobs - jobI;
 		size_t topBatchesLeft = numberOfCompleteBatches - currentBatchIndex;
 		size_t numberOfBatchesInThisJob = topBatchesLeft / jobsLeft;
 
-		std::vector<std::uint32_t> topIndices;
+		std::vector<JobTopInfo> topIndices;
 		topIndices.reserve(numberOfBatchesInThisJob * topsPerBatch);
 		for(size_t i = 0; i < numberOfBatchesInThisJob; i++) {
 			std::uint32_t curBatchStart = completeBatchIndices[currentBatchIndex++] * topsPerBatch;
 			for(size_t j = 0; j < topsPerBatch; j++) {
-				topIndices.push_back(static_cast<std::uint32_t>(curBatchStart + j));
+				addJobTop(topIndices, curBatchStart + j, flatNodes);
 			}
 		}
 		// Add remaining tops to job 0
 		if(jobI == 0) {
 			size_t firstUnbatchedTop = numberOfCompleteBatches * topsPerBatch;
 			for(size_t topI = firstUnbatchedTop; topI < numberOfMBFsToProcess; topI++) {
-				topIndices.push_back(static_cast<std::uint32_t>(topI));
+				addJobTop(topIndices, topI, flatNodes);
 			}
 		}
 
@@ -326,7 +335,7 @@ void initializeComputeProject(unsigned int Variables, std::string computeFolder,
 	std::cout << "Generated " << numberOfJobs << " job files of ~" << (numberOfMBFsToProcess / numberOfJobs) << " MBFs per job." << std::endl;
 }
 
-static std::vector<std::uint32_t> loadJob(unsigned int Variables, const std::string& computeFolder, const std::string& computeID, int jobIndex) {
+static std::vector<JobTopInfo> loadJob(unsigned int Variables, const std::string& computeFolder, const std::string& computeID, int jobIndex) {
 	std::string jobFile = computeFilePath(computeFolder, "jobs", jobIndex, ".job");
 	std::string workingFile = computeFilePath(computeFolder, "working", jobIndex, "_" + computeID + ".job");
 	std::string resultsFile = computeFilePath(computeFolder, "results", jobIndex, "_" + computeID + ".results");
@@ -350,7 +359,7 @@ static std::vector<std::uint32_t> loadJob(unsigned int Variables, const std::str
 		std::abort();
 	}
 
-	std::vector<std::uint32_t> topIndices = deserializePODVector<std::uint32_t>(jobIn);
+	std::vector<JobTopInfo> topIndices = deserializePODVector<JobTopInfo>(jobIn);
 	checkFileDone(jobIn);
 
 	return topIndices;
@@ -417,24 +426,24 @@ void processJob(unsigned int Variables, const std::string& computeFolder, int jo
 	std::string computeID = methodName + "_" + getComputeIdentifier();
 	checkValidationFileExists(computeFolder, computeID);
 
-	std::vector<std::uint32_t> topsToProcess = loadJob(Variables, computeFolder, computeID, jobIndex);
+	std::future<std::vector<JobTopInfo>> topsToProcessFuture = std::async(loadJob, Variables, computeFolder, computeID, jobIndex);
 
 	std::cout << "Starting Computation..." << std::endl;
 	
-	ResultProcessorOutput pipelineOutput = pcoeffPipeline(Variables, topsToProcess, processorFunc);
+	ResultProcessorOutput pipelineOutput = pcoeffPipeline(Variables, topsToProcessFuture, processorFunc);
 	std::vector<BetaResult>& betaResults = pipelineOutput.results;
 
 	
-	if(betaResults.size() != topsToProcess.size()) {
+	/*if(betaResults.size() != topsToProcess.size()) {
 		std::cerr << "This can't happen! Number of tops processed isn't number of inputs tops!" << std::endl;
 		std::abort();
-	}
+	}*/
 
-	std::cout << "Original top indices: " << std::endl;
+	/*std::cout << "Original top indices: " << std::endl;
 	for(unsigned int idx : topsToProcess) {
 		std::cout << idx << ", ";
 	}
-	std::cout << std::endl;
+	std::cout << std::endl;*/
 
 	std::cout << "Result indices: " << std::endl;
 	for(BetaResult& r : betaResults) {

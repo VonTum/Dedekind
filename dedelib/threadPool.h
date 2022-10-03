@@ -114,11 +114,18 @@ public:
 typedef PThreadPool ThreadPool;
 
 class PThreadsSpread {
-	std::vector<pthread_t> threads;
+	std::unique_ptr<pthread_t[]> threads;
+	size_t threadCount;
 public:
 	PThreadsSpread() : threads() {}
+	PThreadsSpread(PThreadsSpread&&) = default;
+	PThreadsSpread& operator=(PThreadsSpread&&) = default;
+	PThreadsSpread(const PThreadsSpread&) = delete;
+	PThreadsSpread& operator=(const PThreadsSpread&) = delete;
 	template<typename T>
-	PThreadsSpread(size_t threadCount, CPUAffinityType affinity, T* datas, void*(*func)(void*), size_t threadsPerData = 1) : threads(threadCount) {
+	PThreadsSpread(size_t threadCount, CPUAffinityType affinity, T* datas, void*(*func)(void*), size_t threadsPerData = 1) : 
+		threads(new pthread_t[threadCount]), 
+		threadCount(threadCount) {
 		for(size_t i = 0; i < threadCount; i++) {
 			size_t selectedDataIdx = i / threadsPerData;
 			T* selectedData = &datas[selectedDataIdx];

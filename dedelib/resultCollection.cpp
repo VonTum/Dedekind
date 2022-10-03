@@ -132,8 +132,7 @@ static void resultprocessingThread(
 
 ResultProcessorOutput NUMAResultProcessor(
 	unsigned int Variables,
-	PCoeffProcessingContext& context,
-	size_t numResults
+	PCoeffProcessingContext& context
 ) {
 	std::cout << "\033[32m[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
 	void* numaClassInfos[2];
@@ -144,7 +143,7 @@ ResultProcessorOutput NUMAResultProcessor(
 	std::cout << "\033[32m[Result Processor] Finished Loading ClassInfos. Result processor started.\033[39m\n" << std::flush;
 
 	ResultProcessorOutput result;
-	result.results.resize(numResults);
+	result.results.resize(context.numTops); // set and synchronized by the bottomBufferCreator latch
 	std::atomic<BetaResult*> finalResultPtr;
 	finalResultPtr.store(&result.results[0]);
 

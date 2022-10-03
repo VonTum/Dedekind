@@ -39,6 +39,21 @@ void shuffleBots(NodeIndex* bots, NodeIndex* botsEnd) {
 	}
 }
 
+std::vector<JobTopInfo> loadAllTops(unsigned int Variables) {
+	std::vector<JobTopInfo> topsToProcess;
+	const FlatNode* allNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
+	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
+		JobTopInfo newTopInfo;
+		newTopInfo.top = i;
+		newTopInfo.topDual = allNodes[i].dual;
+		topsToProcess.push_back(newTopInfo);
+	}
+	//shuffleBots(&topsToProcess[0], (&topsToProcess[0]) + topsToProcess.size());
+	//free(allNodes);
+
+	return topsToProcess;
+}
+
 std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sampleCount) {
 	std::vector<NodeIndex> resultingVector;
 	for(NodeIndex i = 0; i < sampleCount; i++) {
@@ -89,7 +104,7 @@ void loadNUMA_MBFs(unsigned int Variables, const void* mbfs[2]) {
 	mbfs[1] = numaMBFBuffers[1];
 }
 
-ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, std::future<std::vector<JobTopInfo>>& topIndices, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
 	//setThreadName("Main Thread");
 	PCoeffProcessingContext context(Variables);
 
@@ -183,19 +198,17 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<N
 		});
 	}
 
-
-	ResultProcessorOutput results = NUMAResultProcessor(Variables, context, topIndices.size());
+	ResultProcessorOutput results = NUMAResultProcessor(Variables, context);
 
 	inputProducerThread.join();
 	processorThread.join();
 	queueWatchdogThread.join();
 	validatorThreads.join();
 
-	assert(results.results.size() == topIndices.size());
+	//assert(results.results.size() == topIndices.size());
 
 	return results;
 }
-
 
 std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const FlatNode* allMBFNodes, const ClassInfo* allClassInfos, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf) {
 	std::unique_ptr<u128[]> finalResults(new u128[mbfCounts[Variables]]);

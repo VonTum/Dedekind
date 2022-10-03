@@ -148,7 +148,7 @@ void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context, const void* 
 
 void loadNUMA_MBFs(unsigned int Variables, const void* mbfs[2]);
 
-ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::vector<NodeIndex>& topIndices, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = nullptr);
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, std::future<std::vector<JobTopInfo>>& topIndices, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = nullptr);
 
 std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const FlatNode* allMBFNodes, const ClassInfo* allClassInfos, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf);
 
@@ -168,17 +168,14 @@ void computeFinalDedekindNumberFromGatheredResults(const std::vector<BetaSumPair
 	std::cout << "D(" << (Variables + 2) << ") (validator) = " << dedekindNumberFromValidator << std::endl;
 }
 
+std::vector<JobTopInfo> loadAllTops(unsigned int Variables);
+
 template<unsigned int Variables>
 void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = nullptr) {
-	std::vector<NodeIndex> topsToProcess;
-	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
-		topsToProcess.push_back(i);
-	}
-
-	shuffleBots(&topsToProcess[0], (&topsToProcess[0]) + topsToProcess.size());
-
+	std::future<std::vector<JobTopInfo>> allTopsFuture = std::async(loadAllTops, Variables);
+	
 	std::cout << "Starting Computation..." << std::endl;
-	ResultProcessorOutput betaResults = pcoeffPipeline(Variables, topsToProcess, processorFunc, validator);
+	ResultProcessorOutput betaResults = pcoeffPipeline(Variables, allTopsFuture, processorFunc, validator);
 
 	BetaResultCollector collector(Variables);
 	collector.addBetaResults(betaResults.results);

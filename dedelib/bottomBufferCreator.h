@@ -10,11 +10,6 @@
 
 class Latch;
 
-struct JobTopInfo {
-	uint32_t top;
-	uint32_t topDual;
-};
-
 const uint32_t* loadLinks(unsigned int Variables);
 
 std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::vector<NodeIndex>& topIndices);

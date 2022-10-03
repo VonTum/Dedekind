@@ -391,6 +391,7 @@ void runBottomBufferCreator(
 	std::cout << "\033[33m[BottomBufferCreator] Finished loading links. Took " + std::to_string(timeTaken) + "s\033[39m\n" << std::flush;
 
 	std::vector<JobTopInfo> jobTopsVec = jobTops.get();
+	context.numTops = jobTopsVec.size();
 	std::atomic<const JobTopInfo*> jobTopAtomic;
 	jobTopAtomic.store(&jobTopsVec[0]);
 	const JobTopInfo* jobTopEnd = jobTopAtomic.load() + jobTopsVec.size();

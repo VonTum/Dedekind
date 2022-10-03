@@ -358,18 +358,30 @@ int main(int argc, char** argv) {
 		justProcessorInitializationMain();
 		return 0;
 	}
+	auto validatorFunc = NO_VALIDATOR;
+	if(USE_VALIDATOR) {
+		std::cout << "Using Validator!" << std::endl;
+		validatorFunc = threadPoolBufferValidator<7>;
+	}
 	try {
-		std::cout << "Processing tops: ";
-		for(NodeIndex i : topsToProcess) std::cout << i << ',';
-		std::cout << std::endl;
-
+		std::future<std::vector<JobTopInfo>> topsToProcessFuture = std::async([&]() -> std::vector<JobTopInfo> {
+			std::vector<JobTopInfo> jobTopInfos;
+			std::cout << "Processing tops: ";
+			const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(7), mbfCounts[7]);
+			for(NodeIndex i : topsToProcess) {
+				JobTopInfo newInfo;
+				newInfo.top = i;
+				newInfo.topDual = flatNodes[i].dual;
+				jobTopInfos.push_back(newInfo);
+				std::cout << i << ',';
+			}
+			std::cout << std::endl;
+			delete[] flatNodes;
+			return jobTopInfos;
+		});
 		std::cout << "Pipelining computation for " << topsToProcess.size() << " tops..." << std::endl;
-		auto validatorFunc = NO_VALIDATOR;
-		if(USE_VALIDATOR) {
-			std::cout << "Using Validator!" << std::endl;
-			validatorFunc = threadPoolBufferValidator<7>;
-		}
-		ResultProcessorOutput result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_Throughput, validatorFunc);
+		
+		ResultProcessorOutput result = pcoeffPipeline(7, topsToProcessFuture, fpgaProcessor_Throughput, validatorFunc);
 		
 		//ResultProcessorOutput result = pcoeffPipeline(7, topsToProcess, fpgaProcessor_FullySerial);
 		std::cout << "Computation Finished!" << std::endl;
