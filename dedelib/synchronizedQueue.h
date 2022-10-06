@@ -178,7 +178,7 @@ public:
 
 	// Pops a number of elements into the provided buffer. 
 	// May wait forever
-	void popN_wait_forever(T* buffer, size_t numberToPop) {
+	void popN_wait(T* buffer, size_t numberToPop) {
 		std::unique_lock<std::mutex> lock(mutex);
 		while(this->queue.size() < numberToPop) {
 			readyForPop.wait(lock);

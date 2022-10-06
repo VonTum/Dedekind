@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "crossPlatformIntrinsics.h"
+#include "pcoeffValidator.h"
 
 void checkFileDone(std::ifstream& file) {
 	if(file.peek() != EOF) {
@@ -397,7 +398,50 @@ static void addValidationDataToFile(unsigned int Variables, const std::string& c
 	std::cout << "Validation file " + validationFileName + " closed.\n" << std::flush;
 }
 
+struct __attribute((packed)) PackedResultData {
+	uint32_t nodeIndex;
+	u128 brA;
+	u128 brB;
+	uint64_t szDownA;
+	uint64_t szDownB;
+};
+static void serializeBetaResults(const std::vector<BetaResult>& results, std::ofstream& resultsFile) {
+	std::unique_ptr<PackedResultData[]> packedFileData(new PackedResultData[results.size()]);
 
+	for(size_t idx = 0; idx < results.size(); idx++) {
+		const BetaResult& i = results[idx];
+		const BetaSumPair& ip = i.dataForThisTop;
+		PackedResultData& o = packedFileData[idx];
+
+		o.nodeIndex = i.topIndex;
+		o.brA = ip.betaSum.betaSum;
+		o.brB = ip.betaSumDualDedup.betaSum;
+		o.szDownA = ip.betaSum.countedIntervalSizeDown;
+		o.szDownB = ip.betaSumDualDedup.countedIntervalSizeDown;
+	}
+
+	serializeU64(results.size(), resultsFile);
+	resultsFile.write(reinterpret_cast<const char*>(packedFileData.get()), results.size() * sizeof(PackedResultData));
+}
+static std::vector<BetaResult> deserializeBetaResults(std::ifstream& resultsFile) {
+	size_t size = deserializeU64(resultsFile);
+	std::unique_ptr<PackedResultData[]> packedFileData(new PackedResultData[size]);
+	resultsFile.read(reinterpret_cast<char*>(packedFileData.get()), size * sizeof(PackedResultData));
+	std::vector<BetaResult> results(size);
+
+	for(size_t idx = 0; idx < size; idx++) {
+		BetaResult& i = results[idx];
+		BetaSumPair& ip = i.dataForThisTop;
+		const PackedResultData& o = packedFileData[idx];
+
+		i.topIndex = o.nodeIndex;
+		ip.betaSum.betaSum = o.brA;
+		ip.betaSumDualDedup.betaSum = o.brB;
+		ip.betaSum.countedIntervalSizeDown = o.szDownA;
+		ip.betaSumDualDedup.countedIntervalSizeDown = o.szDownB;
+	}
+	return results;
+}
 
 static void saveResults(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& computeID, const std::vector<BetaResult>& betaResults) {
 	std::string workingFile = computeFilePath(computeFolder, "working", jobID, "_" + computeID + ".job");
@@ -416,7 +460,7 @@ static void saveResults(unsigned int Variables, const std::string& computeFolder
 	{
 		std::ofstream resultsOut(resultsFile, std::ios::binary);
 		serializeU32(Variables, resultsOut);
-		serializePODVector(betaResults, resultsOut);
+		serializeBetaResults(betaResults, resultsOut);
 	}
 	std::filesystem::rename(workingFile, finishedFile); // Throws filesystem::filesystem_error on error
 	// At this point the job is committed and finished!
@@ -430,10 +474,11 @@ void processJob(unsigned int Variables, const std::string& computeFolder, const 
 
 	std::cout << "Starting Computation..." << std::endl;
 	
-	ResultProcessorOutput pipelineOutput = pcoeffPipeline(Variables, topsToProcessFuture, processorFunc);
+	ResultProcessorOutput pipelineOutput = pcoeffPipeline(Variables, topsToProcessFuture, processorFunc/*, threadPoolBufferValidator<7>*/);
 	std::vector<BetaResult>& betaResults = pipelineOutput.results;
-
 	
+
+
 	/*if(betaResults.size() != topsToProcess.size()) {
 		std::cerr << "This can't happen! Number of tops processed isn't number of inputs tops!" << std::endl;
 		std::abort();
@@ -445,14 +490,11 @@ void processJob(unsigned int Variables, const std::string& computeFolder, const 
 	}
 	std::cout << std::endl;*/
 
-	std::cout << "Result indices: " << std::endl;
-	for(BetaResult& r : betaResults) {
-		std::cout << r.topIndex << ", ";
-	}
-	std::cout << std::endl;
+	std::cout << "Saving " << betaResults.size() << " results\n" << std::flush;
 
 	addValidationDataToFile(Variables, computeFolder, computeID, pipelineOutput);
 
+	std::sort(betaResults.begin(), betaResults.end(), [](BetaResult a, BetaResult b) -> bool {return a.topIndex < b.topIndex;});
 	saveResults(Variables, computeFolder, jobID, computeID, betaResults);
 }
 
@@ -466,7 +508,7 @@ std::vector<BetaResult> readResultsFile(unsigned int Variables, const std::files
 		std::abort();
 	}
 
-	std::vector<BetaResult> result = deserializePODVector<BetaResult>(resultFileIn);
+	std::vector<BetaResult> result = deserializeBetaResults(resultFileIn);
 	checkFileDone(resultFileIn);
 	return result;
 }

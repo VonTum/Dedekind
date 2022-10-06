@@ -17,14 +17,15 @@
 										each of the inputs. 
 */
 
-constexpr size_t NUM_INPUT_BUFFERS_PER_NODE = 40; // 320 buffers in total
-constexpr size_t NUM_RESULT_BUFFERS_PER_NODE = 15; // 120 buffers in total
+constexpr int NUMA_SLICE_COUNT = 2;
+constexpr size_t NUM_INPUT_BUFFERS_PER_NODE = 160; // 320 buffers in total
+constexpr size_t NUM_RESULT_BUFFERS_PER_NODE = 50; // 120 buffers in total
 
 class PCoeffProcessingContextEighth {
 public:
 	// Return queues are implemented as stacks, to try and reuse recently retired buffers more often, to improve cache coherency. 
-	SynchronizedStack<NodeIndex*> inputBufferAlloc;
-	SynchronizedStack<ProcessedPCoeffSum*> resultBufferAlloc;
+	SynchronizedQueue<NodeIndex*> inputBufferAlloc;
+	SynchronizedQueue<ProcessedPCoeffSum*> resultBufferAlloc;
 
 	SynchronizedQueue<OutputBuffer> outputQueue;
 	SynchronizedQueue<OutputBuffer> validationQueue;
@@ -34,9 +35,9 @@ public:
 
 class PCoeffProcessingContext {
 public:
-	NUMAArray<NodeIndex> numaInputMemory[8];
-	NUMAArray<ProcessedPCoeffSum> numaResultMemory[8];
-	unique_numa_ptr<PCoeffProcessingContextEighth> numaQueues[8];
+	NUMAArray<NodeIndex> numaInputMemory[NUMA_SLICE_COUNT];
+	NUMAArray<ProcessedPCoeffSum> numaResultMemory[NUMA_SLICE_COUNT];
+	unique_numa_ptr<PCoeffProcessingContextEighth> numaQueues[NUMA_SLICE_COUNT];
 
 	SynchronizedMultiQueue<JobInfo> inputQueue;
 

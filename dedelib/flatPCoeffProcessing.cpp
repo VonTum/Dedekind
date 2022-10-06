@@ -9,7 +9,7 @@
 constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 16;
 constexpr size_t NUM_RESULT_VALIDATORS = 16;
 constexpr int MAX_VALIDATOR_COUNT = 16;
-constexpr size_t NUM_VALIDATOR_THREADS_PER_COMPLEX = 5;
+constexpr size_t NUM_VALIDATOR_THREADS_PER_COMPLEX = 7;
 
 
 uint8_t reverseBits(uint8_t index) {
@@ -131,7 +131,7 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, std::future<std::ve
 		setThreadName("Processor");
 		try {
 			processorFunc(context, mbfs);
-			for(int numaNode = 0; numaNode < 8; numaNode++) {
+			for(int numaNode = 0; numaNode < NUMA_SLICE_COUNT; numaNode++) {
 				context.numaQueues[numaNode]->outputQueue.close();
 			}
 		} catch(const char* errText) {
@@ -147,7 +147,7 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, std::future<std::ve
 		setThreadName("Queue Watchdog");
 		while(!context.inputQueue.isClosed) {
 			std::string totalString = "\033[34m[Queues]:";
-			for(int numaNode = 0; numaNode < 8; numaNode++) {
+			for(int numaNode = 0; numaNode < NUMA_SLICE_COUNT; numaNode++) {
 				PCoeffProcessingContextEighth& subContext = *context.numaQueues[numaNode];
 
 				totalString += "\n" + std::to_string(numaNode)
@@ -170,11 +170,11 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, std::future<std::ve
 		const void* mbfs;
 		int numaNode;
 	};
-	ValidatorThreadData validatorDatas[8];
-	for(int i = 0; i < 8; i++) {
+	ValidatorThreadData validatorDatas[NUMA_SLICE_COUNT];
+	for(int i = 0; i < NUMA_SLICE_COUNT; i++) {
 		validatorDatas[i].validator = validator;
 		validatorDatas[i].context = context.numaQueues[i].ptr;
-		validatorDatas[i].mbfs = mbfs[i / 4];
+		validatorDatas[i].mbfs = mbfs[i];
 		validatorDatas[i].numaNode = i;
 	}
 
@@ -186,10 +186,10 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, std::future<std::ve
 			validatorThread(validatorData->validator, *validatorData->context, validatorData->mbfs);
 			pthread_exit(nullptr);
 			return nullptr;
-		}, 2);
+		}, 8);
 	} else {
 		std::cout << "***** No validation selected! ******\n" << std::endl;
-		validatorThreads = PThreadsSpread(8, CPUAffinityType::NUMA_DOMAIN, validatorDatas, [](void* data) -> void* {
+		validatorThreads = PThreadsSpread(2, CPUAffinityType::SOCKET, validatorDatas, [](void* data) -> void* {
 			ValidatorThreadData* validatorData = (ValidatorThreadData*) data;
 			setThreadName(("NoValidator " + std::to_string(validatorData->numaNode)).c_str());
 			noValidatorThread(*validatorData->context);

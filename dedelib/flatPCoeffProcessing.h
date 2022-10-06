@@ -39,7 +39,7 @@ void cpuProcessor_SingleThread_MBF(PCoeffProcessingContext& context, const Monot
 
 		//shuffleBots(job.bufStart + 1, job.bufEnd);
 		//std::cout << "Grabbed job of size " << job.bufferSize() << '\n' << std::flush;
-		ProcessedPCoeffSum* countConnectedSumBuf = subContext.resultBufferAlloc.pop_wait();
+		ProcessedPCoeffSum* countConnectedSumBuf = subContext.resultBufferAlloc.pop_wait().value();
 		//std::cout << "Grabbed output buffer.\n" << std::flush;
 		processBetasCPU_SingleThread(mbfs, job, countConnectedSumBuf);
 		OutputBuffer result;
@@ -68,7 +68,7 @@ void cpuProcessor_FineMultiThread_MBF(PCoeffProcessingContext& context, const Mo
 		JobInfo& job = jobOpt.value();
 		PCoeffProcessingContextEighth& subContext = context.getNUMAForBuf(job.bufStart);
 
-		ProcessedPCoeffSum* countConnectedSumBuf = subContext.resultBufferAlloc.pop_wait();
+		ProcessedPCoeffSum* countConnectedSumBuf = subContext.resultBufferAlloc.pop_wait().value();
 		//shuffleBots(job.bufStart + 1, job.bufEnd);
 		processBetasCPU_MultiThread(mbfs, job, countConnectedSumBuf, pool);
 		OutputBuffer result;
@@ -88,35 +88,35 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void*
 	struct ProcessorData {
 		PCoeffProcessingContext* context;
 		const Monotonic<Variables>* mbfs;
-		int numaNode;
+		int socket;
 	};
 
-	ProcessorData procData[8];
-	for(int i = 0; i < 8; i++) {
+	ProcessorData procData[NUMA_SLICE_COUNT];
+	for(int i = 0; i < NUMA_SLICE_COUNT; i++) {
 		procData[i].context = &context;
-		procData[i].mbfs = static_cast<const Monotonic<Variables>*>(mbfs[i / 4]);
-		procData[i].numaNode = i;
+		procData[i].mbfs = static_cast<const Monotonic<Variables>*>(mbfs[i]);
+		procData[i].socket = i;
 	}
 
 	auto processorFunc = [](void* voidData) -> void* {
 		ProcessorData* procData = (ProcessorData*) voidData;
 
-		setThreadName(("Processor " + std::to_string(procData->numaNode)).c_str());
+		setThreadName(("Processor " + std::to_string(procData->socket)).c_str());
 		ThreadPool threadPool(CORES_PER_COMPLEX);
 
 		PCoeffProcessingContext& context = *procData->context;
 
-		int numaNode = procData->numaNode;
-		PCoeffProcessingContextEighth& numaQueue = *context.numaQueues[numaNode];
+		int socket = procData->socket;
+		PCoeffProcessingContextEighth& numaQueue = *context.numaQueues[socket];
 
 		constexpr size_t BATCHER_SIZE = Variables < 7 ? 8 : 1;
 		PopBatcher<JobInfo, BATCHER_SIZE> batcher;
 		auto batchPopFunc = [&](JobInfo* buf) -> size_t {
-			return context.inputQueue.popN_specific_wait(buf, BATCHER_SIZE, numaNode);
+			return context.inputQueue.popN_specific_wait(buf, BATCHER_SIZE, socket);
 		};
 		for(std::optional<JobInfo> jobOpt; (jobOpt = batcher.pop_wait(batchPopFunc)).has_value(); ) {
 			JobInfo& job = jobOpt.value();
-			ProcessedPCoeffSum* countConnectedSumBuf = numaQueue.resultBufferAlloc.pop_wait();
+			ProcessedPCoeffSum* countConnectedSumBuf = numaQueue.resultBufferAlloc.pop_wait().value();
 			//shuffleBots(job.bufStart + 1, job.bufEnd);
 			processBetasCPU_MultiThread(procData->mbfs, job, countConnectedSumBuf, threadPool);
 			OutputBuffer result;
@@ -129,7 +129,7 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void*
 		return nullptr;
 	};
 
-	PThreadsSpread coreComplexThreads(CORE_COMPLEX_COUNT, CPUAffinityType::COMPLEX, procData, processorFunc, 2);
+	PThreadsSpread coreComplexThreads(CORE_COMPLEX_COUNT, CPUAffinityType::COMPLEX, procData, processorFunc, 8);
 	coreComplexThreads.join();
 }
 

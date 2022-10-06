@@ -109,6 +109,10 @@ public:
 
 	// this work function may only return once all work has been completed
 	void doInParallel(std::function<void()>&& work, std::function<void()>&& mainThreadFunc);
+
+	/*void setPriority(int priority);
+	void setPriorityMin();
+	void setPriorityMax();*/
 };
 
 typedef PThreadPool ThreadPool;

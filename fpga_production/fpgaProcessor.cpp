@@ -135,7 +135,7 @@ cl_event PCoeffKernel::launchKernel(cl_mem input, cl_mem output, cl_uint bufferS
 	cl_event outEvent;
 	status = clEnqueueNDRangeKernel(this->queue, this->kernel, 1, NULL, &gSize, &lSize, numEventsInWaitList, eventWaitlist, &outEvent);
 	checkError(status, "Failed to launch kernel");
-	std::cout << "Kernel launched for size " << bufferSize << std::endl;
+	//std::cout << "Kernel launched for size " << bufferSize << std::endl;
 	return outEvent;
 }
 void PCoeffKernel::finish() {
@@ -164,6 +164,7 @@ void dryRunKernels(PCoeffKernel* kernels, size_t numKernels) {
 	for(size_t i = 0; i < numKernels; i++) {
 		PCoeffKernel& k = kernels[i];
 		cl_event writeDone = k.writeBuffer(k.inputMems[0], dryBuf, dryBufSize);
+		std::cout << "Dry run of size " + std::to_string(dryBufSize) + "\n" << std::flush;
 		k.launchKernel(k.inputMems[0], k.resultMems[0], dryBufSize, 1, &writeDone);
 	}
 

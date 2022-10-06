@@ -30,25 +30,32 @@ void setStackToBufferParts(SynchronizedStack<T*>& target, T* bufMemory, size_t p
 	}
 	target.sz = numParts;
 }
+template<typename T>
+void setQueueToBufferParts(SynchronizedQueue<T*>& target, T* bufMemory, size_t partSize, size_t numParts) {
+	RingQueue<T*>& q = target.get();
+	for(size_t i = 0; i < numParts; i++) {
+		q.push(bufMemory + i * partSize);
+	}
+}
 
-PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables) : inputQueue(8, NUM_INPUT_BUFFERS_PER_NODE) {
+PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables) : inputQueue(NUMA_SLICE_COUNT, NUM_INPUT_BUFFERS_PER_NODE) {
 	std::cout 
-		<< "Create PCoeffProcessingContext in 8 parts with " 
+		<< "Create PCoeffProcessingContext in 2 parts with " 
 		<< Variables 
 		<< " Variables, " 
-		<< NUM_INPUT_BUFFERS_PER_NODE * 8
-		<< " buffers / NUMA node, and "
-		<< NUM_RESULT_BUFFERS_PER_NODE * 8
+		<< NUM_INPUT_BUFFERS_PER_NODE
+		<< " buffers / socket, and "
+		<< NUM_RESULT_BUFFERS_PER_NODE
 		<< " result buffers\n" << std::flush;
 
 	size_t alignedBufSize = getAlignedBufferSize(Variables);
-	for(int numaNode = 0; numaNode < 8; numaNode++) {
-		this->numaInputMemory[numaNode] = NUMAArray<NodeIndex>::alloc_onnode(alignedBufSize * NUM_INPUT_BUFFERS_PER_NODE, numaNode);
-		this->numaResultMemory[numaNode] = NUMAArray<ProcessedPCoeffSum>::alloc_onnode(alignedBufSize * NUM_RESULT_BUFFERS_PER_NODE, numaNode);
-		this->numaQueues[numaNode] = unique_numa_ptr<PCoeffProcessingContextEighth>::alloc_onnode(numaNode);
+	for(int socketI = 0; socketI < NUMA_SLICE_COUNT; socketI++) {
+		this->numaInputMemory[socketI] = NUMAArray<NodeIndex>::alloc_onsocket(alignedBufSize * NUM_INPUT_BUFFERS_PER_NODE, socketI);
+		this->numaResultMemory[socketI] = NUMAArray<ProcessedPCoeffSum>::alloc_onsocket(alignedBufSize * NUM_RESULT_BUFFERS_PER_NODE, socketI);
+		this->numaQueues[socketI] = unique_numa_ptr<PCoeffProcessingContextEighth>::alloc_onnode(socketI * 4 + 3); // Prefer nodes 3 and 7 because that's where the FPGAs are
 
-		setStackToBufferParts(this->numaQueues[numaNode]->inputBufferAlloc, this->numaInputMemory[numaNode].buf, alignedBufSize, NUM_INPUT_BUFFERS_PER_NODE);
-		setStackToBufferParts(this->numaQueues[numaNode]->resultBufferAlloc, this->numaResultMemory[numaNode].buf, alignedBufSize, NUM_RESULT_BUFFERS_PER_NODE);
+		setQueueToBufferParts(this->numaQueues[socketI]->inputBufferAlloc, this->numaInputMemory[socketI].buf, alignedBufSize, NUM_INPUT_BUFFERS_PER_NODE);
+		setQueueToBufferParts(this->numaQueues[socketI]->resultBufferAlloc, this->numaResultMemory[socketI].buf, alignedBufSize, NUM_RESULT_BUFFERS_PER_NODE);
 	}
 
 	std::cout << "Finished PCoeffProcessingContext\n" << std::flush;

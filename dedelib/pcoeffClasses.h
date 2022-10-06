@@ -87,7 +87,6 @@ inline uint64_t getPCoeffCount(ProcessedPCoeffSum input) {
 	return (input & 0x1FFF000000000000) >> 48;
 }
 
-
 struct BetaSum {
 	u128 betaSum;
 	
@@ -125,6 +124,7 @@ struct BetaSumPair {
 	BetaSum getBetaSumPlusValidationTerm(unsigned int Variables, BetaSum validationTerm) const;
 };
 
+// Must be packed, to ensure that results file does not contain random padding data
 struct BetaResult {
 	BetaSumPair dataForThisTop;
 	NodeIndex topIndex;

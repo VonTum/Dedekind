@@ -401,31 +401,30 @@ void runBottomBufferCreator(
 		std::atomic<const JobTopInfo*>* curStartingJobTop;
 		const JobTopInfo* jobTopsEnd;
 		PCoeffProcessingContext* context;
-		size_t numaNode;
+		size_t socket;
 		std::atomic<const uint32_t*>* links;
 	};
 
 	auto threadFunc = [](void* data) -> void* {
 		ThreadInfo* ti = (ThreadInfo*) data;
-		setThreadName(("InputProducer " + std::to_string(ti->numaNode)).c_str());
-		runBottomBufferCreatorNoAlloc(ti->Variables, *ti->curStartingJobTop, ti->jobTopsEnd, *ti->context, ti->numaNode, *ti->links);
+		setThreadName(("InputProducer " + std::to_string(ti->socket)).c_str());
+		runBottomBufferCreatorNoAlloc(ti->Variables, *ti->curStartingJobTop, ti->jobTopsEnd, *ti->context, ti->socket, *ti->links);
 		pthread_exit(NULL);
 		return NULL;
 	};
 
-	ThreadInfo threadDatas[8];
-	for(int numaNode = 0; numaNode < 8; numaNode++) {
-		int socket = numaNode / 4;
-		ThreadInfo& ti = threadDatas[numaNode];
+	ThreadInfo threadDatas[NUMA_SLICE_COUNT];
+	for(int socket = 0; socket < NUMA_SLICE_COUNT; socket++) {
+		ThreadInfo& ti = threadDatas[socket];
 		ti.Variables = Variables;
 		ti.curStartingJobTop = &jobTopAtomic;
 		ti.jobTopsEnd = jobTopEnd;
 		ti.context = &context;
-		ti.numaNode = numaNode;
+		ti.socket = socket;
 		ti.links = &links[socket];
 	}
 
-	PThreadsSpread threads(numberOfThreads, CPUAffinityType::COMPLEX, threadDatas, threadFunc, 2);
+	PThreadsSpread threads(numberOfThreads, CPUAffinityType::COMPLEX, threadDatas, threadFunc, 8);
 
 	if(hasStarted != nullptr) {
 		hasStarted->notify();

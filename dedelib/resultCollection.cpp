@@ -163,7 +163,7 @@ ResultProcessorOutput NUMAResultProcessor(
 	ThreadData datas[8];
 	for(int i = 0; i < 8; i++) {
 		datas[i].validationBufferSize = validationBufferSize;
-		datas[i].context = context.numaQueues[i].ptr;
+		datas[i].context = context.numaQueues[i / 4].ptr;
 		datas[i].mbfClassInfos = static_cast<const ClassInfo*>(numaClassInfos[i / 4]);
 		datas[i].finalResultPtr = &finalResultPtr;
 		datas[i].validationBuffer = static_cast<ValidationData*>(validationBuffers[i]);

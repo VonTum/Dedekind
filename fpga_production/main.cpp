@@ -60,7 +60,7 @@ static bool USE_VALIDATOR = false;
 static double ACTIVITY_MULTIPLIER = 10*60.0;
 static bool THROUGHPUT_MODE = false;
 
-static std::string kernelFile;
+static std::string kernelFile = "dedekindAccelerator";
 
 
 // inclusive, simimar to verilog. getBitRange(v, 11, 3) == v[11:3]
@@ -138,7 +138,7 @@ void pushJobIntoKernel(FPGAData* data) {
 
 	PCoeffProcessingContextEighth& numaQueue = data->queues->getNUMAForBuf(job.bufStart);
 	//std::cout << "Grabbing output buffer..." << std::endl;
-	ProcessedPCoeffSum* countConnectedSumBuf = numaQueue.resultBufferAlloc.pop_wait();
+	ProcessedPCoeffSum* countConnectedSumBuf = numaQueue.resultBufferAlloc.pop_wait().value();
 	//std::cout << "Grabbed output buffer" << std::endl;
 	
 	data->outBuf = countConnectedSumBuf;
@@ -235,15 +235,17 @@ void fpgaProcessor_Throughput(PCoeffProcessingContext& queues, const void* mbfs[
 
 
 #include "../dedelib/supercomputerJobs.h"
+#include "../dedelib/timeTracker.h"
 
 // Supercomputing entry point.
 int main(int argc, char** argv) {
+	TimeTracker timer("FPGA computation ");
 	if(argc != 3) {
 		std::cerr << "Usage: " << argv[0] << " <computeFolder> <jobID>\n" << std::flush;
 		return -1;
 	}
 	std::string computeFolder(argv[1]);
-	std::string jobID(argv[1]);
+	std::string jobID(argv[2]);
 
 	processJob(7, computeFolder, jobID, "fpga", fpgaProcessor_Throughput);
 	return 0;
@@ -270,8 +272,6 @@ static std::vector<NodeIndex> parseArgs(int argc, char** argv) {
 	configure(parsed); // Configures memory mapping, and other settings
 	
 	Options options(argc, argv);
-
-	kernelFile = "dedekindAccelerator";
 
 	if(options.has("kernel")) {
 		kernelFile = options.get<std::string>("kernel");

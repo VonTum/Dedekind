@@ -43,6 +43,18 @@ PThreadPool::~PThreadPool() {
 	}
 }
 
+/*void PThreadPool::setPriority(int priority) {
+	for(size_t threadI = 0; threadI < numThreads - 1; threadI++) {
+		pthread_setschedprio(threads[threadI], priority);
+	}
+}
+void PThreadPool::setPriorityMin() {
+	setPriority(sched_get_priority_min())
+}
+void PThreadPool::setPriorityMax() {
+
+}*/
+
 // this work function may only return once all work has been completed
 void PThreadPool::doInParallel(std::function<void()>&& work) {
 	funcToRun = std::move(work);
@@ -77,6 +89,7 @@ void PThreadsSpread::join() {
 	}
 	this->threads = nullptr;
 }
+
 PThreadsSpread::~PThreadsSpread() {
 	this->threads.get() == nullptr; // Must be joined before destroying
 }
