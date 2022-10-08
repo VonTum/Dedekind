@@ -13,21 +13,24 @@ template<unsigned int Variables>
 static void processSuperComputingJob_ST(const std::vector<std::string>& args) {
 	std::string projectFolderPath = args[0];
 	std::string jobID = args[1];
-	processJob(Variables, projectFolderPath, jobID, "cpuST", cpuProcessor_SingleThread<Variables>);
+	bool validate = args.size() >= 3;
+	processJob(Variables, projectFolderPath, jobID, "cpuST", cpuProcessor_SingleThread<Variables>, validate ? threadPoolBufferValidator<Variables> : nullptr);
 }
 
 template<unsigned int Variables>
 static void processSuperComputingJob_FMT(const std::vector<std::string>& args) {
 	std::string projectFolderPath = args[0];
 	std::string jobID = args[1];
-	processJob(Variables, projectFolderPath, jobID, "cpuFMT", cpuProcessor_FineMultiThread<Variables>);
+	bool validate = args.size() >= 3;
+	processJob(Variables, projectFolderPath, jobID, "cpuFMT", cpuProcessor_FineMultiThread<Variables>, validate ? threadPoolBufferValidator<Variables> : nullptr);
 }
 
 template<unsigned int Variables>
 static void processSuperComputingJob_SMT(const std::vector<std::string>& args) {
 	std::string projectFolderPath = args[0];
 	std::string jobID = args[1];
-	processJob(Variables, projectFolderPath, jobID, "cpuSMT", cpuProcessor_SuperMultiThread<Variables>);
+	bool validate = args.size() >= 3;
+	processJob(Variables, projectFolderPath, jobID, "cpuSMT", cpuProcessor_SuperMultiThread<Variables>, validate ? threadPoolBufferValidator<Variables> : nullptr);
 }
 
 template<unsigned int Variables>

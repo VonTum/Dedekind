@@ -117,8 +117,14 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void*
 		for(std::optional<JobInfo> jobOpt; (jobOpt = batcher.pop_wait(batchPopFunc)).has_value(); ) {
 			JobInfo& job = jobOpt.value();
 			ProcessedPCoeffSum* countConnectedSumBuf = numaQueue.resultBufferAlloc.pop_wait().value();
+			auto startTime = std::chrono::high_resolution_clock::now();
 			//shuffleBots(job.bufStart + 1, job.bufEnd);
 			processBetasCPU_MultiThread(procData->mbfs, job, countConnectedSumBuf, threadPool);
+			std::chrono::nanoseconds deltaTime = std::chrono::high_resolution_clock::now() - startTime;
+			std::cout << 
+				"Processed job " + std::to_string(job.getTop())
+				 + " of " + std::to_string(job.getNumberOfBottoms() / 1000000.0)
+				 + "M bottoms in " + std::to_string(std::chrono::duration_cast<std::chrono::seconds>(deltaTime).count()) + "s\n" << std::flush;
 			OutputBuffer result;
 			result.originalInputData = job;
 			result.outputBuf = countConnectedSumBuf;

@@ -8,8 +8,57 @@
 #include <limits.h>
 #include <string.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include "crossPlatformIntrinsics.h"
-#include "pcoeffValidator.h"
+
+// Utilities for easily working with syscall open
+static void check(int retVal, const char* err) {
+	if(retVal != 0) {
+		perror(err);
+		std::abort();
+	}
+}
+
+static void checkRead(int fd, void* outBuf, size_t readSize, const char* err) {
+	ssize_t readCount = read(fd, outBuf, readSize);
+	if(readCount != readSize) {
+		perror(err);
+		std::abort();
+	}
+}
+
+static void checkWrite(int fd, const void* buf, size_t writeSize, const char* err) {
+	ssize_t writeCount = write(fd, buf, writeSize);
+	if(writeCount != writeSize) {
+		perror(err);
+		std::abort();
+	}
+}
+
+static int checkOpen(const char* file, int flags, const char* err) {
+	int fd = open(file, flags);
+	//std::cout << "Opening file " << file << " with flags=" << flags << ": fd=" << fd << std::endl;
+	if(fd == -1) {
+		perror(err);
+		std::abort();
+	}
+	return fd;
+}
+
+static int checkCreate(const char* file) {
+	int fd = open(file, O_WRONLY|O_CREAT, 0600); // read and write permission
+	//std::cout << "Creating file " << file << ": fd=" << fd << std::endl;
+	if(fd == -1) {
+		std::string err = std::string("Failed to create file ") + file + "\n";
+		perror(err.c_str());
+		std::abort();
+	}
+	return fd;
+}
+
 
 void checkFileDone(std::ifstream& file) {
 	if(file.peek() != EOF) {
@@ -47,60 +96,38 @@ static std::string getValidationFilePath(std::string computeFolder, const std::s
 
 
 
-size_t getValidationBufByteSize(unsigned int Variables) {
-	return sizeof(ValidationData) * VALIDATION_BUFFER_SIZE(Variables);
-}
 size_t getTopBitsetByteSize(unsigned int Variables) {
 	return (mbfCounts[Variables] + 7) / 8;
 }
 
 struct ValidationFileData{
 	unsigned int Variables;
-	std::unique_ptr<ValidationData[]> savedValidationBuffer;
-	std::unique_ptr<uint8_t[]> savedTopsBitset;
+	std::unique_ptr<char[]> memory;
+	ValidationData* savedValidationBuffer;
+	uint8_t* savedTopsBitset;
 
 	ValidationFileData() = default;
 	ValidationFileData(unsigned int Variables) : 
 		Variables(Variables),
-		savedValidationBuffer(new ValidationData[VALIDATION_BUFFER_SIZE(Variables)]),
-		savedTopsBitset(new uint8_t[getTopBitsetByteSize(Variables)]) {}
+		memory(new char[VALIDATION_BUFFER_SIZE(Variables)*sizeof(ValidationData) + getTopBitsetByteSize(Variables)]) {
+			
+		savedValidationBuffer = reinterpret_cast<ValidationData*>(this->memory.get());
+		savedTopsBitset = reinterpret_cast<uint8_t*>(savedValidationBuffer + VALIDATION_BUFFER_SIZE(Variables));
+	}
+
+	size_t getTotalMemorySize() const {
+		return sizeof(ValidationData) * VALIDATION_BUFFER_SIZE(Variables) + getTopBitsetByteSize(Variables);
+	}
 
 	void initializeZero() {
-		memset(savedValidationBuffer.get(), 0, getValidationBufByteSize(Variables));
-		memset(savedTopsBitset.get(), 0, getTopBitsetByteSize(Variables));
+		memset(memory.get(), 0, getTotalMemorySize());
 	}
 
-	void readFromFile(FILE* validationFile) {
-		size_t bufferSizeInBytes = getValidationBufByteSize(Variables);
-		size_t savedTopsBitsetBytes = getTopBitsetByteSize(Variables);
-		size_t allValidationRead = fread(static_cast<void*>(savedValidationBuffer.get()), 1, bufferSizeInBytes, validationFile);
-		if(allValidationRead != bufferSizeInBytes) {
-			perror("ERROR");
-			std::cerr << "Validation file is too short in validation part! Aborting!\n" << std::flush;
-			std::abort();
-		}
-		size_t allBitsetRead = fread(static_cast<void*>(savedTopsBitset.get()), 1, savedTopsBitsetBytes, validationFile);
-		if(allBitsetRead != savedTopsBitsetBytes) {
-			perror("ERROR");
-			std::cerr << "Validation file is too short in top bitset part! Aborting!\n" << std::flush;
-			std::abort();
-		}
+	void readFromFile(int validationFD) {
+		checkRead(validationFD, memory.get(), getTotalMemorySize(), "Validation file is too short! ");
 	}
-	void writeToFile(FILE* validationFile) const {
-		size_t bufferSizeInBytes = getValidationBufByteSize(Variables);
-		size_t savedTopsBitsetBytes = getTopBitsetByteSize(Variables);
-		size_t allValidationWritten = fwrite(static_cast<const void*>(savedValidationBuffer.get()), 1, bufferSizeInBytes, validationFile);
-		if(allValidationWritten != bufferSizeInBytes) {
-			perror("ERROR");
-			std::cerr << "Could not write full validation for some reason! Aborting!\n" << std::flush;
-			std::abort();
-		}
-		size_t allBitsetWritten = fwrite(static_cast<const void*>(savedTopsBitset.get()), 1, savedTopsBitsetBytes, validationFile);
-		if(allBitsetWritten != savedTopsBitsetBytes) {
-			perror("ERROR");
-			std::cerr << "Could not write full bitset for some reason! Aborting!\n" << std::flush;
-			std::abort();
-		}
+	void writeToFile(int validationFD) const {
+		checkWrite(validationFD, memory.get(), getTotalMemorySize(), "Could not write full validation file for some reason! ");
 	}
 
 	bool isTopPresent(NodeIndex topIdx) const {
@@ -193,10 +220,13 @@ struct ValidationFileData{
 		return totalTopsInOther;
 	}
 
-	std::unique_ptr<ValidationData[]> finalize() && {
+	std::unique_ptr<ValidationData[]> finalize() {
 		this->checkHasAllTops();
 
-		return std::move(this->savedValidationBuffer);
+		std::unique_ptr<ValidationData[]> result(new ValidationData[VALIDATION_BUFFER_SIZE(Variables)]);
+		memcpy(result.get(), this->savedValidationBuffer, VALIDATION_BUFFER_SIZE(Variables) * sizeof(ValidationData));
+
+		return result;
 	}
 };
 
@@ -221,15 +251,12 @@ static void initializeValidationFile(const ValidationFileData& initialFileData, 
 		std::cerr << "Validation file already exists! Abort!\n" << std::flush;
 		std::abort();
 	}
-	FILE* validationFile = fopen(validationFileName.c_str(), "wb");
+	int validationFD = checkCreate(validationFileName.c_str());
 
-	initialFileData.writeToFile(validationFile);
+	initialFileData.writeToFile(validationFD);
 
-	if(fclose(validationFile) != 0) {
-		perror("ERROR");
-		std::cerr << "Failed to close Validation File! Abort!\n" << std::flush;
-		std::abort();
-	}
+	fsync(validationFD);
+	check(close(validationFD), "Failed to close Validation File! ");
 }
 
 void initializeValidationFiles(unsigned int Variables, std::string computeFolder, const std::vector<std::string>& computeIDs) {
@@ -372,13 +399,11 @@ static void addValidationDataToFile(unsigned int Variables, const std::string& c
 
 	ValidationFileData fileData(Variables);
 
-	FILE* validationFile = fopen(validationFileName.c_str(), "rb+");
-	if(validationFile == NULL) {
-		std::cerr << "Validation file " + validationFileName + " does not exist, yet it existed at the start! Aborting!\n" << std::flush;
-		std::abort();
-	}
+	std::cout << "Opening Validation file " + validationFileName + "\n" << std::flush;
+	int validationFD = checkOpen(validationFileName.c_str(), O_RDWR, "Validation file does not exist, yet it existed at the start! ");
+
 	std::cout << "Reading Validation file " + validationFileName + "\n" << std::flush;
-	fileData.readFromFile(validationFile);
+	fileData.readFromFile(validationFD);
 	std::cout << "Validation file " + validationFileName + " read properly\nAdding new information to buffer...\n" << std::flush;
 
 	for(BetaResult result : computationResults.results) {
@@ -388,24 +413,28 @@ static void addValidationDataToFile(unsigned int Variables, const std::string& c
 		fileData.savedValidationBuffer[i].dualBetaSum += computationResults.validationBuffer[i].dualBetaSum;
 	}
 
-	rewind(validationFile); // reset to start of file
+	check(lseek64(validationFD, 0, SEEK_SET), "Error resetting to start of validation file! "); // reset to start of file
 
 	std::cout << "Buffer updated\nWriting Validation file " + validationFileName + "\n" << std::flush;
-	fileData.writeToFile(validationFile);
+	fileData.writeToFile(validationFD);
 	std::cout << "Validation file " + validationFileName + " written properly\n" << std::flush;
 
-	fclose(validationFile);
+	check(fsync(validationFD), "Failed to fsync validation file! ");
+	check(close(validationFD), "Failed to close validation file! ");
 	std::cout << "Validation file " + validationFileName + " closed.\n" << std::flush;
 }
 
-struct __attribute((packed)) PackedResultData {
+struct PackedResultData {
 	uint32_t nodeIndex;
+	uint32_t padding4 = 0xFFFFFFFF;
+	uint64_t padding8 = 0xFFFFFFFFFFFFFFFF;
 	u128 brA;
 	u128 brB;
 	uint64_t szDownA;
 	uint64_t szDownB;
 };
-static void serializeBetaResults(const std::vector<BetaResult>& results, std::ofstream& resultsFile) {
+
+static std::unique_ptr<PackedResultData[]> packResults(const std::vector<BetaResult>& results) {
 	std::unique_ptr<PackedResultData[]> packedFileData(new PackedResultData[results.size()]);
 
 	for(size_t idx = 0; idx < results.size(); idx++) {
@@ -420,16 +449,13 @@ static void serializeBetaResults(const std::vector<BetaResult>& results, std::of
 		o.szDownB = ip.betaSumDualDedup.countedIntervalSizeDown;
 	}
 
-	serializeU64(results.size(), resultsFile);
-	resultsFile.write(reinterpret_cast<const char*>(packedFileData.get()), results.size() * sizeof(PackedResultData));
+	return packedFileData;
 }
-static std::vector<BetaResult> deserializeBetaResults(std::ifstream& resultsFile) {
-	size_t size = deserializeU64(resultsFile);
-	std::unique_ptr<PackedResultData[]> packedFileData(new PackedResultData[size]);
-	resultsFile.read(reinterpret_cast<char*>(packedFileData.get()), size * sizeof(PackedResultData));
-	std::vector<BetaResult> results(size);
 
-	for(size_t idx = 0; idx < size; idx++) {
+static std::vector<BetaResult> unpackResults(const PackedResultData* packedFileData, size_t resultCount) {
+	std::vector<BetaResult> results(resultCount);
+
+	for(size_t idx = 0; idx < resultCount; idx++) {
 		BetaResult& i = results[idx];
 		BetaSumPair& ip = i.dataForThisTop;
 		const PackedResultData& o = packedFileData[idx];
@@ -440,8 +466,17 @@ static std::vector<BetaResult> deserializeBetaResults(std::ifstream& resultsFile
 		ip.betaSum.countedIntervalSizeDown = o.szDownA;
 		ip.betaSumDualDedup.countedIntervalSizeDown = o.szDownB;
 	}
+
 	return results;
 }
+
+union ResultsFileHeader {
+	struct {
+		uint64_t Variables;
+		uint64_t resultCount;
+	};
+	char charData[16];
+};
 
 static void saveResults(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& computeID, const std::vector<BetaResult>& betaResults) {
 	std::string workingFile = computeFilePath(computeFolder, "working", jobID, "_" + computeID + ".job");
@@ -458,15 +493,22 @@ static void saveResults(unsigned int Variables, const std::string& computeFolder
 	}
 	
 	{
-		std::ofstream resultsOut(resultsFile, std::ios::binary);
-		serializeU32(Variables, resultsOut);
-		serializeBetaResults(betaResults, resultsOut);
+		ResultsFileHeader header;
+		header.Variables = Variables;
+		header.resultCount = betaResults.size();
+		
+		int resultsFD = checkCreate(resultsFile.c_str());
+		checkWrite(resultsFD, &header, sizeof(ResultsFileHeader), "Result file write failed! ");
+		std::unique_ptr<PackedResultData[]> packedResults = packResults(betaResults);
+		checkWrite(resultsFD, packedResults.get(), sizeof(PackedResultData) * betaResults.size(), "Result file write failed! ");
+		check(fsync(resultsFD), "Result file sync failed! ");
+		check(close(resultsFD), "Result file close failed! ");
 	}
 	std::filesystem::rename(workingFile, finishedFile); // Throws filesystem::filesystem_error on error
 	// At this point the job is committed and finished!
 }
 
-void processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&, const void*[2])) {
+void processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
 	std::string computeID = methodName + "_" + getComputeIdentifier();
 	checkValidationFileExists(computeFolder, computeID);
 
@@ -474,7 +516,7 @@ void processJob(unsigned int Variables, const std::string& computeFolder, const 
 
 	std::cout << "Starting Computation..." << std::endl;
 	
-	ResultProcessorOutput pipelineOutput = pcoeffPipeline(Variables, topsToProcessFuture, processorFunc/*, threadPoolBufferValidator<7>*/);
+	ResultProcessorOutput pipelineOutput = pcoeffPipeline(Variables, topsToProcessFuture, processorFunc, validator);
 	std::vector<BetaResult>& betaResults = pipelineOutput.results;
 	
 
@@ -500,16 +542,20 @@ void processJob(unsigned int Variables, const std::string& computeFolder, const 
 
 
 std::vector<BetaResult> readResultsFile(unsigned int Variables, const std::filesystem::path& filePath) {
-	std::ifstream resultFileIn(filePath, std::ios::binary);
+	ResultsFileHeader header;
+	int resultsFD = checkOpen(filePath.c_str(), O_RDONLY, "Failed to open results file! ");
+	checkRead(resultsFD, &header, sizeof(ResultsFileHeader), "Results read failed! ");
 
-	unsigned int fileVariables = deserializeU32(resultFileIn);
-	if(Variables != fileVariables) {
-		std::cerr << "Results File for incorrect Dedekind Target! Specified Target: D(" + std::to_string(Variables + 2) + "), target from file: D(" + std::to_string(fileVariables + 2) + ")" << std::endl;
+	if(Variables != header.Variables) {
+		std::cerr << "Results File for incorrect Dedekind Target! Specified Target: D(" + std::to_string(Variables + 2) + "), target from file: D(" + std::to_string(header.Variables + 2) + ")" << std::endl;
 		std::abort();
 	}
 
-	std::vector<BetaResult> result = deserializeBetaResults(resultFileIn);
-	checkFileDone(resultFileIn);
+	std::unique_ptr<PackedResultData[]> packedData(new PackedResultData[header.resultCount]);
+	checkRead(resultsFD, packedData.get(), sizeof(PackedResultData) * header.resultCount, "Results read failed! ");
+	check(close(resultsFD), "Failed to close results file! ");
+
+	std::vector<BetaResult> result = unpackResults(packedData.get(), header.resultCount);
 	return result;
 }
 
@@ -545,12 +591,13 @@ std::unique_ptr<ValidationData[]> collectAllValidationFiles(unsigned int Variabl
 		if(file.is_regular_file() && filePath.substr(filePath.find_last_of(".")) == ".validation") {
 			// Results file
 			std::cout << "Reading validation file " + filePath << std::endl;
-			FILE* validationFile = fopen(filePath.c_str(), "rb");
-			currentlyAddingFile.readFromFile(validationFile);
+			int validationFD = checkOpen(filePath.c_str(), O_RDONLY, "Failed to open validation file! ");
+			currentlyAddingFile.readFromFile(validationFD);
 			size_t numberOfTopsInOther = summer.mergeIntoThis(currentlyAddingFile);
 			std::cout << "Successfully added validation file " + filePath + ", added " + std::to_string(numberOfTopsInOther) + " tops." << std::endl;
+			check(close(validationFD), "Failed to close validation file! ");
 		}
 	}
 
-	return std::move(summer).finalize();
+	return summer.finalize();
 }

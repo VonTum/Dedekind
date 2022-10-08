@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <random>
+#include <chrono>
 
 constexpr size_t VALIDATE_BEGIN_SIZE = 128;
 constexpr size_t VALIDATE_END_SIZE = 128;
@@ -15,7 +16,7 @@ constexpr size_t VALIDATE_RANDOM_BLOCK_SIZE = 32;
 constexpr size_t VALIDATE_FRACTION = 10000; // check factorial(Variables)/(VALIDATE_FRACTION)
 
 void validatorStartMessage(NodeIndex topIdx, size_t numBottoms);
-void validatorFinishMessage(NodeIndex topIdx, size_t numBottoms, size_t numTestedPCoeffs);
+void validatorFinishMessage(NodeIndex topIdx, size_t numBottoms, size_t numTestedPCoeffs, std::chrono::time_point<std::chrono::high_resolution_clock> startTime);
 void printBadPCoeffSumError(NodeIndex botIdx, size_t elementIdx, ProcessedPCoeffSum foundPCoeffSum, ProcessedPCoeffSum correctPCoeffSum);
 
 template<unsigned int Variables>
@@ -48,7 +49,8 @@ void threadPoolBufferValidator(const OutputBuffer& resultBuf, const void* voidMB
 	const Monotonic<Variables>* mbfs = static_cast<const Monotonic<Variables>*>(voidMBFs);
 	NodeIndex topIdx = resultBuf.originalInputData.getTop();
 	size_t numBottoms = resultBuf.originalInputData.getNumberOfBottoms();
-	validatorStartMessage(topIdx, numBottoms);
+	std::chrono::time_point<std::chrono::high_resolution_clock> startTime = std::chrono::high_resolution_clock::now();
+	//validatorStartMessage(topIdx, numBottoms);
 	Monotonic<Variables> top = mbfs[topIdx];
 	size_t numValidated;
 	if(numBottoms <= VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD) {
@@ -71,5 +73,5 @@ void threadPoolBufferValidator(const OutputBuffer& resultBuf, const void* voidMB
 		});
 		numValidated = totalPCoeffCount.load();
 	}
-	validatorFinishMessage(topIdx, numBottoms, numValidated);
+	validatorFinishMessage(topIdx, numBottoms, numValidated, startTime);
 }

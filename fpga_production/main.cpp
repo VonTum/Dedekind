@@ -236,6 +236,7 @@ void fpgaProcessor_Throughput(PCoeffProcessingContext& queues, const void* mbfs[
 
 #include "../dedelib/supercomputerJobs.h"
 #include "../dedelib/timeTracker.h"
+#include "../dedelib/pcoeffValidator.h"
 
 // Supercomputing entry point.
 int main(int argc, char** argv) {
@@ -247,7 +248,7 @@ int main(int argc, char** argv) {
 	std::string computeFolder(argv[1]);
 	std::string jobID(argv[2]);
 
-	processJob(7, computeFolder, jobID, "fpga", fpgaProcessor_Throughput);
+	processJob(7, computeFolder, jobID, "fpga", fpgaProcessor_Throughput, threadPoolBufferValidator<7>);
 	return 0;
 }
 

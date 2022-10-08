@@ -7,8 +7,9 @@
 void validatorStartMessage(NodeIndex topIdx, size_t numBottoms) {
 	std::cout << "\033[35m[Validator] Validating top " + std::to_string(topIdx) + " with " + std::to_string(numBottoms) + " bottoms\033[39m\n" << std::flush;
 }
-void validatorFinishMessage(NodeIndex topIdx, size_t numBottoms, size_t numTestedPCoeffs) {
-	std::cout << "\033[35m[Validator] Correct top " + std::to_string(topIdx) + " with " + std::to_string(numBottoms) + " bottoms: " + std::to_string(numTestedPCoeffs) + " p-coefficients checked. \033[39m\n" << std::flush;
+void validatorFinishMessage(NodeIndex topIdx, size_t numBottoms, size_t numTestedPCoeffs, std::chrono::time_point<std::chrono::high_resolution_clock> startTime) {
+	std::chrono::nanoseconds deltaTime = std::chrono::high_resolution_clock::now() - startTime;
+	std::cout << "\033[35m[Validator] Correct top " + std::to_string(topIdx) + " with " + std::to_string(numBottoms) + " bottoms: " + std::to_string(numTestedPCoeffs) + " p-coefficients checked in " + std::to_string(deltaTime.count() / 1000000.0) + "ms\033[39m\n" << std::flush;
 }
 
 void printBadPCoeffSumError(NodeIndex botIdx, size_t elementIdx, ProcessedPCoeffSum foundPCoeffSum, ProcessedPCoeffSum correctPCoeffSum) {
