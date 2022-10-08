@@ -58,6 +58,14 @@ static void setCoreComplexAffinity(pthread_t pt, int coreComplex) {
 	}
 }
 
+static void setNUMANodeAffinity(pthread_t pt, int numaNode) {
+	cpu_set_t cpuset = createCPUSet(numaNode * CORES_PER_NUMA, CORES_PER_NUMA);
+	int rc = pthread_setaffinity_np(pt, sizeof(cpu_set_t), &cpuset);
+	if (rc != 0) {
+		std::cerr << "Error calling pthread_setaffinity_np: " << rc << "\n";
+	}
+}
+
 static void setSocketAffinity(pthread_t pt, int socketI) {
 	cpu_set_t cpuset = createCPUSet(socketI * CORES_PER_SOCKET, CORES_PER_SOCKET);
 	int rc = pthread_setaffinity_np(pt, sizeof(cpu_set_t), &cpuset);
@@ -74,9 +82,14 @@ void setCoreComplexAffinity(std::thread& th, int coreComplex) {
 	setCoreComplexAffinity(th.native_handle(), coreComplex);
 }
 
+void setNUMANodeAffinity(std::thread& th, int numaNode) {
+	setNUMANodeAffinity(th.native_handle(), numaNode);
+}
+
 void setSocketAffinity(std::thread& th, int socketI) {
 	setSocketAffinity(th.native_handle(), socketI);
 }
+
 
 void setCPUAffinity(int cpuI) {
 	setCPUAffinity(pthread_self(), cpuI);
@@ -84,6 +97,10 @@ void setCPUAffinity(int cpuI) {
 
 void setCoreComplexAffinity(int coreComplex) {
 	setCoreComplexAffinity(pthread_self(), coreComplex);
+}
+
+void setNUMANodeAffinity(int numaNode) {
+	setNUMANodeAffinity(pthread_self(), numaNode);
 }
 
 void setSocketAffinity(int socketI) {
@@ -125,6 +142,9 @@ pthread_t createCPUPThread(int cpuI, void* (*func)(void*), void* data) {
 }
 pthread_t createCoreComplexPThread(int coreComplex, void* (*func)(void*), void* data) {
 	return createPThreadAffinity(createCPUSet(CORE_COMPLEX_SIZE * coreComplex, CORE_COMPLEX_SIZE), func, data);
+}
+pthread_t createNUMANodePThread(int numaNode, void* (*func)(void*), void* data) {
+	return createPThreadAffinity(createCPUSet(CORES_PER_NUMA * numaNode, CORES_PER_NUMA), func, data);
 }
 pthread_t createSocketPThread(int socketI, void* (*func)(void*), void* data) {
 	return createPThreadAffinity(createCPUSet(CORES_PER_SOCKET * socketI, CORES_PER_SOCKET), func, data);

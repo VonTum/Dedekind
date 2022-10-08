@@ -140,7 +140,7 @@ ResultProcessorOutput NUMAResultProcessor(
 	allocSocketBuffers(classInfoBufferSize, numaClassInfos);
 	readFlatVoidBufferNoMMAP(FileName::flatClassInfo(Variables), classInfoBufferSize, numaClassInfos[0]);
 	memcpy(numaClassInfos[1], numaClassInfos[0], classInfoBufferSize);
-	std::cout << "\033[32m[Result Processor] Finished Loading ClassInfos. Result processor started.\033[39m\n" << std::flush;
+	std::cout << "\033[32m[Result Processor] Finished Loading ClassInfos. Allocating validation buffers\033[39m\n" << std::flush;
 
 	ResultProcessorOutput result;
 	result.results.resize(context.numTops); // set and synchronized by the bottomBufferCreator latch
@@ -150,6 +150,7 @@ ResultProcessorOutput NUMAResultProcessor(
 	void* validationBuffers[8];
 	size_t validationBufferSize = sizeof(ValidationData) * VALIDATION_BUFFER_SIZE(Variables);
 	allocNumaNodeBuffers(validationBufferSize, validationBuffers);
+	std::cout << "\033[32m[Result Processor] Allocated validation buffers. Starting result processing threads\033[39m\n" << std::flush;
 
 	struct ThreadData {
 		size_t validationBufferSize;

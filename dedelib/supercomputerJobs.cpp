@@ -23,23 +23,33 @@ static void check(int retVal, const char* err) {
 }
 
 static void checkRead(int fd, void* outBuf, size_t readSize, const char* err) {
-	ssize_t readCount = read(fd, outBuf, readSize);
-	if(readCount != readSize) {
-		perror(err);
-		std::abort();
+	while(readSize != 0) {
+		ssize_t readCount = read(fd, outBuf, readSize); // have to repeat reads, because for some godawful reason read is limited in size
+		if(readCount == -1) {
+			perror(err);
+			std::abort();
+		} else {
+			readSize -= readCount;
+			reinterpret_cast<char*&>(outBuf) += readCount;
+		}
 	}
 }
 
 static void checkWrite(int fd, const void* buf, size_t writeSize, const char* err) {
-	ssize_t writeCount = write(fd, buf, writeSize);
-	if(writeCount != writeSize) {
-		perror(err);
-		std::abort();
+	while(writeSize != 0) {
+		ssize_t writeCount = write(fd, buf, writeSize); // have to repeat writes, because for some godawful reason write is limited in size
+		if(writeCount == -1) {
+			perror(err);
+			std::abort();
+		} else {
+			writeSize -= writeCount;
+			reinterpret_cast<const char*&>(buf) += writeCount;
+		}
 	}
 }
 
 static int checkOpen(const char* file, int flags, const char* err) {
-	int fd = open(file, flags);
+	int fd = open64(file, flags);
 	//std::cout << "Opening file " << file << " with flags=" << flags << ": fd=" << fd << std::endl;
 	if(fd == -1) {
 		perror(err);
@@ -49,8 +59,8 @@ static int checkOpen(const char* file, int flags, const char* err) {
 }
 
 static int checkCreate(const char* file) {
-	int fd = open(file, O_WRONLY|O_CREAT, 0600); // read and write permission
-	//std::cout << "Creating file " << file << ": fd=" << fd << std::endl;
+	int fd = open64(file, O_WRONLY|O_CREAT, 0600); // read and write permission
+	std::cout << "Creating file " << file << ": fd=" << fd << std::endl;
 	if(fd == -1) {
 		std::string err = std::string("Failed to create file ") + file + "\n";
 		perror(err.c_str());
@@ -251,11 +261,12 @@ static void initializeValidationFile(const ValidationFileData& initialFileData, 
 		std::cerr << "Validation file already exists! Abort!\n" << std::flush;
 		std::abort();
 	}
+	std::cout << "Creating validation file " << validationFileName << std::endl;
 	int validationFD = checkCreate(validationFileName.c_str());
 
 	initialFileData.writeToFile(validationFD);
 
-	fsync(validationFD);
+	check(fsync(validationFD), "Failed to fsync Validation File! ");
 	check(close(validationFD), "Failed to close Validation File! ");
 }
 

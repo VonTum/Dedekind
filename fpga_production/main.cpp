@@ -112,11 +112,12 @@ struct FPGAData {
 	cl_mem resultMem;
 	JobInfo job;
 	cl_event* done;
-	size_t* curBufIdx;
+	size_t deviceI;
 };
 
 void pushJobIntoKernel(FPGAData* data) {
-	std::optional<JobInfo> jobOpt = data->queues->inputQueue.pop_wait(*(data->curBufIdx));
+	size_t otherDevice = 1 - data->deviceI;
+	std::optional<JobInfo> jobOpt = data->queues->inputQueue.pop_wait(otherDevice); // inverting the device makes pop_wait always select the proper device
 	if(!jobOpt.has_value()) {
 		clSetUserEventStatus(*data->done, CL_COMPLETE);
 		return;
@@ -126,7 +127,7 @@ void pushJobIntoKernel(FPGAData* data) {
 	cl_uint bufferSize = static_cast<cl_uint>(job.bufferSize());
 	size_t numberOfBottoms = job.getNumberOfBottoms();
 	NodeIndex topIdx = job.getTop();
-	std::cout << "Grabbed job " + std::to_string(topIdx) + " with " + std::to_string(numberOfBottoms) + " bottoms\n" << std::flush;
+	std::cout << "FPGA " + std::to_string(data->deviceI) + ": Grabbed job " + std::to_string(topIdx) + " with " + std::to_string(numberOfBottoms) + " bottoms\n" << std::flush;
 
 	constexpr cl_uint JOB_SIZE_ALIGNMENT = 16*32; // Block Size 32, shuffle size 16
 	assert(bufferSize % JOB_SIZE_ALIGNMENT == 0);
@@ -169,8 +170,59 @@ void pushJobIntoKernel(FPGAData* data) {
 
 constexpr size_t DEVICE_COUNT = 2;
 
+struct FPGAThreadData {
+	size_t deviceI;
+	const uint64_t* mbfLUT;
+	PCoeffProcessingContext* queues;
+};
+
+void* oneFPGAThread(void* dataIn) {
+	FPGAThreadData* threadInfo = (FPGAThreadData*) dataIn;
+	std::string threadName = "FPGA Processor " + std::to_string(threadInfo->deviceI);
+	setThreadName(threadName.c_str());
+
+	cl_event dones[NUM_BUFFERS];
+	FPGAData storedData[NUM_BUFFERS];
+	PCoeffKernel kernel;
+	size_t queueIndex;
+
+	std::cout << "\033[31m[FPGA Processor " + std::to_string(threadInfo->deviceI) + "] Initializing Kernel.\033[39m\n" << std::flush;
+	kernel.init(devices[threadInfo->deviceI], threadInfo->mbfLUT, kernelFile.c_str());
+	kernel.createBuffers(NUM_BUFFERS, BUFFER_SIZE);
+
+	for(size_t i = 0; i < NUM_BUFFERS; i++) {
+		size_t doneI = i;
+		cl_int status;
+		dones[doneI] = clCreateUserEvent(kernel.context, &status);
+		checkError(status, "clCreateUserEvent error");
+		//clSetUserEventStatus(dones[doneI], CL_QUEUED);
+		storedData[doneI].queues = threadInfo->queues;
+		storedData[doneI].kernel = &kernel;
+		storedData[doneI].deviceI = threadInfo->deviceI;
+		storedData[doneI].done = &dones[doneI];
+		storedData[doneI].inputMem = kernel.inputMems[i];
+		storedData[doneI].resultMem = kernel.resultMems[i];
+	}
+	std::cout << "\033[31m[FPGA Processor " + std::to_string(threadInfo->deviceI) + "] Waiting for intialization finish.\033[39m\n" << std::flush;
+	kernel.finish();
+	std::cout << "\033[31m[FPGA Processor " + std::to_string(threadInfo->deviceI) + "] Performing Dry-Run.\033[39m\n" << std::flush;
+	dryRunKernels(&kernel, 1);
+
+	std::cout << "\033[31m[FPGA Processor " + std::to_string(threadInfo->deviceI) + "] FPGA Processor started.\033[39m\n" << std::flush;
+	for(size_t bufI = 0; bufI < NUM_BUFFERS; bufI++) {
+		pushJobIntoKernel(&storedData[bufI]);
+	}
+
+	std::cout << "\033[31m[FPGA Processor " + std::to_string(threadInfo->deviceI) + "] Initial jobs submitted.\033[39m\n" << std::flush;
+	checkError(clWaitForEvents(NUM_BUFFERS, dones), "clWaitForEvents error");
+
+	std::cout << "\033[31m[FPGA Processor " + std::to_string(threadInfo->deviceI) + "] Done. Exiting.\033[39m\n" << std::flush;
+	pthread_exit(nullptr);
+	return nullptr;
+}
+
 void fpgaProcessor_Throughput_OnDevices(PCoeffProcessingContext& queues, const uint64_t* mbfLUT) {
-	cl_event dones[NUM_BUFFERS * DEVICE_COUNT];
+	/*cl_event dones[NUM_BUFFERS * DEVICE_COUNT];
 	FPGAData storedData[NUM_BUFFERS * DEVICE_COUNT];
 
 	PCoeffKernel kernels[DEVICE_COUNT];
@@ -212,10 +264,23 @@ void fpgaProcessor_Throughput_OnDevices(PCoeffProcessingContext& queues, const u
 
 	std::cout << "\033[31m[FPGA Processor] Initial jobs submitted!\033[39m\n" << std::flush;
 	
-	std::thread t0([&](){checkError(clWaitForEvents(NUM_BUFFERS * 1, dones), "clWaitForEvents error 0000000000000000000");});
-	checkError(clWaitForEvents(NUM_BUFFERS * 1, dones + NUM_BUFFERS), "clWaitForEvents error 1111111111111111111");
+	std::thread t0([&](){checkError(clWaitForEvents(NUM_BUFFERS, dones), "clWaitForEvents error 0000000000000000000");});
+	checkError(clWaitForEvents(NUM_BUFFERS, dones + NUM_BUFFERS), "clWaitForEvents error 1111111111111111111");
 
-	t0.join();
+	t0.join();*/
+
+	FPGAThreadData datas[DEVICE_COUNT];
+	for(size_t i = 0; i < DEVICE_COUNT; i++) {
+		datas[i].deviceI = i;
+		datas[i].mbfLUT = mbfLUT;
+		datas[i].queues = &queues;
+	}
+	pthread_t fpga0 = createNUMANodePThread(3, oneFPGAThread, &datas[0]);
+	pthread_t fpga1 = createNUMANodePThread(7, oneFPGAThread, &datas[1]);
+
+	pthread_join(fpga0, nullptr);
+	pthread_join(fpga1, nullptr);
+
 	//kernels[1].finish();
 	//cl_int status = clWaitForEvents(NUM_BUFFERS * 1, dones);
 	//checkError(status, "clWaitForEvents error");
