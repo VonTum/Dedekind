@@ -9,9 +9,10 @@
 #include <random>
 #include <chrono>
 
-constexpr size_t VALIDATE_BEGIN_SIZE = 128;
-constexpr size_t VALIDATE_END_SIZE = 128;
-constexpr size_t VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD = 1024; // Should be larger than VALIDATE_BEGIN_SIZE + VALIDATE_END_SIZE
+constexpr size_t VALIDATE_BEGIN_SIZE = 512;
+constexpr size_t VALIDATE_END_SIZE = 512;
+constexpr size_t VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD = 2048;
+static_assert(VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD >= VALIDATE_BEGIN_SIZE + VALIDATE_END_SIZE);
 constexpr size_t VALIDATE_RANDOM_BLOCK_SIZE = 32;
 constexpr size_t VALIDATE_FRACTION = 100000; // check factorial(Variables)/(VALIDATE_FRACTION)
 

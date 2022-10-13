@@ -113,11 +113,16 @@ struct FPGAData {
 	JobInfo job;
 	cl_event* done;
 	size_t deviceI;
+	size_t* processedCount;
 };
 
 void pushJobIntoKernel(FPGAData* data) {
-	size_t otherDevice = 1 - data->deviceI;
-	std::optional<JobInfo> jobOpt = data->queues->inputQueue.pop_wait(otherDevice); // inverting the device makes pop_wait always select the proper device
+	size_t thisCount = (*data->processedCount)++;
+	if(thisCount % 50 == 0) {
+		int temperature = getDeviceTemperature(data->deviceI);
+		std::cout << "\033[31m[FPGA Processor " + std::to_string(data->deviceI) + "] Processed " + std::to_string(thisCount) + " jobs, device temperature: " + std::to_string(temperature) + ".\033[39m\n" << std::flush;
+	}
+	std::optional<JobInfo> jobOpt = data->queues->inputQueue.pop_wait_prefer(data->deviceI);
 	if(!jobOpt.has_value()) {
 		clSetUserEventStatus(*data->done, CL_COMPLETE);
 		return;
@@ -190,18 +195,19 @@ void* oneFPGAThread(void* dataIn) {
 	kernel.init(devices[threadInfo->deviceI], threadInfo->mbfLUT, kernelFile.c_str());
 	kernel.createBuffers(NUM_BUFFERS, BUFFER_SIZE);
 
+	size_t processedCount = 0;
 	for(size_t i = 0; i < NUM_BUFFERS; i++) {
-		size_t doneI = i;
 		cl_int status;
-		dones[doneI] = clCreateUserEvent(kernel.context, &status);
+		dones[i] = clCreateUserEvent(kernel.context, &status);
 		checkError(status, "clCreateUserEvent error");
-		//clSetUserEventStatus(dones[doneI], CL_QUEUED);
-		storedData[doneI].queues = threadInfo->queues;
-		storedData[doneI].kernel = &kernel;
-		storedData[doneI].deviceI = threadInfo->deviceI;
-		storedData[doneI].done = &dones[doneI];
-		storedData[doneI].inputMem = kernel.inputMems[i];
-		storedData[doneI].resultMem = kernel.resultMems[i];
+		//clSetUserEventStatus(dones[i], CL_QUEUED);
+		storedData[i].queues = threadInfo->queues;
+		storedData[i].kernel = &kernel;
+		storedData[i].deviceI = threadInfo->deviceI;
+		storedData[i].done = &dones[i];
+		storedData[i].inputMem = kernel.inputMems[i];
+		storedData[i].resultMem = kernel.resultMems[i];
+		storedData[i].processedCount = &processedCount;
 	}
 	std::cout << "\033[31m[FPGA Processor " + std::to_string(threadInfo->deviceI) + "] Waiting for intialization finish.\033[39m\n" << std::flush;
 	kernel.finish();
@@ -308,7 +314,7 @@ int main(int argc, char** argv) {
 	TimeTracker timer("FPGA computation ");
 	if(argc != 3) {
 		std::cerr << "Usage: " << argv[0] << " <computeFolder> <jobID>\n" << std::flush;
-		return -1;
+		std::abort();
 	}
 	std::string computeFolder(argv[1]);
 	std::string jobID(argv[2]);

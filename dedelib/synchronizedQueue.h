@@ -386,7 +386,7 @@ public:
 
 	// Read side
 	// May wait forever
-	std::optional<T> pop_wait(size_t& lastQueueIdx) {
+	std::optional<T> pop_wait_rotate(size_t& lastQueueIdx) {
 		std::unique_lock<std::mutex> lock(mutex);
 		size_t curIdx = lastQueueIdx;
 
@@ -396,10 +396,30 @@ public:
 				curIdx--;
 
 				if(!this->queues[curIdx].empty()) {
-					lastQueueIdx = curIdx;
+					lastQueueIdx = curIdx; // update lastQueueIndex such that the next call will prefer a different queue
 					return this->queues[curIdx].pop();
 				}
 			} while(curIdx != lastQueueIdx);
+			if(isClosed) return std::nullopt;
+			readyForPop.wait(lock);
+			// Try again
+		}
+	}
+
+	// Read side
+	// May wait forever
+	std::optional<T> pop_wait_prefer(size_t preferredQueue) {
+		std::unique_lock<std::mutex> lock(mutex);
+		size_t curIdx = preferredQueue;
+
+		while(true) {
+			do {
+				if(!this->queues[curIdx].empty()) {
+					return this->queues[curIdx].pop();
+				}
+				if(curIdx == 0) curIdx = this->queues.size();
+				curIdx--;
+			} while(curIdx != preferredQueue);
 			if(isClosed) return std::nullopt;
 			readyForPop.wait(lock);
 			// Try again

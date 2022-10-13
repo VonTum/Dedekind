@@ -312,7 +312,13 @@ static void addJobTop(std::vector<JobTopInfo>& jobVector, NodeIndex newTop, cons
 	jobVector.push_back(std::move(newVal));
 }
 
-void initializeComputeProject(unsigned int Variables, std::string computeFolder, size_t numberOfJobs, size_t topsPerBatch) {
+void initializeComputeProject(unsigned int Variables, std::string computeFolder, size_t numberOfJobs, size_t numberOfJobsToActuallyGenerate) {
+	if(numberOfJobsToActuallyGenerate != numberOfJobs) {
+		std::cerr << "WARNING initializeComputeProject: GENERATING ONLY PARTIAL JOBS:" << numberOfJobsToActuallyGenerate << '/' << numberOfJobs << " -> INVALID COMPUTE PROJECT!\n" << std::flush;
+	}
+
+	constexpr size_t TOP_CLUSTER_SIZE = 8; // Cluster tops to make bot buffer generation more efficient
+
 	std::cout << "Generating a supercomputing project for computing Dedekind Number D(" << (Variables + 2) << "). Split across " << numberOfJobs << " jobs. \nPath: " << computeFolder << std::endl;
 	
 	if(std::filesystem::exists(computeFolder)) {
@@ -320,7 +326,7 @@ void initializeComputeProject(unsigned int Variables, std::string computeFolder,
 		std::abort();
 	}
 
-	std::cout << "Generating directories: " << computeFolder << "/\n    jobs/\n    working/\n    finished/\n    results/\n    logs/\n    validation/\n" << std::flush;
+	std::cout << "Generating directories: " << computeFolder << "/\n    jobs/\n    working/\n    finished/\n    results/\n    logs/\n    validation/\n\n" << std::flush;
 	std::filesystem::create_directory(computeFolder);
 	std::filesystem::create_directory(computeFolderPath(computeFolder, "jobs"));
 	std::filesystem::create_directory(computeFolderPath(computeFolder, "working"));
@@ -330,7 +336,7 @@ void initializeComputeProject(unsigned int Variables, std::string computeFolder,
 	std::filesystem::create_directory(computeFolderPath(computeFolder, "validation"));
 
 	size_t numberOfMBFsToProcess = mbfCounts[Variables];
-	size_t numberOfCompleteBatches = numberOfMBFsToProcess / topsPerBatch;
+	size_t numberOfCompleteBatches = numberOfMBFsToProcess / TOP_CLUSTER_SIZE;
 
 	std::cout << "Collecting the " << numberOfMBFsToProcess << " MBFs for the full computation..." << std::endl;
 
@@ -342,27 +348,27 @@ void initializeComputeProject(unsigned int Variables, std::string computeFolder,
 	std::default_random_engine generator;
 	std::shuffle(completeBatchIndices.begin(), completeBatchIndices.end(), generator);
 
-	std::cout << "Generating " << numberOfJobs << " job files of ~" << (numberOfMBFsToProcess / numberOfJobs) << " MBFs per job..." << std::endl;
+	std::cout << "Generating " << numberOfJobsToActuallyGenerate << " job files of ~" << (numberOfMBFsToProcess / numberOfJobs) << " MBFs per job..." << std::endl;
 
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
 
 	size_t currentBatchIndex = 0;
-	for(size_t jobI = 0; jobI < numberOfJobs; jobI++) {
+	for(size_t jobI = 0; jobI < numberOfJobsToActuallyGenerate; jobI++) {
 		size_t jobsLeft = numberOfJobs - jobI;
 		size_t topBatchesLeft = numberOfCompleteBatches - currentBatchIndex;
 		size_t numberOfBatchesInThisJob = topBatchesLeft / jobsLeft;
 
 		std::vector<JobTopInfo> topIndices;
-		topIndices.reserve(numberOfBatchesInThisJob * topsPerBatch);
+		topIndices.reserve(numberOfBatchesInThisJob * TOP_CLUSTER_SIZE);
 		for(size_t i = 0; i < numberOfBatchesInThisJob; i++) {
-			std::uint32_t curBatchStart = completeBatchIndices[currentBatchIndex++] * topsPerBatch;
-			for(size_t j = 0; j < topsPerBatch; j++) {
+			std::uint32_t curBatchStart = completeBatchIndices[currentBatchIndex++] * TOP_CLUSTER_SIZE;
+			for(size_t j = 0; j < TOP_CLUSTER_SIZE; j++) {
 				addJobTop(topIndices, curBatchStart + j, flatNodes);
 			}
 		}
 		// Add remaining tops to job 0
 		if(jobI == 0) {
-			size_t firstUnbatchedTop = numberOfCompleteBatches * topsPerBatch;
+			size_t firstUnbatchedTop = numberOfCompleteBatches * TOP_CLUSTER_SIZE;
 			for(size_t topI = firstUnbatchedTop; topI < numberOfMBFsToProcess; topI++) {
 				addJobTop(topIndices, topI, flatNodes);
 			}
@@ -371,7 +377,7 @@ void initializeComputeProject(unsigned int Variables, std::string computeFolder,
 		writeJobToFile(Variables, computeFilePath(computeFolder, "jobs", std::to_string(jobI), ".job"), topIndices);
 	}
 
-	std::cout << "Generated " << numberOfJobs << " job files of ~" << (numberOfMBFsToProcess / numberOfJobs) << " MBFs per job." << std::endl;
+	std::cout << "Generated " << numberOfJobsToActuallyGenerate << " job files of ~" << (numberOfMBFsToProcess / numberOfJobs) << " MBFs per job." << std::endl;
 }
 
 static std::vector<JobTopInfo> loadJob(unsigned int Variables, const std::string& computeFolder, const std::string& computeID, const std::string& jobID) {

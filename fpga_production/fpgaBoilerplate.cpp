@@ -178,5 +178,8 @@ static void display_device_info( cl_device_id device ) {
 	}
 }
 
-
-
+cl_int getDeviceTemperature(size_t deviceI) {
+	cl_int a;
+	clGetDeviceInfo(devices[deviceI], CL_DEVICE_CORE_TEMPERATURE_INTELFPGA, sizeof(cl_int), &a, NULL);
+	return a;
+}

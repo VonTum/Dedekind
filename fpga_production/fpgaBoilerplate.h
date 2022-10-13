@@ -20,3 +20,4 @@ void initPlatform();
 const uint64_t* initMBFLUT(const void* voidMBFs);
 void init(const char* kernelFile);
 void cleanup();
+cl_int getDeviceTemperature(size_t deviceI);

@@ -29,7 +29,7 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 		size_t bufferI = 0;
 		size_t queueIdxRotator = 0;
 		while(true) {
-			auto optBuf = context.inputQueue.pop_wait(queueIdxRotator);
+			auto optBuf = context.inputQueue.pop_wait_rotate(queueIdxRotator);
 			if(optBuf.has_value()) {
 				double secondsSinceStart = ((std::chrono::high_resolution_clock::now() - startTime).count() * 1.0e-9);
 				std::cout << "Buffer " << bufferI++ << " received at " << secondsSinceStart << "s" << std::endl;
@@ -77,7 +77,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 			size_t queueIdxRotator = 0;
 			while(true) {
 				std::memset(foundBottoms, 0, mbfCounts[Variables]*sizeof(bool));
-				auto optBuf = context.inputQueue.pop_wait(queueIdxRotator);
+				auto optBuf = context.inputQueue.pop_wait_rotate(queueIdxRotator);
 				if(optBuf.has_value()) {
 					auto buf = optBuf.value();
 

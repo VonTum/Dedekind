@@ -352,7 +352,7 @@ void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::st
 	size_t queueIdx = 0;
 	for(NodeIndex currentlyProcessingTopMeThinks : topsToProcess) {
 		std::cout << "Waiting for top to process..." << std::endl;
-		JobInfo job = context.inputQueue.pop_wait(queueIdx).value();
+		JobInfo job = context.inputQueue.pop_wait_rotate(queueIdx).value();
 		NodeIndex top = job.bufStart[0] & 0x7FFFFFFF;
 		size_t jobSize = job.bufferSize() & ~size_t(0xF);
 		std::cout << "Processing top " << top << '/' << currentlyProcessingTopMeThinks << " of size " << jobSize << std::endl;

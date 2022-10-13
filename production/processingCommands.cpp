@@ -83,8 +83,12 @@ CommandSet processingCommands {"Massively parallel Processing Commands", {
 		std::string projectFolderPath = args[0];
 		unsigned int targetDedekindNumber = std::stoi(args[1]);
 		size_t numberOfJobs = std::stoi(args[2]);
-		size_t topsPerBatch = args.size() >= 4 ? std::stoi(args[3]) : 8;
-		initializeComputeProject(targetDedekindNumber - 2, projectFolderPath, numberOfJobs, topsPerBatch);
+		size_t numberOfJobsToActuallyGenerate = numberOfJobs;
+		if(args.size() >= 4) {
+			numberOfJobsToActuallyGenerate = std::stoi(args[3]);
+			std::cerr << "WARNING: GENERATING ONLY PARTIAL JOBS:" << numberOfJobsToActuallyGenerate << '/' << numberOfJobs << " -> INVALID COMPUTE PROJECT!\n" << std::flush;
+		}
+		initializeComputeProject(targetDedekindNumber - 2, projectFolderPath, numberOfJobs, numberOfJobsToActuallyGenerate);
 	}},
 
 	{"initializeValidationFiles", [](const std::vector<std::string>& args) {
