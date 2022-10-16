@@ -4,6 +4,7 @@
 #include <mutex>
 #include <memory>
 #include <stddef.h>
+#include <functional>
 
 #include "u192.h"
 #include "pcoeffClasses.h"
@@ -30,5 +31,6 @@ BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff);
 
 ResultProcessorOutput NUMAResultProcessor(
 	unsigned int Variables,
-	PCoeffProcessingContext& context
+	PCoeffProcessingContext& context,
+	const std::function<std::vector<JobTopInfo>()>& topLoader
 );

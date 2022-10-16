@@ -132,9 +132,12 @@ static void resultprocessingThread(
 
 ResultProcessorOutput NUMAResultProcessor(
 	unsigned int Variables,
-	PCoeffProcessingContext& context
+	PCoeffProcessingContext& context,
+	const std::function<std::vector<JobTopInfo>()>& topLoader
 ) {
-	std::cout << "\033[32m[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
+	std::cout << "\033[32m[Result Processor] Started loading job tops...\033[39m\n" << std::flush;
+	context.initTops(topLoader());
+	std::cout << "\033[32m[Result Processor] Finished loading job tops...\n[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
 	void* numaClassInfos[2];
 	size_t classInfoBufferSize = mbfCounts[Variables] * sizeof(ClassInfo);
 	allocSocketBuffers(classInfoBufferSize, numaClassInfos);
@@ -143,7 +146,7 @@ ResultProcessorOutput NUMAResultProcessor(
 	std::cout << "\033[32m[Result Processor] Finished Loading ClassInfos. Allocating validation buffers\033[39m\n" << std::flush;
 
 	ResultProcessorOutput result;
-	result.results.resize(context.numTops); // set and synchronized by the bottomBufferCreator latch
+	result.results.resize(context.tops.size());
 	std::atomic<BetaResult*> finalResultPtr;
 	finalResultPtr.store(&result.results[0]);
 

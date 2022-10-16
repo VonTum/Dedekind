@@ -40,6 +40,7 @@
 #include "../dedelib/knownData.h"
 #include "../dedelib/configure.h"
 #include "../dedelib/pcoeffValidator.h"
+#include "../dedelib/latch.h"
 
 #include "fpgaBoilerplate.h"
 #include "fpgaProcessor.h"
@@ -179,6 +180,7 @@ struct FPGAThreadData {
 	size_t deviceI;
 	const uint64_t* mbfLUT;
 	PCoeffProcessingContext* queues;
+	Latch* initializationLatch;
 };
 
 void* oneFPGAThread(void* dataIn) {
@@ -275,11 +277,13 @@ void fpgaProcessor_Throughput_OnDevices(PCoeffProcessingContext& queues, const u
 
 	t0.join();*/
 
+	Latch initializationLatch(DEVICE_COUNT);
 	FPGAThreadData datas[DEVICE_COUNT];
 	for(size_t i = 0; i < DEVICE_COUNT; i++) {
 		datas[i].deviceI = i;
 		datas[i].mbfLUT = mbfLUT;
 		datas[i].queues = &queues;
+		datas[i].initializationLatch = &initializationLatch;
 	}
 	pthread_t fpga0 = createNUMANodePThread(3, oneFPGAThread, &datas[0]);
 	pthread_t fpga1 = createNUMANodePThread(7, oneFPGAThread, &datas[1]);

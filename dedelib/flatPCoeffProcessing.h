@@ -6,7 +6,7 @@
 #include <thread>
 #include <queue>
 #include <optional>
-#include <future>
+#include <functional>
 
 #include "knownData.h"
 #include "flatMBFStructure.h"
@@ -103,7 +103,7 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void*
 		ProcessorData* procData = (ProcessorData*) voidData;
 
 		setThreadName(("CPU " + std::to_string(procData->coreComplex)).c_str());
-		//ThreadPool threadPool(CORES_PER_COMPLEX);
+		ThreadPool threadPool(CORES_PER_COMPLEX);
 
 		PCoeffProcessingContext& context = *procData->context;
 
@@ -115,8 +115,8 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void*
 			ProcessedPCoeffSum* countConnectedSumBuf = numaQueue.resultBufferAlloc.pop_wait().value();
 			auto startTime = std::chrono::high_resolution_clock::now();
 			//shuffleBots(job.bufStart + 1, job.bufEnd);
-			processBetasCPU_SingleThread(procData->mbfs, job, countConnectedSumBuf);
-			//processBetasCPU_MultiThread(procData->mbfs, job, countConnectedSumBuf, threadPool);
+			//processBetasCPU_SingleThread(procData->mbfs, job, countConnectedSumBuf);
+			processBetasCPU_MultiThread(procData->mbfs, job, countConnectedSumBuf, threadPool);
 			std::chrono::nanoseconds deltaTime = std::chrono::high_resolution_clock::now() - startTime;
 			std::cout << 
 				"CPU " + std::to_string(procData->coreComplex) + ": Processed job " + std::to_string(job.getTop())
@@ -151,7 +151,7 @@ void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context, const void* 
 
 void loadNUMA_MBFs(unsigned int Variables, const void* mbfs[2]);
 
-ResultProcessorOutput pcoeffPipeline(unsigned int Variables, std::future<std::vector<JobTopInfo>>& topIndices, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = nullptr);
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = nullptr);
 
 std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const FlatNode* allMBFNodes, const ClassInfo* allClassInfos, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf);
 
@@ -175,10 +175,8 @@ std::vector<JobTopInfo> loadAllTops(unsigned int Variables);
 
 template<unsigned int Variables>
 void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = nullptr) {
-	std::future<std::vector<JobTopInfo>> allTopsFuture = std::async(loadAllTops, Variables);
-	
 	std::cout << "Starting Computation..." << std::endl;
-	ResultProcessorOutput betaResults = pcoeffPipeline(Variables, allTopsFuture, processorFunc, validator);
+	ResultProcessorOutput betaResults = pcoeffPipeline(Variables, []() -> std::vector<JobTopInfo> {return loadAllTops(Variables);}, processorFunc, validator);
 
 	BetaResultCollector collector(Variables);
 	collector.addBetaResults(betaResults.results);

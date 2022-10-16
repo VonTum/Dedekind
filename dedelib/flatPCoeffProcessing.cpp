@@ -104,17 +104,14 @@ void loadNUMA_MBFs(unsigned int Variables, const void* mbfs[2]) {
 	mbfs[1] = numaMBFBuffers[1];
 }
 
-ResultProcessorOutput pcoeffPipeline(unsigned int Variables, std::future<std::vector<JobTopInfo>>& topIndices, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
 	//setThreadName("Main Thread");
 	PCoeffProcessingContext context(Variables);
-
-	Latch processingHasStarted(1); // BottomBufferCreator and (not) processor
 
 	std::thread inputProducerThread([&]() {
 		setThreadName("InputProducer");
 		try {
-			runBottomBufferCreator(Variables, topIndices, context, BOTTOM_BUF_CREATOR_COUNT, &processingHasStarted);
-			context.inputQueue.close();
+			runBottomBufferCreator(Variables, context, BOTTOM_BUF_CREATOR_COUNT);
 		} catch(const char* errText) {
 			std::cerr << "Error thrown in inputProducerThread: " << errText;
 			exit(-1);
@@ -140,9 +137,6 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, std::future<std::ve
 		}
 	});
 	
-	processingHasStarted.wait();
-	std::cout << "Basic initialization has started, begin processing!\n" << std::flush;
-
 	std::thread queueWatchdogThread([&](){
 		setThreadName("Queue Watchdog");
 		while(!context.inputQueue.isClosed) {
@@ -189,7 +183,7 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, std::future<std::ve
 		}, 8);
 	} else {
 		std::cout << "***** No validation selected! ******\n" << std::endl;
-		validatorThreads = PThreadsSpread(2, CPUAffinityType::SOCKET, validatorDatas, [](void* data) -> void* {
+		validatorThreads = PThreadsSpread(NUMA_SLICE_COUNT, CPUAffinityType::SOCKET, validatorDatas, [](void* data) -> void* {
 			ValidatorThreadData* validatorData = (ValidatorThreadData*) data;
 			setThreadName(("NoValidator " + std::to_string(validatorData->numaNode)).c_str());
 			noValidatorThread(*validatorData->context);
@@ -198,14 +192,17 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, std::future<std::ve
 		});
 	}
 
-	ResultProcessorOutput results = NUMAResultProcessor(Variables, context);
+	ResultProcessorOutput results = NUMAResultProcessor(Variables, context, topLoader);
+	assert(results.results.size() == context.tops.size());
 
 	inputProducerThread.join();
+
+
+
 	processorThread.join();
 	queueWatchdogThread.join();
 	validatorThreads.join();
 
-	//assert(results.results.size() == topIndices.size());
 
 	return results;
 }

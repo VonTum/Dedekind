@@ -17,7 +17,6 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
 	auto tops = generateRangeSample(Variables, sampleCount);
-	auto jobTops = convertTopInfos(flatNodes, tops);
 
 	PCoeffProcessingContext context(Variables);
 	//context.outputQueue.close(); // Don't use output queue
@@ -39,7 +38,8 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 			}
 		}
 	});
-	runBottomBufferCreator(Variables, jobTops, context, threadCount);
+	context.initTops(convertTopInfos(flatNodes, tops));
+	runBottomBufferCreator(Variables, context, threadCount);
 
 	loopBack.join();
 }
@@ -62,7 +62,6 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 		tops.push_back(newTop);
 	}
 	std::cout << std::endl;
-	auto jobTops = convertTopInfos(flatNodes, tops);
 
 	PCoeffProcessingContext context(Variables);
 	//context.outputQueue.close(); // Don't use output queue
@@ -144,7 +143,8 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 		});
 		loopBackThreads.push_back(std::move(loopBack));
 	}
-	runBottomBufferCreator(Variables, jobTops, context, threadCount);
+	context.initTops(convertTopInfos(flatNodes, tops));
+	runBottomBufferCreator(Variables, context, threadCount);
 
 	for(std::thread& t : loopBackThreads) {
 		t.join();

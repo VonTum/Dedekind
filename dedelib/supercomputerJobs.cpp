@@ -495,11 +495,9 @@ void processJob(unsigned int Variables, const std::string& computeFolder, const 
 	std::filesystem::rename(jobFile, workingFile); // Throws filesystem::filesystem_error on error
 	std::cout << "Moved job to working directory: " << jobFile << "=>" << workingFile << std::endl;
 
-	std::future<std::vector<JobTopInfo>> topsToProcessFuture = std::async(loadJob, Variables, workingFile);
-
 	std::cout << "Starting Computation..." << std::endl;
 	
-	ResultProcessorOutput pipelineOutput = pcoeffPipeline(Variables, topsToProcessFuture, processorFunc, validator);
+	ResultProcessorOutput pipelineOutput = pcoeffPipeline(Variables, [&]() -> std::vector<JobTopInfo> {return loadJob(Variables, workingFile);}, processorFunc, validator);
 	std::vector<BetaResult>& betaResults = pipelineOutput.results;
 	
 

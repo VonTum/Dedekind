@@ -2,6 +2,7 @@
 
 #include "synchronizedQueue.h"
 #include "pcoeffClasses.h"
+#include "latch.h"
 
 /*
 	This is a closed-loop buffer circulation system. 
@@ -41,7 +42,10 @@ public:
 
 	SynchronizedMultiQueue<JobInfo> inputQueue;
 
-	size_t numTops; // Synchronizes on the latch
+	MutexLatch topsAreReady;
+	std::vector<JobTopInfo> tops; // Synchronizes on the topsAreReady latch
+
+	void initTops(std::vector<JobTopInfo> tops);
 
 	PCoeffProcessingContext(unsigned int Variables);
 	~PCoeffProcessingContext();

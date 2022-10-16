@@ -27,7 +27,6 @@
 #include "threadUtils.h"
 #include <pthread.h>
 #include "threadPool.h"
-#include "latch.h"
 
 #include "numaMem.h"
 
@@ -368,18 +367,18 @@ const uint32_t* loadLinks(unsigned int Variables) {
 
 void runBottomBufferCreator(
 	unsigned int Variables,
-	std::future<std::vector<JobTopInfo>>& jobTops,
 	PCoeffProcessingContext& context,
-	int numberOfThreads,
-	Latch* hasStarted
+	int numberOfThreads
 ) {
 	std::cout << "\033[33m[BottomBufferCreator] Loading Links...\033[39m\n" << std::flush;
 	auto linkLoadStart = std::chrono::high_resolution_clock::now();
 	//const uint32_t* links = loadLinks(Variables);
 	
 	size_t linkBufMemSize = getTotalLinkCount(Variables) * sizeof(uint32_t);
+	size_t linkBufMemSizeWithPrefetching = linkBufMemSize + PREFETCH_OFFSET * sizeof(uint32_t);
+	
 	void* numaLinks[2];
-	allocSocketBuffers(linkBufMemSize + PREFETCH_OFFSET * sizeof(uint32_t), numaLinks);
+	allocSocketBuffers(linkBufMemSizeWithPrefetching, numaLinks);
 	readFlatVoidBufferNoMMAP(FileName::mbfStructure(Variables), linkBufMemSize, numaLinks[0]);
 	memset((char*) numaLinks[0] + linkBufMemSize, 0, PREFETCH_OFFSET * sizeof(uint32_t));
 
@@ -390,11 +389,10 @@ void runBottomBufferCreator(
 	double timeTaken = (std::chrono::high_resolution_clock::now() - linkLoadStart).count() * 1.0e-9;
 	std::cout << "\033[33m[BottomBufferCreator] Finished loading links. Took " + std::to_string(timeTaken) + "s\033[39m\n" << std::flush;
 
-	std::vector<JobTopInfo> jobTopsVec = jobTops.get();
-	context.numTops = jobTopsVec.size();
 	std::atomic<const JobTopInfo*> jobTopAtomic;
-	jobTopAtomic.store(&jobTopsVec[0]);
-	const JobTopInfo* jobTopEnd = jobTopAtomic.load() + jobTopsVec.size();
+	context.topsAreReady.wait();
+	jobTopAtomic.store(&context.tops[0]);
+	const JobTopInfo* jobTopEnd = jobTopAtomic.load() + context.tops.size();
 
 	struct ThreadInfo {
 		unsigned int Variables;
@@ -426,12 +424,8 @@ void runBottomBufferCreator(
 
 	PThreadsSpread threads(numberOfThreads, CPUAffinityType::COMPLEX, threadDatas, threadFunc, 8);
 
-	if(hasStarted != nullptr) {
-		hasStarted->notify();
-	}
-
 	if(numberOfThreads > 8) {
-		memcpy(numaLinks[1], numaLinks[0], linkBufMemSize + PREFETCH_OFFSET * sizeof(uint32_t));
+		memcpy(numaLinks[1], numaLinks[0], linkBufMemSizeWithPrefetching);
 		links[1].store(reinterpret_cast<const uint32_t*>(numaLinks[1])); // Switch to closer buffer
 	}
 
@@ -440,19 +434,10 @@ void runBottomBufferCreator(
 	threads.join();
 
 	std::cout << "\033[33m[BottomBufferCreator] All Threads finished! Closing output queue\033[39m\n" << std::flush;
-}
 
-void runBottomBufferCreator(
-	unsigned int Variables,
-	const std::vector<JobTopInfo>& jobTops,
-	PCoeffProcessingContext& context,
-	int numberOfThreads,
-	Latch* hasStarted
-) {
-	std::promise<std::vector<JobTopInfo>> jobTopsPromise;
-	jobTopsPromise.set_value(jobTops);
-	std::future<std::vector<JobTopInfo>> jobTopsFuture = jobTopsPromise.get_future();
-	runBottomBufferCreator(Variables, jobTopsFuture, context, numberOfThreads, hasStarted);
+	context.inputQueue.close();
+	numa_free(numaLinks[0], linkBufMemSizeWithPrefetching);
+	numa_free(numaLinks[1], linkBufMemSizeWithPrefetching);
 }
 
 std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::vector<NodeIndex>& topIndices) {
@@ -465,21 +450,4 @@ std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::ve
 		topInfos.push_back(newInfo);
 	}
 	return topInfos;
-}
-
-void runBottomBufferCreator(
-	unsigned int Variables,
-	const std::vector<NodeIndex>& jobTops,
-	PCoeffProcessingContext& context,
-	int numberOfThreads,
-	Latch* hasStarted
-) {
-	// Read top infos in parallel, we must prioritize inputProducerThread starts as soon as possible
-	std::future<std::vector<JobTopInfo>> topInfosFuture = std::async(std::launch::async, [&](){
-		const FlatNode* nodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
-		std::vector<JobTopInfo> topInfos = convertTopInfos(nodes, jobTops);
-		return topInfos;
-	});
-
-	runBottomBufferCreator(Variables, topInfosFuture, context, numberOfThreads, hasStarted);
 }
