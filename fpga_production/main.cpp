@@ -33,6 +33,7 @@
 #include <random>
 #include <fstream>
 #include <optional>
+#include <mutex>
 #include "AOCLUtils/aocl_utils.h"
 
 #include "../dedelib/toString.h"
@@ -71,38 +72,6 @@ uint64_t getBitRange(uint64_t v, int highestBit, int lowestBit) {
 	uint64_t mask = (uint64_t(1) << bitWidth) - 1;
 	return shiftedRight & mask;
 }
-
-
-/*void summarizeResultsBuffer(uint64_t* resultsOut, cl_int bufSize) {
-	int corrects = 0;
-	int nonZeroCorrects = 0;
-	int totals = 0;
-	int nonZeroTotals = 0;
-
-	for(cl_int i = 0; i < bufSize; i++) {
-		uint64_t resultConnectCount = getBitRange(resultsOut[i], 47, 0);
-		uint64_t resultNumTerms = getBitRange(resultsOut[i], 13+48-1, 48);
-
-		if(SHOW_ALL || allData[i].connectCount != 0 || resultConnectCount != 0) {
-			if(SHOW_NONZEROS) {
-				std::cout << "[PCoeff] CPU: " << allData[i].connectCount << " FPGA: " << resultConnectCount << ", \t";
-				std::cout << "[NumTerms] CPU: " << allData[i].numTerms << " FPGA: " << resultNumTerms << std::endl;
-			}
-		}
-
-		if(!allData[i].isTop) {
-			if(resultConnectCount == allData[i].connectCount && resultNumTerms == allData[i].numTerms) {
-				corrects++;
-				if(resultConnectCount != 0) nonZeroCorrects++;
-			}
-			totals++;
-			if(allData[i].connectCount != 0) nonZeroTotals++;
-		}
-	}
-
-	std::cout << "Total tally: " << corrects << "/" << totals << std::endl;
-	std::cout << "Nonzero tally: " << nonZeroCorrects << "/" << nonZeroTotals << std::endl;
-}*/
 
 
 struct FPGAData {
@@ -180,13 +149,17 @@ struct FPGAThreadData {
 	size_t deviceI;
 	const uint64_t* mbfLUT;
 	PCoeffProcessingContext* queues;
+	std::mutex* initializationMutex;
 	Latch* initializationLatch;
+	Latch* dryRunLatch;
 };
 
 void* oneFPGAThread(void* dataIn) {
 	FPGAThreadData* threadInfo = (FPGAThreadData*) dataIn;
 	std::string threadName = "FPGA Processor " + std::to_string(threadInfo->deviceI);
 	setThreadName(threadName.c_str());
+
+	std::unique_lock<std::mutex> initializationLock(*threadInfo->initializationMutex);
 
 	cl_event dones[NUM_BUFFERS];
 	FPGAData storedData[NUM_BUFFERS];
@@ -211,10 +184,14 @@ void* oneFPGAThread(void* dataIn) {
 		storedData[i].resultMem = kernel.resultMems[i];
 		storedData[i].processedCount = &processedCount;
 	}
+
+	threadInfo->initializationLatch->notify_wait(initializationLock);
 	std::cout << "\033[31m[FPGA Processor " + std::to_string(threadInfo->deviceI) + "] Waiting for intialization finish.\033[39m\n" << std::flush;
 	kernel.finish();
 	std::cout << "\033[31m[FPGA Processor " + std::to_string(threadInfo->deviceI) + "] Performing Dry-Run.\033[39m\n" << std::flush;
 	dryRunKernels(&kernel, 1);
+	threadInfo->dryRunLatch->notify_wait(initializationLock);
+	initializationLock.unlock();
 
 	std::cout << "\033[31m[FPGA Processor " + std::to_string(threadInfo->deviceI) + "] FPGA Processor started.\033[39m\n" << std::flush;
 	for(size_t bufI = 0; bufI < NUM_BUFFERS; bufI++) {
@@ -230,60 +207,17 @@ void* oneFPGAThread(void* dataIn) {
 }
 
 void fpgaProcessor_Throughput_OnDevices(PCoeffProcessingContext& queues, const uint64_t* mbfLUT) {
-	/*cl_event dones[NUM_BUFFERS * DEVICE_COUNT];
-	FPGAData storedData[NUM_BUFFERS * DEVICE_COUNT];
-
-	PCoeffKernel kernels[DEVICE_COUNT];
-	size_t queueIdxes[DEVICE_COUNT];
-
-	std::cout << "\033[31m[FPGA Processor] Initializing Kernels.\033[39m\n" << std::flush;
-	for(size_t deviceI = 0; deviceI < DEVICE_COUNT; deviceI++) {
-		PCoeffKernel& k = kernels[deviceI];
-		queueIdxes[deviceI] = 0;
-
-		k.init(devices[deviceI], mbfLUT, kernelFile.c_str());
-		k.createBuffers(NUM_BUFFERS, BUFFER_SIZE);
-
-		for(size_t i = 0; i < NUM_BUFFERS; i++) {
-			size_t doneI = deviceI * NUM_BUFFERS + i;
-			cl_int status;
-			dones[doneI] = clCreateUserEvent(k.context, &status);
-			checkError(status, "clCreateUserEvent error");
-			//clSetUserEventStatus(dones[doneI], CL_QUEUED);
-			storedData[doneI].queues = &queues;
-			storedData[doneI].kernel = &k;
-			storedData[doneI].curBufIdx = &queueIdxes[deviceI];
-			storedData[doneI].done = &dones[doneI];
-			storedData[doneI].inputMem = k.inputMems[i];
-			storedData[doneI].resultMem = k.resultMems[i];
-		}
-	}
-	std::cout << "\033[31m[FPGA Processor] Waiting for intialization finish.\033[39m\n" << std::flush;
-	for(size_t deviceI = 0; deviceI < DEVICE_COUNT; deviceI++) {
-		kernels[deviceI].finish();
-	}
-	std::cout << "\033[31m[FPGA Processor] Performing Dry-Run.\033[39m\n" << std::flush;
-	dryRunKernels(kernels, DEVICE_COUNT);
-
-	std::cout << "\033[31m[FPGA Processor] FPGA Processor started.\033[39m\n" << std::flush;
-	for(size_t bufI = 0; bufI < NUM_BUFFERS*DEVICE_COUNT; bufI++) {
-		pushJobIntoKernel(&storedData[bufI]);
-	}
-
-	std::cout << "\033[31m[FPGA Processor] Initial jobs submitted!\033[39m\n" << std::flush;
-	
-	std::thread t0([&](){checkError(clWaitForEvents(NUM_BUFFERS, dones), "clWaitForEvents error 0000000000000000000");});
-	checkError(clWaitForEvents(NUM_BUFFERS, dones + NUM_BUFFERS), "clWaitForEvents error 1111111111111111111");
-
-	t0.join();*/
-
+	std::mutex initializationMutex;
 	Latch initializationLatch(DEVICE_COUNT);
+	Latch dryRunLatch(DEVICE_COUNT);
 	FPGAThreadData datas[DEVICE_COUNT];
 	for(size_t i = 0; i < DEVICE_COUNT; i++) {
 		datas[i].deviceI = i;
 		datas[i].mbfLUT = mbfLUT;
 		datas[i].queues = &queues;
+		datas[i].initializationMutex = &initializationMutex;
 		datas[i].initializationLatch = &initializationLatch;
+		datas[i].dryRunLatch = &dryRunLatch;
 	}
 	pthread_t fpga0 = createNUMANodePThread(3, oneFPGAThread, &datas[0]);
 	pthread_t fpga1 = createNUMANodePThread(7, oneFPGAThread, &datas[1]);

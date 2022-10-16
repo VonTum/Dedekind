@@ -110,12 +110,7 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 
 	std::thread inputProducerThread([&]() {
 		setThreadName("InputProducer");
-		try {
-			runBottomBufferCreator(Variables, context, BOTTOM_BUF_CREATOR_COUNT);
-		} catch(const char* errText) {
-			std::cerr << "Error thrown in inputProducerThread: " << errText;
-			exit(-1);
-		}
+		runBottomBufferCreator(Variables, context, BOTTOM_BUF_CREATOR_COUNT);
 	});
 	
 
@@ -126,14 +121,9 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 
 	std::thread processorThread([&]() {
 		setThreadName("Processor");
-		try {
-			processorFunc(context, mbfs);
-			for(int numaNode = 0; numaNode < NUMA_SLICE_COUNT; numaNode++) {
-				context.numaQueues[numaNode]->outputQueue.close();
-			}
-		} catch(const char* errText) {
-			std::cerr << "Error thrown in processorThread: " << errText;
-			exit(-1);
+		processorFunc(context, mbfs);
+		for(int numaNode = 0; numaNode < NUMA_SLICE_COUNT; numaNode++) {
+			context.numaQueues[numaNode]->outputQueue.close();
 		}
 	});
 	
@@ -196,13 +186,9 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 	assert(results.results.size() == context.tops.size());
 
 	inputProducerThread.join();
-
-
-
 	processorThread.join();
 	queueWatchdogThread.join();
 	validatorThreads.join();
-
 
 	return results;
 }
