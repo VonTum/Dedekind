@@ -4,10 +4,10 @@
 #include <pthread.h>
 
 enum class CPUAffinityType {
-	CORE,
-	COMPLEX,
-	NUMA_DOMAIN,
-	SOCKET
+	CORE = 1,
+	COMPLEX = 8,
+	NUMA_DOMAIN = 16,
+	SOCKET = 64
 };
 
 cpu_set_t createCPUSet(int cpuI, CPUAffinityType t);

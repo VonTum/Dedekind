@@ -476,7 +476,7 @@ static void saveResults(unsigned int Variables, const std::string& resultsFile, 
 	check(close(resultsFD), "Result file close failed! ");
 }
 
-void processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
+void processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void*(*validator)(void*)) {
 	std::string computeID = methodName + "_" + getComputeIdentifier();
 
 	std::string validationFileName = getValidationFilePath(computeFolder, computeID);

@@ -22,6 +22,11 @@ PCoeffProcessingContextEighth::PCoeffProcessingContextEighth() :
 	outputQueue(std::min(NUM_INPUT_BUFFERS_PER_NODE, NUM_RESULT_BUFFERS_PER_NODE)),
 	validationQueue(std::min(NUM_INPUT_BUFFERS_PER_NODE, NUM_RESULT_BUFFERS_PER_NODE)) {}
 
+PCoeffProcessingContextEighth::~PCoeffProcessingContextEighth() {
+	inputBufferAlloc.close();
+	resultBufferAlloc.close();
+}
+
 template<typename T>
 void setStackToBufferParts(SynchronizedStack<T*>& target, T* bufMemory, size_t partSize, size_t numParts) {
 	T** stack = target.get();

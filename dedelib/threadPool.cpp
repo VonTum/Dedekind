@@ -83,13 +83,21 @@ void PThreadPool::doInParallel(std::function<void()>&& work, std::function<void(
 	selfLock.unlock();
 }
 
-void PThreadsSpread::join() {
+void PThreadBundle::join() {
 	for(size_t threadI = 0; threadI < threadCount; threadI++) {
 		pthread_join(threads[threadI], NULL);
 	}
 	this->threads = nullptr;
 }
 
-PThreadsSpread::~PThreadsSpread() {
-	this->threads.get() == nullptr; // Must be joined before destroying
+PThreadBundle::~PThreadBundle() {
+	assert(this->threads.get() == nullptr); // Must be joined before destroying
+}
+
+PThreadBundle multiThread(size_t threadCount, int cpuI, CPUAffinityType affinity, void* data, void*(*func)(void*)) {
+	pthread_t* threads = new pthread_t[threadCount]; 
+	for(size_t i = 0; i < threadCount; i++) {
+		threads[i] = createPThreadAffinity(cpuI, affinity, func, data);
+	}
+	return PThreadBundle(threads, threadCount);
 }

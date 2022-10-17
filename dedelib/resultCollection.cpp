@@ -175,7 +175,7 @@ ResultProcessorOutput NUMAResultProcessor(
 		datas[i].Variables = Variables;
 	}
 
-	PThreadsSpread threads(8, CPUAffinityType::NUMA_DOMAIN, datas, [](void* voidData) -> void* {
+	PThreadBundle threads = spreadThreads(8, CPUAffinityType::NUMA_DOMAIN, datas, [](void* voidData) -> void* {
 		ThreadData* tData = (ThreadData*) voidData;
 		setThreadName(("Result Processor " + std::to_string(tData->numaNode)).c_str());
 		memset(static_cast<void*>(tData->validationBuffer), 0, tData->validationBufferSize);

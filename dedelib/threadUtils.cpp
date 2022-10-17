@@ -13,16 +13,7 @@ constexpr int CORES_PER_SOCKET = 64;
 
 
 static size_t getAffinityBlockSize(CPUAffinityType t) {
-	switch(t) {
-	case CPUAffinityType::CORE:
-		return 1;
-	case CPUAffinityType::COMPLEX:
-		return 8;
-	case CPUAffinityType::NUMA_DOMAIN:
-		return 16;
-	case CPUAffinityType::SOCKET:
-		return 64;
-	}
+	return static_cast<int>(t);
 }
 
 static cpu_set_t createCPUSet(int cpuI, int numCPUs) {

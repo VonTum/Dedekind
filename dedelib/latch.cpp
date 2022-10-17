@@ -9,17 +9,17 @@ void Latch::wait(std::unique_lock<std::mutex>& lock) noexcept {
 }
 
 void Latch::notify(std::unique_lock<std::mutex>& lock, int amount) noexcept {
-	latchCount -= amount;
+	int foundLatchCount = latchCount -= amount;
 
-	if(latchCount == 0) {
+	if(foundLatchCount == 0) {
 		starter.notify_all();
 	}
 }
 
 void Latch::notify_wait(std::unique_lock<std::mutex>& lock, int amount) noexcept {
-	latchCount -= amount;
+	int foundLatchCount = latchCount -= amount;
 
-	if(latchCount == 0) {
+	if(foundLatchCount == 0) {
 		starter.notify_all();
 	} else {
 		this->wait(lock);

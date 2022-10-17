@@ -23,7 +23,7 @@ public:
 		} else if(nanos < 1.0e13) {
 			std::cout << message << nanos / 1.0e9 << "s";
 		} else {
-			std::cout << message << nanos / 60.0e-9 << "min";
+			std::cout << message << nanos / 60.0e9 << "min";
 		}
 		std::cout << "\n";
 	}

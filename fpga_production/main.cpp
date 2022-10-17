@@ -50,7 +50,7 @@ using namespace aocl_utils;
 
 
 // Runtime constants
-static bool SHOW_NONZEROS = false;
+/*static bool SHOW_NONZEROS = false;
 static bool SHOW_ALL = false;
 static bool ENABLE_SHUFFLE = false;
 static bool ENABLE_COMPARE = false;
@@ -62,7 +62,7 @@ static bool USE_VALIDATOR = false;
 static double ACTIVITY_MULTIPLIER = 10*60.0;
 static bool THROUGHPUT_MODE = false;
 
-static std::string kernelFile = "dedekindAccelerator";
+static std::string kernelFile = "dedekindAccelerator";*/
 
 
 // inclusive, simimar to verilog. getBitRange(v, 11, 3) == v[11:3]
@@ -167,7 +167,7 @@ void* oneFPGAThread(void* dataIn) {
 	size_t queueIndex;
 
 	std::cout << "\033[31m[FPGA Processor " + std::to_string(threadInfo->deviceI) + "] Initializing Kernel.\033[39m\n" << std::flush;
-	kernel.init(devices[threadInfo->deviceI], threadInfo->mbfLUT, kernelFile.c_str());
+	kernel.init(devices[threadInfo->deviceI], threadInfo->mbfLUT, "dedekindAccelerator");
 	kernel.createBuffers(NUM_BUFFERS, BUFFER_SIZE);
 
 	size_t processedCount = 0;
@@ -257,7 +257,7 @@ int main(int argc, char** argv) {
 	std::string computeFolder(argv[1]);
 	std::string jobID(argv[2]);
 
-	processJob(7, computeFolder, jobID, "fpga", fpgaProcessor_Throughput, threadPoolBufferValidator<7>);
+	processJob(7, computeFolder, jobID, "fpga", fpgaProcessor_Throughput, continuousValidatorPThread<7>);
 	return 0;
 }
 

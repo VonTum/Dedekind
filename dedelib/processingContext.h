@@ -32,6 +32,7 @@ public:
 	SynchronizedQueue<OutputBuffer> validationQueue;
 
 	PCoeffProcessingContextEighth();
+	~PCoeffProcessingContextEighth();
 };
 
 class PCoeffProcessingContext {

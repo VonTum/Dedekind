@@ -5,11 +5,11 @@
 #include <optional>
 
 #include "latch.h"
+#include "pcoeffValidator.h"
 
 constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 16;
 constexpr size_t NUM_RESULT_VALIDATORS = 16;
 constexpr int MAX_VALIDATOR_COUNT = 16;
-constexpr size_t NUM_VALIDATOR_THREADS_PER_COMPLEX = 7;
 
 
 uint8_t reverseBits(uint8_t index) {
@@ -48,6 +48,7 @@ std::vector<JobTopInfo> loadAllTops(unsigned int Variables) {
 		newTopInfo.topDual = allNodes[i].dual;
 		topsToProcess.push_back(newTopInfo);
 	}
+	free(const_cast<FlatNode*>(allNodes));
 	//shuffleBots(&topsToProcess[0], (&topsToProcess[0]) + topsToProcess.size());
 	//free(allNodes);
 
@@ -63,36 +64,7 @@ std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sam
 	return resultingVector;
 }
 
-// Expects mbfs0 to be stored in memory of socket0, and mbfs1 to have memory of socket1
-static void validatorThread(
-	void(*validator)(const OutputBuffer&, const void*, ThreadPool&), 
-	PCoeffProcessingContextEighth& context,
-	const void* validatorData
-) {
-	ThreadPool pool(NUM_VALIDATOR_THREADS_PER_COMPLEX);
-	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = context.validationQueue.pop_wait()).has_value(); ) {
-		OutputBuffer outBuf = outputBuffer.value();
-
-		validator(outBuf, validatorData, pool);
-
-		context.inputBufferAlloc.push(outBuf.originalInputData.bufStart);
-		context.resultBufferAlloc.push(outBuf.outputBuf);
-	}
-}
-
-// Expects mbfs0 to be stored in memory of socket0, and mbfs1 to have memory of socket1
-static void noValidatorThread(
-	PCoeffProcessingContextEighth& context
-) {
-	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = context.validationQueue.pop_wait()).has_value(); ) {
-		OutputBuffer outBuf = outputBuffer.value();
-
-		context.inputBufferAlloc.push(outBuf.originalInputData.bufStart);
-		context.resultBufferAlloc.push(outBuf.outputBuf);
-	}
-}
-
-void loadNUMA_MBFs(unsigned int Variables, const void* mbfs[2]) {
+static void loadNUMA_MBFs(unsigned int Variables, const void* mbfs[2]) {
 	void* numaMBFBuffers[2];
 	size_t mbfSize = (1 << (Variables > 3 ? Variables-3 : 0)); // sizeof(Monotonic<Variables>)
 	size_t mbfBufSize = mbfSize * mbfCounts[Variables];
@@ -103,8 +75,15 @@ void loadNUMA_MBFs(unsigned int Variables, const void* mbfs[2]) {
 	mbfs[0] = numaMBFBuffers[0];
 	mbfs[1] = numaMBFBuffers[1];
 }
+static void freeNUMA_MBFs(unsigned int Variables, const void* mbfs[2]) {
+	size_t mbfSize = (1 << (Variables > 3 ? Variables-3 : 0)); // sizeof(Monotonic<Variables>)
+	size_t mbfBufSize = mbfSize * mbfCounts[Variables];
 
-ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&)) {
+	numa_free(const_cast<void*>(mbfs[0]), mbfBufSize);
+	numa_free(const_cast<void*>(mbfs[1]), mbfBufSize);
+}
+
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void*(*validator)(void*)) {
 	//setThreadName("Main Thread");
 	PCoeffProcessingContext context(Variables);
 
@@ -148,38 +127,25 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 		}
 	});
 
-	struct ValidatorThreadData{
-		void(*validator)(const OutputBuffer&, const void*, ThreadPool&);
-		PCoeffProcessingContextEighth* context;
-		const void* mbfs;
-		int numaNode;
-	};
-	ValidatorThreadData validatorDatas[NUMA_SLICE_COUNT];
-	for(int i = 0; i < NUMA_SLICE_COUNT; i++) {
-		validatorDatas[i].validator = validator;
-		validatorDatas[i].context = context.numaQueues[i].ptr;
-		validatorDatas[i].mbfs = mbfs[i];
-		validatorDatas[i].numaNode = i;
-	}
+	ValidatorThreadData validatorDatas[16];
 
-	PThreadsSpread validatorThreads;
+	PThreadBundle validatorThreads;
 	if(validator != nullptr) {
-		validatorThreads = PThreadsSpread(16, CPUAffinityType::COMPLEX, validatorDatas, [](void* data) -> void* {
-			ValidatorThreadData* validatorData = (ValidatorThreadData*) data;
-			setThreadName(("Validator " + std::to_string(validatorData->numaNode)).c_str());
-			validatorThread(validatorData->validator, *validatorData->context, validatorData->mbfs);
-			pthread_exit(nullptr);
-			return nullptr;
-		}, 8);
+		for(int i = 0; i < 16; i++) {
+			validatorDatas[i].context = context.numaQueues[i / 8].ptr;
+			validatorDatas[i].mbfs = mbfs[i / 8];
+			validatorDatas[i].complexI = i;
+		}
+		validatorThreads = spreadThreads(16, CPUAffinityType::COMPLEX, validatorDatas, validator);
 	} else {
 		std::cout << "***** No validation selected! ******\n" << std::endl;
-		validatorThreads = PThreadsSpread(NUMA_SLICE_COUNT, CPUAffinityType::SOCKET, validatorDatas, [](void* data) -> void* {
-			ValidatorThreadData* validatorData = (ValidatorThreadData*) data;
-			setThreadName(("NoValidator " + std::to_string(validatorData->numaNode)).c_str());
-			noValidatorThread(*validatorData->context);
-			pthread_exit(nullptr);
-			return nullptr;
-		});
+
+		for(int i = 0; i < NUMA_SLICE_COUNT; i++) {
+			validatorDatas[i].context = context.numaQueues[i].ptr;
+			validatorDatas[i].mbfs = mbfs[i];
+			validatorDatas[i].complexI = i;
+		}
+		validatorThreads = spreadThreads(NUMA_SLICE_COUNT, CPUAffinityType::SOCKET, validatorDatas, noValidatorPThread);
 	}
 
 	ResultProcessorOutput results = NUMAResultProcessor(Variables, context, topLoader);
@@ -189,6 +155,8 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 	processorThread.join();
 	queueWatchdogThread.join();
 	validatorThreads.join();
+
+	freeNUMA_MBFs(Variables, mbfs);
 
 	return results;
 }

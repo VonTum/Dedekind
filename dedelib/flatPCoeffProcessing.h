@@ -132,7 +132,7 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void*
 		return nullptr;
 	};
 
-	PThreadsSpread coreComplexThreads(CORE_COMPLEX_COUNT, CPUAffinityType::COMPLEX, procData, processorFunc);
+	PThreadBundle coreComplexThreads = spreadThreads(CORE_COMPLEX_COUNT, CPUAffinityType::COMPLEX, procData, processorFunc);
 	coreComplexThreads.join();
 }
 
@@ -149,9 +149,7 @@ void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context, const void* 
 	cpuProcessor_FineMultiThread_MBF(context, static_cast<const Monotonic<Variables>*>(mbfs[0]));
 }
 
-void loadNUMA_MBFs(unsigned int Variables, const void* mbfs[2]);
-
-ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = nullptr);
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void*(*validator)(void*) = nullptr);
 
 std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const FlatNode* allMBFNodes, const ClassInfo* allClassInfos, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf);
 
@@ -174,7 +172,7 @@ void computeFinalDedekindNumberFromGatheredResults(const std::vector<BetaSumPair
 std::vector<JobTopInfo> loadAllTops(unsigned int Variables);
 
 template<unsigned int Variables>
-void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void(*validator)(const OutputBuffer&, const void*, ThreadPool&) = nullptr) {
+void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void*(*validator)(void*) = nullptr) {
 	std::cout << "Starting Computation..." << std::endl;
 	ResultProcessorOutput betaResults = pcoeffPipeline(Variables, []() -> std::vector<JobTopInfo> {return loadAllTops(Variables);}, processorFunc, validator);
 
@@ -182,6 +180,8 @@ void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& contex
 	collector.addBetaResults(betaResults.results);
 
 	computeFinalDedekindNumberFromGatheredResults<Variables>(collector.getResultingSums(), betaResults.validationBuffer);
+
+	numa_free(betaResults.validationBuffer, VALIDATION_BUFFER_SIZE(Variables) * sizeof(ValidationData));
 }
 
 std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sampleCount);

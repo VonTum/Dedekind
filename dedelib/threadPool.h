@@ -117,26 +117,29 @@ public:
 
 typedef PThreadPool ThreadPool;
 
-class PThreadsSpread {
+class PThreadBundle {
 	std::unique_ptr<pthread_t[]> threads;
 	size_t threadCount;
 public:
-	PThreadsSpread() : threads() {}
-	PThreadsSpread(PThreadsSpread&&) = default;
-	PThreadsSpread& operator=(PThreadsSpread&&) = default;
-	PThreadsSpread(const PThreadsSpread&) = delete;
-	PThreadsSpread& operator=(const PThreadsSpread&) = delete;
-	template<typename T>
-	PThreadsSpread(size_t threadCount, CPUAffinityType affinity, T* datas, void*(*func)(void*), size_t threadsPerData = 1) : 
-		threads(new pthread_t[threadCount]), 
-		threadCount(threadCount) {
-		for(size_t i = 0; i < threadCount; i++) {
-			size_t selectedDataIdx = i / threadsPerData;
-			T* selectedData = &datas[selectedDataIdx];
-			this->threads[i] = createPThreadAffinity(i, affinity, func, (void*) selectedData);
-		}
-	}
+	PThreadBundle() : threads() {}
+	PThreadBundle(pthread_t* threads, size_t threadCount) : threads(threads), threadCount(threadCount) {}
+	PThreadBundle(PThreadBundle&&) = default;
+	PThreadBundle& operator=(PThreadBundle&&) = default;
+	PThreadBundle(const PThreadBundle&) = delete;
+	PThreadBundle& operator=(const PThreadBundle&) = delete;
 	void join();
-	~PThreadsSpread();
+	~PThreadBundle();
 };
 
+PThreadBundle multiThread(size_t threadCount, int cpuI, CPUAffinityType affinity, void* data, void*(*func)(void*));
+
+template<typename T>
+PThreadBundle spreadThreads(size_t threadCount, CPUAffinityType affinity, T* datas, void*(*func)(void*), size_t threadsPerData = 1) {
+	pthread_t* threads = new pthread_t[threadCount]; 
+	for(size_t i = 0; i < threadCount; i++) {
+		size_t selectedDataIdx = i / threadsPerData;
+		T* selectedData = &datas[selectedDataIdx];
+		threads[i] = createPThreadAffinity(i, affinity, func, (void*) selectedData);
+	}
+	return PThreadBundle(threads, threadCount);
+}

@@ -98,6 +98,12 @@ public:
 	}
 };
 
+enum class TryPopStatus {
+	SUCCESS,
+	EMPTY,
+	CLOSED
+};
+
 template<typename T>
 class SynchronizedQueue {
 	RingQueue<T> queue;
@@ -185,6 +191,18 @@ public:
 		}
 		for(size_t i = 0; i < numberToPop; i++) {
 			buffer[i] = this->queue.pop();
+		}
+	}
+
+	TryPopStatus try_pop(T& out) {
+		std::unique_lock<std::mutex> lock(mutex);
+		if(!this->queue.empty()) {
+			out = this->queue.pop();
+			return TryPopStatus::SUCCESS;
+		} else if(this->isClosed) {
+			return TryPopStatus::CLOSED;
+		} else {
+			return TryPopStatus::EMPTY;
 		}
 	}
 };

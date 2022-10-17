@@ -10,32 +10,43 @@
 #include <sstream>
 
 template<unsigned int Variables>
-static void processSuperComputingJob_ST(const std::vector<std::string>& args) {
+static void processSuperComputingJob_FromArgs(const std::vector<std::string>& args, const char* name, void (*processorFunc)(PCoeffProcessingContext&, const void*[2])) {
 	std::string projectFolderPath = args[0];
 	std::string jobID = args[1];
-	bool validate = args.size() >= 3;
-	processJob(Variables, projectFolderPath, jobID, "cpuST", cpuProcessor_SingleThread<Variables>, validate ? threadPoolBufferValidator<Variables> : nullptr);
+	void*(*validator)(void*) = nullptr;
+	if(args.size() >= 3) {
+		if(args[2] == "validate_basic") {
+			validator = basicValidatorPThread<Variables>;
+		} else if(args[2] == "validate_adv") {
+			validator = continuousValidatorPThread<Variables>;
+		}
+	}
+	processJob(Variables, projectFolderPath, jobID, name, processorFunc, validator);
+}
+
+template<unsigned int Variables>
+static void processSuperComputingJob_ST(const std::vector<std::string>& args) {
+	processSuperComputingJob_FromArgs<Variables>(args, "cpuST", cpuProcessor_SingleThread<Variables>);
 }
 
 template<unsigned int Variables>
 static void processSuperComputingJob_FMT(const std::vector<std::string>& args) {
-	std::string projectFolderPath = args[0];
-	std::string jobID = args[1];
-	bool validate = args.size() >= 3;
-	processJob(Variables, projectFolderPath, jobID, "cpuFMT", cpuProcessor_FineMultiThread<Variables>, validate ? threadPoolBufferValidator<Variables> : nullptr);
+	processSuperComputingJob_FromArgs<Variables>(args, "cpuFMT", cpuProcessor_FineMultiThread<Variables>);
 }
 
 template<unsigned int Variables>
 static void processSuperComputingJob_SMT(const std::vector<std::string>& args) {
-	std::string projectFolderPath = args[0];
-	std::string jobID = args[1];
-	bool validate = args.size() >= 3;
-	processJob(Variables, projectFolderPath, jobID, "cpuSMT", cpuProcessor_SuperMultiThread<Variables>, validate ? threadPoolBufferValidator<Variables> : nullptr);
+	processSuperComputingJob_FromArgs<Variables>(args, "cpuSMT", cpuProcessor_SuperMultiThread<Variables>);
 }
 
 template<unsigned int Variables>
-void processDedekindNumberWithValidator(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2])) {
-	processDedekindNumber<Variables>(processorFunc, threadPoolBufferValidator<Variables>);
+void processDedekindNumberWithBasicValidator(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2])) {
+	processDedekindNumber<Variables>(processorFunc, basicValidatorPThread<Variables>);
+}
+
+template<unsigned int Variables>
+void processDedekindNumberWithContinuousValidator(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2])) {
+	processDedekindNumber<Variables>(processorFunc, continuousValidatorPThread<Variables>);
 }
 
 CommandSet processingCommands {"Massively parallel Processing Commands", {
@@ -71,13 +82,21 @@ CommandSet processingCommands {"Massively parallel Processing Commands", {
 	{"processDedekindNumber6_SMT", []() {processDedekindNumber<6>(cpuProcessor_SuperMultiThread<6>); }},
 	{"processDedekindNumber7_SMT", []() {processDedekindNumber<7>(cpuProcessor_SuperMultiThread<7>); }},
 
-	{"processDedekindNumber1_FMT_Validated", []() {processDedekindNumberWithValidator<1>(cpuProcessor_FineMultiThread<1>); }},
-	{"processDedekindNumber2_FMT_Validated", []() {processDedekindNumberWithValidator<2>(cpuProcessor_FineMultiThread<2>); }},
-	{"processDedekindNumber3_FMT_Validated", []() {processDedekindNumberWithValidator<3>(cpuProcessor_FineMultiThread<3>); }},
-	{"processDedekindNumber4_FMT_Validated", []() {processDedekindNumberWithValidator<4>(cpuProcessor_FineMultiThread<4>); }},
-	{"processDedekindNumber5_FMT_Validated", []() {processDedekindNumberWithValidator<5>(cpuProcessor_FineMultiThread<5>); }},
-	{"processDedekindNumber6_FMT_Validated", []() {processDedekindNumberWithValidator<6>(cpuProcessor_FineMultiThread<6>); }},
-	{"processDedekindNumber7_FMT_Validated", []() {processDedekindNumberWithValidator<7>(cpuProcessor_FineMultiThread<7>); }},
+	{"processDedekindNumber1_FMT_BasicValidated", []() {processDedekindNumberWithBasicValidator<1>(cpuProcessor_FineMultiThread<1>); }},
+	{"processDedekindNumber2_FMT_BasicValidated", []() {processDedekindNumberWithBasicValidator<2>(cpuProcessor_FineMultiThread<2>); }},
+	{"processDedekindNumber3_FMT_BasicValidated", []() {processDedekindNumberWithBasicValidator<3>(cpuProcessor_FineMultiThread<3>); }},
+	{"processDedekindNumber4_FMT_BasicValidated", []() {processDedekindNumberWithBasicValidator<4>(cpuProcessor_FineMultiThread<4>); }},
+	{"processDedekindNumber5_FMT_BasicValidated", []() {processDedekindNumberWithBasicValidator<5>(cpuProcessor_FineMultiThread<5>); }},
+	{"processDedekindNumber6_FMT_BasicValidated", []() {processDedekindNumberWithBasicValidator<6>(cpuProcessor_FineMultiThread<6>); }},
+	{"processDedekindNumber7_FMT_BasicValidated", []() {processDedekindNumberWithBasicValidator<7>(cpuProcessor_FineMultiThread<7>); }},
+
+	{"processDedekindNumber1_FMT_ContinuousValidated", []() {processDedekindNumberWithContinuousValidator<1>(cpuProcessor_FineMultiThread<1>); }},
+	{"processDedekindNumber2_FMT_ContinuousValidated", []() {processDedekindNumberWithContinuousValidator<2>(cpuProcessor_FineMultiThread<2>); }},
+	{"processDedekindNumber3_FMT_ContinuousValidated", []() {processDedekindNumberWithContinuousValidator<3>(cpuProcessor_FineMultiThread<3>); }},
+	{"processDedekindNumber4_FMT_ContinuousValidated", []() {processDedekindNumberWithContinuousValidator<4>(cpuProcessor_FineMultiThread<4>); }},
+	{"processDedekindNumber5_FMT_ContinuousValidated", []() {processDedekindNumberWithContinuousValidator<5>(cpuProcessor_FineMultiThread<5>); }},
+	{"processDedekindNumber6_FMT_ContinuousValidated", []() {processDedekindNumberWithContinuousValidator<6>(cpuProcessor_FineMultiThread<6>); }},
+	{"processDedekindNumber7_FMT_ContinuousValidated", []() {processDedekindNumberWithContinuousValidator<7>(cpuProcessor_FineMultiThread<7>); }},
 }, {
 	{"initializeSupercomputingProject", [](const std::vector<std::string>& args) {
 		std::string projectFolderPath = args[0];

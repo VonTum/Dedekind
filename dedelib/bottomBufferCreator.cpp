@@ -422,7 +422,7 @@ void runBottomBufferCreator(
 		ti.links = &links[socket];
 	}
 
-	PThreadsSpread threads(numberOfThreads, CPUAffinityType::COMPLEX, threadDatas, threadFunc, 8);
+	PThreadBundle threads = spreadThreads(numberOfThreads, CPUAffinityType::COMPLEX, threadDatas, threadFunc, 8);
 
 	if(numberOfThreads > 8) {
 		memcpy(numaLinks[1], numaLinks[0], linkBufMemSizeWithPrefetching);
