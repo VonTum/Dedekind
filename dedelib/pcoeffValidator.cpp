@@ -28,13 +28,16 @@ void printBadPCoeffSumError(NodeIndex botIdx, size_t elementIdx, ProcessedPCoeff
 		 + "\033[39m\n" << std::flush;
 }
 
-void freeBuffersAfterValidation(int complexI, PCoeffProcessingContextEighth& context, ValidatorWorkerData& workerData, int jobToFree) {
-	const OutputBuffer& resultBuf = workerData.jobs[jobToFree];
+void freeBuffersAfterValidation(int complexI, PCoeffProcessingContextEighth& context, const OutputBuffer& resultBuf, uint64_t workAmount, std::chrono::time_point<std::chrono::high_resolution_clock>& startTime) {
 	NodeIndex topIdx = resultBuf.originalInputData.getTop();
 	size_t numBottoms = resultBuf.originalInputData.getNumberOfBottoms();
 	context.inputBufferAlloc.push(resultBuf.originalInputData.bufStart);
 	context.resultBufferAlloc.push(resultBuf.outputBuf);
-	validatorFinishMessage(complexI, topIdx, numBottoms, workerData.processedCounts[jobToFree].load(), workerData.startTimes[jobToFree]);
+	validatorFinishMessage(complexI, topIdx, numBottoms, workAmount, startTime);
+}
+
+void freeBuffersAfterValidation(int complexI, PCoeffProcessingContextEighth& context, ValidatorWorkerData& workerData, int jobToFree) {
+	freeBuffersAfterValidation(complexI, context, workerData.jobs[jobToFree], workerData.processedCounts[jobToFree].load(),  workerData.startTimes[jobToFree]);
 }
 
 void* noValidatorPThread(void* voidData) {

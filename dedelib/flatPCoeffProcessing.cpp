@@ -48,7 +48,7 @@ std::vector<JobTopInfo> loadAllTops(unsigned int Variables) {
 		newTopInfo.topDual = allNodes[i].dual;
 		topsToProcess.push_back(newTopInfo);
 	}
-	free(const_cast<FlatNode*>(allNodes));
+	freeFlatBuffer(allNodes, mbfCounts[Variables]);
 	//shuffleBots(&topsToProcess[0], (&topsToProcess[0]) + topsToProcess.size());
 	//free(allNodes);
 
