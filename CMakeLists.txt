@@ -64,6 +64,7 @@ add_executable(production
   production/testSetCommands.cpp
   production/codeGenCommands.cpp
   production/bottomBufferCommands.cpp
+  production/superCommands.cpp
 )
 add_executable(indev
   indev/indev.cpp

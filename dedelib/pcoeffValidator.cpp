@@ -20,7 +20,7 @@ void validatorFinishMessage(int validatorIdx, NodeIndex topIdx, size_t numBottom
 void printBadPCoeffSumError(NodeIndex botIdx, size_t elementIdx, ProcessedPCoeffSum foundPCoeffSum, ProcessedPCoeffSum correctPCoeffSum) {
 	std::cerr << "\033[35m[Validator] \033[101mERROR\033[49m at bottom "
 		 + std::to_string(elementIdx)
-		 + ", Bot=" + std::to_string(elementIdx)
+		 + ", bot=" + std::to_string(botIdx)
 		 + ", true count=" + std::to_string(getPCoeffCount(correctPCoeffSum))
 		 + ", found count=" + std::to_string(getPCoeffCount(foundPCoeffSum))
 		 + ", true sum=" + std::to_string(getPCoeffSum(correctPCoeffSum))

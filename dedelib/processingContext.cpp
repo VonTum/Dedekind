@@ -43,7 +43,7 @@ void setQueueToBufferParts(SynchronizedQueue<T*>& target, T* bufMemory, size_t p
 	}
 }
 
-PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables) : topsAreReady(1), inputQueue(NUMA_SLICE_COUNT, NUM_INPUT_BUFFERS_PER_NODE) {
+PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables) : inputQueue(NUMA_SLICE_COUNT, NUM_INPUT_BUFFERS_PER_NODE), topsAreReady(1) {
 	std::cout 
 		<< "Create PCoeffProcessingContext in 2 parts with " 
 		<< Variables 

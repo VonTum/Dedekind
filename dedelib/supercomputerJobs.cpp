@@ -223,6 +223,10 @@ size_t ValidationFileData::mergeIntoThis(const ValidationFileData& other) {
 	return totalTopsInOther;
 }
 
+bool operator==(const ValidationFileData& a, const ValidationFileData& b) {
+	return memcmp(a.memory.get(), b.memory.get(), a.getTotalMemorySize()) == 0;
+}
+
 static void checkValidationFileExists(const std::string& validationFileName) {
 	if(!std::filesystem::exists(validationFileName)) {
 		std::cerr << "Validation file " + validationFileName + " does not exist! Aborting!\n" << std::flush;
@@ -534,6 +538,40 @@ void processJob(unsigned int Variables, const std::string& computeFolder, const 
 	std::cout << "Finished critical section, everything comitted! " << criticalFile << "=>" << finishedFile << std::endl;
 }
 
+static std::pair<std::string, std::string> parseFileName(const std::filesystem::path& filePath, const std::string& extention) {
+	std::string fileName = filePath.filename().string();
+
+	if(fileName[0] != 'j' || fileName.substr(fileName.length()-extention.length()) != extention) {
+		std::cerr << "Invalid job filename " + filePath.string() + "?\n";
+		std::abort();
+	}
+		
+	size_t underscoreIdx = fileName.find('_');
+	std::string jobID = fileName.substr(1/*cut initial j*/, underscoreIdx-1);
+	std::string deviceID = fileName.substr(underscoreIdx + 1, fileName.length()-extention.length()-underscoreIdx-1);
+	return std::make_pair(jobID, deviceID);
+}
+
+void resetUnfinishedJobs(const std::string& computeFolder) {
+	std::string jobsFolder = computeFolderPath(computeFolder, "jobs");
+	std::string workingFolder = computeFolderPath(computeFolder, "working");
+
+	std::ofstream log("resetJobsLog.txt", std::ios::app);
+
+	std::string totalResetString = "";
+
+	for(std::filesystem::directory_entry unfinishedJob : std::filesystem::directory_iterator(workingFolder)) {
+		std::pair<std::string, std::string> jobDevicePair = parseFileName(unfinishedJob.path(), ".job");
+
+		log << "Job " + jobDevicePair.first + " reset from node " + jobDevicePair.second << "\n";
+
+		totalResetString.append(jobDevicePair.first + ",");
+
+		std::filesystem::rename(unfinishedJob.path().string(), jobsFolder + "j" + jobDevicePair.first + ".job");
+	}
+
+	std::cout << "Resulting new sbatch array: --array=" + totalResetString.substr(0, totalResetString.length() - 1) << std::endl;
+}
 
 std::vector<BetaResult> readResultsFile(unsigned int Variables, const std::filesystem::path& filePath) {
 	ResultsFileHeader header;
@@ -553,6 +591,42 @@ std::vector<BetaResult> readResultsFile(unsigned int Variables, const std::files
 	return result;
 }
 
+struct NamedResultFile {
+	std::string jobID;
+	std::string nodeID;
+	std::filesystem::path filePath;
+	std::vector<BetaResult> results;
+};
+
+static std::vector<NamedResultFile> loadAllResultsFiles(unsigned int Variables, const std::string& computeFolder) {
+	std::vector<NamedResultFile> allResultFileContents;
+
+	std::string resultsDirectory = computeFolderPath(computeFolder, "results");
+	for(const auto& file : std::filesystem::directory_iterator(resultsDirectory)) {
+		std::filesystem::path path = file.path();
+		std::string filePath = path.string();
+		if(file.is_regular_file() && filePath.substr(filePath.find_last_of(".")) == ".results") {
+			// Results file
+			std::cout << "Reading results file " << filePath << std::endl;
+			std::vector<BetaResult> results = readResultsFile(Variables, path);
+
+			std::pair<std::string, std::string> jobDevicePair = parseFileName(path, ".results");
+			
+			NamedResultFile entry;
+			entry.jobID = jobDevicePair.first;
+			entry.nodeID = jobDevicePair.second;
+			entry.filePath = path;
+			entry.results = std::move(results);
+
+			allResultFileContents.push_back(std::move(entry));
+		} else {
+			std::cerr << "Unknown file found, expected results file: " << filePath << std::endl;
+		}
+	}
+
+	return allResultFileContents;
+}
+
 BetaResultCollector collectAllResultFiles(unsigned int Variables, const std::string& computeFolder) {
 	BetaResultCollector collector(Variables);
 
@@ -565,6 +639,8 @@ BetaResultCollector collectAllResultFiles(unsigned int Variables, const std::str
 			std::cout << "Reading results file " << filePath << std::endl;
 			std::vector<BetaResult> results = readResultsFile(Variables, path);
 			collector.addBetaResults(results);
+		} else {
+			std::cerr << "Unknown file found, expected results file: " << filePath << std::endl;
 		}
 	}
 
@@ -590,8 +666,45 @@ ValidationFileData collectAllValidationFiles(unsigned int Variables, const std::
 			size_t numberOfTopsInOther = summer.mergeIntoThis(currentlyAddingFile);
 			std::cout << "Successfully added validation file " + filePath + ", added " + std::to_string(numberOfTopsInOther) + " tops." << std::endl;
 			check(close(validationFD), "Failed to close validation file! ");
+		} else {
+			std::cerr << "Unknown file found, expected validation file: " << filePath << std::endl;
 		}
 	}
 
 	return summer;
 }
+
+void checkProjectResultsIdentical(unsigned int Variables, const std::string& computeFolderA, const std::string& computeFolderB) {
+	std::vector<NamedResultFile> resultsA = loadAllResultsFiles(Variables, computeFolderA);
+	std::sort(resultsA.begin(), resultsA.end(), [](const NamedResultFile& a, const NamedResultFile& b) -> bool {return a.jobID < b.jobID;});
+	std::vector<NamedResultFile> resultsB = loadAllResultsFiles(Variables, computeFolderB);
+	std::sort(resultsB.begin(), resultsB.end(), [](const NamedResultFile& a, const NamedResultFile& b) -> bool {return a.jobID < b.jobID;});
+	
+	bool success = true;
+
+	std::cout << "Loaded all result files\nComparing...\n" << std::flush;
+	for(size_t i = 0; i < resultsA.size(); i++) {
+		if(resultsA[i].jobID != resultsB[i].jobID) {
+			std::cerr << "Missing result file? " + resultsA[i].filePath.string() + " <-> " + resultsB[i].filePath.string() << std::endl;
+			std::abort();
+		}
+
+		if(resultsA[i].results != resultsB[i].results) {
+			std::cerr << "Nonmatching result files! " + resultsA[i].filePath.string() + " <-> " + resultsB[i].filePath.string() << std::endl;
+			success = false;
+		}
+	}
+
+	ValidationFileData validationA = collectAllValidationFiles(Variables, computeFolderA);
+	ValidationFileData validationB = collectAllValidationFiles(Variables, computeFolderB);
+
+	if(validationA != validationB) {
+		std::cerr << "Mismatching validation data!\n" << std::flush;
+		success = false;
+	}
+
+	if(success) {
+		std::cout << "All files checked. Projects " + computeFolderA + " and " + computeFolderB + " are identical!\n" << std::flush;
+	}
+}
+

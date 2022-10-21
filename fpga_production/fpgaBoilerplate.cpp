@@ -63,8 +63,8 @@ void initPlatform() {
 
 	// Query the available OpenCL devices.
 	//devices = new cl_device_id[2]; // Nodes have 2 fpga accelerators
-	//cl_int status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 2, devices, &numDevices);
-	devices = getDevices(platform, CL_DEVICE_TYPE_ALL, &numDevices);
+	//cl_int status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ACCELERATOR, 2, devices, &numDevices);
+	devices = getDevices(platform, CL_DEVICE_TYPE_ACCELERATOR, &numDevices);
 	if(numDevices != 2) {
 		std::cerr << "Error expected 2 devices\n" << std::flush;
 		exit(-1);

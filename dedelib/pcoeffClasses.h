@@ -94,6 +94,13 @@ struct BetaSum {
 	uint64_t countedIntervalSizeDown;
 };
 
+inline bool operator==(BetaSum a, BetaSum b) {
+	return a.betaSum == b.betaSum && a.countedIntervalSizeDown == b.countedIntervalSizeDown;
+}
+inline bool operator!=(BetaSum a, BetaSum b) {
+	return !(a == b);
+}
+
 inline BetaSum operator+(BetaSum a, BetaSum b) {
 	return BetaSum{a.betaSum + b.betaSum, a.countedIntervalSizeDown + b.countedIntervalSizeDown};
 }
@@ -124,11 +131,27 @@ struct BetaSumPair {
 	BetaSum getBetaSumPlusValidationTerm(unsigned int Variables, BetaSum validationTerm) const;
 };
 
+inline bool operator==(BetaSumPair a, BetaSumPair b) {
+	return a.betaSum == b.betaSum && a.betaSumDualDedup == b.betaSumDualDedup;
+}
+inline bool operator!=(BetaSumPair a, BetaSumPair b) {
+	return !(a == b);
+}
+
+
 // Must be packed, to ensure that results file does not contain random padding data
 struct BetaResult {
 	BetaSumPair dataForThisTop;
 	NodeIndex topIndex;
 };
+
+inline bool operator==(BetaResult a, BetaResult b) {
+	return a.topIndex == b.topIndex && a.dataForThisTop == b.dataForThisTop;
+}
+inline bool operator!=(BetaResult a, BetaResult b) {
+	return !(a == b);
+}
+
 
 class BetaResultCollector {
 	std::vector<BetaSumPair> allBetaSums;

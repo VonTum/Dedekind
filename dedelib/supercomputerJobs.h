@@ -32,6 +32,10 @@ struct ValidationFileData{
 	size_t mergeIntoThis(const ValidationFileData& other);
 };
 
+bool operator==(const ValidationFileData& a, const ValidationFileData& b);
+inline bool operator!=(const ValidationFileData& a, const ValidationFileData& b) {
+	return !(a == b);
+}
  
 // Creates all necessary files and folders for a project to compute the given dedekind number
 // Requires that the compute folder does not already exist to prevent data loss
@@ -41,6 +45,9 @@ void initializeComputeProject(unsigned int Variables, std::string computeFolder,
 void initializeValidationFiles(unsigned int Variables, std::string computeFolder, const std::vector<std::string>& computeIDs);
 
 void processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void*(*validator)(void*) = nullptr);
+
+void resetUnfinishedJobs(const std::string& computeFolder);
+
 
 BetaResultCollector collectAllResultFiles(unsigned int Variables, const std::string& computeFolder);
 ValidationFileData collectAllValidationFiles(unsigned int Variables, const std::string& computeFolder);
@@ -53,3 +60,5 @@ void collectAndProcessResults(const std::string& computeFolder) {
 
 	computeFinalDedekindNumberFromGatheredResults<Variables>(allResults.getResultingSums(), completeValidationBuffer.savedValidationBuffer);
 }
+
+void checkProjectResultsIdentical(unsigned int Variables, const std::string& computeFolderA, const std::string& computeFolderB);

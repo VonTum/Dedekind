@@ -143,33 +143,25 @@ void* validationWorkerThread(void* voidData) {
 	ValidatorWorkerData* validatorData = (ValidatorWorkerData*) voidData;
 	const Monotonic<Variables>* mbfs = static_cast<const Monotonic<Variables>*>(validatorData->mbfs);
 
-	int prevJob = VALIDATOR_EXIT; // At startup, threads "have been processing" A
-	const NodeIndex* indices;
-	const ProcessedPCoeffSum* results;
-	Monotonic<Variables> top;
-	size_t numBottoms;
+	int curJob = validatorData->nextJob.load();
 
-	while(true) {
-		int curJob = validatorData->nextJob.load();
-		if(curJob != prevJob) {
-			const OutputBuffer& resultBuf = validatorData->jobs[curJob];
-			NodeIndex topIdx = resultBuf.originalInputData.getTop();
-			numBottoms = resultBuf.originalInputData.getNumberOfBottoms();
-			top = mbfs[topIdx];
-			indices = resultBuf.originalInputData.bufStart;
-			results = resultBuf.outputBuf;
-			
-			if(prevJob != VALIDATOR_EXIT) { // numProcessingB is already correct for initial run
-				validatorData->workerSwitchTo(curJob); // Explicit Acquire/release semantics!
-			}
-			if(curJob == VALIDATOR_EXIT) {
-				break;
-			}
-			prevJob = curJob;
-		}
+	while(curJob != VALIDATOR_EXIT) {
+		const OutputBuffer& resultBuf = validatorData->jobs[curJob];
+		NodeIndex topIdx = resultBuf.originalInputData.getTop();
+		size_t numBottoms = resultBuf.originalInputData.getNumberOfBottoms();
+		Monotonic<Variables> top = mbfs[topIdx];
+		const NodeIndex* indices = resultBuf.originalInputData.bufStart;
+		const ProcessedPCoeffSum* results = resultBuf.outputBuf;
 
-		uint64_t workAmount = validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator);
-		validatorData->processedCounts[curJob].fetch_add(workAmount);
+		int newJob;
+		do {
+			uint64_t workAmount = validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator);
+			validatorData->processedCounts[curJob].fetch_add(workAmount);
+			newJob = validatorData->nextJob.load();
+		} while(newJob == curJob);
+		curJob = newJob;
+
+		validatorData->workerSwitchTo(curJob);
 	}
 
 	pthread_exit(nullptr);

@@ -18,3 +18,4 @@ extern CommandSet testSetCommands;
 extern CommandSet processingCommands;
 extern CommandSet codeGenCommands;
 extern CommandSet bottomBufferCommands;
+extern CommandSet superCommands;
