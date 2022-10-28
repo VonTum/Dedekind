@@ -31,6 +31,5 @@ BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff);
 
 ResultProcessorOutput NUMAResultProcessor(
 	unsigned int Variables,
-	PCoeffProcessingContext& context,
-	const std::function<std::vector<JobTopInfo>()>& topLoader
+	PCoeffProcessingContext& context
 );

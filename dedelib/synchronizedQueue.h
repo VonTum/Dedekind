@@ -11,66 +11,78 @@
 #include "slabAllocator.h"
 #include "numaMem.h"
 
+inline uint64_t roundUpToPow2(uint64_t v) {
+	v--;
+	v |= v >> 1;
+	v |= v >> 2;
+	v |= v >> 4;
+	v |= v >> 8;
+	v |= v >> 16;
+	v |= v >> 32;
+	v++;
+	return v;
+}
 
 template<typename T>
 class RingQueue {
-	T* queueBuffer;
-	T* queueBufferEnd;
-	T* readHead;
-	T* writeHead;
+	// Cute trick I learned recently. You can make a circular queue by not moduloing the indices, but only moduloing after increment. 
+	// This does require that capacity and indices are both powers of 2, such that there is no error when indices wrap around
+	T* data;
+	uint64_t dataCapacityMask; // Masks out acceptable index bits, looks like 0b00000...00111...1111
+	uint64_t readHead;
+	uint64_t writeHead;
 
 public:
-	size_t capacity() const {
-		return queueBufferEnd - queueBuffer;
+	uint64_t capacity() const {
+		return dataCapacityMask + 1;
 	}
 	bool empty() const {
 		return readHead == writeHead;
 	}
-	size_t size() const {
-		if(writeHead >= readHead) {
-			return writeHead - readHead;
-		} else {
-			return (queueBufferEnd - readHead) + (writeHead - queueBuffer);
-		}
+	uint64_t size() const {
+		return writeHead - readHead;
 	}
 
-	RingQueue() noexcept : queueBuffer(nullptr), queueBufferEnd(nullptr), readHead(nullptr), writeHead(nullptr) {}
-	RingQueue(size_t capacity) : 
-		queueBuffer(new T[capacity + 1]), // Extra capacity margin so that writeHead != readHead when the buffer is full
-		queueBufferEnd(this->queueBuffer + (capacity + 1)),
-		readHead(this->queueBuffer),
-		writeHead(this->queueBuffer) {}
+	RingQueue() noexcept : data(nullptr), dataCapacityMask(0), readHead(0), writeHead(0) {}
+	RingQueue(uint64_t capacity) : 
+		data(new T[roundUpToPow2(capacity)]), // Extra capacity margin so that writeHead != readHead when the buffer is full
+		dataCapacityMask(roundUpToPow2(capacity) - 1),
+		readHead(0),
+		writeHead(0) {}
 	
 	RingQueue(RingQueue&& other) noexcept : 
-		queueBuffer(other.queueBuffer), 
-		queueBufferEnd(other.queueBufferEnd), 
+		data(other.data), 
+		dataCapacityMask(other.dataCapacityMask), 
 		readHead(other.readHead), 
 		writeHead(other.writeHead) {
 		
-		other.queueBuffer = nullptr;
-		other.queueBufferEnd = nullptr;
-		other.readHead = nullptr;
-		other.writeHead = nullptr;
+		other.data = nullptr;
+		other.dataCapacityMask = 0;
+		other.readHead = 0;
+		other.writeHead = 0;
 	}
 
 	RingQueue& operator=(RingQueue&& other) noexcept {
-		std::swap(this->queueBuffer, other.queueBuffer);
-		std::swap(this->queueBufferEnd, other.queueBufferEnd);
+		std::swap(this->data, other.data);
+		std::swap(this->dataCapacityMask, other.dataCapacityMask);
 		std::swap(this->readHead, other.readHead);
 		std::swap(this->writeHead, other.writeHead);
 		return *this;
 	}
 
-	RingQueue(const RingQueue& other) : RingQueue(other.capacity()) {
-		T* readPtrInOther = other.readHead;
-		if(readPtrInOther > other.writeHead) { // loops around
-			for(; readPtrInOther != other.queueBufferEnd; readPtrInOther++) {
-				this->push(*readPtrInOther);
-			}
-			readPtrInOther = other.queueBuffer;
-		}
-		for(; readPtrInOther != other.writeHead; readPtrInOther++) {
-			this->push(*readPtrInOther);
+	~RingQueue() {
+		delete[] data;
+	}
+
+	RingQueue(const RingQueue& other) : 
+		data(new T[other.capacity()]),
+		dataCapacityMask(other.dataCapacityMask),
+		readHead(0),
+		writeHead(0) {
+
+		for(this->writeHead = 0; this->writeHead < other.size(); this->writeHead++) {
+			uint64_t indexInOther = (other.readHead + this->writeHead) & other.dataCapacityMask;
+			this->data[writeHead] = other.data[indexInOther];
 		}
 	}
 
@@ -80,20 +92,24 @@ public:
 		return *this;
 	}
 
-	~RingQueue() {
-		delete[] queueBuffer;
-	}
-
 	void push(T item) {
-		*writeHead++ = std::move(item);
-		if(writeHead == queueBufferEnd) writeHead = queueBuffer;
-		assert(writeHead != readHead);
+		assert(this->size() < this->capacity());
+		this->data[writeHead++ & dataCapacityMask] = std::move(item);
 	}
 
 	T pop() {
-		assert(readHead != writeHead);
-		T result = std::move(*readHead++);
-		if(readHead == queueBufferEnd) readHead = queueBuffer;
+		assert(!this->empty());
+		T result = std::move(this->data[readHead++ & dataCapacityMask]);
+		return result;
+	}
+
+	// Picks out element at idx
+	T cherrypop(uint64_t idx) {
+		assert(idx < this->size());
+		assert(!this->empty());
+		uint64_t selectedIndex = (readHead + idx) & dataCapacityMask;
+		T result = std::move(this->data[selectedIndex]);
+		this->data[selectedIndex] = std::move(this->data[readHead++ & dataCapacityMask]);
 		return result;
 	}
 };
@@ -175,7 +191,23 @@ public:
 		}
 
 		if(!this->queue.empty()) {
-			return std::make_optional(std::move(this->queue.pop()));
+			return std::make_optional(this->queue.pop());
+		} else {
+			assert(this->isClosed);
+			return std::nullopt;
+		}
+	}
+
+	template<typename RandomEngine>
+	std::optional<T> pop_wait_random(RandomEngine& generator) {
+		uint64_t randomIdx = generator();
+		std::unique_lock<std::mutex> lock(mutex);
+		while(this->queue.empty() && !this->isClosed) {
+			readyForPop.wait(lock);
+		}
+
+		if(!this->queue.empty()) {
+			return std::make_optional(this->queue.cherrypop(randomIdx % this->queue.size()));
 		} else {
 			assert(this->isClosed);
 			return std::nullopt;
@@ -432,8 +464,30 @@ public:
 
 		while(true) {
 			do {
-				if(!this->queues[curIdx].empty()) {
-					return this->queues[curIdx].pop();
+				RingQueue<T>& selectedQueue = this->queues[curIdx];
+				if(!selectedQueue.empty()) {
+					return selectedQueue.pop();
+				}
+				if(curIdx == 0) curIdx = this->queues.size();
+				curIdx--;
+			} while(curIdx != preferredQueue);
+			if(isClosed) return std::nullopt;
+			readyForPop.wait(lock);
+			// Try again
+		}
+	}
+
+	template<typename RandomEngine>
+	std::optional<T> pop_wait_prefer_random(size_t preferredQueue, RandomEngine& generator) {
+		uint64_t randomIdx = generator();
+		std::unique_lock<std::mutex> lock(mutex);
+		size_t curIdx = preferredQueue;
+
+		while(true) {
+			do {
+				RingQueue<T>& selectedQueue = this->queues[curIdx];
+				if(!selectedQueue.empty()) {
+					return selectedQueue.cherrypop(randomIdx % selectedQueue.size());
 				}
 				if(curIdx == 0) curIdx = this->queues.size();
 				curIdx--;

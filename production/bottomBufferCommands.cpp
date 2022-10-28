@@ -13,7 +13,6 @@
 inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args) {
 	unsigned int Variables = std::stoi(args[0]);
 	int sampleCount = std::stoi(args[1]);
-	int threadCount = std::stoi(args[2]);
 
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
 	auto tops = generateRangeSample(Variables, sampleCount);
@@ -39,7 +38,7 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 		}
 	});
 	context.initTops(convertTopInfos(flatNodes, tops));
-	runBottomBufferCreator(Variables, context, threadCount);
+	runBottomBufferCreator(Variables, context);
 
 	loopBack.join();
 }
@@ -47,8 +46,7 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 template<unsigned int Variables>
 inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 	int sampleCount = std::stoi(args[0]);
-	int threadCount = std::stoi(args[1]);
-	int loopBackThreadCount = std::stoi(args[2]);
+	int loopBackThreadCount = std::stoi(args[1]);
 
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
 	const Monotonic<Variables>* mbfs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
@@ -144,7 +142,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 		loopBackThreads.push_back(std::move(loopBack));
 	}
 	context.initTops(convertTopInfos(flatNodes, tops));
-	runBottomBufferCreator(Variables, context, threadCount);
+	runBottomBufferCreator(Variables, context);
 
 	for(std::thread& t : loopBackThreads) {
 		t.join();

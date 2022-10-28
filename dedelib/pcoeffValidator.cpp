@@ -25,7 +25,7 @@ void printBadPCoeffSumError(NodeIndex botIdx, size_t elementIdx, ProcessedPCoeff
 		 + ", found count=" + std::to_string(getPCoeffCount(foundPCoeffSum))
 		 + ", true sum=" + std::to_string(getPCoeffSum(correctPCoeffSum))
 		 + ", found sum=" + std::to_string(getPCoeffSum(foundPCoeffSum))
-		 + "\033[39m\n" << std::flush;
+		 + "\033[39m\n";
 }
 
 void freeBuffersAfterValidation(int complexI, PCoeffProcessingContextEighth& context, const OutputBuffer& resultBuf, uint64_t workAmount, std::chrono::time_point<std::chrono::high_resolution_clock>& startTime) {

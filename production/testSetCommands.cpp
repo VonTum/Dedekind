@@ -340,7 +340,7 @@ void GenTopsFullPermutePipelineTestSetOpenCL(std::vector<size_t> topsIn, std::st
 
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
 	context.initTops(convertTopInfos(flatNodes, topsToProcess));
-	runBottomBufferCreator(Variables, context, 1);
+	runBottomBufferCreator(Variables, context);
 	std::cout << "Processing..." << std::endl;
 	//std::thread cpuThread([&](){cpuProcessor_SingleThread(allMBFData, context);});
 

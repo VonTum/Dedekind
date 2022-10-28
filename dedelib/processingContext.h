@@ -37,6 +37,7 @@ public:
 
 class PCoeffProcessingContext {
 public:
+	unsigned int Variables;
 	NUMAArray<NodeIndex> numaInputMemory[NUMA_SLICE_COUNT];
 	NUMAArray<ProcessedPCoeffSum> numaResultMemory[NUMA_SLICE_COUNT];
 	unique_numa_ptr<PCoeffProcessingContextEighth> numaQueues[NUMA_SLICE_COUNT];
@@ -46,7 +47,12 @@ public:
 	MutexLatch topsAreReady;
 	std::vector<JobTopInfo> tops; // Synchronizes on the topsAreReady latch
 
+	MutexLatch mbfs0Ready;
+	MutexLatch mbfsBothReady;
+	const void* mbfs[2]; // One buffer on Socket 0 and one on Socket 1
+
 	void initTops(std::vector<JobTopInfo> tops);
+	void initMBFS();
 
 	PCoeffProcessingContext(unsigned int Variables);
 	~PCoeffProcessingContext();

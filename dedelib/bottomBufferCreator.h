@@ -13,6 +13,5 @@ std::vector<JobTopInfo> convertTopInfos(const FlatNode* flatNodes, const std::ve
 
 void runBottomBufferCreator(
 	unsigned int Variables,
-	PCoeffProcessingContext& context,
-	int numberOfThreads
+	PCoeffProcessingContext& context
 );

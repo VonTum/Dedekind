@@ -6,7 +6,7 @@
 #include <sstream>
 
 template<unsigned int Variables>
-static void processSuperComputingJob_FromArgs(const std::vector<std::string>& args, const char* name, void (*processorFunc)(PCoeffProcessingContext&, const void*[2])) {
+static void processSuperComputingJob_FromArgs(const std::vector<std::string>& args, const char* name, void (*processorFunc)(PCoeffProcessingContext&)) {
 	std::string projectFolderPath = args[0];
 	std::string jobID = args[1];
 	void*(*validator)(void*) = nullptr;

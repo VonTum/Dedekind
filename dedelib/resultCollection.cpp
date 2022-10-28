@@ -101,10 +101,6 @@ static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const JobIn
 	return result;
 }
 
-static const ClassInfo* loadClassInfos(unsigned int Variables) {
-	return readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
-}
-
 static void resultprocessingThread(
 	const ClassInfo* mbfClassInfos,
 	PCoeffProcessingContextEighth& context,
@@ -132,12 +128,8 @@ static void resultprocessingThread(
 
 ResultProcessorOutput NUMAResultProcessor(
 	unsigned int Variables,
-	PCoeffProcessingContext& context,
-	const std::function<std::vector<JobTopInfo>()>& topLoader
+	PCoeffProcessingContext& context
 ) {
-	std::cout << "\033[32m[Result Processor] Started loading job tops...\033[39m\n" << std::flush;
-	context.initTops(topLoader());
-	std::cout << "\033[32m[Result Processor] Finished loading job tops...\n[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
 	void* numaClassInfos[2];
 	size_t classInfoBufferSize = mbfCounts[Variables] * sizeof(ClassInfo);
 	allocSocketBuffers(classInfoBufferSize, numaClassInfos);

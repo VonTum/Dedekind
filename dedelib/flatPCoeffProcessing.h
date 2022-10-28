@@ -80,7 +80,7 @@ void cpuProcessor_FineMultiThread_MBF(PCoeffProcessingContext& context, const Mo
 }
 
 template<unsigned int Variables>
-void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void* mbfs[2]) {
+void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context) {
 	// Assume 16 core complexes of 8 cores each
 	constexpr int CORE_COMPLEX_COUNT = 16;
 	constexpr int CORES_PER_COMPLEX = 8;
@@ -92,10 +92,11 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void*
 		int coreComplex;
 	};
 
+	context.mbfsBothReady.wait();
 	ProcessorData procData[CORE_COMPLEX_COUNT];
 	for(int i = 0; i < CORE_COMPLEX_COUNT; i++) {
 		procData[i].context = &context;
-		procData[i].mbfs = static_cast<const Monotonic<Variables>*>(mbfs[i / COMPLEXES_PER_SOCKET]);
+		procData[i].mbfs = static_cast<const Monotonic<Variables>*>(context.mbfs[i / COMPLEXES_PER_SOCKET]);
 		procData[i].coreComplex = i;
 	}
 
@@ -137,19 +138,22 @@ void cpuProcessor_SuperMultiThread(PCoeffProcessingContext& context, const void*
 }
 
 template<unsigned int Variables>
-void cpuProcessor_SingleThread(PCoeffProcessingContext& context, const void* mbfs[2]) {
-	cpuProcessor_SingleThread_MBF(context, static_cast<const Monotonic<Variables>*>(mbfs[0]));
+void cpuProcessor_SingleThread(PCoeffProcessingContext& context) {
+	context.mbfs0Ready.wait();
+	cpuProcessor_SingleThread_MBF(context, static_cast<const Monotonic<Variables>*>(context.mbfs[0]));
 }
 template<unsigned int Variables>
-void cpuProcessor_CoarseMultiThread(PCoeffProcessingContext& context, const void* mbfs[2]) {
-	cpuProcessor_CoarseMultiThread_MBF(context, static_cast<const Monotonic<Variables>*>(mbfs[0]));
+void cpuProcessor_CoarseMultiThread(PCoeffProcessingContext& context) {
+	context.mbfs0Ready.wait();
+	cpuProcessor_CoarseMultiThread_MBF(context, static_cast<const Monotonic<Variables>*>(context.mbfs[0]));
 }
 template<unsigned int Variables>
-void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context, const void* mbfs[2]) {
-	cpuProcessor_FineMultiThread_MBF(context, static_cast<const Monotonic<Variables>*>(mbfs[0]));
+void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context) {
+	context.mbfs0Ready.wait();
+	cpuProcessor_FineMultiThread_MBF(context, static_cast<const Monotonic<Variables>*>(context.mbfs[0]));
 }
 
-ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void*(*validator)(void*) = nullptr);
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext& context), void*(*validator)(void*) = nullptr);
 
 std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const FlatNode* allMBFNodes, const ClassInfo* allClassInfos, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf);
 
@@ -172,7 +176,7 @@ void computeFinalDedekindNumberFromGatheredResults(const std::vector<BetaSumPair
 std::vector<JobTopInfo> loadAllTops(unsigned int Variables);
 
 template<unsigned int Variables>
-void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2]), void*(*validator)(void*) = nullptr) {
+void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context), void*(*validator)(void*) = nullptr) {
 	std::cout << "Starting Computation..." << std::endl;
 	ResultProcessorOutput betaResults = pcoeffPipeline(Variables, []() -> std::vector<JobTopInfo> {return loadAllTops(Variables);}, processorFunc, validator);
 

@@ -5,12 +5,12 @@
 #include "../dedelib/pcoeffValidator.h"
 
 template<unsigned int Variables>
-void processDedekindNumberWithBasicValidator(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2])) {
+void processDedekindNumberWithBasicValidator(void (*processorFunc)(PCoeffProcessingContext& context)) {
 	processDedekindNumber<Variables>(processorFunc, basicValidatorPThread<Variables>);
 }
 
 template<unsigned int Variables>
-void processDedekindNumberWithContinuousValidator(void (*processorFunc)(PCoeffProcessingContext& context, const void* mbfs[2])) {
+void processDedekindNumberWithContinuousValidator(void (*processorFunc)(PCoeffProcessingContext& context)) {
 	processDedekindNumber<Variables>(processorFunc, continuousValidatorPThread<Variables>);
 }
 

@@ -7,7 +7,6 @@
 #include "latch.h"
 #include "pcoeffValidator.h"
 
-constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 16;
 constexpr size_t NUM_RESULT_VALIDATORS = 16;
 constexpr int MAX_VALIDATOR_COUNT = 16;
 
@@ -64,47 +63,43 @@ std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sam
 	return resultingVector;
 }
 
-static void loadNUMA_MBFs(unsigned int Variables, const void* mbfs[2]) {
-	void* numaMBFBuffers[2];
-	size_t mbfSize = (1 << (Variables > 3 ? Variables-3 : 0)); // sizeof(Monotonic<Variables>)
-	size_t mbfBufSize = mbfSize * mbfCounts[Variables];
-	allocSocketBuffers(mbfBufSize, numaMBFBuffers);
-	readFlatVoidBufferNoMMAP(FileName::flatMBFs(Variables), mbfBufSize, numaMBFBuffers[1]);
-	memcpy(numaMBFBuffers[0], numaMBFBuffers[1], mbfBufSize);
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*)) {
+	setNUMANodeAffinity(0); // Fopr buffer loading, use the ethernet socket on node 0, to save bandwidth for big flatLinksBuffer on socket 4. 
+	setThreadName("Main Thread");
+	// Alloc on node 3, because that's where the FPGA processor is located too. We want as low latency from it to the context
+	unique_numa_ptr<PCoeffProcessingContext> contextPtr = unique_numa_ptr<PCoeffProcessingContext>::alloc_onnode(3, Variables);
+	PCoeffProcessingContext& context = *contextPtr;
 
-	mbfs[0] = numaMBFBuffers[0];
-	mbfs[1] = numaMBFBuffers[1];
-}
-static void freeNUMA_MBFs(unsigned int Variables, const void* mbfs[2]) {
-	size_t mbfSize = (1 << (Variables > 3 ? Variables-3 : 0)); // sizeof(Monotonic<Variables>)
-	size_t mbfBufSize = mbfSize * mbfCounts[Variables];
-
-	numa_free(const_cast<void*>(mbfs[0]), mbfBufSize);
-	numa_free(const_cast<void*>(mbfs[1]), mbfBufSize);
-}
-
-ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void*(*validator)(void*)) {
-	//setThreadName("Main Thread");
-	PCoeffProcessingContext context(Variables);
-
-	std::thread inputProducerThread([&]() {
+	// Set it on second socket, because that is where 2 ethernet links are for faster buffer download
+	pthread_t inputProducerThread = createNUMANodePThread(4, [](void* voidContext) -> void* {
+		PCoeffProcessingContext* typedContext = (PCoeffProcessingContext*) voidContext;
 		setThreadName("InputProducer");
-		runBottomBufferCreator(Variables, context, BOTTOM_BUF_CREATOR_COUNT);
-	});
+		runBottomBufferCreator(typedContext->Variables, *typedContext);
+		pthread_exit(nullptr);
+		return nullptr;
+	}, &context);
 	
+	struct ProcData {
+		PCoeffProcessingContext* context;
+		void (*processorFunc)(PCoeffProcessingContext&);
+	};
+	ProcData procData;
+	procData.context = &context;
+	procData.processorFunc = processorFunc;
 
-	// load the MBF buffers for processor and result verifier
-	
-	const void* mbfs[2];
-	loadNUMA_MBFs(Variables, mbfs);
-
-	std::thread processorThread([&]() {
+	// FPGAs are on nodes 3 and 7, context is on 3, so start main thread on node 3
+	pthread_t processorThread = createNUMANodePThread(3, [](void* voidProcData) -> void* {
 		setThreadName("Processor");
-		processorFunc(context, mbfs);
+		ProcData* procData = (ProcData*) voidProcData;
+
+		procData->processorFunc(*procData->context);
 		for(int numaNode = 0; numaNode < NUMA_SLICE_COUNT; numaNode++) {
-			context.numaQueues[numaNode]->outputQueue.close();
+			procData->context->numaQueues[numaNode]->outputQueue.close();
 		}
-	});
+
+		pthread_exit(nullptr);
+		return nullptr;
+	}, &procData);
 	
 	std::thread queueWatchdogThread([&](){
 		setThreadName("Queue Watchdog");
@@ -127,13 +122,18 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 		}
 	});
 
-	ValidatorThreadData validatorDatas[16];
+	std::cout << "\033[32m[Result Processor] Started loading MBFS...\033[39m\n" << std::flush;
+	context.initMBFS();
+	std::cout << "\033[32m[Result Processor] Finished loading MBFS...\n[Result Processor] Started loading job tops...\033[39m\n" << std::flush;
+	context.initTops(topLoader());
+	std::cout << "\033[32m[Result Processor] Finished loading job tops...\n[Result Processor] Started loading ClassInfos...\033[39m\n" << std::flush;
 
+	ValidatorThreadData validatorDatas[16];
 	PThreadBundle validatorThreads;
 	if(validator != nullptr) {
 		for(int i = 0; i < 16; i++) {
 			validatorDatas[i].context = context.numaQueues[i / 8].ptr;
-			validatorDatas[i].mbfs = mbfs[i / 8];
+			validatorDatas[i].mbfs = context.mbfs[i / 8];
 			validatorDatas[i].complexI = i;
 		}
 		validatorThreads = spreadThreads(16, CPUAffinityType::COMPLEX, validatorDatas, validator);
@@ -142,21 +142,19 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 
 		for(int i = 0; i < NUMA_SLICE_COUNT; i++) {
 			validatorDatas[i].context = context.numaQueues[i].ptr;
-			validatorDatas[i].mbfs = mbfs[i];
+			validatorDatas[i].mbfs = context.mbfs[i];
 			validatorDatas[i].complexI = i;
 		}
 		validatorThreads = spreadThreads(NUMA_SLICE_COUNT, CPUAffinityType::SOCKET, validatorDatas, noValidatorPThread);
 	}
 
-	ResultProcessorOutput results = NUMAResultProcessor(Variables, context, topLoader);
+	ResultProcessorOutput results = NUMAResultProcessor(Variables, context);
 	assert(results.results.size() == context.tops.size());
 
-	inputProducerThread.join();
-	processorThread.join();
+	pthread_join(inputProducerThread, nullptr);
+	pthread_join(processorThread, nullptr);
 	queueWatchdogThread.join();
 	validatorThreads.join();
-
-	freeNUMA_MBFs(Variables, mbfs);
 
 	return results;
 }

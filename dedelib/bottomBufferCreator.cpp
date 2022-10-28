@@ -365,10 +365,10 @@ const uint32_t* loadLinks(unsigned int Variables) {
 	return readFlatBuffer<uint32_t>(FileName::mbfStructure(Variables), getTotalLinkCount(Variables));
 }
 
+constexpr size_t BOTTOM_BUF_CREATOR_COUNT = 16;
 void runBottomBufferCreator(
 	unsigned int Variables,
-	PCoeffProcessingContext& context,
-	int numberOfThreads
+	PCoeffProcessingContext& context
 ) {
 	std::cout << "\033[33m[BottomBufferCreator] Loading Links...\033[39m\n" << std::flush;
 	auto linkLoadStart = std::chrono::high_resolution_clock::now();
@@ -379,12 +379,12 @@ void runBottomBufferCreator(
 	
 	void* numaLinks[2];
 	allocSocketBuffers(linkBufMemSizeWithPrefetching, numaLinks);
-	readFlatVoidBufferNoMMAP(FileName::mbfStructure(Variables), linkBufMemSize, numaLinks[0]);
-	memset((char*) numaLinks[0] + linkBufMemSize, 0, PREFETCH_OFFSET * sizeof(uint32_t));
+	readFlatVoidBufferNoMMAP(FileName::mbfStructure(Variables), linkBufMemSize, numaLinks[1]);
+	memset((char*) numaLinks[1] + linkBufMemSize, 0, PREFETCH_OFFSET * sizeof(uint32_t));
 
 	std::atomic<const uint32_t*> links[2];
-	links[0].store(reinterpret_cast<const uint32_t*>(numaLinks[0]));
-	links[1].store(reinterpret_cast<const uint32_t*>(numaLinks[0])); // Not a mistake, gets replaced by numaLinks[1] after it is copied
+	links[0].store(reinterpret_cast<const uint32_t*>(numaLinks[1])); // Not a mistake, gets replaced by numaLinks[1] after it is copied
+	links[1].store(reinterpret_cast<const uint32_t*>(numaLinks[1]));
 	
 	double timeTaken = (std::chrono::high_resolution_clock::now() - linkLoadStart).count() * 1.0e-9;
 	std::cout << "\033[33m[BottomBufferCreator] Finished loading links. Took " + std::to_string(timeTaken) + "s\033[39m\n" << std::flush;
@@ -422,12 +422,10 @@ void runBottomBufferCreator(
 		ti.links = &links[socket];
 	}
 
-	PThreadBundle threads = spreadThreads(numberOfThreads, CPUAffinityType::COMPLEX, threadDatas, threadFunc, 8);
+	PThreadBundle threads = spreadThreads(BOTTOM_BUF_CREATOR_COUNT, CPUAffinityType::COMPLEX, threadDatas, threadFunc, 8);
 
-	if(numberOfThreads > 8) {
-		memcpy(numaLinks[1], numaLinks[0], linkBufMemSizeWithPrefetching);
-		links[1].store(reinterpret_cast<const uint32_t*>(numaLinks[1])); // Switch to closer buffer
-	}
+	memcpy(numaLinks[0], numaLinks[1], linkBufMemSizeWithPrefetching);
+	links[0].store(reinterpret_cast<const uint32_t*>(numaLinks[0])); // Switch to closer buffer
 
 	std::cout << "\033[33m[BottomBufferCreator] Copied Links to second socket buffer\033[39m\n" << std::flush;
 

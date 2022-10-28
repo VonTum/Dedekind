@@ -8,6 +8,10 @@
 
 #include "numaMem.h"
 
+#include "flatBufferManagement.h"
+#include "fileNames.h"
+#include <string.h>
+
 // Try for at least 2MB huge pages
 // Also alignment is required for openCL buffer sending and receiving methods
 constexpr size_t ALLOC_ALIGN = 1 << 21;
@@ -43,7 +47,7 @@ void setQueueToBufferParts(SynchronizedQueue<T*>& target, T* bufMemory, size_t p
 	}
 }
 
-PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables) : inputQueue(NUMA_SLICE_COUNT, NUM_INPUT_BUFFERS_PER_NODE), topsAreReady(1) {
+PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables) : Variables(Variables), inputQueue(NUMA_SLICE_COUNT, NUM_INPUT_BUFFERS_PER_NODE), topsAreReady(1), mbfs0Ready(1), mbfsBothReady(1) {
 	std::cout 
 		<< "Create PCoeffProcessingContext in 2 parts with " 
 		<< Variables 
@@ -66,13 +70,36 @@ PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables) : input
 	std::cout << "Finished PCoeffProcessingContext\n" << std::flush;
 }
 
+static void freeNUMA_MBFs(unsigned int Variables, const void* mbfs[2]) {
+	size_t mbfSize = (1 << (Variables > 3 ? Variables-3 : 0)); // sizeof(Monotonic<Variables>)
+	size_t mbfBufSize = mbfSize * mbfCounts[Variables];
+
+	numa_free(const_cast<void*>(mbfs[0]), mbfBufSize);
+	numa_free(const_cast<void*>(mbfs[1]), mbfBufSize);
+}
+
 PCoeffProcessingContext::~PCoeffProcessingContext() {
 	std::cout << "Destroy PCoeffProcessingContext, Deleting input and output buffers..." << std::endl;
+	freeNUMA_MBFs(this->Variables, this->mbfs);
 }
 
 void PCoeffProcessingContext::initTops(std::vector<JobTopInfo> tops) {
 	this->tops = std::move(tops);
 	this->topsAreReady.notify();
+}
+
+void PCoeffProcessingContext::initMBFS() {
+	void* numaMBFBuffers[2];
+	size_t mbfSize = (1 << (Variables > 3 ? Variables-3 : 0)); // sizeof(Monotonic<Variables>)
+	size_t mbfBufSize = mbfSize * mbfCounts[Variables];
+	allocSocketBuffers(mbfBufSize, numaMBFBuffers);
+	readFlatVoidBufferNoMMAP(FileName::flatMBFs(Variables), mbfBufSize, numaMBFBuffers[0]);
+
+	mbfs[0] = numaMBFBuffers[0];
+	this->mbfs0Ready.notify();
+	memcpy(numaMBFBuffers[1], numaMBFBuffers[0], mbfBufSize);
+	mbfs[1] = numaMBFBuffers[1];
+	this->mbfsBothReady.notify();
 }
 
 

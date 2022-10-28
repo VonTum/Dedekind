@@ -19,7 +19,7 @@ constexpr size_t STRING_BUFFER_LEN = 1024;
 // OpenCL runtime configuration
 cl_platform_id platform = NULL;
 cl_uint numDevices = 0;
-cl_device_id* devices = nullptr;
+cl_device_id* deviceIDs = nullptr;
 
 
 // Function prototypes
@@ -62,16 +62,16 @@ void initPlatform() {
 	}
 
 	// Query the available OpenCL devices.
-	//devices = new cl_device_id[2]; // Nodes have 2 fpga accelerators
-	//cl_int status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ACCELERATOR, 2, devices, &numDevices);
-	devices = getDevices(platform, CL_DEVICE_TYPE_ACCELERATOR, &numDevices);
+	//deviceIDs = new cl_device_id[2]; // Nodes have 2 fpga accelerators
+	//cl_int status = clGetDeviceIDs(platform, CL_DEVICE_TYPE_ACCELERATOR, 2, deviceIDs, &numDevices);
+	deviceIDs = getDevices(platform, CL_DEVICE_TYPE_ACCELERATOR, &numDevices);
 	if(numDevices != 2) {
 		std::cerr << "Error expected 2 devices\n" << std::flush;
 		exit(-1);
 	}
 
 	// ECC detection, VERY NICE
-	clSetDeviceExceptionCallbackIntelFPGA(numDevices, devices, CL_DEVICE_EXCEPTION_ECC_CORRECTABLE_INTEL | CL_DEVICE_EXCEPTION_ECC_NON_CORRECTABLE_INTEL, 
+	clSetDeviceExceptionCallbackIntelFPGA(numDevices, deviceIDs, CL_DEVICE_EXCEPTION_ECC_CORRECTABLE_INTEL | CL_DEVICE_EXCEPTION_ECC_NON_CORRECTABLE_INTEL, 
 		[](CL_EXCEPTION_TYPE_INTEL exception_type, const void* private_info, size_t cb, void* user_data){
 			std::cerr << "[CRC] CRC Error detected in FPGA Fabric!\nException of type " << exception_type << " with cb=" << cb << "! ABORTING!\n" << std::flush;
 			exit(-1);
@@ -79,39 +79,13 @@ void initPlatform() {
 	);
 
 	// Display some device information.
-	display_device_info(devices[0]);
-	display_device_info(devices[1]);
-}
-
-const uint64_t* initMBFLUT(const void* voidMBFs) {
-	auto mbfBufPrepareStart = std::chrono::system_clock::now();
-	std::cout << "Preparing mbfLUT buffer..." << std::endl;
-
-	const Monotonic<7>* mbfs = static_cast<const Monotonic<7>*>(voidMBFs);
-
-	// Can't use MMAP here, memory mapped blocks don't mesh well with OpenCL buffer uploads
-	//const uint64_t* mbfsUINT64 = readFlatBufferNoMMAP<uint64_t>(FileName::flatMBFsU64(7), FlatMBFStructure<7>::MBF_COUNT * 2);
-
-	// Quick fix, apparently __m128 isn't stored as previously thought. Fix better later
-	uint64_t* mbfsUINT64 = (uint64_t*) aligned_malloc(mbfCounts[7]*sizeof(Monotonic<7>), 64);
-	for(size_t i = 0; i < mbfCounts[7]; i++) {
-		Monotonic<7> mbf = mbfs[i];
-		uint64_t upper = _mm_extract_epi64(mbf.bf.bitset.data, 1);
-		uint64_t lower = _mm_extract_epi64(mbf.bf.bitset.data, 0);
-		mbfsUINT64[i*2] = upper;
-		mbfsUINT64[i*2+1] = lower;
-	}
-
-	std::cout << "MBF LUT prepared successfully! ";
-	auto mbfPrepareEnd = std::chrono::system_clock::now();
-	std::cout << "Took " << std::chrono::duration<double>(mbfPrepareEnd - mbfBufPrepareStart).count() << "s\n";
-
-	return mbfsUINT64;
+	display_device_info(deviceIDs[0]);
+	display_device_info(deviceIDs[1]);
 }
 
 // Free the resources allocated during initialization
 void cleanup() {
-	delete[] devices;
+	delete[] deviceIDs;
 }
 
 // Helper functions to display parameters returned by OpenCL queries
@@ -178,8 +152,8 @@ static void display_device_info( cl_device_id device ) {
 	}
 }
 
-cl_int getDeviceTemperature(size_t deviceI) {
+cl_int getDeviceTemperature(cl_device_id device) {
 	cl_int a;
-	clGetDeviceInfo(devices[deviceI], CL_DEVICE_CORE_TEMPERATURE_INTELFPGA, sizeof(cl_int), &a, NULL);
+	checkError(clGetDeviceInfo(device, CL_DEVICE_CORE_TEMPERATURE_INTELFPGA, sizeof(cl_int), &a, NULL), "Failed to get device temperature!");
 	return a;
 }

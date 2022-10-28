@@ -44,7 +44,7 @@ void initializeComputeProject(unsigned int Variables, std::string computeFolder,
 // Creates the necessary validation files
 void initializeValidationFiles(unsigned int Variables, std::string computeFolder, const std::vector<std::string>& computeIDs);
 
-void processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&, const void*[2]), void*(*validator)(void*) = nullptr);
+void processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*) = nullptr);
 
 void resetUnfinishedJobs(const std::string& computeFolder);
 

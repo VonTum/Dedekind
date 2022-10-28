@@ -10,13 +10,13 @@
 #include <random>
 #include <chrono>
 
-constexpr size_t VALIDATE_BEGIN_SIZE = 512;
-constexpr size_t VALIDATE_END_SIZE = 512;
-constexpr size_t VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD = 2048;
+constexpr size_t VALIDATE_BEGIN_SIZE = 256;
+constexpr size_t VALIDATE_END_SIZE = 128;
+constexpr size_t VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD = 512;
 static_assert(VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD >= VALIDATE_BEGIN_SIZE + VALIDATE_END_SIZE);
 constexpr size_t VALIDATE_RANDOM_BLOCK_SIZE = 32;
 constexpr int VALIDATE_WORKER_COUNT = 5;
-constexpr uint64_t VALIDATE_FRACTION = 100000; // check factorial(Variables)/(VALIDATE_FRACTION)
+constexpr uint64_t VALIDATE_FRACTION = 150000; // check at least factorial(Variables)/(VALIDATE_FRACTION)
 
 void validatorOnlineMessage(int validatorIdx);
 void validatorExitMessage(int validatorIdx);
