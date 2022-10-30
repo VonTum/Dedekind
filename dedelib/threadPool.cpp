@@ -101,3 +101,11 @@ PThreadBundle multiThread(size_t threadCount, int cpuI, CPUAffinityType affinity
 	}
 	return PThreadBundle(threads, threadCount);
 }
+PThreadBundle allCoresSpread(void* data, void*(*func)(void*)) {
+	unsigned int threadCount = std::thread::hardware_concurrency();
+	pthread_t* threads = new pthread_t[threadCount]; 
+	for(size_t i = 0; i < threadCount; i++) {
+		threads[i] = createCPUPThread(i, func, data);
+	}
+	return PThreadBundle(threads, threadCount);
+}

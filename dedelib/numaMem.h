@@ -3,11 +3,15 @@
 #include <stddef.h>
 #include <cassert>
 
+constexpr int NUMA_NODE_COUNT = 8;
+constexpr int CORES_PER_NUMA_NODE = 16;
+
 #ifdef USE_NUMA
 #include <numa.h>
 #else
 void numa_free(void* ptr, size_t size);
 void* numa_alloc_onnode(size_t size, int numaNode);
+void* numa_alloc_interleaved(size_t size);
 #endif
 
 void* numa_alloc_onsocket(size_t size, unsigned int socket);

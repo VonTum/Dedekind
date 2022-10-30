@@ -19,3 +19,4 @@ extern CommandSet processingCommands;
 extern CommandSet codeGenCommands;
 extern CommandSet bottomBufferCommands;
 extern CommandSet superCommands;
+extern CommandSet verificationCommands;

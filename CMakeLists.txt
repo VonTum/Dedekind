@@ -38,6 +38,7 @@ add_library(dedelib
   dedelib/processingContext.cpp
   dedelib/flatPCoeffProcessing.cpp
   dedelib/pcoeffValidator.cpp
+  dedelib/singleTopVerification.cpp
   dedelib/supercomputerJobs.cpp
   dedelib/bottomBufferCreator.cpp
   dedelib/threadUtils.cpp
@@ -65,6 +66,7 @@ add_executable(production
   production/codeGenCommands.cpp
   production/bottomBufferCommands.cpp
   production/superCommands.cpp
+  production/verificationCommands.cpp
 )
 add_executable(indev
   indev/indev.cpp

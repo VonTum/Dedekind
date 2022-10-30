@@ -32,11 +32,6 @@ struct ValidationFileData{
 	size_t mergeIntoThis(const ValidationFileData& other);
 };
 
-bool operator==(const ValidationFileData& a, const ValidationFileData& b);
-inline bool operator!=(const ValidationFileData& a, const ValidationFileData& b) {
-	return !(a == b);
-}
- 
 // Creates all necessary files and folders for a project to compute the given dedekind number
 // Requires that the compute folder does not already exist to prevent data loss
 void initializeComputeProject(unsigned int Variables, std::string computeFolder, size_t numberOfJobs, size_t numberOfJobsToActuallyGenerate);

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cassert>
+#include <string>
 
 #define PCOEFF_DEDUPLICATE
 
@@ -109,6 +110,14 @@ inline BetaSum& operator+=(BetaSum& a, BetaSum b) {
 	a.countedIntervalSizeDown += b.countedIntervalSizeDown;
 	return a;
 }
+inline BetaSum operator-(BetaSum a, BetaSum b) {
+	return BetaSum{a.betaSum - b.betaSum, a.countedIntervalSizeDown - b.countedIntervalSizeDown};
+}
+inline BetaSum& operator-=(BetaSum& a, BetaSum b) {
+	a.betaSum -= b.betaSum;
+	a.countedIntervalSizeDown -= b.countedIntervalSizeDown;
+	return a;
+}
 inline BetaSum operator*(BetaSum a, uint32_t b) {
 	return BetaSum{a.betaSum * b, a.countedIntervalSizeDown * b};
 }
@@ -181,3 +190,8 @@ struct JobTopInfo {
 	uint32_t top;
 	uint32_t topDual;
 };
+
+
+std::string toString(const BetaSum& betaSum);
+std::string toString(const BetaResult& br);
+

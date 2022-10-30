@@ -24,19 +24,9 @@ void flatDPlus1() {
 		ClassInfo ci = s.allClassInfos[i];
 		totalSum += umul128(uint64_t(ci.intervalSizeDown), uint64_t(ci.classSize));
 	}
-	std::cout << "D(" << (Variables+1) << ") = " << totalSum << std::endl;
+	std::cout << "D(" << (Variables+1) << ") = " << toString(totalSum) << std::endl;
 }
 
-template<unsigned int Variables>
-BooleanFunction<Variables>* listPermutationsBelow(const Monotonic<Variables>& top, const Monotonic<Variables>& botToPermute, BooleanFunction<Variables> result[factorial(Variables)]) {
-	botToPermute.forEachPermutation([&result, &top](const Monotonic<Variables>& permutedBot) {
-		if(permutedBot <= top) {
-			BooleanFunction<Variables> difference = andnot(top.bf, permutedBot.bf);
-			*result++ = difference;
-		}
-	});
-	return result;
-}
 
 template<unsigned int Variables>
 uint64_t computePCoeffSum(BooleanFunction<Variables> graph) {
@@ -63,11 +53,6 @@ uint64_t computePCoeffSum(const BooleanFunction<Variables>* graphsBuf, const Boo
 	return totalSum;
 }
 
-template<typename TI>
-TI getBitField(TI value, int startAt, int bitWidth) {
-	return (value >> startAt) & ((static_cast<TI>(1) << bitWidth) - static_cast<TI>(1));
-}
-
 template<unsigned int Variables>
 ProcessedPCoeffSum processPCoeffSum(Monotonic<Variables> top, Monotonic<Variables> bot) {
 	uint64_t pcoeffSum = 0;
@@ -84,12 +69,26 @@ ProcessedPCoeffSum processPCoeffSum(Monotonic<Variables> top, Monotonic<Variable
 }
 
 template<unsigned int Variables>
-ProcessedPCoeffSum processPCoeffSum(Monotonic<Variables> top, Monotonic<Variables> bot, BooleanFunction<Variables> graphsBuf[factorial(Variables)]) {
+BooleanFunction<Variables>* listPermutationsBelow(const Monotonic<Variables>& top, const Monotonic<Variables>& botToPermute, BooleanFunction<Variables> result[factorial(Variables)]) {
+	botToPermute.forEachPermutation([&result, &top](const Monotonic<Variables>& permutedBot) {
+		if(permutedBot <= top) {
+			BooleanFunction<Variables> difference = andnot(top.bf, permutedBot.bf);
+			*result++ = difference;
+		}
+	});
+	return result;
+}
+
+template<unsigned int Variables>
+ProcessedPCoeffSum processPCoeffSum(Monotonic<Variables> top, Monotonic<Variables> bot, BooleanFunction<Variables>* graphsBuf/*[factorial(Variables)]*/) {
 	BooleanFunction<Variables>* graphsBufEnd = listPermutationsBelow<Variables>(top, bot, graphsBuf);
 	uint64_t pcoeffCount = graphsBufEnd - graphsBuf;
 	uint64_t pcoeffSum = computePCoeffSum(graphsBuf, graphsBufEnd);
 	return produceProcessedPcoeffSumCount(pcoeffSum, pcoeffCount);
 }
+
+
+
 
 template<unsigned int Variables>
 ProcessedPCoeffSum processOneBeta(const Monotonic<Variables>* mbfs, NodeIndex topIdx, NodeIndex botIdx) {

@@ -167,12 +167,10 @@ inline uint256_t asBigInt(u192 v) {
 	return uint256_t(v.low) | (uint256_t(v.mid) << 64) | (uint256_t(v.high) << 128);
 }
 
-#include <ostream>
-inline std::ostream& operator<<(std::ostream& os, u128 v) {
-	os << asBigInt(v);
-	return os;
+#include <string>
+inline std::string toString(u128 v) {
+	return asBigInt(v).str();
 }
-inline std::ostream& operator<<(std::ostream& os, u192 v) {
-	os << asBigInt(v);
-	return os;
+inline std::string toString(u192 v) {
+	return asBigInt(v).str();
 }

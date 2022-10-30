@@ -52,3 +52,11 @@ BetaSum BetaSumPair::getBetaSumPlusValidationTerm(unsigned int Variables, BetaSu
 	BetaSum totalSum = betaSum + validationTerm + betaSumDualDedup;
 	return safeDiv(totalSum, factorial(Variables));
 }
+
+std::string toString(const BetaSum& betaSum) {
+	return "bs:" + toString(betaSum.betaSum) + ", isd:" + std::to_string(betaSum.countedIntervalSizeDown);
+}
+
+std::string toString(const BetaResult& br) {
+	return "top " + std::to_string(br.topIndex) + " =>  betaSum: " + toString(br.dataForThisTop.betaSum) + ";  dualDedup: " + toString(br.dataForThisTop.betaSumDualDedup);
+}

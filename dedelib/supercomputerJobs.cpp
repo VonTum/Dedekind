@@ -147,22 +147,9 @@ bool ValidationFileData::isTopPresent(NodeIndex topIdx) const {
 void ValidationFileData::checkHasAllTops() const {
 	bool fault = false;
 
-	size_t leftoverTopBits = mbfCounts[Variables] % 8;
-	size_t fullTopBytes = (mbfCounts[Variables] - leftoverTopBits) / 8;
-	for(size_t i = 0; i < fullTopBytes; i++) {
-		uint8_t topsByte = this->savedTopsBitset[i];
-		while(topsByte != 0b11111111) {
-			int missingOne = ctz8(~topsByte);
-			std::cerr << "Error: Missing top " + std::to_string(i * 8 + missingOne) + " again! Aborting!\n" << std::flush;
-			topsByte |= (1 << missingOne);
-			fault = true;
-		}
-	}
-
-	for(size_t finalBit = 0; finalBit < leftoverTopBits; finalBit++) {
-		NodeIndex finalTopIdx = fullTopBytes * 8 + finalBit;
-		if(!this->isTopPresent(finalTopIdx)) {
-			std::cerr << "Error: Missing top " + std::to_string(finalTopIdx) + " again! Aborting!\n" << std::flush;
+	for(NodeIndex topIdx = 0; topIdx < mbfCounts[Variables]; topIdx++) {
+		if(!this->isTopPresent(topIdx)) {
+			std::cerr << "Error: Missing top " + std::to_string(topIdx) + " again! Aborting!\n" << std::flush;
 			fault = true;
 		}
 	}
@@ -221,10 +208,6 @@ size_t ValidationFileData::mergeIntoThis(const ValidationFileData& other) {
 		this->savedValidationBuffer[i].dualBetaSum += other.savedValidationBuffer[i].dualBetaSum;
 	}
 	return totalTopsInOther;
-}
-
-bool operator==(const ValidationFileData& a, const ValidationFileData& b) {
-	return memcmp(a.memory.get(), b.memory.get(), a.getTotalMemorySize()) == 0;
 }
 
 static void checkValidationFileExists(const std::string& validationFileName) {
@@ -685,12 +668,26 @@ void checkProjectResultsIdentical(unsigned int Variables, const std::string& com
 	std::cout << "Loaded all result files\nComparing...\n" << std::flush;
 	for(size_t i = 0; i < resultsA.size(); i++) {
 		if(resultsA[i].jobID != resultsB[i].jobID) {
-			std::cerr << "Missing result file? " + resultsA[i].filePath.string() + " <-> " + resultsB[i].filePath.string() << std::endl;
+			std::cerr << "\033[31mMissing result file? " + resultsA[i].filePath.string() + " <-> " + resultsB[i].filePath.string() << "\033[39m\n" << std::flush;
 			std::abort();
 		}
 
-		if(resultsA[i].results != resultsB[i].results) {
-			std::cerr << "Nonmatching result files! " + resultsA[i].filePath.string() + " <-> " + resultsB[i].filePath.string() << std::endl;
+		const std::vector<BetaResult>& rA = resultsA[i].results;
+		const std::vector<BetaResult>& rB = resultsB[i].results;
+		if(rA.size() != rB.size()) {
+			std::cerr << "\033[31mResult files of unequal size! " + resultsA[i].filePath.string() + " <-> " + resultsB[i].filePath.string() << "\033[39m\n" << std::flush;
+			success = false;
+		}
+		if(rA != rB) {
+			std::cerr << "\033[31mNonmatching result files! " + resultsA[i].filePath.string() + " <-> " + resultsB[i].filePath.string() << "\033[39m\n" << std::flush;
+			for(size_t topI = 0; topI < rA.size(); topI++) {
+				const BetaResult& rrA = rA[topI];
+				const BetaResult& rrB = rB[topI];
+
+				if(rrA != rrB) {
+					std::cerr << "\033[31mElement " + std::to_string(topI) + ">\n        " + toString(rrA) + "\n    <-> " + toString(rrB) + "\033[39m\n" << std::flush;
+				}
+			}
 			success = false;
 		}
 	}
@@ -698,13 +695,30 @@ void checkProjectResultsIdentical(unsigned int Variables, const std::string& com
 	ValidationFileData validationA = collectAllValidationFiles(Variables, computeFolderA);
 	ValidationFileData validationB = collectAllValidationFiles(Variables, computeFolderB);
 
-	if(validationA != validationB) {
-		std::cerr << "Mismatching validation data!\n" << std::flush;
-		success = false;
+	std::cout << "Checking validation files tops are identical...\n" << std::flush;
+	for(NodeIndex topI = 0; topI < mbfCounts[Variables]; topI++) {
+		if(validationA.isTopPresent(topI) != validationB.isTopPresent(topI)) {
+			if(validationA.isTopPresent(topI)) {
+				std::cerr << "\033[31mTop " + std::to_string(topI) + " present in " + computeFolderA + " but not in " + computeFolderB + "!\033[39m\n" << std::flush;
+			} else {
+				std::cerr << "\033[31mTop " + std::to_string(topI) + " not present in " + computeFolderA + " but is present in " + computeFolderB + "!\033[39m\n" << std::flush;
+			}
+			success = false;
+		}
+	}
+
+	std::cout << "Checking validation bottoms...\n" << std::flush;
+	for(NodeIndex botI = 0; botI < VALIDATION_BUFFER_SIZE(Variables); botI++) {
+		BetaSum vA = validationA.savedValidationBuffer[botI].dualBetaSum;
+		BetaSum vB = validationB.savedValidationBuffer[botI].dualBetaSum;
+		if(vA != vB) {
+			std::cout << "\033[31mMismatching value for bot " + std::to_string(botI) + ": " + toString(vA) + " <-> " + toString(vB) + "\033[39m\n" << std::flush;
+			success = false;
+		}
 	}
 
 	if(success) {
-		std::cout << "All files checked. Projects " + computeFolderA + " and " + computeFolderB + " are identical!\n" << std::flush;
+		std::cout << "\033[32mAll files checked. Projects " + computeFolderA + " and " + computeFolderB + " are identical!\033[39m\n" << std::flush;
 	}
 }
 

@@ -31,13 +31,17 @@ static void display_device_info( cl_device_id device );
 
 
 
+void crcErrFunc(CL_EXCEPTION_TYPE_INTEL exception_type, const void* /*private_info*/, size_t cb, void* /*user_data*/) {
+	std::cerr << "[CRC] CRC Error detected in FPGA Fabric!\nException of type " << exception_type << " with cb=" << cb << "! ABORTING!\n" << std::flush;
+	std::abort();
+}
 
 
 /////// HELPER FUNCTIONS ///////
 void initPlatform() {
 	if(!setCwdToExeDir()) {
 		std::cerr << "ERROR: setCwdToExeDir\n" << std::flush;
-		exit(-1);
+		std::abort();
 	}
 
 	// Get the OpenCL platform.
@@ -45,7 +49,7 @@ void initPlatform() {
 	
 	if(platform == NULL) {
 		printf("ERROR: Unable to find Intel(R) FPGA OpenCL platform.\n");
-		exit(-1);
+		std::abort();
 	}
 
 	// User-visible output - Platform information
@@ -67,15 +71,12 @@ void initPlatform() {
 	deviceIDs = getDevices(platform, CL_DEVICE_TYPE_ACCELERATOR, &numDevices);
 	if(numDevices != 2) {
 		std::cerr << "Error expected 2 devices\n" << std::flush;
-		exit(-1);
+		std::abort();
 	}
 
 	// ECC detection, VERY NICE
 	clSetDeviceExceptionCallbackIntelFPGA(numDevices, deviceIDs, CL_DEVICE_EXCEPTION_ECC_CORRECTABLE_INTEL | CL_DEVICE_EXCEPTION_ECC_NON_CORRECTABLE_INTEL, 
-		[](CL_EXCEPTION_TYPE_INTEL exception_type, const void* private_info, size_t cb, void* user_data){
-			std::cerr << "[CRC] CRC Error detected in FPGA Fabric!\nException of type " << exception_type << " with cb=" << cb << "! ABORTING!\n" << std::flush;
-			exit(-1);
-		}, NULL /*user_data*/
+		crcErrFunc, NULL /*user_data*/
 	);
 
 	// Display some device information.

@@ -5,6 +5,7 @@
 #include "../dedelib/u192.h"
 
 #include "../dedelib/generators.h"
+#include "../dedelib/toString.h"
 
 #include <iostream>
 

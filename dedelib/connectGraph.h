@@ -381,5 +381,3 @@ uint64_t countConnectedVeryVeryFastBroken(const BooleanFunction<Variables>& grap
 	BooleanFunction<Variables> groupRepresentatives = graph & ~totalToEliminate;
 	return groupRepresentatives.size();
 }
-
-

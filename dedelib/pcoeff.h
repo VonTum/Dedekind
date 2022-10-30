@@ -477,7 +477,7 @@ u192 noCanonizationPCoeffMethod() {
 	}
 
 	printHistogramAndPCoeffs(Variables);
-	std::cout << "D(" << (Variables + 2) << ") = " << total << std::endl;
+	std::cout << "D(" << (Variables + 2) << ") = " << toString(total) << std::endl;
 
 	return total;
 }
@@ -570,7 +570,7 @@ u192 pcoeffMethodV2() {
 	}
 
 	printHistogramAndPCoeffs(Variables);
-	std::cout << "D(" << (Variables + 2) << ") = " << total << std::endl;
+	std::cout << "D(" << (Variables + 2) << ") = " << toString(total) << std::endl;
 
 	return total;
 }
@@ -601,7 +601,7 @@ void pcoeffTimeEstimate() {
 		u192 subTotal = computePCoeffSum(topLayerI, selectedIndex, allIntervalSizesAndDownLinks, swapper);
 		
 		mtx.lock();
-		std::cout << "Layer " << topLayerI << "  " << subTotal << "\n";
+		std::cout << "Layer " << topLayerI << "  " << toString(subTotal) << "\n";
 
 		auto timeTaken = std::chrono::high_resolution_clock::now() - start;
 		double secondsTaken = timeTaken.count() / 1000000000.0;
@@ -634,7 +634,7 @@ void pcoeffLayerElementStats(size_t topLayerI) {
 	SwapperLayers<Variables, bool> swapper;
 	u192 subTotal = computePCoeffSum(topLayerI, selectedIndex, allIntervalSizesAndDownLinks, swapper);
 
-	std::cout << "Layer " << topLayerI << "  " << subTotal << "\n";
+	std::cout << "Layer " << topLayerI << "  " << toString(subTotal) << "\n";
 
 	auto timeTaken = std::chrono::high_resolution_clock::now() - start;
 	double secondsTaken = timeTaken.count() / 1000000000.0;

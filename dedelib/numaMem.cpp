@@ -13,6 +13,9 @@ void numa_free(void* ptr, size_t size) {
 void* numa_alloc_onnode(size_t size, int numaNode) {
 	return aligned_malloc(size, 4096); // numa alloc alignment
 }
+void* numa_alloc_interleaved(size_t size) {
+	return aligned_malloc(size, 4096); // numa alloc alignment
+}
 #endif
 
 void* allocInterleaved(size_t bufSize, const char* nodeString) {

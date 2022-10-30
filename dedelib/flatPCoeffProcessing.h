@@ -165,12 +165,12 @@ void computeFinalDedekindNumberFromGatheredResults(const std::vector<BetaSumPair
 
 	std::cout << "Computation finished." << std::endl;
 	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, sortedBetaSumPairs);
-	std::cout << "D(" << (Variables + 2) << ") = " << dedekindNumber << std::endl;
+	std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;
 
 	std::unique_ptr<u128[]> perTopSubResult = mergeResultsAndValidationForFinalBuffer(Variables, allMBFData.allNodes, allMBFData.allClassInfos, sortedBetaSumPairs, validationBuffer);
 	
 	u192 dedekindNumberFromValidator = computeDedekindNumberFromStandardBetaTopSums(allMBFData, perTopSubResult.get());
-	std::cout << "D(" << (Variables + 2) << ") (validator) = " << dedekindNumberFromValidator << std::endl;
+	std::cout << "D(" << (Variables + 2) << ") (validator) = " << toString(dedekindNumberFromValidator) << std::endl;
 }
 
 std::vector<JobTopInfo> loadAllTops(unsigned int Variables);

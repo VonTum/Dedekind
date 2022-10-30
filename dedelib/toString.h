@@ -11,6 +11,7 @@
 #include "layerStack.h"
 #include "smallVector.h"
 #include "funcTypes.h"
+#include "u192.h"
 
 #include "dedekindDecomposition.h"
 #include "valuedDecomposition.h"
@@ -123,6 +124,16 @@ inline std::ostream& printHex(std::ostream& os, const BitSet<Size>& bitset) {
 	}
 	return os;
 }
+
+inline std::ostream& operator<<(std::ostream& os, u128 v) {
+	os << toString(v);
+	return os;
+}
+inline std::ostream& operator<<(std::ostream& os, u192 v) {
+	os << toString(v);
+	return os;
+}
+
 
 template<unsigned int Variables>
 void printACComponent(std::ostream& os, size_t index) {

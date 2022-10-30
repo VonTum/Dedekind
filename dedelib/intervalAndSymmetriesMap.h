@@ -137,8 +137,8 @@ void computeDPlus1() {
 		delete[] foundLayer;
 	}
 
-	std::cout << "Amount of work: " << totalWork << std::endl;
-	std::cout << "D(" << Variables + 1 << "): " << dedekindNumber << std::endl;
+	std::cout << "Amount of work: " << toString(totalWork) << std::endl;
+	std::cout << "D(" << Variables + 1 << "): " << toString(dedekindNumber) << std::endl;
 }
 
 

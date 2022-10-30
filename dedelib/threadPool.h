@@ -132,6 +132,7 @@ public:
 };
 
 PThreadBundle multiThread(size_t threadCount, int cpuI, CPUAffinityType affinity, void* data, void*(*func)(void*));
+PThreadBundle allCoresSpread(void* data, void*(*func)(void*));
 
 template<typename T>
 PThreadBundle spreadThreads(size_t threadCount, CPUAffinityType affinity, T* datas, void*(*func)(void*), size_t threadsPerData = 1) {
