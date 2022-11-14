@@ -123,9 +123,9 @@ enum class TryPopStatus {
 template<typename T>
 class SynchronizedQueue {
 	RingQueue<T> queue;
-	mutable std::mutex mutex;
-	std::condition_variable readyForPop;
 	bool isClosed = false;
+	alignas(64) mutable std::mutex mutex;
+	alignas(64) std::condition_variable readyForPop;
 public:
 	SynchronizedQueue() = default;
 	SynchronizedQueue(size_t capacity) :
@@ -242,11 +242,13 @@ public:
 template<typename T>
 class SynchronizedStack {
 	std::unique_ptr<T[]> stack;
-	mutable std::mutex mutex;
-	std::condition_variable readyForPop;
 public:
 	size_t sz = 0;
 	size_t cap;
+private:
+	alignas(64) mutable std::mutex mutex;
+	alignas(64) std::condition_variable readyForPop;
+public:
 
 	SynchronizedStack() = default;
 	SynchronizedStack(size_t capacity) : stack(new T[capacity]), cap(capacity) {}
@@ -330,8 +332,8 @@ template<typename T>
 class SynchronizedSlabAllocator {
 	SlabAllocator<T> slabAlloc;
 
-	std::mutex mutex;
-	std::condition_variable readyForAlloc;
+	alignas(64) std::mutex mutex;
+	alignas(64) std::condition_variable readyForAlloc;
 public:
 	// Unprotected. Only use in single-thread context
 	SlabAllocator<T>& get() {return slabAlloc;}
@@ -368,8 +370,8 @@ public:
 class SynchronizedIndexAllocator {
 	SlabIndexAllocator alloc;
 
-	std::mutex mutex;
-	std::condition_variable readyForAlloc;
+	alignas(64) std::mutex mutex;
+	alignas(64) std::condition_variable readyForAlloc;
 public:
 	// Unprotected. Only use in single-thread context
 	SlabIndexAllocator& get() {return alloc;}
@@ -396,11 +398,13 @@ public:
 
 template<typename T>
 class SynchronizedMultiQueue {
-	std::mutex mutex;
-	std::condition_variable readyForPop;
 public:
 	bool isClosed = false;
 	std::vector<RingQueue<T>> queues;
+private:
+	alignas(64) std::mutex mutex;
+	alignas(64) std::condition_variable readyForPop;
+public:
 	SynchronizedMultiQueue() = default;
 	SynchronizedMultiQueue(size_t numQueues, size_t queueCapacity) {
 		queues.reserve(numQueues);

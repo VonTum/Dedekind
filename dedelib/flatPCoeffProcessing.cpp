@@ -159,13 +159,17 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 	return results;
 }
 
-std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const FlatNode* allMBFNodes, const ClassInfo* allClassInfos, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf) {
+std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf) {
+	const FlatNode* allNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
+	const ClassInfo* allClassInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
+
+	
 	std::unique_ptr<u128[]> finalResults(new u128[mbfCounts[Variables]]);
 
 	size_t validationBufferNonZeroSize = VALIDATION_BUFFER_SIZE(Variables);
 
 	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
-		uint32_t dualNode = allMBFNodes[i].dual;
+		uint32_t dualNode = allNodes[i].dual;
 		ValidationData validationTerm;
 		if(dualNode < validationBufferNonZeroSize) {
 			validationTerm = validationBuf[dualNode];
@@ -195,5 +199,31 @@ std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Var
 
 	std::cout << "\033[35m[Validation] All interval sizes checked, no errors found!\033[39m\n" << std::flush;
 
+	freeFlatBuffer<FlatNode>(allNodes, mbfCounts[Variables]);
+	freeFlatBuffer<ClassInfo>(allClassInfos, mbfCounts[Variables]);
+
 	return finalResults;
+}
+
+void computeFinalDedekindNumberFromGatheredResults(unsigned int Variables, const std::vector<BetaSumPair>& sortedBetaSumPairs, const ValidationData* validationBuffer) {
+	std::cout << "Computation finished." << std::endl;
+	u192 dedekindNumber = computeDedekindNumberFromBetaSums(Variables, sortedBetaSumPairs);
+	std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;
+
+	std::unique_ptr<u128[]> perTopSubResult = mergeResultsAndValidationForFinalBuffer(Variables, sortedBetaSumPairs, validationBuffer);
+	
+	u192 dedekindNumberFromValidator = computeDedekindNumberFromStandardBetaTopSums(Variables, perTopSubResult.get());
+	std::cout << "D(" << (Variables + 2) << ") (validator) = " << toString(dedekindNumberFromValidator) << std::endl;
+}
+
+void processDedekindNumber(unsigned int Variables, void (*processorFunc)(PCoeffProcessingContext& context), void*(*validator)(void*)) {
+	std::cout << "Starting Computation..." << std::endl;
+	ResultProcessorOutput betaResults = pcoeffPipeline(Variables, [Variables]() -> std::vector<JobTopInfo> {return loadAllTops(Variables);}, processorFunc, validator);
+
+	BetaResultCollector collector(Variables);
+	collector.addBetaResults(betaResults.results);
+
+	computeFinalDedekindNumberFromGatheredResults(Variables, collector.getResultingSums(), betaResults.validationBuffer);
+
+	numa_free(betaResults.validationBuffer, VALIDATION_BUFFER_SIZE(Variables) * sizeof(ValidationData));
 }

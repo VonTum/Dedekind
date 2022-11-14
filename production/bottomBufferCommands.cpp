@@ -15,7 +15,17 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 	int sampleCount = std::stoi(args[1]);
 
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables] + 1);
-	auto tops = generateRangeSample(Variables, sampleCount);
+	std::vector<NodeIndex> topsTMP = generateRangeSample(Variables, sampleCount / 8);
+	std::vector<NodeIndex> tops;
+	tops.reserve(topsTMP.size() * 8);
+	for(NodeIndex item : topsTMP) {
+		for(int i = 0; i < 8; i++) {
+			NodeIndex idx = item + i;
+			if(idx < mbfCounts[Variables]) {
+				tops.push_back(idx);
+			}
+		}
+	}
 
 	PCoeffProcessingContext context(Variables);
 	//context.outputQueue.close(); // Don't use output queue
@@ -41,6 +51,11 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 	runBottomBufferCreator(Variables, context);
 
 	loopBack.join();
+	
+	for(size_t i = 0; i < NUMA_SLICE_COUNT; i++) {
+		context.numaQueues[i]->validationQueue.close(); // Don't use validation queue
+		context.numaQueues[i]->outputQueue.close(); 
+	}
 }
 
 template<unsigned int Variables>

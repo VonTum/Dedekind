@@ -75,9 +75,9 @@ void initPlatform() {
 	}
 
 	// ECC detection, VERY NICE
-	clSetDeviceExceptionCallbackIntelFPGA(numDevices, deviceIDs, CL_DEVICE_EXCEPTION_ECC_CORRECTABLE_INTEL | CL_DEVICE_EXCEPTION_ECC_NON_CORRECTABLE_INTEL, 
+	checkError(clSetDeviceExceptionCallbackIntelFPGA(numDevices, deviceIDs, CL_DEVICE_EXCEPTION_ECC_CORRECTABLE_INTEL | CL_DEVICE_EXCEPTION_ECC_NON_CORRECTABLE_INTEL, 
 		crcErrFunc, NULL /*user_data*/
-	);
+	), "Error setting clSetDeficeExceptionCallbackIntelFPGA");
 
 	// Display some device information.
 	display_device_info(deviceIDs[0]);

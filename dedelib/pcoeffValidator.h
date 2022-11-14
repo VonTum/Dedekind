@@ -9,14 +9,15 @@
 #include <atomic>
 #include <random>
 #include <chrono>
+#include <immintrin.h>
 
-constexpr size_t VALIDATE_BEGIN_SIZE = 256;
-constexpr size_t VALIDATE_END_SIZE = 128;
-constexpr size_t VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD = 512;
+constexpr size_t VALIDATE_BEGIN_SIZE = 64;
+constexpr size_t VALIDATE_END_SIZE = 16;
+constexpr size_t VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD = 128;
 static_assert(VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD >= VALIDATE_BEGIN_SIZE + VALIDATE_END_SIZE);
-constexpr size_t VALIDATE_RANDOM_BLOCK_SIZE = 32;
+constexpr size_t VALIDATE_RANDOM_BLOCK_SIZE = 2;
 constexpr int VALIDATE_WORKER_COUNT = 5;
-constexpr uint64_t VALIDATE_FRACTION = 150000; // check at least factorial(Variables)/(VALIDATE_FRACTION)
+constexpr uint64_t VALIDATE_FRACTION = 120000; // check at least factorial(Variables)/(VALIDATE_FRACTION)
 
 void validatorOnlineMessage(int validatorIdx);
 void validatorExitMessage(int validatorIdx);
@@ -32,6 +33,7 @@ uint64_t validateBufferSlice(const NodeIndex* indices, const ProcessedPCoeffSum*
 		size_t elementIndex = startAt + i;
 		NodeIndex botIdx = indices[elementIndex];
 		ProcessedPCoeffSum foundPCoeffSum = results[elementIndex];
+		_mm_prefetch(&mbfs[botIdx], _MM_HINT_NTA); // Try to reduce cache pollution
 		Monotonic<Variables> bot = mbfs[botIdx];
 		ProcessedPCoeffSum correctPCoeffSum = processPCoeffSum(top, bot);
 
@@ -90,7 +92,7 @@ struct ValidatorWorkerData {
 	}
 	bool allWorkersLeftJob(int jobI) {
 		int foundNumProcessing = numProcessingB.load();
-		int targetNumProcessing = jobI == 1 ? 0 : VALIDATE_WORKER_COUNT;
+		int targetNumProcessing = (jobI == 1) ? 0 : VALIDATE_WORKER_COUNT;
 		return foundNumProcessing == targetNumProcessing;
 	}
 };
@@ -139,11 +141,13 @@ bool validateWholeBufferIfTooSmall(int complexI, PCoeffProcessingContextEighth& 
 template<unsigned int Variables>
 void* validationWorkerThread(void* voidData) {
 	std::default_random_engine generator;
+	setThreadName("Valid Worker");
 
 	ValidatorWorkerData* validatorData = (ValidatorWorkerData*) voidData;
 	const Monotonic<Variables>* mbfs = static_cast<const Monotonic<Variables>*>(validatorData->mbfs);
 
-	int curJob = validatorData->nextJob.load();
+	// int curJob = validatorData->nextJob.load(); // THIS WAS A BUG, main thread could already set this to 1 before worker starts, leading to a blocked worker
+	int curJob = 0;
 
 	while(curJob != VALIDATOR_EXIT) {
 		const OutputBuffer& resultBuf = validatorData->jobs[curJob];
@@ -178,7 +182,8 @@ void* continuousValidatorPThread(void* voidData) {
 	ValidatorThreadData* validatorData = (ValidatorThreadData*) voidData;
 	int complexI = validatorData->complexI;
 	PCoeffProcessingContextEighth& context = *validatorData->context;
-	setThreadName(("ContinuousValidator " + std::to_string(complexI)).c_str());
+	std::string threadName = "Validator " + std::to_string(complexI);
+	setThreadName(threadName.c_str());
 	validatorOnlineMessage(complexI);
 
 	const Monotonic<Variables>* mbfs = static_cast<const Monotonic<Variables>*>(validatorData->mbfs);
@@ -229,28 +234,24 @@ void* continuousValidatorPThread(void* voidData) {
 			}
 
 			grabNewJobFromShortJob:
-			TryPopStatus status;
-			OutputBuffer newJob;
-			while((status = context.validationQueue.try_pop(newJob)) != TryPopStatus::SUCCESS) {
-				if(status == TryPopStatus::CLOSED) {
-					// Return final buffers
-					workerData.nextJob.store(VALIDATOR_EXIT);
-					workerThreads.join();
+			std::optional<OutputBuffer> newJob = context.validationQueue.pop_wait();
+			if(!newJob.has_value()) { // Closed
+				// Return final buffers
+				workerData.nextJob.store(VALIDATOR_EXIT);
+				workerThreads.join();
 
-					freeBuffersAfterValidation(complexI, context, workerData, curJob);
+				freeBuffersAfterValidation(complexI, context, workerData, curJob);
 
-					goto exit;
-				}
-				validateRandomBufferPart(workerData, curJob, mbfs, generator);
+				goto exit;
 			}
-			if(validateWholeBufferIfTooSmall(complexI, context, newJob, mbfs)) {
+			if(validateWholeBufferIfTooSmall(complexI, context, newJob.value(), mbfs)) {
 				goto grabNewJobFromShortJob;
 			}
 
 			curJob = 1 - curJob;
 			isFirstBuffer = false;
 
-			workerData.setNewJob(std::move(newJob), curJob);
+			workerData.setNewJob(std::move(newJob.value()), curJob);
 		}
 	}
 	

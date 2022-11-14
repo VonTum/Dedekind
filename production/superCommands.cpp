@@ -49,26 +49,12 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 		initializeComputeProject(targetDedekindNumber - 2, projectFolderPath, numberOfJobs, numberOfJobsToActuallyGenerate);
 	}},
 
-	{"initializeValidationFiles", [](const std::vector<std::string>& args) {
-		std::string projectFolderPath = args[0];
-		unsigned int targetDedekindNumber = std::stoi(args[1]);
-		std::vector<std::string> validationComputeIDs;
-		for(size_t i = 2; i < args.size(); i++) {
-			validationComputeIDs.push_back(args[i]);
-		}
-		initializeValidationFiles(targetDedekindNumber - 2, projectFolderPath, validationComputeIDs);
-	}},
-
 	{"resetUnfinishedJobs", [](const std::vector<std::string>& args){resetUnfinishedJobs(args[0]);}},
 	{"checkProjectResultsIdentical", [](const std::vector<std::string>& args){checkProjectResultsIdentical(std::stoi(args[0]) - 2, args[1], args[2]);}},
 
-	{"collectAllSupercomputingProjectResults_D3", [](const std::vector<std::string>& args){collectAndProcessResults<1>(args[0]);}},
-	{"collectAllSupercomputingProjectResults_D4", [](const std::vector<std::string>& args){collectAndProcessResults<2>(args[0]);}},
-	{"collectAllSupercomputingProjectResults_D5", [](const std::vector<std::string>& args){collectAndProcessResults<3>(args[0]);}},
-	{"collectAllSupercomputingProjectResults_D6", [](const std::vector<std::string>& args){collectAndProcessResults<4>(args[0]);}},
-	{"collectAllSupercomputingProjectResults_D7", [](const std::vector<std::string>& args){collectAndProcessResults<5>(args[0]);}},
-	{"collectAllSupercomputingProjectResults_D8", [](const std::vector<std::string>& args){collectAndProcessResults<6>(args[0]);}},
-	{"collectAllSupercomputingProjectResults_D9", [](const std::vector<std::string>& args){collectAndProcessResults<7>(args[0]);}},
+	{"collectAllSupercomputingProjectResults", [](const std::vector<std::string>& args){collectAndProcessResults(std::stoi(args[0]) - 2, args[1]);}},
+
+	{"checkProjectIntegrity", [](const std::vector<std::string>& args){checkProjectIntegrity(std::stoi(args[0]) - 2, args[1]);}},
 
 	{"processJobCPU1_ST", processSuperComputingJob_ST<1>},
 	{"processJobCPU2_ST", processSuperComputingJob_ST<2>},

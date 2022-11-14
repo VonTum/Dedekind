@@ -15,6 +15,7 @@
 #include <atomic>
 
 #include <string.h>
+#include <immintrin.h>
 
 // does the necessary math with annotated number of bits, no overflows possible for D(9). 
 BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount) {
@@ -169,7 +170,7 @@ ResultProcessorOutput NUMAResultProcessor(
 
 	PThreadBundle threads = spreadThreads(8, CPUAffinityType::NUMA_DOMAIN, datas, [](void* voidData) -> void* {
 		ThreadData* tData = (ThreadData*) voidData;
-		setThreadName(("Result Processor " + std::to_string(tData->numaNode)).c_str());
+		setThreadName(("Result " + std::to_string(tData->numaNode)).c_str());
 		memset(static_cast<void*>(tData->validationBuffer), 0, tData->validationBufferSize);
 		resultprocessingThread(tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validationBuffer);
 		pthread_exit(nullptr);

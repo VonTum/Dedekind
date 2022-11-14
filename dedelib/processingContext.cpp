@@ -12,6 +12,9 @@
 #include "fileNames.h"
 #include <string.h>
 
+constexpr size_t NUM_INPUT_BUFFERS_PER_NODE = 160; // 320 buffers in total
+constexpr size_t NUM_RESULT_BUFFERS_PER_NODE = 70; // 120 buffers in total
+
 // Try for at least 2MB huge pages
 // Also alignment is required for openCL buffer sending and receiving methods
 constexpr size_t ALLOC_ALIGN = 1 << 21;

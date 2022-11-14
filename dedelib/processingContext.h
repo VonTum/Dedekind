@@ -19,8 +19,6 @@
 */
 
 constexpr int NUMA_SLICE_COUNT = 2;
-constexpr size_t NUM_INPUT_BUFFERS_PER_NODE = 160; // 320 buffers in total
-constexpr size_t NUM_RESULT_BUFFERS_PER_NODE = 60; // 120 buffers in total
 
 class PCoeffProcessingContextEighth {
 public:

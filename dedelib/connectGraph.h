@@ -121,7 +121,7 @@ void preCombineConnected(SmallVector<Monotonic<Variables>, getMaxLayerWidth(Vari
 
 // returns a mask, that when anded with the original graph yields the elements that have connected elements, and when andnot'ed, yields the singleton elements
 template<unsigned int Variables>
-BooleanFunction<Variables> getGroupingMaskNaive(const BooleanFunction<Variables>& graph) {
+BooleanFunction<Variables> exploreGraphNaive(const BooleanFunction<Variables>& graph) {
 	BooleanFunction<Variables> totalMaskOut = BooleanFunction<Variables>::empty();
 	for(unsigned int v = 0; v < Variables; v++) {
 		BooleanFunction<Variables> mask(BooleanFunction<Variables>::varMask(v));
@@ -136,7 +136,7 @@ BooleanFunction<Variables> getGroupingMaskNaive(const BooleanFunction<Variables>
 
 // returns a mask, that when anded with the original graph yields the elements that have connected elements, and when andnot'ed, yields the singleton elements
 template<unsigned int Variables>
-BooleanFunction<Variables> getGroupingMask(const BooleanFunction<Variables>& graph) {
+BooleanFunction<Variables> exploreGraph(const BooleanFunction<Variables>& graph) {
 	if constexpr(Variables == 7) {
 		__m128i graphData = graph.bitset.data;
 		__m128i totalMaskOut = _mm_shuffle_epi32(graphData, _MM_SHUFFLE(1, 0, 3, 2)); // 6
@@ -153,7 +153,7 @@ BooleanFunction<Variables> getGroupingMask(const BooleanFunction<Variables>& gra
 		result.bitset.data = totalMaskOut;
 		return result;
 	} else {
-		return getGroupingMaskNaive(graph);
+		return exploreGraphNaive(graph);
 	}
 }
 
@@ -259,7 +259,7 @@ static uint64_t connectedHistogram[50];
 
 template<unsigned int Variables>
 uint64_t eliminateSingletons(BooleanFunction<Variables>& graph) {
-	BooleanFunction<Variables> groupingMask = getGroupingMask(graph);
+	BooleanFunction<Variables> groupingMask = exploreGraph(graph);
 
 	BooleanFunction<Variables> singletons = andnot(graph, groupingMask);
 	size_t singletonCount = singletons.size();
@@ -271,7 +271,7 @@ uint64_t eliminateSingletons(BooleanFunction<Variables>& graph) {
 	return singletonCount;
 }
 
-static uint64_t cyclesHistogram[100];
+//static uint64_t cyclesHistogram[100];
 
 // assumes that no subgraph contains an element which is dominated by an element of another subgraph
 template<unsigned int Variables>
@@ -284,11 +284,11 @@ uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph, const BooleanF
 
 	BooleanFunction<Variables> expandedDown = initialGuess;
 
-	int totalCycles = 0;
+	//int totalCycles = 0;
 
 	while(true) {
 		do {
-			totalCycles++;
+			//totalCycles++;
 			BooleanFunction<Variables> expandedUp = expandedDown.monotonizeUp() & graph;
 			if(expandedUp == expandedDown) break;
 			expandedDown = expandedUp.monotonizeDown() & graph;
@@ -305,29 +305,46 @@ uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph, const BooleanF
 		expandedDown = expandedDown.monotonizeDown() & graph; // will always be an expansion, since singletons have been filtered out first
 	}
 
-	cyclesHistogram[totalCycles]++;
+	//cyclesHistogram[totalCycles]++;
 
 	return totalConnectedComponents;
 }
 
-// assumes that no subgraph contains an element which is dominated by an element of another subgraph
 template<unsigned int Variables>
 uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph) {
-	assert(!graph.isEmpty());
-	
-	BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
-	initialGuess.add(graph.getLast());
-	initialGuess = initialGuess.monotonizeDown() & graph;
+	eliminateLeavesUp(graph);
+	uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
 
-	return countConnectedVeryFast<Variables>(graph, initialGuess);
+	if(!graph.isEmpty()) {
+		size_t initialGuessIndex = graph.getLast();
+		BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
+		initialGuess.add(initialGuessIndex);
+		initialGuess = initialGuess.monotonizeDown() & graph;
+		connectCount += countConnectedVeryFast(graph, initialGuess);
+	}
+	return connectCount;
 }
+
+/*template<unsigned int Variables>
+uint64_t countConnectedVeryFast(BooleanFunction<Variables> graph) {
+	while(!graph.isEmpty()) {
+		size_t initialGuessIndex = graph.getLast();
+		BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
+		initialGuess.add(initialGuessIndex);
+
+
+		do {
+
+		}
+	}
+}*/
 
 // assumes that no subgraph contains an element which is dominated by an element of another subgraph
 template<unsigned int Variables>
 uint64_t countConnectedFloodFill(BooleanFunction<Variables> graph) {
 	uint64_t totalConnectedComponents = 0;
 
-	int totalCycles = 0;
+	//int totalCycles = 0;
 
 	while(!graph.isEmpty()) {
 		totalConnectedComponents++;
@@ -336,7 +353,7 @@ uint64_t countConnectedFloodFill(BooleanFunction<Variables> graph) {
 		expandedDown = expandedDown.monotonizeDown() & graph; // will always be an expansion, since singletons have been filtered out first
 
 		do {
-			totalCycles++;
+			//totalCycles++;
 			BooleanFunction<Variables> expandedUp = expandedDown.monotonizeUp() & graph;
 			if(expandedUp == expandedDown) break;
 			expandedDown = expandedUp.monotonizeDown() & graph;
@@ -345,7 +362,7 @@ uint64_t countConnectedFloodFill(BooleanFunction<Variables> graph) {
 		graph = andnot(graph, expandedDown);
 	}
 
-	cyclesHistogram[totalCycles]++;
+	//cyclesHistogram[totalCycles]++;
 
 	return totalConnectedComponents;
 }

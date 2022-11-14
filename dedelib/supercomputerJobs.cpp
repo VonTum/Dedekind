@@ -14,6 +14,27 @@
 
 #include "crossPlatformIntrinsics.h"
 
+struct ValidationFileData{
+	unsigned int Variables;
+	std::unique_ptr<char[]> memory;
+	ValidationData* savedValidationBuffer;
+	uint8_t* savedTopsBitset;
+
+	ValidationFileData() = default;
+	ValidationFileData(unsigned int Variables);
+	size_t getTotalMemorySize() const;
+	void initializeZero();
+	void readFromFile(int validationFD);
+	void writeToFile(int validationFD) const;
+	bool isTopPresent(NodeIndex topIdx) const;
+	void checkHasAllTops() const;
+	void addTop(NodeIndex topIdx);
+	// Returns the number of tops added
+	size_t mergeIntoThis(const ValidationFileData& other);
+	ValidationData getCheckSum() const;
+};
+
+
 // Utilities for easily working with syscall open
 static void check(int retVal, const char* err) {
 	if(retVal != 0) {
@@ -99,8 +120,15 @@ static std::string computeFilePath(std::string computeFolder, const char* folder
 	return computeFolderPath(computeFolder, folder) + computeFileName(jobID, extention);
 }
 
-static std::string getValidationFilePath(std::string computeFolder, const std::string& computeID) {
-	return computeFolderPath(computeFolder, "validation") + "v" + computeID + ".validation";
+static std::string getValidationFilePath(std::string computeFolder, const std::string& jobID, const std::string& computeID) {
+	constexpr int JOB_SET_SIZE = 500;
+	int jobIdx = std::stoi(jobID);
+
+	int jobSet = jobIdx / JOB_SET_SIZE;
+
+	int jobSetName = jobSet * JOB_SET_SIZE;
+
+	return computeFolderPath(computeFolder, "validation") + "v" + computeID + "_" + std::to_string(jobSetName) + ".validation";
 }
 
 
@@ -210,60 +238,27 @@ size_t ValidationFileData::mergeIntoThis(const ValidationFileData& other) {
 	return totalTopsInOther;
 }
 
-static void checkValidationFileExists(const std::string& validationFileName) {
-	if(!std::filesystem::exists(validationFileName)) {
-		std::cerr << "Validation file " + validationFileName + " does not exist! Aborting!\n" << std::flush;
-		std::abort();
-	} else {
-		std::cout << "Confirmed Validation file " + validationFileName + " found!\n" << std::flush;
+ValidationData getIntactnessCheckSum(const ValidationData* buf, unsigned int Variables) {
+	ValidationData sum;
+	sum.dualBetaSum.betaSum = 0;
+	sum.dualBetaSum.countedIntervalSizeDown = 0;
+
+	for(size_t i = 0; i < VALIDATION_BUFFER_SIZE(Variables); i++) {
+		sum.dualBetaSum += buf[i].dualBetaSum;
 	}
+
+	return sum;
 }
 
-
-
+ValidationData ValidationFileData::getCheckSum() const {
+	return getIntactnessCheckSum(this->savedValidationBuffer, this->Variables);
+}
 
 static void checkNotExists(const std::string& fileName) {
 	if(std::filesystem::exists(fileName)) {
 		std::cerr << "File " + fileName + " already exists! Aborting!\n" << std::flush;
 		std::abort();
 	}
-}
-
-static void initializeValidationFile(const ValidationFileData& initialFileData, const std::string& validationFileName) {
-	checkNotExists(validationFileName);
-
-	std::cout << "Creating validation file " << validationFileName << std::endl;
-	int validationFD = checkCreate(validationFileName.c_str());
-
-	initialFileData.writeToFile(validationFD);
-
-	check(fsync(validationFD), "Failed to fsync Validation File! ");
-	check(close(validationFD), "Failed to close Validation File! ");
-}
-
-void initializeValidationFiles(unsigned int Variables, std::string computeFolder, const std::vector<std::string>& computeIDs) {
-	std::cout << "Generating initial validation file Dedekind Number D(" << (Variables + 2) << "). \nPath: " << computeFolder << std::endl;
-
-	if(!std::filesystem::exists(computeFolderPath(computeFolder, "validation"))) {
-		std::cerr << "The Project folder " + computeFolder + "does not yet exist! You must create it first!\n" << std::flush;
-		std::abort();
-	}
-
-	ValidationFileData initialData(Variables);
-	initialData.initializeZero();
-
-	std::cout << "Validation files:\n";
-	for(const std::string& computeID : computeIDs) {
-		std::string validationFileName = getValidationFilePath(computeFolder, computeID);
-
-		checkNotExists(validationFileName);
-	}
-
-	for(const std::string& computeID : computeIDs) {
-		std::cout << "Initialize " + computeID + "\n" << std::flush;
-		initializeValidationFile(initialData, getValidationFilePath(computeFolder, computeID));
-	}
-	std::cout << "Finished generating all validation files!\n" << std::flush;
 }
 
 static void writeJobToFile(unsigned int Variables, const std::string& jobFileName, const std::vector<JobTopInfo>& topVector) {
@@ -346,6 +341,8 @@ void initializeComputeProject(unsigned int Variables, std::string computeFolder,
 		writeJobToFile(Variables, computeFilePath(computeFolder, "jobs", std::to_string(jobI), ".job"), topIndices);
 	}
 
+	freeFlatBuffer<FlatNode>(flatNodes, mbfCounts[Variables]);
+
 	std::cout << "Generated " << numberOfJobsToActuallyGenerate << " job files of ~" << (numberOfMBFsToProcess / numberOfJobs) << " MBFs per job." << std::endl;
 }
 
@@ -365,21 +362,34 @@ static std::vector<JobTopInfo> loadJob(unsigned int Variables, const std::string
 }
 
 // Updates the validation file atomically
-static void addValidationDataToFile(unsigned int Variables, const std::string& validationFileName, const std::string& validationFileNameTmp, const ResultProcessorOutput& computationResults) {
+// Returns checksum
+static ValidationData addValidationDataToFile(unsigned int Variables, const std::string& validationFileName, const std::string& validationFileNameTmp, const ResultProcessorOutput& computationResults) {
 	ValidationFileData fileData(Variables);
 
 	std::cout << "Opening Validation file " + validationFileName + "\n" << std::flush;
-	int validationFD = checkOpen(validationFileName.c_str(), O_RDONLY, "Validation file does not exist, yet it existed at the start! ");
+	int validationFD = open(validationFileName.c_str(), O_RDONLY);
 
-	std::cout << "Reading Validation file " + validationFileName + "\n" << std::flush;
-	fileData.readFromFile(validationFD);
-	std::cout << "Validation file " + validationFileName + " read properly\nAdding new information to buffer...\n" << std::flush;
-	check(close(validationFD), "Failed to close validation file! ");
+	if(validationFD == -1) {
+		// No validation file yet! create it!
+		std::cout << "Validation file " + validationFileName + " does not yet exist! No worries, creating new one!\n" << std::flush;
+		fileData.initializeZero();
+	} else {
+		std::cout << "Reading Validation file " + validationFileName + "\n" << std::flush;
+		fileData.readFromFile(validationFD);
+		std::cout << "Validation file " + validationFileName + " read properly\nAdding new information to buffer...\n" << std::flush;
+		check(close(validationFD), "Failed to close validation file! ");
+	}
 
 	for(BetaResult result : computationResults.results) {
 		fileData.addTop(result.topIndex);
 	}
+
+	ValidationData checkSum;
+	checkSum.dualBetaSum.betaSum = 0;
+	checkSum.dualBetaSum.countedIntervalSizeDown = 0;
+
 	for(size_t i = 0; i < VALIDATION_BUFFER_SIZE(Variables); i++) {
+		checkSum.dualBetaSum += computationResults.validationBuffer[i].dualBetaSum;
 		fileData.savedValidationBuffer[i].dualBetaSum += computationResults.validationBuffer[i].dualBetaSum;
 	}
 
@@ -394,6 +404,8 @@ static void addValidationDataToFile(unsigned int Variables, const std::string& v
 	check(fsync(validationOutFD), "Failed to fsync validationTMP file! ");
 	check(close(validationOutFD), "Failed to close validationTMP file! ");
 	std::cout << "Validation file " + validationFileNameTmp + " closed.\n" << std::flush;
+
+	return checkSum;
 }
 
 struct PackedResultData {
@@ -442,18 +454,17 @@ static std::vector<BetaResult> unpackResults(const PackedResultData* packedFileD
 	return results;
 }
 
-union ResultsFileHeader {
-	struct {
-		uint64_t Variables;
-		uint64_t resultCount;
-	};
-	char charData[16];
+struct ResultsFileHeader {
+	ValidationData checkSum;
+	uint32_t Variables;
+	uint32_t resultCount;
 };
 
-static void saveResults(unsigned int Variables, const std::string& resultsFile, const std::vector<BetaResult>& betaResults) {
+static void saveResults(unsigned int Variables, const std::string& resultsFile, const std::vector<BetaResult>& betaResults, ValidationData checkSum) {
 	ResultsFileHeader header;
 	header.Variables = Variables;
 	header.resultCount = betaResults.size();
+	header.checkSum = checkSum;
 	
 	int resultsFD = checkCreate(resultsFile.c_str());
 	checkWrite(resultsFD, &header, sizeof(ResultsFileHeader), "Result file write failed! ");
@@ -466,15 +477,13 @@ static void saveResults(unsigned int Variables, const std::string& resultsFile, 
 void processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*)) {
 	std::string computeID = methodName + "_" + getComputeIdentifier();
 
-	std::string validationFileName = getValidationFilePath(computeFolder, computeID);
+	std::string validationFileName = getValidationFilePath(computeFolder, jobID, computeID);
 	std::string jobFile = computeFilePath(computeFolder, "jobs", jobID, ".job");
 	std::string workingFile = computeFilePath(computeFolder, "working", jobID, "_" + computeID + ".job");
 	std::string criticalFile = computeFilePath(computeFolder, "critical", jobID, "_" + computeID + ".job");
 	std::string finishedFile = computeFilePath(computeFolder, "finished", jobID, "_" + computeID + ".job");
 	std::string resultsFile = computeFilePath(computeFolder, "results", jobID, "_" + computeID + ".results");
 
-	checkValidationFileExists(validationFileName);
-	
 	checkNotExists(workingFile);
 	checkNotExists(criticalFile);
 	checkNotExists(finishedFile);
@@ -504,7 +513,7 @@ void processJob(unsigned int Variables, const std::string& computeFolder, const 
 	std::cout << "Saving " << betaResults.size() << " results\n" << std::flush;
 
 	std::string validationFileNameTmp = validationFileName + "_tmp";
-	addValidationDataToFile(Variables, validationFileName, validationFileNameTmp, pipelineOutput);
+	ValidationData checkSum = addValidationDataToFile(Variables, validationFileName, validationFileNameTmp, pipelineOutput);
 
 	// Check files again, just to be sure
 	checkNotExists(finishedFile);
@@ -514,7 +523,7 @@ void processJob(unsigned int Variables, const std::string& computeFolder, const 
 	std::cout << "Entering critical section: " << workingFile << "=>" << criticalFile << std::endl;
 	std::filesystem::rename(workingFile, criticalFile); // Throws filesystem::filesystem_error on error
 
-	saveResults(Variables, resultsFile, betaResults);
+	saveResults(Variables, resultsFile, betaResults, checkSum);
 	std::filesystem::rename(validationFileNameTmp, validationFileName); // Commit the new validation file, Throws filesystem::filesystem_error on error
 
 	std::filesystem::rename(criticalFile, finishedFile); // Throws filesystem::filesystem_error on error
@@ -556,7 +565,7 @@ void resetUnfinishedJobs(const std::string& computeFolder) {
 	std::cout << "Resulting new sbatch array: --array=" + totalResetString.substr(0, totalResetString.length() - 1) << std::endl;
 }
 
-std::vector<BetaResult> readResultsFile(unsigned int Variables, const std::filesystem::path& filePath) {
+std::vector<BetaResult> readResultsFile(unsigned int Variables, const std::filesystem::path& filePath, ValidationData& checkSum) {
 	ResultsFileHeader header;
 	int resultsFD = checkOpen(filePath.c_str(), O_RDONLY, "Failed to open results file! ");
 	checkRead(resultsFD, &header, sizeof(ResultsFileHeader), "Results read failed! ");
@@ -565,6 +574,8 @@ std::vector<BetaResult> readResultsFile(unsigned int Variables, const std::files
 		std::cerr << "Results File for incorrect Dedekind Target! Specified Target: D(" + std::to_string(Variables + 2) + "), target from file: D(" + std::to_string(header.Variables + 2) + ")" << std::endl;
 		std::abort();
 	}
+
+	checkSum.dualBetaSum += header.checkSum.dualBetaSum;
 
 	std::unique_ptr<PackedResultData[]> packedData(new PackedResultData[header.resultCount]);
 	checkRead(resultsFD, packedData.get(), sizeof(PackedResultData) * header.resultCount, "Results read failed! ");
@@ -577,6 +588,7 @@ std::vector<BetaResult> readResultsFile(unsigned int Variables, const std::files
 struct NamedResultFile {
 	std::string jobID;
 	std::string nodeID;
+	ValidationData checkSum;
 	std::filesystem::path filePath;
 	std::vector<BetaResult> results;
 };
@@ -591,7 +603,11 @@ static std::vector<NamedResultFile> loadAllResultsFiles(unsigned int Variables, 
 		if(file.is_regular_file() && filePath.substr(filePath.find_last_of(".")) == ".results") {
 			// Results file
 			std::cout << "Reading results file " << filePath << std::endl;
-			std::vector<BetaResult> results = readResultsFile(Variables, path);
+
+			ValidationData checkSum;
+			checkSum.dualBetaSum.betaSum = 0;
+			checkSum.dualBetaSum.countedIntervalSizeDown = 0;
+			std::vector<BetaResult> results = readResultsFile(Variables, path, checkSum);
 
 			std::pair<std::string, std::string> jobDevicePair = parseFileName(path, ".results");
 			
@@ -599,6 +615,7 @@ static std::vector<NamedResultFile> loadAllResultsFiles(unsigned int Variables, 
 			entry.jobID = jobDevicePair.first;
 			entry.nodeID = jobDevicePair.second;
 			entry.filePath = path;
+			entry.checkSum = checkSum;
 			entry.results = std::move(results);
 
 			allResultFileContents.push_back(std::move(entry));
@@ -610,7 +627,10 @@ static std::vector<NamedResultFile> loadAllResultsFiles(unsigned int Variables, 
 	return allResultFileContents;
 }
 
-BetaResultCollector collectAllResultFiles(unsigned int Variables, const std::string& computeFolder) {
+BetaResultCollector collectAllResultFiles(unsigned int Variables, const std::string& computeFolder, ValidationData& checkSum) {
+	checkSum.dualBetaSum.betaSum = 0;
+	checkSum.dualBetaSum.countedIntervalSizeDown = 0;
+	
 	BetaResultCollector collector(Variables);
 
 	std::string resultsDirectory = computeFolderPath(computeFolder, "results");
@@ -620,7 +640,7 @@ BetaResultCollector collectAllResultFiles(unsigned int Variables, const std::str
 		if(file.is_regular_file() && filePath.substr(filePath.find_last_of(".")) == ".results") {
 			// Results file
 			std::cout << "Reading results file " << filePath << std::endl;
-			std::vector<BetaResult> results = readResultsFile(Variables, path);
+			std::vector<BetaResult> results = readResultsFile(Variables, path, checkSum);
 			collector.addBetaResults(results);
 		} else {
 			std::cerr << "Unknown file found, expected results file: " << filePath << std::endl;
@@ -657,6 +677,25 @@ ValidationFileData collectAllValidationFiles(unsigned int Variables, const std::
 	return summer;
 }
 
+void collectAndProcessResults(unsigned int Variables, const std::string& computeFolder) {
+	ValidationData resultsValidationCheckSum;
+	resultsValidationCheckSum.dualBetaSum.betaSum = 0;
+	resultsValidationCheckSum.dualBetaSum.countedIntervalSizeDown = 0;
+	BetaResultCollector allResults = collectAllResultFiles(Variables, computeFolder, resultsValidationCheckSum);
+	ValidationFileData completeValidationBuffer = collectAllValidationFiles(Variables, computeFolder);
+	completeValidationBuffer.checkHasAllTops();
+
+	ValidationData completeValidationCheckSum = completeValidationBuffer.getCheckSum();
+
+	if(resultsValidationCheckSum.dualBetaSum != completeValidationCheckSum.dualBetaSum) {
+		std::cerr << "Error: Project Not Intact! Validation Checksums do not match!\n" << std::flush;
+		std::abort();
+	}
+	std::cout << "Checksum matches. No file tampering has happened between result and validation files!\n" << std::flush;
+
+	computeFinalDedekindNumberFromGatheredResults(Variables, allResults.getResultingSums(), completeValidationBuffer.savedValidationBuffer);
+}
+
 void checkProjectResultsIdentical(unsigned int Variables, const std::string& computeFolderA, const std::string& computeFolderB) {
 	std::vector<NamedResultFile> resultsA = loadAllResultsFiles(Variables, computeFolderA);
 	std::sort(resultsA.begin(), resultsA.end(), [](const NamedResultFile& a, const NamedResultFile& b) -> bool {return a.jobID < b.jobID;});
@@ -670,6 +709,11 @@ void checkProjectResultsIdentical(unsigned int Variables, const std::string& com
 		if(resultsA[i].jobID != resultsB[i].jobID) {
 			std::cerr << "\033[31mMissing result file? " + resultsA[i].filePath.string() + " <-> " + resultsB[i].filePath.string() << "\033[39m\n" << std::flush;
 			std::abort();
+		}
+
+		if(resultsA[i].checkSum.dualBetaSum != resultsB[i].checkSum.dualBetaSum) {
+			std::cerr << "\033[31mValidation data Checksum Differs? " + resultsA[i].filePath.string() + " <-> " + resultsB[i].filePath.string() << "\033[39m\n" << std::flush;
+			success = false;
 		}
 
 		const std::vector<BetaResult>& rA = resultsA[i].results;
@@ -722,3 +766,24 @@ void checkProjectResultsIdentical(unsigned int Variables, const std::string& com
 	}
 }
 
+
+void checkProjectIntegrity(unsigned int Variables, const std::string& computeFolder) {
+	std::vector<NamedResultFile> results = loadAllResultsFiles(Variables, computeFolder);
+	ValidationFileData validation = collectAllValidationFiles(Variables, computeFolder);
+
+	ValidationData checkSum;
+	checkSum.dualBetaSum.betaSum = 0;
+	checkSum.dualBetaSum.countedIntervalSizeDown = 0;
+
+	for(NamedResultFile& nrf : results) {
+		checkSum.dualBetaSum += nrf.checkSum.dualBetaSum;
+	}
+
+	ValidationData realCheckSum = validation.getCheckSum();
+	if(realCheckSum.dualBetaSum != checkSum.dualBetaSum) {
+		std::cerr << "\033[31mValidation data Checksum Incorrect!\033[39m\n" << std::flush;
+		std::abort();
+	} else {
+		std::cout << "\033[32mChecksum matches!\033[39m\n" << std::flush;
+	}
+}

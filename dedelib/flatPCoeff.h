@@ -3,7 +3,6 @@
 #include <atomic>
 
 #include "knownData.h"
-#include "flatMBFStructure.h"
 #include "bitSet.h"
 #include "u192.h"
 #include "connectGraph.h"
@@ -16,39 +15,11 @@
 #define PCOEFF_MULTITHREAD
 
 template<unsigned int Variables>
-void flatDPlus1() {
-	FlatMBFStructure<Variables> s = readFlatMBFStructure<Variables>(false, true, false, false);
-
-	u128 totalSum = 0;
-	for(size_t i = 0; i < FlatMBFStructure<Variables>::MBF_COUNT; i++) {
-		ClassInfo ci = s.allClassInfos[i];
-		totalSum += umul128(uint64_t(ci.intervalSizeDown), uint64_t(ci.classSize));
-	}
-	std::cout << "D(" << (Variables+1) << ") = " << toString(totalSum) << std::endl;
-}
-
-
-template<unsigned int Variables>
-uint64_t computePCoeffSum(BooleanFunction<Variables> graph) {
-	eliminateLeavesUp(graph);
-	uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
-
-	if(!graph.isEmpty()) {
-		size_t initialGuessIndex = graph.getLast();
-		BooleanFunction<Variables> initialGuess = BooleanFunction<Variables>::empty();
-		initialGuess.add(initialGuessIndex);
-		initialGuess = initialGuess.monotonizeDown() & graph;
-		connectCount += countConnectedVeryFast(graph, initialGuess);
-	}
-	return uint64_t(1) << connectCount;
-}
-
-template<unsigned int Variables>
 uint64_t computePCoeffSum(const BooleanFunction<Variables>* graphsBuf, const BooleanFunction<Variables>* graphsBufEnd) {
 	uint64_t totalSum = 0;
 
 	for(; graphsBuf != graphsBufEnd; graphsBuf++) {
-		totalSum += computePCoeffSum<Variables>(*graphsBuf);
+		totalSum += uint64_t(1) << countConnectedVeryFast<Variables>(*graphsBuf);
 	}
 	return totalSum;
 }
@@ -61,7 +32,7 @@ ProcessedPCoeffSum processPCoeffSum(Monotonic<Variables> top, Monotonic<Variable
 		if(permutedBot <= top) {
 			BooleanFunction<Variables> graph = andnot(top.bf, permutedBot.bf);
 			pcoeffCount++;
-			pcoeffSum += computePCoeffSum<Variables>(graph);
+			pcoeffSum += uint64_t(1) << countConnectedVeryFast<Variables>(graph);
 		}
 	});
 
@@ -142,63 +113,7 @@ void processBetasCPU_MultiThread(const Monotonic<Variables>* mbfs, const JobInfo
 	});
 }
 
-template<unsigned int Variables>
-void isEvenPlus2() {
-	FlatMBFStructure<Variables> allMBFs = readFlatMBFStructure<Variables>(false, true, true, false);
-
-	bool isEven = true; // 0 is even
-	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
-		uint64_t classSize = allMBFs.allClassInfos[i].classSize;
-
-		if(classSize % 2 == 0) continue;
-
-		uint64_t intervalSizeDown = allMBFs.allClassInfos[i].intervalSizeDown;
-		if(intervalSizeDown % 2 == 0) continue;
-
-		NodeIndex dualI = allMBFs.allNodes[i].dual;
-		uint64_t intervalSizeUp = allMBFs.allClassInfos[dualI].intervalSizeDown;
-		if(intervalSizeUp % 2 == 0) continue;
-
-		isEven = !isEven;
-	}
-
-	std::cout << "D(" << (Variables + 2) << ") is " << (isEven ? "even" : "odd") << std::endl;
-}
-
-template<unsigned int Variables>
-u192 computeDedekindNumberFromStandardBetaTopSums(const FlatMBFStructure<Variables>& allMBFData, const u128* topSums) {
-	u192 total = 0;
-
-	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
-		ClassInfo topDualInfo = allMBFData.allClassInfos[allMBFData.allNodes[i].dual];
-		uint64_t topIntervalSizeUp = topDualInfo.intervalSizeDown;
-		uint64_t topFactor = topIntervalSizeUp * topDualInfo.classSize; // max log2(2414682040998*5040) = 53.4341783883
-		total += umul192(topSums[i], topFactor);
-	}
-
-	return total;
-}
-
-template<unsigned int Variables>
-u192 computeDedekindNumberFromBetaSums(const FlatMBFStructure<Variables>& allMBFData, const std::vector<BetaSumPair>& betaSums) {
-	if(betaSums.size() != mbfCounts[Variables]) {
-		std::cerr << "Incorrect number of beta sums! Aborting!" << std::endl;
-		std::abort();
-	}
-	u192 total = 0;
-	for(size_t i = 0; i < betaSums.size(); i++) {
-		BetaSumPair bPair = betaSums[i];
-		BetaSum betaSum = bPair.getBetaSum(Variables);
-		ClassInfo topInfo = allMBFData.allClassInfos[i];
-		
-		// invalid for DEDUPLICATION
-#ifndef PCOEFF_DEDUPLICATE
-		if(betaSum.countedIntervalSizeDown != topInfo.intervalSizeDown) throw "INVALID!";
-#endif
-		uint64_t topIntervalSizeUp = allMBFData.allClassInfos[allMBFData.allNodes[i].dual].intervalSizeDown;
-		uint64_t topFactor = topIntervalSizeUp * topInfo.classSize; // max log2(2414682040998*5040) = 53.4341783883
-		total += umul192(betaSum.betaSum, topFactor);
-	}
-	return total;
-}
-
+void flatDPlus1(unsigned int Variables);
+void isEvenPlus2(unsigned int Variables);
+u192 computeDedekindNumberFromStandardBetaTopSums(unsigned int Variables, const u128* topSums);
+u192 computeDedekindNumberFromBetaSums(unsigned int Variables, const std::vector<BetaSumPair>& betaSums);

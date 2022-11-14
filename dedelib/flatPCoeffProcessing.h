@@ -29,10 +29,9 @@
 void shuffleBots(NodeIndex* bots, NodeIndex* botsEnd);
 
 template<unsigned int Variables>
-void cpuProcessor_SingleThread_MBF(PCoeffProcessingContext& context, const Monotonic<Variables>* mbfs) {
+void cpuProcessor_SingleThread_MBF(PCoeffProcessingContext& context, const Monotonic<Variables>* mbfs, int preferredNode = 0) {
 	std::cout << "SingleThread CPU Processor started.\n" << std::flush;
-	size_t lastNUMANode = 0;
-	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait_rotate(lastNUMANode)).has_value(); ) {
+	for(std::optional<JobInfo> jobOpt; (jobOpt = context.inputQueue.pop_wait_prefer(preferredNode)).has_value(); ) {
 		JobInfo& job = jobOpt.value();
 
 		PCoeffProcessingContextEighth& subContext = context.getNUMAForBuf(job.bufStart);
@@ -54,8 +53,22 @@ void cpuProcessor_SingleThread_MBF(PCoeffProcessingContext& context, const Monot
 template<unsigned int Variables>
 void cpuProcessor_CoarseMultiThread_MBF(PCoeffProcessingContext& context, const Monotonic<Variables>* mbfs) {
 	std::cout << "Coarse MultiThread CPU Processor started.\n" << std::flush;
-	ThreadPool pool;
-	pool.doInParallel([&]() {cpuProcessor_SingleThread_MBF(context, mbfs);});
+	struct ThreadData {
+		PCoeffProcessingContext* context;
+		const Monotonic<Variables>* mbfs;
+		int numaNode;
+	};
+
+	ThreadData datas[2]{{&context, mbfs, 0}, {&context, mbfs, 1}};
+
+	PThreadBundle threads = spreadThreads(std::thread::hardware_concurrency(), CPUAffinityType::CORE, datas, [](void* voidData) -> void* {
+		ThreadData* data = (ThreadData*) voidData;
+		cpuProcessor_SingleThread_MBF(*data->context, data->mbfs, data->numaNode);
+		pthread_exit(nullptr);
+		return nullptr;
+	}, std::thread::hardware_concurrency() / 2);
+
+	threads.join();
 	std::cout << "Coarse MultiThread CPU Processor finished.\n" << std::flush;
 }
 
@@ -155,37 +168,11 @@ void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context) {
 
 ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext& context), void*(*validator)(void*) = nullptr);
 
-std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const FlatNode* allMBFNodes, const ClassInfo* allClassInfos, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf);
-
-template<unsigned int Variables>
-void computeFinalDedekindNumberFromGatheredResults(const std::vector<BetaSumPair>& sortedBetaSumPairs, const ValidationData* validationBuffer) {
-	std::cout << "Reading FlatMBFStructure..." << std::endl;
-	const FlatMBFStructure<Variables> allMBFData = readFlatMBFStructure<Variables>();
-	std::cout << "FlatMBFStructure initialized." << std::endl;
-
-	std::cout << "Computation finished." << std::endl;
-	u192 dedekindNumber = computeDedekindNumberFromBetaSums(allMBFData, sortedBetaSumPairs);
-	std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;
-
-	std::unique_ptr<u128[]> perTopSubResult = mergeResultsAndValidationForFinalBuffer(Variables, allMBFData.allNodes, allMBFData.allClassInfos, sortedBetaSumPairs, validationBuffer);
-	
-	u192 dedekindNumberFromValidator = computeDedekindNumberFromStandardBetaTopSums(allMBFData, perTopSubResult.get());
-	std::cout << "D(" << (Variables + 2) << ") (validator) = " << toString(dedekindNumberFromValidator) << std::endl;
-}
+std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf);
 
 std::vector<JobTopInfo> loadAllTops(unsigned int Variables);
 
-template<unsigned int Variables>
-void processDedekindNumber(void (*processorFunc)(PCoeffProcessingContext& context), void*(*validator)(void*) = nullptr) {
-	std::cout << "Starting Computation..." << std::endl;
-	ResultProcessorOutput betaResults = pcoeffPipeline(Variables, []() -> std::vector<JobTopInfo> {return loadAllTops(Variables);}, processorFunc, validator);
-
-	BetaResultCollector collector(Variables);
-	collector.addBetaResults(betaResults.results);
-
-	computeFinalDedekindNumberFromGatheredResults<Variables>(collector.getResultingSums(), betaResults.validationBuffer);
-
-	numa_free(betaResults.validationBuffer, VALIDATION_BUFFER_SIZE(Variables) * sizeof(ValidationData));
-}
-
 std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sampleCount);
+
+void computeFinalDedekindNumberFromGatheredResults(unsigned int Variables, const std::vector<BetaSumPair>& sortedBetaSumPairs, const ValidationData* validationBuffer);
+void processDedekindNumber(unsigned int Variables, void (*processorFunc)(PCoeffProcessingContext& context), void*(*validator)(void*) = nullptr);

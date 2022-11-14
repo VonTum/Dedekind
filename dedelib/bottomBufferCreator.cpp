@@ -42,17 +42,45 @@ constexpr size_t JOB_SIZE_ALIGNMENT = 16 * FPGA_BLOCK_SIZE; // Block Size 32, sh
  * Swapper code
  */
 
+static uint32_t* convertBlockPtr(uint32_t* ptr) {
+	static_assert(sizeof(uint32_t) == 4);
+	uintptr_t p = reinterpret_cast<uintptr_t>(ptr);
+	constexpr uintptr_t LOWER_MASK = (FPGA_BLOCK_SIZE / 2 - 1) * sizeof(uint32_t);
+	static_assert(LOWER_MASK == 0b00111100);
+	constexpr uintptr_t MSB_MASK = (FPGA_BLOCK_SIZE / 2) * sizeof(uint32_t);
+	static_assert(MSB_MASK == 0b01000000);
+
+	uintptr_t cvtP = (p & ~(LOWER_MASK | MSB_MASK)) | ((p & LOWER_MASK) << 1) | ((p & MSB_MASK) >> 4);
+
+	return reinterpret_cast<uint32_t*>(cvtP);
+}
+
+static void unshuffleBlockForFPGA(uint32_t* block) {
+	assert(reinterpret_cast<uintptr_t>(block) % FPGA_BLOCK_ALIGN == 0);
+	alignas(FPGA_BLOCK_ALIGN) uint32_t tmpBuf[FPGA_BLOCK_SIZE];
+	for(size_t i = 0; i < FPGA_BLOCK_SIZE; i++) {
+		tmpBuf[i] = block[i];
+	}
+	for(size_t i = 0; i < FPGA_BLOCK_SIZE; i++) {
+		block[i] = *convertBlockPtr(&tmpBuf[i]);
+	}
+}
+
+static void addValueToBlockFPGA(uint32_t*& buf, uint32_t newValue) {
+	//*buf = newValue;
+	_mm_stream_si32(reinterpret_cast<int*>(convertBlockPtr(buf)), static_cast<int>(newValue));
+	//_mm_stream_si32(reinterpret_cast<int*>(buf), static_cast<int>(newValue)); 
+	buf++;
+}
+
 // Returns the starting layer aka the highest layer
 static int initializeSwapperRun(
 	unsigned int Variables,
-	swapper_block* __restrict swapper,
-	uint32_t* __restrict * __restrict resultBuffers,
+	JobInfo* __restrict resultBuffers,
 	const JobTopInfo* __restrict tops,
 	int* topLayers,
 	int numberOfTops
 ) {
-	memset(swapper, 0, sizeof(swapper_block) * getMaxLayerSize(Variables));
-
 	int highestLayer = 0;
 	for(int i = 0; i < numberOfTops; i++) {
 		uint32_t curTop = tops[i].top;
@@ -61,14 +89,14 @@ static int initializeSwapperRun(
 		if(layer > highestLayer) highestLayer = layer;
 		topLayers[i] = layer;
 
-		*resultBuffers[i]++ = curTop | uint32_t(0x80000000); // Mark the incoming top so that the processor can detect it
-		*resultBuffers[i]++ = curTop | uint32_t(0x80000000); // Double because the FPGA is double-pumped
+		addValueToBlockFPGA(resultBuffers[i].bufEnd, curTop | uint32_t(0x80000000)); // Mark the incoming top so that the processor can detect it
+		addValueToBlockFPGA(resultBuffers[i].bufEnd, curTop | uint32_t(0x80000000)); // Double because the FPGA is double-pumped
 
 #ifdef PCOEFF_DEDUPLICATE
-		*resultBuffers[i]++ = topDual; // Add dual in fixed location. That way it doesn't need to be computed by resultsCollection
+		addValueToBlockFPGA(resultBuffers[i].bufEnd, topDual); // Add dual in fixed location. That way it doesn't need to be computed by resultsCollection
 		if(curTop < topDual)
 #endif
-			*resultBuffers[i]++ = curTop;
+			addValueToBlockFPGA(resultBuffers[i].bufEnd, curTop);
 	}
 
 
@@ -91,49 +119,35 @@ static void initializeSwapperTops(
 	}
 }
 
-static void optimizeBlockForFPGA(uint32_t* buf) {
-	assert(reinterpret_cast<uintptr_t>(buf) % FPGA_BLOCK_ALIGN == 0);
-	if(__builtin_expect(((buf[0] & 0x80000000) == 0), 1)) {
-		uint32_t tmpBuf[FPGA_BLOCK_SIZE];
-		for(size_t i = 0; i < FPGA_BLOCK_SIZE; i++) {
-			tmpBuf[i] = buf[i];
-		}
-		for(size_t i = 0; i < FPGA_BLOCK_SIZE/2; i++) {
-			buf[2*i] = tmpBuf[i];
-			buf[2*i+1] = tmpBuf[i+FPGA_BLOCK_SIZE/2];
-		}
-	}
-}
-
-static void addValueToBlockFPGA(uint32_t*__restrict& buf, uint32_t newValue) {
-	*buf = newValue;
-	//_mm_stream_si32(reinterpret_cast<int*>(buf), static_cast<int>(newValue)); // TODO Compare performance
-	buf++;
-	if(__builtin_expect(reinterpret_cast<uintptr_t>(buf) % FPGA_BLOCK_ALIGN == 0, 0)) {
-		optimizeBlockForFPGA(buf - FPGA_BLOCK_SIZE);
-	}
-}
 
 
+static void finalizeBuffer(unsigned int Variables, JobInfo& resultBuffer, const JobTopInfo& topInfo, uint32_t nodeOffset) {
+	uint32_t fillUpTo = nodeOffset;
+#ifdef PCOEFF_DEDUPLICATE
+	if(topInfo.topDual < fillUpTo) fillUpTo = topInfo.topDual;
+#endif
 
-static void finalizeBuffer(uint32_t* __restrict & resultBuffer, uint32_t fillUpTo) {
 	if(fillUpTo >= FPGA_BLOCK_SIZE) {
-		uint32_t* __restrict resultBufPtr = resultBuffer;
-		uintptr_t alignOffset = (reinterpret_cast<uintptr_t>(resultBufPtr) / sizeof(uint32_t)) % FPGA_BLOCK_SIZE;
+		uintptr_t alignOffset = (reinterpret_cast<uintptr_t>(resultBuffer.bufEnd) / sizeof(uint32_t)) % FPGA_BLOCK_SIZE;
 		if(alignOffset != 0) {
 			uint32_t alignmentElementCount = FPGA_BLOCK_SIZE - alignOffset;
 			fillUpTo = fillUpTo - alignmentElementCount;
 			for(uint32_t i = 0; i < alignmentElementCount; i++) {
-				*resultBuffer++ = fillUpTo + i;
+				addValueToBlockFPGA(resultBuffer.bufEnd, fillUpTo + i);
 			}
-			optimizeBlockForFPGA(resultBuffer - FPGA_BLOCK_SIZE);
+		}
+	} else {
+		uint32_t* alignedEndPtr = reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(resultBuffer.bufEnd) & ~(FPGA_BLOCK_ALIGN - 1));
+		if(alignedEndPtr != resultBuffer.bufStart) {
+			unshuffleBlockForFPGA(alignedEndPtr); // Have to unshuffle last segment too, if it wasn't aligned by the above code
 		}
 	}
+	unshuffleBlockForFPGA(resultBuffer.bufStart);
 	// Generate aligned blocks efficiently
 	uint32_t numBlocks = fillUpTo / FPGA_BLOCK_SIZE;
 	if(numBlocks >= 1) {
 		static_assert(FPGA_BLOCK_SIZE == 32);
-		__m256i* dataM = reinterpret_cast<__m256i*>(resultBuffer);
+		__m256i* dataM = reinterpret_cast<__m256i*>(resultBuffer.bufEnd);
 		__m256i four = _mm256_set1_epi32(4);
 		__m256i v0 = _mm256_set_epi32(19,3,18,2,17,1,16,0);
 		__m256i v1 = _mm256_add_epi32(v0, four);
@@ -150,49 +164,59 @@ static void finalizeBuffer(uint32_t* __restrict & resultBuffer, uint32_t fillUpT
 			v2 = _mm256_add_epi32(v2, thirtyTwo);
 			v3 = _mm256_add_epi32(v3, thirtyTwo);
 		}
-		resultBuffer += numBlocks * FPGA_BLOCK_SIZE;
+		resultBuffer.bufEnd += numBlocks * FPGA_BLOCK_SIZE;
 	}
+
+	// Last chunk should be ordered properly
 	for(uint32_t i = numBlocks * FPGA_BLOCK_SIZE; i < fillUpTo; i++) {
-		*resultBuffer++ = i;
+		//*resultBuffer.bufEnd = i;
+		_mm_stream_si32(reinterpret_cast<int*>(resultBuffer.bufEnd), static_cast<int>(i));
+		resultBuffer.bufEnd++;
 	}
 	/*uint32_t finalNode = mbfCounts[Variables]-1;
-	while(reinterpret_cast<std::uintptr_t>(resultBuffer+2) % FPGA_BLOCK_ALIGN != 0) {
-		*resultBuffer++ = finalNode;
+	while(reinterpret_cast<std::uintptr_t>(resultBuffer.bufEnd+2) % FPGA_BLOCK_ALIGN != 0) {
+		*resultBuffer.bufEnd++ = finalNode;
 	}
-	*resultBuffer++ = uint32_t(0x80000000);*/
+	*resultBuffer.bufEnd++ = uint32_t(0x80000000);*/
+
+	// Add end cap
+	resultBuffer.blockEnd = resultBuffer.bufEnd;
+	uintptr_t endAlign = (reinterpret_cast<uintptr_t>(resultBuffer.blockEnd) / sizeof(uint32_t)) % JOB_SIZE_ALIGNMENT;
+	if(endAlign != 0) {
+		for(; endAlign < JOB_SIZE_ALIGNMENT; endAlign++) {
+			_mm_stream_si32(reinterpret_cast<int*>(resultBuffer.blockEnd++), static_cast<int>(mbfCounts[Variables] - 1)); // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
+		}
+	}
+	assert((reinterpret_cast<uintptr_t>(resultBuffer.blockEnd) / sizeof(uint32_t)) % FPGA_BLOCK_ALIGN == 0);
+	/*for(size_t i = 0; i < 2; i++) {
+		resultBuffer.bufStart[bufferSize++] = 0x80000000; // Tops at the end for stats collection
+	}*/
+
+	/*int bufSize = resultBuffer.getNumberOfBottoms() + 2;
+	std::string text = "\033[34mBuf: (size=" + std::to_string(bufSize) + ") ";
+	for(int i = 0; i < 64; i++) {
+		if(i == bufSize) text.append("\033[39m");
+		text.append(std::to_string(resultBuffer.bufStart[i]));
+		text.append(", ");
+	}
+	text.append("\033[39m\n");
+	std::cout << text << std::flush;*/
 }
 
 static void finalizeBuffersMasked(
+	unsigned int Variables,
 	swapper_block bufferMask,
 	uint32_t nodeOffset, 
 	const JobTopInfo* tops,
-	uint32_t* __restrict * __restrict resultBuffers
+	JobInfo* __restrict resultBuffers
 ) {
 	while(bufferMask != 0) {
 		static_assert(BUFFERS_PER_BATCH == 8);
 		int idx = ctz8(bufferMask);
 		bufferMask &= ~(swapper_block(1) << idx);
 
-		uint32_t finalizeUpTo = nodeOffset;
-#ifdef PCOEFF_DEDUPLICATE
-		if(tops[idx].topDual < finalizeUpTo) finalizeUpTo = tops[idx].topDual;
-#endif
-		finalizeBuffer(resultBuffers[idx], finalizeUpTo);
+		finalizeBuffer(Variables, resultBuffers[idx], tops[idx], nodeOffset);
 	}
-}
-
-static void addJobEndCap(unsigned int Variables, JobInfo& job) {
-	job.blockEnd = job.bufEnd;
-	uintptr_t endAlign = (reinterpret_cast<uintptr_t>(job.blockEnd) / sizeof(uint32_t)) % JOB_SIZE_ALIGNMENT;
-	if(endAlign != 0) {
-		for(; endAlign < JOB_SIZE_ALIGNMENT; endAlign++) {
-			*job.blockEnd++ = mbfCounts[Variables] - 1; // Fill with the global TOP mbf. AKA 0xFFFFFFFF.... to minimize wasted work
-		}
-	}
-	assert((reinterpret_cast<uintptr_t>(job.blockEnd) / sizeof(uint32_t)) % FPGA_BLOCK_ALIGN == 0);
-	/*for(size_t i = 0; i < 2; i++) {
-		job.bufStart[bufferSize++] = 0x80000000; // Tops at the end for stats collection
-	}*/
 }
 
 static void computeNextLayerLinks (
@@ -231,36 +255,43 @@ static void computeNextLayerLinks (
 	assert(curNodeI == toLayerSize);
 }
 
-
 static swapper_block pushSwapperResults(
+	unsigned int Variables,
 	const JobTopInfo* tops,
 	const swapper_block* __restrict swapper,
 	uint32_t resultIndexOffset,
-	uint32_t* __restrict * __restrict resultBuffers,
+	JobInfo* __restrict resultBuffers,
 	swapper_block activeMask, // Has a 1 for active buffers
 	uint32_t swapperSize
 ) {
 	swapper_block finishedConnections = activeMask;
 
-	for(uint32_t curNodeI = 0; curNodeI < swapperSize; curNodeI++) {	
-		uint32_t thisValue = resultIndexOffset + curNodeI;
-
+	for(uint32_t curNodeI = 0; curNodeI < swapperSize; curNodeI++) {
 		swapper_block currentConnectionsIn = swapper[curNodeI];
 		finishedConnections &= currentConnectionsIn;
-		currentConnectionsIn &= activeMask; // only check currently active ones
-		while(currentConnectionsIn != 0) {
-			static_assert(BUFFERS_PER_BATCH <= 8);
-			int idx = ctz8(currentConnectionsIn);
-			currentConnectionsIn &= ~(swapper_block(1) << idx);
+	}
 
+	for(size_t bufI = 0; bufI < BUFFERS_PER_BATCH; bufI++) {
+		swapper_block bufBit = swapper_block(1) << bufI;
+		if((activeMask & bufBit) == 0) continue;
+		uint32_t curTopDual = tops[bufI].topDual;
+		uint32_t*& curBufEnd = resultBuffers[bufI].bufEnd;
+
+		uint32_t upTo = resultIndexOffset + swapperSize;
 #ifdef PCOEFF_DEDUPLICATE
-			if(thisValue < tops[idx].topDual)
+		if(curTopDual < upTo) {
+			upTo = curTopDual;
+		}
 #endif
-				addValueToBlockFPGA(resultBuffers[idx], thisValue);
+
+		for(uint32_t thisValue = resultIndexOffset; thisValue < upTo; thisValue++) {
+			if((swapper[thisValue - resultIndexOffset] & bufBit) != 0) {
+				addValueToBlockFPGA(curBufEnd, thisValue);
+			}
 		}
 	}
 
-	finalizeBuffersMasked(finishedConnections, resultIndexOffset, tops, resultBuffers);
+	finalizeBuffersMasked(Variables, finishedConnections, resultIndexOffset, tops, resultBuffers);
 
 	return activeMask & ~finishedConnections;
 }
@@ -271,18 +302,21 @@ static void generateBotBuffers(
 	swapper_block* __restrict swapperB,
 	uint32_t* __restrict * __restrict resultBuffers,
 	SynchronizedMultiQueue<JobInfo>& outputQueue,
-	size_t NUMAIndex,
+	size_t socket,
 	const uint32_t* __restrict links,
 	const JobTopInfo* tops,
 	int numberOfTops
 ) {
+	memset(swapperA, 0, sizeof(swapper_block) * getMaxLayerSize(Variables));
+
 	JobInfo jobs[BUFFERS_PER_BATCH];
 	for(int i = 0; i < numberOfTops; i++) {
 		jobs[i].bufStart = resultBuffers[i];
+		jobs[i].bufEnd = resultBuffers[i];
 	}
 
 	int topLayers[BUFFERS_PER_BATCH];
-	int startingLayer = initializeSwapperRun(Variables, swapperA, resultBuffers, tops, topLayers, numberOfTops);
+	int startingLayer = initializeSwapperRun(Variables, jobs, tops, topLayers, numberOfTops);
 
 	swapper_block activeMask = numberOfTops == BUFFERS_PER_BATCH ? swapper_block(0xFFFFFFFFFFFFFFFF) : (swapper_block(1) << numberOfTops) - 1; // Has a 1 for active buffers
 
@@ -304,7 +338,7 @@ static void generateBotBuffers(
 #endif
 		);
 
-		activeMask = pushSwapperResults(tops, swapperB, nodeOffset, resultBuffers, activeMask, layerSizes[Variables][toLayer]);
+		activeMask = pushSwapperResults(Variables, tops, swapperB, nodeOffset, jobs, activeMask, layerSizes[Variables][toLayer]);
 
 		if(activeMask == 0) break;
 
@@ -313,16 +347,9 @@ static void generateBotBuffers(
 		std::swap(swapperA, swapperB);
 	}
 
-	finalizeBuffersMasked(activeMask, 0, tops, resultBuffers);
+	finalizeBuffersMasked(Variables, activeMask, 0, tops, jobs);
 
-	for(int i = 0; i < numberOfTops; i++) {
-		jobs[i].bufEnd = resultBuffers[i];
-
-		addJobEndCap(Variables, jobs[i]);
-	}
-	outputQueue.pushN(NUMAIndex, jobs, numberOfTops);
-
-	std::cout << "\033[33m[BottomBufferCreator] Pushed 8 Buffers\033[39m\n" << std::flush;
+	outputQueue.pushN(socket, jobs, numberOfTops);
 }
 
 static void runBottomBufferCreatorNoAlloc (
@@ -330,16 +357,17 @@ static void runBottomBufferCreatorNoAlloc (
 	std::atomic<const JobTopInfo*>& curStartingJobTop,
 	const JobTopInfo* jobTopsEnd,
 	PCoeffProcessingContext& context,
-	size_t NUMAIndex,
+	size_t coreComplex,
 	std::atomic<const uint32_t*>& links
 ) {
 	size_t SWAPPER_WIDTH = getMaxLayerSize(Variables);
 	swapper_block* swapperA = aligned_mallocT<swapper_block>(SWAPPER_WIDTH, 64);
 	swapper_block* swapperB = aligned_mallocT<swapper_block>(SWAPPER_WIDTH, 64);
 
-	std::cout << "\033[33m[BottomBufferCreator] Thread Started!\033[39m\n" << std::flush;
+	std::cout << "\033[33m[BottomBufferCreator " + std::to_string(coreComplex) + "] Thread Started!\033[39m\n" << std::flush;
 
-	PCoeffProcessingContextEighth& subContext = *context.numaQueues[NUMAIndex];
+	size_t socket = coreComplex / 8;
+	PCoeffProcessingContextEighth& subContext = *context.numaQueues[socket];
 
 	while(true) {
 		const JobTopInfo* grabbedTopSet = curStartingJobTop.fetch_add(BUFFERS_PER_BATCH);
@@ -352,10 +380,12 @@ static void runBottomBufferCreatorNoAlloc (
 		uint32_t* buffersEnd[BUFFERS_PER_BATCH];
 		subContext.inputBufferAlloc.popN_wait(buffersEnd, numberOfTops);
 
-		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, context.inputQueue, NUMAIndex, links.load(), grabbedTopSet, numberOfTops);
+		generateBotBuffers(Variables, swapperA, swapperB, buffersEnd, context.inputQueue, socket, links.load(), grabbedTopSet, numberOfTops);
+
+		std::cout << "\033[33m[BottomBufferCreator " + std::to_string(coreComplex) + "] Pushed 8 Buffers\033[39m\n" << std::flush;
 	}
 
-	std::cout << "\033[33m[BottomBufferCreator] Thread Finished!\033[39m\n" << std::flush;
+	std::cout << "\033[33m[BottomBufferCreator " + std::to_string(coreComplex) + "] Thread Finished!\033[39m\n" << std::flush;
 
 	aligned_free(swapperA);
 	aligned_free(swapperB);
@@ -399,30 +429,32 @@ void runBottomBufferCreator(
 		std::atomic<const JobTopInfo*>* curStartingJobTop;
 		const JobTopInfo* jobTopsEnd;
 		PCoeffProcessingContext* context;
-		size_t socket;
+		size_t coreComplex;
 		std::atomic<const uint32_t*>* links;
 	};
 
 	auto threadFunc = [](void* data) -> void* {
 		ThreadInfo* ti = (ThreadInfo*) data;
-		setThreadName(("InputProducer " + std::to_string(ti->socket)).c_str());
-		runBottomBufferCreatorNoAlloc(ti->Variables, *ti->curStartingJobTop, ti->jobTopsEnd, *ti->context, ti->socket, *ti->links);
+		std::string threadName = "BotBufCrea " + std::to_string(ti->coreComplex);
+		setThreadName(threadName.c_str());
+		runBottomBufferCreatorNoAlloc(ti->Variables, *ti->curStartingJobTop, ti->jobTopsEnd, *ti->context, ti->coreComplex, *ti->links);
 		pthread_exit(NULL);
 		return NULL;
 	};
 
-	ThreadInfo threadDatas[NUMA_SLICE_COUNT];
-	for(int socket = 0; socket < NUMA_SLICE_COUNT; socket++) {
-		ThreadInfo& ti = threadDatas[socket];
+	ThreadInfo threadDatas[BOTTOM_BUF_CREATOR_COUNT];
+	for(size_t coreComplex = 0; coreComplex < BOTTOM_BUF_CREATOR_COUNT; coreComplex++) {
+		size_t socket = coreComplex / 8;
+		ThreadInfo& ti = threadDatas[coreComplex];
 		ti.Variables = Variables;
 		ti.curStartingJobTop = &jobTopAtomic;
 		ti.jobTopsEnd = jobTopEnd;
 		ti.context = &context;
-		ti.socket = socket;
+		ti.coreComplex = coreComplex;
 		ti.links = &links[socket];
 	}
 
-	PThreadBundle threads = spreadThreads(BOTTOM_BUF_CREATOR_COUNT, CPUAffinityType::COMPLEX, threadDatas, threadFunc, 8);
+	PThreadBundle threads = spreadThreads(BOTTOM_BUF_CREATOR_COUNT, CPUAffinityType::COMPLEX, threadDatas, threadFunc, 1);
 
 	memcpy(numaLinks[0], numaLinks[1], linkBufMemSizeWithPrefetching);
 	links[0].store(reinterpret_cast<const uint32_t*>(numaLinks[0])); // Switch to closer buffer

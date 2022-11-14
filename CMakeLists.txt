@@ -36,6 +36,7 @@ add_library(dedelib
   dedelib/configure.cpp
   dedelib/terminalColor.cpp
   dedelib/processingContext.cpp
+  dedelib/flatPCoeff.cpp
   dedelib/flatPCoeffProcessing.cpp
   dedelib/pcoeffValidator.cpp
   dedelib/singleTopVerification.cpp

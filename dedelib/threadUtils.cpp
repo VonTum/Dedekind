@@ -100,11 +100,15 @@ void setSocketAffinity(int socketI) {
 
 
 void setThreadName(const char* name) {
-	pthread_setname_np(pthread_self(), name);
+	if(pthread_setname_np(pthread_self(), name) != 0) {
+		perror("Error setting thread name");
+	}
 }
 
 void setThreadName(std::thread& t, const char* name) {
-	pthread_setname_np(t.native_handle(), name);
+	if(pthread_setname_np(t.native_handle(), name) != 0) {
+		perror("Error setting thread name");
+	}
 }
 
 
