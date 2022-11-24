@@ -23,6 +23,11 @@ else()
   add_link_options("$<$<CONFIG:DEBUG>:-fsanitize=address>")
   add_compile_options("$<$<CONFIG:RELEASE>:-Wno-unused-variable>")
   add_compile_options("$<$<CONFIG:RELEASE>:-O3>")
+  
+  # add_compile_options("-fprofile-generate")
+  # link_libraries("gcov")
+  add_compile_options("-fprofile-use")
+  add_compile_options("-fprofile-correction")
 endif()
 
 add_library(dedelib

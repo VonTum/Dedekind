@@ -36,29 +36,6 @@ BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff) {
 	return produceBetaTerm(info, pcoeffSum, pcoeffCount);
 }
 
-// Does not take validation buffer
-static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc) {
-	BetaSum total = BetaSum{0,0};
-
-	ProcessedPCoeffSum* countConnectedSumBuf = buf.outputBuf + BUF_BOTTOM_OFFSET;
-	NodeIndex* bufStart = buf.originalInputData.bufStart + BUF_BOTTOM_OFFSET;
-	NodeIndex* bufEnd = buf.originalInputData.bufEnd;
-	for(const NodeIndex* cur = bufStart; cur != bufEnd; cur++) {
-		ClassInfo info = mbfClassInfos[*cur];
-
-		ProcessedPCoeffSum processedPCoeff = *countConnectedSumBuf++;
-
-		if((processedPCoeff & 0x8000000000000000) != uint64_t(0)) {
-			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - bufStart) << ", value was: " << processedPCoeff << std::endl;
-			errorBufFunc(buf, "ecc");
-		}
-
-		total += produceBetaTerm(info, processedPCoeff);
-	}
-	return total;
-}
-
-// Takes validation buffer
 static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc, ClassInfo topDualClassInfo, ValidationData* validationBuf) {
 	BetaSum total = BetaSum{0,0};
 
@@ -84,17 +61,14 @@ static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const OutputBuffer& 
 }
 
 // Optionally takes a buffer for validation data
-static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc, ValidationData* validationBuf = nullptr) {
+static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc, ValidationData* validationBuf) {
 	// Skip the first elements, as it is the top
 	BetaSumPair result;
-	if(validationBuf != nullptr) {
-		NodeIndex topDualIdx = buf.originalInputData.bufStart[TOP_DUAL_INDEX];
-		ClassInfo topDualClassInfo = mbfClassInfos[topDualIdx];	
 
-		result.betaSum = sumOverBetas(mbfClassInfos, buf, errorBufFunc, topDualClassInfo, validationBuf);
-	} else {
-		result.betaSum = sumOverBetas(mbfClassInfos, buf, errorBufFunc);
-	}
+	NodeIndex topDualIdx = buf.originalInputData.bufStart[TOP_DUAL_INDEX];
+	ClassInfo topDualClassInfo = mbfClassInfos[topDualIdx];	
+
+	result.betaSum = sumOverBetas(mbfClassInfos, buf, errorBufFunc, topDualClassInfo, validationBuf);
 
 #ifdef PCOEFF_DEDUPLICATE
 	ProcessedPCoeffSum nonDuplicateTopDual = buf.outputBuf[TOP_DUAL_INDEX]; // Index of dual
