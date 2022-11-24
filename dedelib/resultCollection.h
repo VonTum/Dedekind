@@ -31,5 +31,6 @@ BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff);
 
 ResultProcessorOutput NUMAResultProcessor(
 	unsigned int Variables,
-	PCoeffProcessingContext& context
+	PCoeffProcessingContext& context,
+	const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc
 );

@@ -17,7 +17,9 @@ static void processSuperComputingJob_FromArgs(const std::vector<std::string>& ar
 			validator = continuousValidatorPThread<Variables>;
 		}
 	}
-	processJob(Variables, projectFolderPath, jobID, name, processorFunc, validator);
+	bool success = processJob(Variables, projectFolderPath, jobID, name, processorFunc, validator);
+
+	if(!success) std::abort();
 }
 
 template<unsigned int Variables>
@@ -33,6 +35,16 @@ static void processSuperComputingJob_FMT(const std::vector<std::string>& args) {
 template<unsigned int Variables>
 static void processSuperComputingJob_SMT(const std::vector<std::string>& args) {
 	processSuperComputingJob_FromArgs<Variables>(args, "cpuSMT", cpuProcessor_SuperMultiThread<Variables>);
+}
+
+template<unsigned int Variables>
+void checkErrorBuffer(const std::vector<std::string>& args) {
+	const std::string& fileName = args[0];
+
+	OutputBuffer buf = readProcessingBufferPairFromFile(fileName.c_str());
+
+	const Monotonic<Variables>* mbfs = readFlatBufferNoMMAP<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+	checkBetasCPU_MultiThread(mbfs, buf);
 }
 
 CommandSet superCommands {"Supercomputing Commands", {}, {
@@ -79,4 +91,12 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"processJobCPU5_SMT", processSuperComputingJob_SMT<5>},
 	{"processJobCPU6_SMT", processSuperComputingJob_SMT<6>},
 	{"processJobCPU7_SMT", processSuperComputingJob_SMT<7>},
+
+	{"checkErrorBuffer1", checkErrorBuffer<1>},
+	{"checkErrorBuffer2", checkErrorBuffer<2>},
+	{"checkErrorBuffer3", checkErrorBuffer<3>},
+	{"checkErrorBuffer4", checkErrorBuffer<4>},
+	{"checkErrorBuffer5", checkErrorBuffer<5>},
+	{"checkErrorBuffer6", checkErrorBuffer<6>},
+	{"checkErrorBuffer7", checkErrorBuffer<7>},
 }};

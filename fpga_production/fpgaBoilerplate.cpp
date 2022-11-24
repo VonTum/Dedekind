@@ -31,12 +31,6 @@ static void display_device_info( cl_device_id device );
 
 
 
-void crcErrFunc(CL_EXCEPTION_TYPE_INTEL exception_type, const void* /*private_info*/, size_t cb, void* /*user_data*/) {
-	std::cerr << "[CRC] CRC Error detected in FPGA Fabric!\nException of type " << exception_type << " with cb=" << cb << "! ABORTING!\n" << std::flush;
-	std::abort();
-}
-
-
 /////// HELPER FUNCTIONS ///////
 void initPlatform() {
 	if(!setCwdToExeDir()) {
@@ -74,14 +68,21 @@ void initPlatform() {
 		std::abort();
 	}
 
+	// Display some device information.
+	display_device_info(deviceIDs[0]);
+	display_device_info(deviceIDs[1]);
+}
+
+void crcErrFunc(CL_EXCEPTION_TYPE_INTEL exception_type, const void* /*private_info*/, size_t cb, void* /*user_data*/) {
+	std::cerr << "[CRC] CRC Error detected in FPGA Fabric!\nException of type " << exception_type << " with cb=" << cb << "! ABORTING!\n" << std::flush;
+	std::abort();
+}
+
+void initCRCExceptionCallback() {
 	// ECC detection, VERY NICE
 	checkError(clSetDeviceExceptionCallbackIntelFPGA(numDevices, deviceIDs, CL_DEVICE_EXCEPTION_ECC_CORRECTABLE_INTEL | CL_DEVICE_EXCEPTION_ECC_NON_CORRECTABLE_INTEL, 
 		crcErrFunc, NULL /*user_data*/
 	), "Error setting clSetDeficeExceptionCallbackIntelFPGA");
-
-	// Display some device information.
-	display_device_info(deviceIDs[0]);
-	display_device_info(deviceIDs[1]);
 }
 
 // Free the resources allocated during initialization

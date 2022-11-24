@@ -26,8 +26,7 @@ void validatorFinishMessage(int validatorIdx, NodeIndex topIdx, size_t numBottom
 void printBadPCoeffSumError(NodeIndex botIdx, size_t elementIdx, ProcessedPCoeffSum foundPCoeffSum, ProcessedPCoeffSum correctPCoeffSum);
 
 template<unsigned int Variables>
-uint64_t validateBufferSlice(const NodeIndex* indices, const ProcessedPCoeffSum* results, size_t numToCheck, size_t startAt, Monotonic<Variables> top, const Monotonic<Variables>* mbfs) {
-	bool success = true;
+uint64_t validateBufferSlice(const NodeIndex* indices, const ProcessedPCoeffSum* results, size_t numToCheck, size_t startAt, Monotonic<Variables> top, const Monotonic<Variables>* mbfs, std::atomic<bool>& correct) {
 	uint64_t totalPCoeffCount = 0;
 	for(size_t i = 0; i < numToCheck; i++) {
 		size_t elementIndex = startAt + i;
@@ -39,12 +38,9 @@ uint64_t validateBufferSlice(const NodeIndex* indices, const ProcessedPCoeffSum*
 
 		if(foundPCoeffSum != correctPCoeffSum) {
 			printBadPCoeffSumError(botIdx, elementIndex, foundPCoeffSum, correctPCoeffSum);
-			success = false;
+			correct.store(false);
 		}
 		totalPCoeffCount += getPCoeffCount(correctPCoeffSum);
-	}
-	if(!success) {
-		exit(-1);
 	}
 	return totalPCoeffCount;
 }
@@ -71,6 +67,7 @@ struct ValidatorWorkerData {
 	alignas(64) 
 	std::atomic<int> nextJob; // Controlled by main thread. Either A=0, or B=1, or VALIDATOR_EXIT
 	std::atomic<int> numProcessingB; // Controlled by worker threads. numProcessingA = totalThreads - numProcessingB
+	std::atomic<bool> correct[2];
 	alignas(64)
 	const void* mbfs;
 	std::chrono::time_point<std::chrono::high_resolution_clock> startTimes[2];
@@ -85,6 +82,7 @@ struct ValidatorWorkerData {
 		jobs[jobIdx] = std::move(newBuf);
 		processedCounts[jobIdx].store(0);
 		nextJob.store(jobIdx);
+		correct[jobIdx].store(true);
 	}
 
 	void workerSwitchTo(int newJob) {
@@ -98,14 +96,14 @@ struct ValidatorWorkerData {
 };
 
 template<unsigned int Variables>
-uint64_t validateRandomBufferPart(const NodeIndex* indices, const ProcessedPCoeffSum* results, Monotonic<Variables> top, size_t numBottoms, const Monotonic<Variables>* mbfs, std::default_random_engine& generator) {
+uint64_t validateRandomBufferPart(const NodeIndex* indices, const ProcessedPCoeffSum* results, Monotonic<Variables> top, size_t numBottoms, const Monotonic<Variables>* mbfs, std::default_random_engine& generator, std::atomic<bool>& correct) {
 	std::uniform_int_distribution<size_t> indexDistribution(2+VALIDATE_BEGIN_SIZE, numBottoms - VALIDATE_END_SIZE - VALIDATE_RANDOM_BLOCK_SIZE);
 
-	return validateBufferSlice(indices, results, VALIDATE_RANDOM_BLOCK_SIZE, indexDistribution(generator), top, mbfs);
+	return validateBufferSlice(indices, results, VALIDATE_RANDOM_BLOCK_SIZE, indexDistribution(generator), top, mbfs, correct);
 }
 
 template<unsigned int Variables>
-void validateRandomBufferPart(ValidatorWorkerData& workerData, int jobI, const Monotonic<Variables>* mbfs, std::default_random_engine& generator) {
+void validateRandomBufferPart(ValidatorWorkerData& workerData, int jobI, const Monotonic<Variables>* mbfs, std::default_random_engine& generator, std::atomic<bool>& correct) {
 	const OutputBuffer& resultBuf = workerData.jobs[jobI];
 	NodeIndex topIdx = resultBuf.originalInputData.getTop();
 	size_t numBottoms = resultBuf.originalInputData.getNumberOfBottoms();
@@ -113,7 +111,7 @@ void validateRandomBufferPart(ValidatorWorkerData& workerData, int jobI, const M
 	const ProcessedPCoeffSum* results = resultBuf.outputBuf;
 	Monotonic<Variables> top = mbfs[topIdx];
 
-	uint64_t processedAmount = ::validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator);
+	uint64_t processedAmount = ::validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator, correct);
 	workerData.processedCounts[jobI].fetch_add(processedAmount);
 }
 
@@ -121,14 +119,20 @@ void freeBuffersAfterValidation(int complexI, PCoeffProcessingContextEighth& con
 void freeBuffersAfterValidation(int complexI, PCoeffProcessingContextEighth& context, ValidatorWorkerData& workerData, int jobToFree);
 
 template<unsigned int Variables>
-bool validateWholeBufferIfTooSmall(int complexI, PCoeffProcessingContextEighth& context, OutputBuffer& resultBuf, const Monotonic<Variables>* mbfs) {
+bool validateWholeBufferIfTooSmall(int complexI, const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc, PCoeffProcessingContextEighth& context, OutputBuffer& resultBuf, const Monotonic<Variables>* mbfs) {
 	size_t numBottoms = resultBuf.originalInputData.getNumberOfBottoms();
 	if(numBottoms <= VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD) {
 		std::chrono::time_point<std::chrono::high_resolution_clock> startTime = std::chrono::high_resolution_clock::now();
 		NodeIndex topIdx = resultBuf.originalInputData.getTop();
 		Monotonic<Variables> top = mbfs[topIdx];
-		uint64_t numValidated = validateBufferSlice(resultBuf.originalInputData.bufStart, resultBuf.outputBuf, numBottoms, 2, top, mbfs);
 
+		std::atomic<bool> correct;
+		correct.store(true);
+		uint64_t numValidated = validateBufferSlice(resultBuf.originalInputData.bufStart, resultBuf.outputBuf, numBottoms, 2, top, mbfs, correct);
+
+		if(correct.load() == false) {
+			errorBufFunc(resultBuf, "validator");
+		}
 		freeBuffersAfterValidation(complexI, context, resultBuf, numValidated, startTime);
 
 		return true;
@@ -151,6 +155,7 @@ void* validationWorkerThread(void* voidData) {
 
 	while(curJob != VALIDATOR_EXIT) {
 		const OutputBuffer& resultBuf = validatorData->jobs[curJob];
+		std::atomic<bool>& correctAtomic = validatorData->correct[curJob];
 		NodeIndex topIdx = resultBuf.originalInputData.getTop();
 		size_t numBottoms = resultBuf.originalInputData.getNumberOfBottoms();
 		Monotonic<Variables> top = mbfs[topIdx];
@@ -159,7 +164,7 @@ void* validationWorkerThread(void* voidData) {
 
 		int newJob;
 		do {
-			uint64_t workAmount = validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator);
+			uint64_t workAmount = validateRandomBufferPart<Variables>(indices, results, top, numBottoms, mbfs, generator, correctAtomic);
 			validatorData->processedCounts[curJob].fetch_add(workAmount);
 			newJob = validatorData->nextJob.load();
 		} while(newJob == curJob);
@@ -175,6 +180,7 @@ void* validationWorkerThread(void* voidData) {
 struct ValidatorThreadData {
 	PCoeffProcessingContextEighth* context;
 	const void* mbfs;
+	const std::function<void(const OutputBuffer&, const char*)>* errorBufFunc;
 	int complexI;
 };
 template<unsigned int Variables>
@@ -182,6 +188,7 @@ void* continuousValidatorPThread(void* voidData) {
 	ValidatorThreadData* validatorData = (ValidatorThreadData*) voidData;
 	int complexI = validatorData->complexI;
 	PCoeffProcessingContextEighth& context = *validatorData->context;
+	const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc = *validatorData->errorBufFunc;
 	std::string threadName = "Validator " + std::to_string(complexI);
 	setThreadName(threadName.c_str());
 	validatorOnlineMessage(complexI);
@@ -192,7 +199,7 @@ void* continuousValidatorPThread(void* voidData) {
 	std::optional<OutputBuffer> jobOpt = context.validationQueue.pop_wait();
 	if(jobOpt.has_value()) {
 		OutputBuffer initalJobBuf = std::move(jobOpt).value();
-		if(validateWholeBufferIfTooSmall(complexI, context, initalJobBuf, mbfs)) {
+		if(validateWholeBufferIfTooSmall(complexI, errorBufFunc, context, initalJobBuf, mbfs)) {
 			goto newInitialJobFromShortJob;
 		}
 
@@ -215,22 +222,27 @@ void* continuousValidatorPThread(void* voidData) {
 			//validatorStartMessage(complexI, topIdx, numBottoms);
 			workerData.startTimes[curJob] = std::chrono::high_resolution_clock::now();
 			
-			uint64_t beginPCoeffCount = validateBufferSlice(indices, results, VALIDATE_BEGIN_SIZE, 2, top, mbfs);
-			uint64_t endPCoeffCount = validateBufferSlice(indices, results, VALIDATE_END_SIZE, numBottoms + 2 - VALIDATE_END_SIZE, top, mbfs);
+			uint64_t beginPCoeffCount = validateBufferSlice(indices, results, VALIDATE_BEGIN_SIZE, 2, top, mbfs, workerData.correct[curJob]);
+			uint64_t endPCoeffCount = validateBufferSlice(indices, results, VALIDATE_END_SIZE, numBottoms + 2 - VALIDATE_END_SIZE, top, mbfs, workerData.correct[curJob]);
 
 			uint64_t workedNow = beginPCoeffCount + endPCoeffCount;
 
 			while(workerData.processedCounts[curJob].fetch_add(workedNow) < minimumWorkTarget) {
-				workedNow = validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator);
+				workedNow = validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator, workerData.correct[curJob]);
 			}
 
 			// Minimum work target met!
 			// Clear out space for new buffer. Wait until attempting to acquire new buffer to validate. Continue to validate in the meantime
 			if(!isFirstBuffer) {
-				while(!workerData.allWorkersLeftJob(1 - curJob)) {
-					validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator);
+				int jobToReplace = 1 - curJob;
+				while(!workerData.allWorkersLeftJob(jobToReplace)) {
+					validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator, workerData.correct[jobToReplace]);
 				}
-				freeBuffersAfterValidation(complexI, context, workerData, 1 - curJob);
+
+				if(workerData.correct[jobToReplace].load() == false) {
+					errorBufFunc(workerData.jobs[jobToReplace], "validator");
+				}
+				freeBuffersAfterValidation(complexI, context, workerData, jobToReplace);
 			}
 
 			grabNewJobFromShortJob:
@@ -240,11 +252,14 @@ void* continuousValidatorPThread(void* voidData) {
 				workerData.nextJob.store(VALIDATOR_EXIT);
 				workerThreads.join();
 
+				if(workerData.correct[curJob].load() == false) {
+					errorBufFunc(workerData.jobs[curJob], "validator");
+				}
 				freeBuffersAfterValidation(complexI, context, workerData, curJob);
 
 				goto exit;
 			}
-			if(validateWholeBufferIfTooSmall(complexI, context, newJob.value(), mbfs)) {
+			if(validateWholeBufferIfTooSmall(complexI, errorBufFunc, context, newJob.value(), mbfs)) {
 				goto grabNewJobFromShortJob;
 			}
 
@@ -262,7 +277,7 @@ void* continuousValidatorPThread(void* voidData) {
 }
 
 template<unsigned int Variables>
-void threadPoolBufferValidator(int complexI, const OutputBuffer& resultBuf, const Monotonic<Variables>* mbfs, ThreadPool& pool) {
+bool threadPoolBufferValidator(int complexI, const OutputBuffer& resultBuf, const Monotonic<Variables>* mbfs, ThreadPool& pool) {
 	NodeIndex topIdx = resultBuf.originalInputData.getTop();
 	size_t numBottoms = resultBuf.originalInputData.getNumberOfBottoms();
 	const NodeIndex* indices = resultBuf.originalInputData.bufStart;
@@ -271,8 +286,10 @@ void threadPoolBufferValidator(int complexI, const OutputBuffer& resultBuf, cons
 	//validatorStartMessage(topIdx, numBottoms);
 	Monotonic<Variables> top = mbfs[topIdx];
 	size_t numValidated;
+	std::atomic<bool> correct;
+	correct.store(true);
 	if(numBottoms <= VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD) {
-		numValidated = validateBufferSlice(indices, results, numBottoms, 2, top, mbfs);
+		numValidated = validateBufferSlice(indices, results, numBottoms, 2, top, mbfs, correct);
 	} else {
 		size_t pcoeffCountTarget = numBottoms * factorial(Variables) / VALIDATE_FRACTION;
 		std::atomic<size_t> totalPCoeffCount;
@@ -280,16 +297,19 @@ void threadPoolBufferValidator(int complexI, const OutputBuffer& resultBuf, cons
 		pool.doInParallel([&](){
 			std::default_random_engine generator;
 
-			while(totalPCoeffCount.fetch_add(validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator)) < pcoeffCountTarget);
+			while(totalPCoeffCount.fetch_add(validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator, correct)) < pcoeffCountTarget);
 		}, [&](){
-			size_t beginPCoeffCount = validateBufferSlice(indices, results, VALIDATE_BEGIN_SIZE, 2, top, mbfs);
-			size_t endPCoeffCount = validateBufferSlice(indices, results, VALIDATE_END_SIZE, numBottoms + 2 - VALIDATE_END_SIZE, top, mbfs);
+			size_t beginPCoeffCount = validateBufferSlice(indices, results, VALIDATE_BEGIN_SIZE, 2, top, mbfs, correct);
+			size_t endPCoeffCount = validateBufferSlice(indices, results, VALIDATE_END_SIZE, numBottoms + 2 - VALIDATE_END_SIZE, top, mbfs, correct);
 
 			totalPCoeffCount.fetch_add(beginPCoeffCount + endPCoeffCount);
 		});
 		numValidated = totalPCoeffCount.load();
 	}
+
 	validatorFinishMessage(complexI, topIdx, numBottoms, numValidated, startTime);
+
+	return correct.load();
 }
 
 template<unsigned int Variables>
@@ -305,7 +325,12 @@ void* basicValidatorPThread(void* voidData) {
 	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = context.validationQueue.pop_wait()).has_value(); ) {
 		OutputBuffer outBuf = outputBuffer.value();
 
-		threadPoolBufferValidator(validatorData->complexI, outBuf, mbfs, pool);
+		bool wasCorrect = threadPoolBufferValidator(validatorData->complexI, outBuf, mbfs, pool);
+
+		if(!wasCorrect) {
+			const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc = *validatorData->errorBufFunc;
+			errorBufFunc(outBuf, "validator");
+		}
 
 		context.inputBufferAlloc.push(outBuf.originalInputData.bufStart);
 		context.resultBufferAlloc.push(outBuf.outputBuf);

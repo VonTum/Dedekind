@@ -289,7 +289,7 @@ void initializeComputeProject(unsigned int Variables, std::string computeFolder,
 		std::abort();
 	}
 
-	std::cout << "Generating directories: " << computeFolder << "/\n    jobs/\n    working/\n    critical/\n    finished/\n    results/\n    logs/\n    validation/\n\n" << std::flush;
+	std::cout << "Generating directories: " << computeFolder << "/\n    jobs/\n    working/\n    critical/\n    finished/\n    results/\n    logs/\n    validation/\n    errors/\n    wrong_finished/\n    wrong_results/\n\n" << std::flush;
 	std::filesystem::create_directory(computeFolder);
 	std::filesystem::create_directory(computeFolderPath(computeFolder, "jobs"));
 	std::filesystem::create_directory(computeFolderPath(computeFolder, "working"));
@@ -298,6 +298,9 @@ void initializeComputeProject(unsigned int Variables, std::string computeFolder,
 	std::filesystem::create_directory(computeFolderPath(computeFolder, "results"));
 	std::filesystem::create_directory(computeFolderPath(computeFolder, "logs"));
 	std::filesystem::create_directory(computeFolderPath(computeFolder, "validation"));
+	std::filesystem::create_directory(computeFolderPath(computeFolder, "errors"));
+	std::filesystem::create_directory(computeFolderPath(computeFolder, "wrong_finished"));
+	std::filesystem::create_directory(computeFolderPath(computeFolder, "wrong_results"));
 
 	size_t numberOfMBFsToProcess = mbfCounts[Variables];
 	size_t numberOfCompleteBatches = numberOfMBFsToProcess / TOP_CLUSTER_SIZE;
@@ -474,7 +477,39 @@ static void saveResults(unsigned int Variables, const std::string& resultsFile, 
 	check(close(resultsFD), "Result file close failed! ");
 }
 
-void processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*)) {
+void writeProcessingBufferPairToFile(const char* fileName, const OutputBuffer& outBuf) {
+	int outFile = checkCreate(fileName);
+
+	uint64_t bufSize = outBuf.originalInputData.bufEnd - outBuf.originalInputData.bufStart;
+	checkWrite(outFile, &bufSize, sizeof(uint64_t), "error writing size to errorBufFile");
+	checkWrite(outFile, outBuf.originalInputData.bufStart, bufSize * sizeof(NodeIndex), "error writing originalInputData to errorBufFile");
+	checkWrite(outFile, outBuf.outputBuf, bufSize * sizeof(ProcessedPCoeffSum), "error writing outputBuf to errorBufFile");
+
+	check(fsync(outFile), "error trying to fsync errorBufFile");
+	check(close(outFile), "error closing errorBufFile");
+}
+
+OutputBuffer readProcessingBufferPairFromFile(const char* fileName) {
+	int outFile = checkOpen(fileName, O_RDONLY, "error opening errorBufFile");
+
+	uint64_t bufSize;
+
+	checkRead(outFile, &bufSize, sizeof(uint64_t), "error reading size from errorBufFile");
+
+	OutputBuffer result;
+	result.originalInputData.bufStart = aligned_mallocT<NodeIndex>(bufSize, 4096);
+	result.originalInputData.bufEnd = result.originalInputData.bufStart + bufSize;
+	result.outputBuf = aligned_mallocT<ProcessedPCoeffSum>(bufSize, 4096);
+	
+	checkRead(outFile, result.originalInputData.bufStart, bufSize * sizeof(NodeIndex), "error reading originalInputData from errorBufFile");
+	checkRead(outFile, result.outputBuf, bufSize * sizeof(ProcessedPCoeffSum), "error reading outputBuf from errorBufFile");
+
+	check(close(outFile), "error closing errorBufFile");
+
+	return result;
+}
+
+bool processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*)) {
 	std::string computeID = methodName + "_" + getComputeIdentifier();
 
 	std::string validationFileName = getValidationFilePath(computeFolder, jobID, computeID);
@@ -483,17 +518,33 @@ void processJob(unsigned int Variables, const std::string& computeFolder, const 
 	std::string criticalFile = computeFilePath(computeFolder, "critical", jobID, "_" + computeID + ".job");
 	std::string finishedFile = computeFilePath(computeFolder, "finished", jobID, "_" + computeID + ".job");
 	std::string resultsFile = computeFilePath(computeFolder, "results", jobID, "_" + computeID + ".results");
+	std::string wrong_finishedFile = computeFilePath(computeFolder, "wrong_finished", jobID, "_" + computeID + ".job");
+	std::string wrong_resultsFile = computeFilePath(computeFolder, "wrong_results", jobID, "_" + computeID + ".results");
 
 	checkNotExists(workingFile);
 	checkNotExists(criticalFile);
 	checkNotExists(finishedFile);
 	checkNotExists(resultsFile);
+	/*checkNotExists(wrong_finishedFile);
+	checkNotExists(wrong_resultsFile);*/
 	std::filesystem::rename(jobFile, workingFile); // Throws filesystem::filesystem_error on error
 	std::cout << "Moved job to working directory: " << jobFile << "=>" << workingFile << std::endl;
 
 	std::cout << "Starting Computation..." << std::endl;
 	
-	ResultProcessorOutput pipelineOutput = pcoeffPipeline(Variables, [&]() -> std::vector<JobTopInfo> {return loadJob(Variables, workingFile);}, processorFunc, validator);
+	std::atomic<bool> noErrorsAtomic;
+	noErrorsAtomic.store(true);
+	auto errorBufFunc = [&](const OutputBuffer& outBuf, const char* moduleThatFoundError) {
+		noErrorsAtomic.store(false);
+
+		std::string bufErrorFile = computeFilePath(computeFolder, "errors", moduleThatFoundError + std::to_string(outBuf.originalInputData.getTop()), "_" + computeID + ".flatBuf");
+		std::cout << "Writing error buffer to " + bufErrorFile + "\n" << std::flush;
+
+
+		writeProcessingBufferPairToFile(bufErrorFile.c_str(), outBuf);
+	};
+
+	ResultProcessorOutput pipelineOutput = pcoeffPipeline(Variables, [&]() -> std::vector<JobTopInfo> {return loadJob(Variables, workingFile);}, processorFunc, validator, errorBufFunc);
 	std::vector<BetaResult>& betaResults = pipelineOutput.results;
 	
 
@@ -509,25 +560,36 @@ void processJob(unsigned int Variables, const std::string& computeFolder, const 
 	}
 	std::cout << std::endl;*/
 	
+	bool noErrors = !noErrorsAtomic.load();
+
 	std::sort(betaResults.begin(), betaResults.end(), [](BetaResult a, BetaResult b) -> bool {return a.topIndex < b.topIndex;});
 	std::cout << "Saving " << betaResults.size() << " results\n" << std::flush;
 
+	ValidationData checkSum;
 	std::string validationFileNameTmp = validationFileName + "_tmp";
-	ValidationData checkSum = addValidationDataToFile(Variables, validationFileName, validationFileNameTmp, pipelineOutput);
-
+	if(noErrors) {
+		checkSum = addValidationDataToFile(Variables, validationFileName, validationFileNameTmp, pipelineOutput);
+	} else {
+		checkSum = getIntactnessCheckSum(pipelineOutput.validationBuffer, Variables);
+	}
 	// Check files again, just to be sure
-	checkNotExists(finishedFile);
 	checkNotExists(criticalFile);
-	checkNotExists(resultsFile);
+
+	const std::string& selectedFinishedFile = noErrors ? finishedFile : wrong_finishedFile;
+	const std::string& selectedResultsFile = noErrors ? resultsFile : wrong_resultsFile;
+	checkNotExists(selectedFinishedFile);
+	checkNotExists(selectedResultsFile);
 
 	std::cout << "Entering critical section: " << workingFile << "=>" << criticalFile << std::endl;
 	std::filesystem::rename(workingFile, criticalFile); // Throws filesystem::filesystem_error on error
 
-	saveResults(Variables, resultsFile, betaResults, checkSum);
-	std::filesystem::rename(validationFileNameTmp, validationFileName); // Commit the new validation file, Throws filesystem::filesystem_error on error
+	saveResults(Variables, selectedResultsFile, betaResults, checkSum);
+	if(noErrors) std::filesystem::rename(validationFileNameTmp, validationFileName); // Commit the new validation file, Throws filesystem::filesystem_error on error
 
-	std::filesystem::rename(criticalFile, finishedFile); // Throws filesystem::filesystem_error on error
-	std::cout << "Finished critical section, everything comitted! " << criticalFile << "=>" << finishedFile << std::endl;
+	std::filesystem::rename(criticalFile, selectedFinishedFile); // Throws filesystem::filesystem_error on error
+	std::cout << "Finished critical section, everything comitted! " << criticalFile << "=>" << selectedFinishedFile << std::endl;
+
+	return noErrors;
 }
 
 static std::pair<std::string, std::string> parseFileName(const std::filesystem::path& filePath, const std::string& extention) {

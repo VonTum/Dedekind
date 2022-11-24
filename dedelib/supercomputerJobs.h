@@ -19,7 +19,11 @@ ValidationData getIntactnessCheckSum(const ValidationData* buf, unsigned int Var
 // Requires that the compute folder does not already exist to prevent data loss
 void initializeComputeProject(unsigned int Variables, std::string computeFolder, size_t numberOfJobs, size_t numberOfJobsToActuallyGenerate);
 
-void processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*) = nullptr);
+void writeProcessingBufferPairToFile(const char* fileName, const OutputBuffer& outBuf);
+OutputBuffer readProcessingBufferPairFromFile(const char* fileName);
+
+// Returns true if computation finished without detected errors
+bool processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*) = nullptr);
 
 void resetUnfinishedJobs(const std::string& computeFolder);
 

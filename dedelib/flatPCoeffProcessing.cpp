@@ -63,7 +63,7 @@ std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sam
 	return resultingVector;
 }
 
-ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*)) {
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*), const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc) {
 	setNUMANodeAffinity(0); // Fopr buffer loading, use the ethernet socket on node 0, to save bandwidth for big flatLinksBuffer on socket 4. 
 	setThreadName("Main Thread");
 	// Alloc on node 3, because that's where the FPGA processor is located too. We want as low latency from it to the context
@@ -135,6 +135,7 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 			validatorDatas[i].context = context.numaQueues[i / 8].ptr;
 			validatorDatas[i].mbfs = context.mbfs[i / 8];
 			validatorDatas[i].complexI = i;
+			validatorDatas[i].errorBufFunc = &errorBufFunc;
 		}
 		validatorThreads = spreadThreads(16, CPUAffinityType::COMPLEX, validatorDatas, validator);
 	} else {
@@ -144,11 +145,12 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 			validatorDatas[i].context = context.numaQueues[i].ptr;
 			validatorDatas[i].mbfs = context.mbfs[i];
 			validatorDatas[i].complexI = i;
+			validatorDatas[i].errorBufFunc = &errorBufFunc;
 		}
 		validatorThreads = spreadThreads(NUMA_SLICE_COUNT, CPUAffinityType::SOCKET, validatorDatas, noValidatorPThread);
 	}
 
-	ResultProcessorOutput results = NUMAResultProcessor(Variables, context);
+	ResultProcessorOutput results = NUMAResultProcessor(Variables, context, errorBufFunc);
 	assert(results.results.size() == context.tops.size());
 
 	pthread_join(inputProducerThread, nullptr);
@@ -218,7 +220,12 @@ void computeFinalDedekindNumberFromGatheredResults(unsigned int Variables, const
 
 void processDedekindNumber(unsigned int Variables, void (*processorFunc)(PCoeffProcessingContext& context), void*(*validator)(void*)) {
 	std::cout << "Starting Computation..." << std::endl;
-	ResultProcessorOutput betaResults = pcoeffPipeline(Variables, [Variables]() -> std::vector<JobTopInfo> {return loadAllTops(Variables);}, processorFunc, validator);
+	ResultProcessorOutput betaResults = pcoeffPipeline(Variables, [Variables]() -> std::vector<JobTopInfo> {return loadAllTops(Variables);}, processorFunc, validator, 
+		[](const OutputBuffer& outBuf, const char* name){
+			std::cerr << "Error from " + std::string(name) + " of top " + std::to_string(outBuf.originalInputData.getTop()) + "\n" << std::flush;
+			std::abort();
+		}
+	);
 
 	BetaResultCollector collector(Variables);
 	collector.addBetaResults(betaResults.results);

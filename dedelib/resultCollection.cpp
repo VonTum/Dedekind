@@ -37,17 +37,20 @@ BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff) {
 }
 
 // Does not take validation buffer
-static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf) {
+static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc) {
 	BetaSum total = BetaSum{0,0};
 
-	for(const NodeIndex* cur = idxBuf; cur != bufEnd; cur++) {
+	ProcessedPCoeffSum* countConnectedSumBuf = buf.outputBuf + BUF_BOTTOM_OFFSET;
+	NodeIndex* bufStart = buf.originalInputData.bufStart + BUF_BOTTOM_OFFSET;
+	NodeIndex* bufEnd = buf.originalInputData.bufEnd;
+	for(const NodeIndex* cur = bufStart; cur != bufEnd; cur++) {
 		ClassInfo info = mbfClassInfos[*cur];
 
 		ProcessedPCoeffSum processedPCoeff = *countConnectedSumBuf++;
 
 		if((processedPCoeff & 0x8000000000000000) != uint64_t(0)) {
-			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - idxBuf) << ", value was: " << processedPCoeff << std::endl;
-			std::abort();
+			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - bufStart) << ", value was: " << processedPCoeff << std::endl;
+			errorBufFunc(buf, "ecc");
 		}
 
 		total += produceBetaTerm(info, processedPCoeff);
@@ -56,17 +59,20 @@ static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idx
 }
 
 // Takes validation buffer
-static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf, ClassInfo topDualClassInfo, ValidationData* validationBuf) {
+static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc, ClassInfo topDualClassInfo, ValidationData* validationBuf) {
 	BetaSum total = BetaSum{0,0};
 
-	for(const NodeIndex* cur = idxBuf; cur != bufEnd; cur++) {
+	ProcessedPCoeffSum* countConnectedSumBuf = buf.outputBuf + BUF_BOTTOM_OFFSET;
+	NodeIndex* bufStart = buf.originalInputData.bufStart + BUF_BOTTOM_OFFSET;
+	NodeIndex* bufEnd = buf.originalInputData.bufEnd;
+	for(const NodeIndex* cur = bufStart; cur != bufEnd; cur++) {
 		ClassInfo info = mbfClassInfos[*cur];
 
 		ProcessedPCoeffSum processedPCoeff = *countConnectedSumBuf++;
 
 		if((processedPCoeff & 0x8000000000000000) != uint64_t(0)) {
-			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - idxBuf) << ", value was: " << processedPCoeff << std::endl;
-			std::abort();
+			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - bufStart) << ", value was: " << processedPCoeff << std::endl;
+			errorBufFunc(buf, "ecc");
 		}
 
 		total += produceBetaTerm(info, processedPCoeff);
@@ -78,22 +84,22 @@ static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idx
 }
 
 // Optionally takes a buffer for validation data
-static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf, ValidationData* validationBuf = nullptr) {
+static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc, ValidationData* validationBuf = nullptr) {
 	// Skip the first elements, as it is the top
 	BetaSumPair result;
 	if(validationBuf != nullptr) {
-		NodeIndex topDualIdx = curJob.bufStart[TOP_DUAL_INDEX];
+		NodeIndex topDualIdx = buf.originalInputData.bufStart[TOP_DUAL_INDEX];
 		ClassInfo topDualClassInfo = mbfClassInfos[topDualIdx];	
 
-		result.betaSum = sumOverBetas(mbfClassInfos, curJob.bufStart + BUF_BOTTOM_OFFSET, curJob.end(), pcoeffSumBuf + BUF_BOTTOM_OFFSET, topDualClassInfo, validationBuf);
+		result.betaSum = sumOverBetas(mbfClassInfos, buf, errorBufFunc, topDualClassInfo, validationBuf);
 	} else {
-		result.betaSum = sumOverBetas(mbfClassInfos, curJob.bufStart + BUF_BOTTOM_OFFSET, curJob.end(), pcoeffSumBuf + BUF_BOTTOM_OFFSET);
+		result.betaSum = sumOverBetas(mbfClassInfos, buf, errorBufFunc);
 	}
 
 #ifdef PCOEFF_DEDUPLICATE
-	ProcessedPCoeffSum nonDuplicateTopDual = pcoeffSumBuf[TOP_DUAL_INDEX]; // Index of dual
+	ProcessedPCoeffSum nonDuplicateTopDual = buf.outputBuf[TOP_DUAL_INDEX]; // Index of dual
 
-	ClassInfo info = mbfClassInfos[curJob.bufStart[TOP_DUAL_INDEX]];
+	ClassInfo info = mbfClassInfos[buf.originalInputData.bufStart[TOP_DUAL_INDEX]];
 
 	result.betaSumDualDedup = produceBetaTerm(info, getPCoeffSum(nonDuplicateTopDual), getPCoeffCount(nonDuplicateTopDual));
 #else
@@ -106,19 +112,20 @@ static void resultprocessingThread(
 	const ClassInfo* mbfClassInfos,
 	PCoeffProcessingContextEighth& context,
 	std::atomic<BetaResult*>& resultPtr,
-	ValidationData* validationData
+	ValidationData* validationData,
+	const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc
 ) {
 	std::cout << "\033[32m[Result Processor] Result processor Thread started.\033[39m\n" << std::flush;
 	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = context.outputQueue.pop_wait()).has_value(); ) {
-		OutputBuffer outBuf = outputBuffer.value();
+		OutputBuffer buf = outputBuffer.value();
 
 		BetaResult curBetaResult;
-		//if constexpr(Variables == 7) std::cout << "Results for job " << outBuf.originalInputData.getTop() << std::endl;
-		curBetaResult.topIndex = outBuf.originalInputData.getTop();
+		//if constexpr(Variables == 7) std::cout << "Results for job " << buf.originalInputData.getTop() << std::endl;
+		curBetaResult.topIndex = buf.originalInputData.getTop();
 
-		curBetaResult.dataForThisTop = produceBetaResult(mbfClassInfos, outBuf.originalInputData, outBuf.outputBuf, validationData);
+		curBetaResult.dataForThisTop = produceBetaResult(mbfClassInfos, buf, errorBufFunc, validationData);
 
-		context.validationQueue.push(outBuf);
+		context.validationQueue.push(buf);
 
 		BetaResult* allocatedSlot = resultPtr.fetch_add(1);
 		*allocatedSlot = std::move(curBetaResult);
@@ -129,7 +136,8 @@ static void resultprocessingThread(
 
 ResultProcessorOutput NUMAResultProcessor(
 	unsigned int Variables,
-	PCoeffProcessingContext& context
+	PCoeffProcessingContext& context,
+	const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc
 ) {
 	void* numaClassInfos[2];
 	size_t classInfoBufferSize = mbfCounts[Variables] * sizeof(ClassInfo);
@@ -156,6 +164,7 @@ ResultProcessorOutput NUMAResultProcessor(
 		ValidationData* validationBuffer;
 		int numaNode;
 		unsigned int Variables;
+		const std::function<void(const OutputBuffer&, const char*)>* errorBufFunc;
 	};
 	ThreadData datas[8];
 	for(int i = 0; i < 8; i++) {
@@ -166,13 +175,14 @@ ResultProcessorOutput NUMAResultProcessor(
 		datas[i].validationBuffer = static_cast<ValidationData*>(validationBuffers[i]);
 		datas[i].numaNode = i;
 		datas[i].Variables = Variables;
+		datas[i].errorBufFunc = &errorBufFunc;
 	}
 
 	PThreadBundle threads = spreadThreads(8, CPUAffinityType::NUMA_DOMAIN, datas, [](void* voidData) -> void* {
 		ThreadData* tData = (ThreadData*) voidData;
 		setThreadName(("Result " + std::to_string(tData->numaNode)).c_str());
 		memset(static_cast<void*>(tData->validationBuffer), 0, tData->validationBufferSize);
-		resultprocessingThread(tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validationBuffer);
+		resultprocessingThread(tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validationBuffer, *tData->errorBufFunc);
 		pthread_exit(nullptr);
 		return nullptr;
 	});

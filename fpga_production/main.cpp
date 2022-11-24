@@ -162,6 +162,7 @@ void fpgaProcessor_Throughput_SingleThread(PCoeffProcessingContext& context) {
 	initPlatform();
 	std::cout << "\033[31m[FPGA Processor] Creating PCoeffMultiKernel for " + std::to_string(numDevices) + " devices...\033[39m\n" << std::flush;
 	FPGAGlobalData globalData(context);
+	initCRCExceptionCallback(); // Create callback after context creation?
 	std::cout << "\033[31m[FPGA Processor] PCoeffMultiKernel created, waiting for MBF LUT...\033[39m\n" << std::flush;
 	context.mbfs0Ready.wait();
 	std::cout << "\033[31m[FPGA Processor] MBF LUT acquired, initializing and dry-running...\033[39m\n" << std::flush;
@@ -194,11 +195,11 @@ int main(int argc, char** argv) {
 	std::string jobID(argv[2]);
 
 	//processJob(7, computeFolder, jobID, "fpga", fpgaProcessor_Throughput, continuousValidatorPThread<7>);
-	processJob(7, computeFolder, jobID, "fpga", fpgaProcessor_Throughput_SingleThread, continuousValidatorPThread<7>);
+	bool success = processJob(7, computeFolder, jobID, "fpga", fpgaProcessor_Throughput_SingleThread, continuousValidatorPThread<7>);
 
 	/*PCoeffProcessingContext emptyContext(7);
 	emptyContext.initMBFS();
 	fpgaProcessor_Throughput_SingleThread(emptyContext);*/
 
-	return 0;
+	return success ? 0 : -1;
 }
