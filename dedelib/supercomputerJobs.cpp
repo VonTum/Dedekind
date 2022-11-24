@@ -572,7 +572,7 @@ bool processJob(unsigned int Variables, const std::string& computeFolder, const 
 	}
 	std::cout << std::endl;*/
 	
-	bool noErrors = !noErrorsAtomic.load();
+	bool noErrors = noErrorsAtomic.load();
 
 	std::sort(betaResults.begin(), betaResults.end(), [](BetaResult a, BetaResult b) -> bool {return a.topIndex < b.topIndex;});
 	std::cout << "Saving " << betaResults.size() << " results\n" << std::flush;
@@ -584,6 +584,7 @@ bool processJob(unsigned int Variables, const std::string& computeFolder, const 
 	} else {
 		checkSum = getIntactnessCheckSum(pipelineOutput.validationBuffer, Variables);
 	}
+	numa_free(pipelineOutput.validationBuffer, VALIDATION_BUFFER_SIZE(Variables) * sizeof(ValidationData));
 	// Check files again, just to be sure
 	checkNotExists(criticalFile);
 
