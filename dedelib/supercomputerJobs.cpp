@@ -455,18 +455,30 @@ static std::vector<BetaResult> unpackResults(const PackedResultData* packedFileD
 }
 
 struct ResultsFileHeader {
+	/*u128 checkSum128;
+	uint64_t checkSum64;*/
 	ValidationData checkSum;
 	uint32_t Variables;
 	uint32_t resultCount;
 };
 
 static void saveResults(unsigned int Variables, const std::string& resultsFile, const std::vector<BetaResult>& betaResults, ValidationData checkSum) {
-	ResultsFileHeader header;
+	union {
+		ResultsFileHeader header;
+		char headerBytes[sizeof(ResultsFileHeader)]; // Ridiculous. Padding has introduced a random aspect that makes file binary unstable. Fix it this way. 
+	};
+	for(size_t i = 0; i < sizeof(ResultsFileHeader); i++) {
+		headerBytes[i] = (char) 0xFF;
+	}
 	header.Variables = Variables;
 	header.resultCount = betaResults.size();
-	header.checkSum = checkSum;
+	header.checkSum.dualBetaSum.betaSum = checkSum.dualBetaSum.betaSum;
+	header.checkSum.dualBetaSum.countedIntervalSizeDown = checkSum.dualBetaSum.countedIntervalSizeDown;
+	//header.checkSum128 = checkSum.betaSum.betaSum;
+	//header.checkSum64 = checkSum.betaSum.countedIntervalSizeDown;
 	
 	int resultsFD = checkCreate(resultsFile.c_str());
+	static_assert(sizeof(ResultsFileHeader) == 48); // Should have been 32, but eurgh, can't change it in the middle of a run. 
 	checkWrite(resultsFD, &header, sizeof(ResultsFileHeader), "Result file write failed! ");
 	std::unique_ptr<PackedResultData[]> packedResults = packResults(betaResults);
 	checkWrite(resultsFD, packedResults.get(), sizeof(PackedResultData) * betaResults.size(), "Result file write failed! ");

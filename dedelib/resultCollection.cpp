@@ -36,27 +36,13 @@ BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff) {
 	return produceBetaTerm(info, pcoeffSum, pcoeffCount);
 }
 
-// Does not take validation buffer
-static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf) {
-	BetaSum total = BetaSum{0,0};
-
-	for(const NodeIndex* cur = idxBuf; cur != bufEnd; cur++) {
-		ClassInfo info = mbfClassInfos[*cur];
-
-		ProcessedPCoeffSum processedPCoeff = *countConnectedSumBuf++;
-
-		if((processedPCoeff & 0x8000000000000000) != uint64_t(0)) {
-			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - idxBuf) << ", value was: " << processedPCoeff << std::endl;
-			std::abort();
-		}
-
-		total += produceBetaTerm(info, processedPCoeff);
-	}
-	return total;
+static void eccErr(size_t idx, ProcessedPCoeffSum value) {
+	std::cerr << "ECC ERROR DETECTED! At bot Index " << idx << ", value was: " << value << std::endl;
+	std::abort();
 }
 
 // Takes validation buffer
-static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf, ClassInfo topDualClassInfo, ValidationData* validationBuf) {
+static inline __attribute__((always_inline)) BetaSum sumOverBetasSegment(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf, ClassInfo topDualClassInfo, ValidationData* validationBuf) {
 	BetaSum total = BetaSum{0,0};
 
 	for(const NodeIndex* cur = idxBuf; cur != bufEnd; cur++) {
@@ -64,9 +50,8 @@ static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idx
 
 		ProcessedPCoeffSum processedPCoeff = *countConnectedSumBuf++;
 
-		if((processedPCoeff & 0x8000000000000000) != uint64_t(0)) {
-			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - idxBuf) << ", value was: " << processedPCoeff << std::endl;
-			std::abort();
+		if(__builtin_expect((processedPCoeff >> 61) != uint64_t(0), 0)) { // Check ECC bit
+			eccErr(cur - idxBuf, processedPCoeff);
 		}
 
 		total += produceBetaTerm(info, processedPCoeff);
@@ -77,18 +62,63 @@ static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idx
 	return total;
 }
 
+// Takes validation buffer
+static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const NodeIndex* idxBuf, const NodeIndex* bufEnd, const ProcessedPCoeffSum* countConnectedSumBuf, ClassInfo topDualClassInfo, ValidationData* validationBuf) {
+	constexpr size_t UNSHUFFLE_BLOCK_SIZE = 32;
+	constexpr size_t UNSHUFFLE_BLOCKS_AT_ONCE = 8;
+	constexpr size_t UNSHUFFLE_BATCH_SIZE = UNSHUFFLE_BLOCK_SIZE * UNSHUFFLE_BLOCKS_AT_ONCE;
+	constexpr size_t BUFFER_LARGE_ENOUGH_FOR_UNSHUFFLE = UNSHUFFLE_BATCH_SIZE + UNSHUFFLE_BLOCK_SIZE;
+
+	BetaSum total;
+	total.betaSum = 0;
+	total.countedIntervalSizeDown = 0;
+
+	size_t numBottoms = bufEnd - idxBuf;
+	if(numBottoms > BUFFER_LARGE_ENOUGH_FOR_UNSHUFFLE) {
+		// Optimize Access pattern
+		const NodeIndex* unshuffleSegmentStart = idxBuf + (UNSHUFFLE_BLOCK_SIZE - 2);
+		const ProcessedPCoeffSum* unshuffleSegmentResults = countConnectedSumBuf + (UNSHUFFLE_BLOCK_SIZE - 2);
+		numBottoms -= (UNSHUFFLE_BLOCK_SIZE - 2);
+		size_t numUnshuffleBlocks = numBottoms / UNSHUFFLE_BATCH_SIZE;
+		
+		total += sumOverBetasSegment(mbfClassInfos, idxBuf, unshuffleSegmentStart, countConnectedSumBuf, topDualClassInfo, validationBuf);
+
+		for(size_t i = 0; i < numUnshuffleBlocks; i++) {
+			NodeIndex unshuffleIndicesBlock[UNSHUFFLE_BATCH_SIZE];
+			ProcessedPCoeffSum unshuffleResultsBlock[UNSHUFFLE_BATCH_SIZE];
+
+			for(size_t b = 0; b < UNSHUFFLE_BLOCKS_AT_ONCE; b++) {
+				for(size_t k = 0; k < UNSHUFFLE_BLOCK_SIZE / 2; k++) {
+					unshuffleIndicesBlock[b * UNSHUFFLE_BLOCK_SIZE + k] = unshuffleSegmentStart[b * UNSHUFFLE_BLOCK_SIZE + 2*k];
+					unshuffleIndicesBlock[b * UNSHUFFLE_BLOCK_SIZE + k + UNSHUFFLE_BLOCK_SIZE / 2] = unshuffleSegmentStart[b * UNSHUFFLE_BLOCK_SIZE + 2*k+1];
+
+					unshuffleResultsBlock[b * UNSHUFFLE_BLOCK_SIZE + k] = unshuffleSegmentResults[b * UNSHUFFLE_BLOCK_SIZE + 2*k];
+					unshuffleResultsBlock[b * UNSHUFFLE_BLOCK_SIZE + k + UNSHUFFLE_BLOCK_SIZE / 2] = unshuffleSegmentResults[b * UNSHUFFLE_BLOCK_SIZE + 2*k+1];
+				}
+			}
+
+			total += sumOverBetasSegment(mbfClassInfos, unshuffleIndicesBlock, unshuffleIndicesBlock+UNSHUFFLE_BATCH_SIZE, unshuffleResultsBlock, topDualClassInfo, validationBuf);
+			unshuffleSegmentStart += UNSHUFFLE_BATCH_SIZE;
+			unshuffleSegmentResults += UNSHUFFLE_BATCH_SIZE;
+		}
+
+		idxBuf = unshuffleSegmentStart;
+		countConnectedSumBuf = unshuffleSegmentResults;
+	}
+
+	total += sumOverBetasSegment(mbfClassInfos, idxBuf, bufEnd, countConnectedSumBuf, topDualClassInfo, validationBuf);
+
+	return total;
+}
+
 // Optionally takes a buffer for validation data
-static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf, ValidationData* validationBuf = nullptr) {
+static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const JobInfo& curJob, const ProcessedPCoeffSum* pcoeffSumBuf, ValidationData* validationBuf) {
 	// Skip the first elements, as it is the top
 	BetaSumPair result;
-	if(validationBuf != nullptr) {
-		NodeIndex topDualIdx = curJob.bufStart[TOP_DUAL_INDEX];
-		ClassInfo topDualClassInfo = mbfClassInfos[topDualIdx];	
+	NodeIndex topDualIdx = curJob.bufStart[TOP_DUAL_INDEX];
+	ClassInfo topDualClassInfo = mbfClassInfos[topDualIdx];	
 
-		result.betaSum = sumOverBetas(mbfClassInfos, curJob.bufStart + BUF_BOTTOM_OFFSET, curJob.end(), pcoeffSumBuf + BUF_BOTTOM_OFFSET, topDualClassInfo, validationBuf);
-	} else {
-		result.betaSum = sumOverBetas(mbfClassInfos, curJob.bufStart + BUF_BOTTOM_OFFSET, curJob.end(), pcoeffSumBuf + BUF_BOTTOM_OFFSET);
-	}
+	result.betaSum = sumOverBetas(mbfClassInfos, curJob.bufStart + BUF_BOTTOM_OFFSET, curJob.end(), pcoeffSumBuf + BUF_BOTTOM_OFFSET, topDualClassInfo, validationBuf);
 
 #ifdef PCOEFF_DEDUPLICATE
 	ProcessedPCoeffSum nonDuplicateTopDual = pcoeffSumBuf[TOP_DUAL_INDEX]; // Index of dual

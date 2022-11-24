@@ -159,7 +159,10 @@ void* validationWorkerThread(void* voidData) {
 
 		int newJob;
 		do {
-			uint64_t workAmount = validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator);
+			uint64_t workAmount = 0;
+			for(int i = 0; i < 16; i++) {
+				workAmount += validateRandomBufferPart(indices, results, top, numBottoms, mbfs, generator);
+			}
 			validatorData->processedCounts[curJob].fetch_add(workAmount);
 			newJob = validatorData->nextJob.load();
 		} while(newJob == curJob);
