@@ -119,7 +119,7 @@ void freeBuffersAfterValidation(int complexI, PCoeffProcessingContextEighth& con
 void freeBuffersAfterValidation(int complexI, PCoeffProcessingContextEighth& context, ValidatorWorkerData& workerData, int jobToFree);
 
 template<unsigned int Variables>
-bool validateWholeBufferIfTooSmall(int complexI, const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc, PCoeffProcessingContextEighth& context, OutputBuffer& resultBuf, const Monotonic<Variables>* mbfs) {
+bool validateWholeBufferIfTooSmall(int complexI, const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc, PCoeffProcessingContextEighth& context, OutputBuffer& resultBuf, const Monotonic<Variables>* mbfs) {
 	size_t numBottoms = resultBuf.originalInputData.getNumberOfBottoms();
 	if(numBottoms <= VALIDATE_CHECK_WHOLE_BUFFER_TRESHOLD) {
 		std::chrono::time_point<std::chrono::high_resolution_clock> startTime = std::chrono::high_resolution_clock::now();
@@ -131,7 +131,7 @@ bool validateWholeBufferIfTooSmall(int complexI, const std::function<void(const 
 		uint64_t numValidated = validateBufferSlice(resultBuf.originalInputData.bufStart, resultBuf.outputBuf, numBottoms, 2, top, mbfs, correct);
 
 		if(correct.load() == false) {
-			errorBufFunc(resultBuf, "validator");
+			errorBufFunc(resultBuf, "validator", false);
 		}
 		freeBuffersAfterValidation(complexI, context, resultBuf, numValidated, startTime);
 
@@ -183,7 +183,7 @@ void* validationWorkerThread(void* voidData) {
 struct ValidatorThreadData {
 	PCoeffProcessingContextEighth* context;
 	const void* mbfs;
-	const std::function<void(const OutputBuffer&, const char*)>* errorBufFunc;
+	const std::function<void(const OutputBuffer&, const char*, bool)>* errorBufFunc;
 	int complexI;
 };
 template<unsigned int Variables>
@@ -191,7 +191,7 @@ void* continuousValidatorPThread(void* voidData) {
 	ValidatorThreadData* validatorData = (ValidatorThreadData*) voidData;
 	int complexI = validatorData->complexI;
 	PCoeffProcessingContextEighth& context = *validatorData->context;
-	const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc = *validatorData->errorBufFunc;
+	const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc = *validatorData->errorBufFunc;
 	std::string threadName = "Validator " + std::to_string(complexI);
 	setThreadName(threadName.c_str());
 	validatorOnlineMessage(complexI);
@@ -243,7 +243,7 @@ void* continuousValidatorPThread(void* voidData) {
 				}
 
 				if(workerData.correct[jobToReplace].load() == false) {
-					errorBufFunc(workerData.jobs[jobToReplace], "validator");
+					errorBufFunc(workerData.jobs[jobToReplace], "validator", false);
 				}
 				freeBuffersAfterValidation(complexI, context, workerData, jobToReplace);
 			}
@@ -256,7 +256,7 @@ void* continuousValidatorPThread(void* voidData) {
 				workerThreads.join();
 
 				if(workerData.correct[curJob].load() == false) {
-					errorBufFunc(workerData.jobs[curJob], "validator");
+					errorBufFunc(workerData.jobs[curJob], "validator", false);
 				}
 				freeBuffersAfterValidation(complexI, context, workerData, curJob);
 
@@ -331,12 +331,13 @@ void* basicValidatorPThread(void* voidData) {
 		bool wasCorrect = threadPoolBufferValidator(validatorData->complexI, outBuf, mbfs, pool);
 
 		if(!wasCorrect) {
-			const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc = *validatorData->errorBufFunc;
-			errorBufFunc(outBuf, "validator");
+			const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc = *validatorData->errorBufFunc;
+			errorBufFunc(outBuf, "validator", false);
 		}
 
-		context.inputBufferAlloc.push(outBuf.originalInputData.bufStart);
-		context.resultBufferAlloc.push(outBuf.outputBuf);
+		size_t bufSize = outBuf.originalInputData.bufferSize();
+		context.freeBuf(outBuf.originalInputData.bufStart, bufSize);
+		context.freeBuf(outBuf.outputBuf, bufSize);
 	}
 
 	validatorExitMessage(validatorData->complexI);

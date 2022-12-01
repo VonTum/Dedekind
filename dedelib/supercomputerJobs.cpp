@@ -501,24 +501,19 @@ void writeProcessingBufferPairToFile(const char* fileName, const OutputBuffer& o
 	check(close(outFile), "error closing errorBufFile");
 }
 
-OutputBuffer readProcessingBufferPairFromFile(const char* fileName) {
+uint64_t readProcessingBufferPairFromFile(const char* fileName, NodeIndex* idxBuf, ProcessedPCoeffSum* resultsBuf) {
 	int outFile = checkOpen(fileName, O_RDONLY, "error opening errorBufFile");
 
 	uint64_t bufSize;
 
 	checkRead(outFile, &bufSize, sizeof(uint64_t), "error reading size from errorBufFile");
 
-	OutputBuffer result;
-	result.originalInputData.bufStart = aligned_mallocT<NodeIndex>(bufSize, 4096);
-	result.originalInputData.bufEnd = result.originalInputData.bufStart + bufSize;
-	result.outputBuf = aligned_mallocT<ProcessedPCoeffSum>(bufSize, 4096);
-	
-	checkRead(outFile, result.originalInputData.bufStart, bufSize * sizeof(NodeIndex), "error reading originalInputData from errorBufFile");
-	checkRead(outFile, result.outputBuf, bufSize * sizeof(ProcessedPCoeffSum), "error reading outputBuf from errorBufFile");
+	checkRead(outFile, idxBuf, bufSize * sizeof(NodeIndex), "error reading originalInputData from errorBufFile");
+	checkRead(outFile, resultsBuf, bufSize * sizeof(ProcessedPCoeffSum), "error reading outputBuf from errorBufFile");
 
 	check(close(outFile), "error closing errorBufFile");
 
-	return result;
+	return bufSize;
 }
 
 bool processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*)) {
@@ -546,9 +541,11 @@ bool processJob(unsigned int Variables, const std::string& computeFolder, const 
 	
 	std::atomic<bool> noErrorsAtomic;
 	noErrorsAtomic.store(true);
-	auto errorBufFunc = [&](const OutputBuffer& outBuf, const char* moduleThatFoundError) {
-		noErrorsAtomic.store(false);
-
+	auto errorBufFunc = [&](const OutputBuffer& outBuf, const char* moduleThatFoundError, bool recoverable) {
+		if(!recoverable) {
+			noErrorsAtomic.store(false);
+		}
+		
 		std::string bufErrorFile = computeFilePath(computeFolder, "errors", moduleThatFoundError + std::to_string(outBuf.originalInputData.getTop()), "_" + computeID + ".flatBuf");
 		std::cout << "Writing error buffer to " + bufErrorFile + "\n" << std::flush;
 
@@ -621,13 +618,13 @@ static std::pair<std::string, std::string> parseFileName(const std::filesystem::
 
 void resetUnfinishedJobs(const std::string& computeFolder) {
 	std::string jobsFolder = computeFolderPath(computeFolder, "jobs");
-	std::string workingFolder = computeFolderPath(computeFolder, "working");
+	std::string wrongFinishedFolder = computeFolderPath(computeFolder, "wrong_finished");
 
 	std::ofstream log("resetJobsLog.txt", std::ios::app);
 
 	std::string totalResetString = "";
 
-	for(std::filesystem::directory_entry unfinishedJob : std::filesystem::directory_iterator(workingFolder)) {
+	for(std::filesystem::directory_entry unfinishedJob : std::filesystem::directory_iterator(wrongFinishedFolder)) {
 		std::pair<std::string, std::string> jobDevicePair = parseFileName(unfinishedJob.path(), ".job");
 
 		log << "Job " + jobDevicePair.first + " reset from node " + jobDevicePair.second << "\n";
@@ -855,6 +852,8 @@ void checkProjectIntegrity(unsigned int Variables, const std::string& computeFol
 	}
 
 	ValidationData realCheckSum = validation.getCheckSum();
+
+	std::cout << "\033[32m" + std::to_string(results.size()) + " result files read.\033[39m\n" << std::flush;
 	if(realCheckSum.dualBetaSum != checkSum.dualBetaSum) {
 		std::cerr << "\033[31mValidation data Checksum Incorrect!\033[39m\n" << std::flush;
 		std::abort();

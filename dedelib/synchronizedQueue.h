@@ -7,6 +7,7 @@
 #include <optional>
 #include <memory>
 #include <vector>
+#include <iostream>
 
 #include "slabAllocator.h"
 #include "numaMem.h"
@@ -160,7 +161,10 @@ public:
 	// Write side
 	void push(T item) {
 		{std::lock_guard<std::mutex> lock(mutex);
-			assert(!this->isClosed);
+			if(isClosed && queue.empty()) {
+				std::cerr << "Attempting to add element to closed queue!\n" << std::flush;
+				std::abort();
+			}
 			queue.push(std::move(item));
 		}
 		readyForPop.notify_one();
@@ -168,7 +172,10 @@ public:
 
 	void pushN(const T* values, size_t count) {
 		{std::lock_guard<std::mutex> lock(mutex);
-			assert(!this->isClosed);
+			if(isClosed && queue.empty()) {
+				std::cerr << "Attempting to add element to closed queue!\n" << std::flush;
+				std::abort();
+			}
 			for(size_t i = 0; i < count; i++) {
 				queue.push(values[i]);
 			}
@@ -178,6 +185,10 @@ public:
 
 	void close() {
 		{std::lock_guard<std::mutex> lock(mutex);
+			if(isClosed) {
+				std::cerr << "Queue already closed!\n" << std::flush;
+				std::abort();
+			}
 			isClosed = true;
 		}
 		readyForPop.notify_all();
@@ -398,13 +409,12 @@ public:
 
 template<typename T>
 class SynchronizedMultiQueue {
-public:
-	bool isClosed = false;
-	std::vector<RingQueue<T>> queues;
-private:
 	alignas(64) std::mutex mutex;
 	alignas(64) std::condition_variable readyForPop;
 public:
+	bool isClosed = false;
+	std::vector<RingQueue<T>> queues;
+
 	SynchronizedMultiQueue() = default;
 	SynchronizedMultiQueue(size_t numQueues, size_t queueCapacity) {
 		queues.reserve(numQueues);
@@ -414,8 +424,11 @@ public:
 	}
 
 	void close() {
-		if(isClosed) throw "Queue already closed!\n";
 		{std::lock_guard<std::mutex> lock(mutex);
+			if(isClosed) {
+				std::cerr << "Queue already closed!\n" << std::flush;
+				std::abort();
+			}
 			isClosed = true;
 		}
 		readyForPop.notify_all();
@@ -424,6 +437,10 @@ public:
 	// Write side
 	void push(size_t queueIdx, T item) {
 		{std::lock_guard<std::mutex> lock(mutex);
+			if(isClosed && queues[queueIdx].empty()) {
+				std::cerr << "Attempting to add element to closed queue!\n" << std::flush;
+				std::abort();
+			}
 			queues[queueIdx].push(std::move(item));
 		}
 		readyForPop.notify_one();
@@ -431,6 +448,10 @@ public:
 
 	void pushN(size_t queueIdx, const T* values, size_t count) {
 		{std::lock_guard<std::mutex> lock(mutex);
+			if(isClosed && queues[queueIdx].empty()) {
+				std::cerr << "Attempting to add element to closed queue!\n" << std::flush;
+				std::abort();
+			}
 			for(size_t i = 0; i < count; i++) {
 				queues[queueIdx].push(values[i]);
 			}

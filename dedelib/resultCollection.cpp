@@ -36,7 +36,17 @@ BetaSum produceBetaTerm(ClassInfo info, ProcessedPCoeffSum processedPCoeff) {
 	return produceBetaTerm(info, pcoeffSum, pcoeffCount);
 }
 
-static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc, ClassInfo topDualClassInfo, ValidationData* validationBuf) {
+static ProcessedPCoeffSum* checkBuffer(ProcessedPCoeffSum* buf, ProcessedPCoeffSum* bufEnd) {
+	while(buf != bufEnd) {
+		if(__builtin_expect((*buf >> 61) != uint64_t(0), 0)) {
+			return buf;
+		}
+		buf++;
+	}
+	return nullptr;
+}
+
+static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, ClassInfo topDualClassInfo, ValidationData* validationBuf) {
 	BetaSum total = BetaSum{0,0};
 
 	ProcessedPCoeffSum* countConnectedSumBuf = buf.outputBuf + BUF_BOTTOM_OFFSET;
@@ -47,28 +57,23 @@ static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const OutputBuffer& 
 
 		ProcessedPCoeffSum processedPCoeff = *countConnectedSumBuf++;
 
-		if((processedPCoeff & 0x8000000000000000) != uint64_t(0)) {
-			std::cerr << "ECC ERROR DETECTED! At bot Index " << (cur - bufStart) << ", value was: " << processedPCoeff << std::endl;
-			errorBufFunc(buf, "ecc");
-		}
-
 		total += produceBetaTerm(info, processedPCoeff);
 
 		// This is the sum to be added to the top "inv(bot)", because we deduplicated it off from that top
 		validationBuf[*cur].dualBetaSum += produceBetaTerm(topDualClassInfo, processedPCoeff);
 	}
+
 	return total;
 }
 
-// Optionally takes a buffer for validation data
-static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc, ValidationData* validationBuf) {
-	// Skip the first elements, as it is the top
+static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, ValidationData* validationBuf) {
 	BetaSumPair result;
 
+	// Skip the first elements, as it is the top
 	NodeIndex topDualIdx = buf.originalInputData.bufStart[TOP_DUAL_INDEX];
 	ClassInfo topDualClassInfo = mbfClassInfos[topDualIdx];	
 
-	result.betaSum = sumOverBetas(mbfClassInfos, buf, errorBufFunc, topDualClassInfo, validationBuf);
+	result.betaSum = sumOverBetas(mbfClassInfos, buf, topDualClassInfo, validationBuf);
 
 #ifdef PCOEFF_DEDUPLICATE
 	ProcessedPCoeffSum nonDuplicateTopDual = buf.outputBuf[TOP_DUAL_INDEX]; // Index of dual
@@ -82,36 +87,78 @@ static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const Outpu
 	return result;
 }
 
-static void resultprocessingThread(
-	const ClassInfo* mbfClassInfos,
-	PCoeffProcessingContextEighth& context,
-	std::atomic<BetaResult*>& resultPtr,
-	ValidationData* validationData,
-	const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc
-) {
+struct ResultProcessingThreadData {
+	size_t validationBufferSize;
+	PCoeffProcessingContext* context;
+	const ClassInfo* mbfClassInfos;
+	std::atomic<BetaResult*>* finalResultPtr;
+	ValidationData* validationBuffer;
+	int numaNode;
+	unsigned int Variables;
+	const std::function<void(const OutputBuffer&, const char*, bool)>* errorBufFunc;
+};
+static void* resultprocessingPThread(void* voidData) {
+	ResultProcessingThreadData* tData = (ResultProcessingThreadData*) voidData;
+	setThreadName(("Result " + std::to_string(tData->numaNode)).c_str());
+	memset(static_cast<void*>(tData->validationBuffer), 0, tData->validationBufferSize);
+	//resultprocessingThread(tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validationBuffer, *tData->errorBufFunc);
+
+	const ClassInfo* mbfClassInfos = tData->mbfClassInfos;
+	ValidationData* validationBuffer = tData->validationBuffer;
+	const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc = *tData->errorBufFunc;
+	PCoeffProcessingContextEighth& subContext = *tData->context->numaQueues[tData->numaNode / 4];
+	std::atomic<BetaResult*>& finalResultPtr = *tData->finalResultPtr;
 	std::cout << "\033[32m[Result Processor] Result processor Thread started.\033[39m\n" << std::flush;
-	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = context.outputQueue.pop_wait()).has_value(); ) {
+	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = subContext.outputQueue.pop_wait()).has_value(); ) {
 		OutputBuffer buf = outputBuffer.value();
 
 		BetaResult curBetaResult;
 		//if constexpr(Variables == 7) std::cout << "Results for job " << buf.originalInputData.getTop() << std::endl;
 		curBetaResult.topIndex = buf.originalInputData.getTop();
 
-		curBetaResult.dataForThisTop = produceBetaResult(mbfClassInfos, buf, errorBufFunc, validationData);
+		ProcessedPCoeffSum* errorLocation = checkBuffer(buf.outputBuf + 2, buf.outputBuf + buf.originalInputData.bufferSize());
+		if(errorLocation != nullptr) {
+			ProcessedPCoeffSum errorValue = *errorLocation;
+			const char* errorMessage = "ECC ERROR DETECTED! At bot Index ";
+			const char* errCat = "ecc";
+			bool recoverable = false;
+			if(errorValue == 0xFFFFFFFFFFFFFFFF) {
+				errorMessage = "MISSING DATA ERROR DETECTED! At bot Index ";
+				errCat = "missingData";
+				recoverable = true;
+			} else if(errorValue == 0xEEEEEEEEEEEEEEEE) {
+				errorMessage = "MISSING IN FPGA DATA ERROR DETECTED! At bot Index ";
+				errCat = "missingInFPGA";
+				recoverable = true;
+			}
+			std::cerr << errorMessage + std::to_string(errorLocation - buf.outputBuf) + ", value was: " + std::to_string(errorValue) + "/n" << std::flush;
+			errorBufFunc(buf, errCat, recoverable);
 
-		context.validationQueue.push(buf);
+			if(recoverable) {
+				std::cout << "\033[32m[Result Processor] Retrying buffer for top " + std::to_string(buf.originalInputData.getTop()) + "!\033[39m\n" << std::flush;
+				tData->context->inputQueue.push(tData->numaNode / 4, buf.originalInputData); // Return the buffer to try again
+				subContext.freeBuf(buf.outputBuf, buf.originalInputData.bufferSize());
+				continue;
+			}
+		}
 
-		BetaResult* allocatedSlot = resultPtr.fetch_add(1);
+		curBetaResult.dataForThisTop = produceBetaResult(mbfClassInfos, buf, validationBuffer);
+		subContext.validationQueue.push(buf);
+
+		BetaResult* allocatedSlot = finalResultPtr.fetch_add(1);
 		*allocatedSlot = std::move(curBetaResult);
 	}
-	context.validationQueue.close();
+	subContext.validationQueue.close();
 	std::cout << "\033[32m[Result Processor] Result processor Thread finished.\033[39m\n" << std::flush;
+
+	pthread_exit(nullptr);
+	return nullptr;
 }
 
 ResultProcessorOutput NUMAResultProcessor(
 	unsigned int Variables,
 	PCoeffProcessingContext& context,
-	const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc
+	const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc
 ) {
 	void* numaClassInfos[2];
 	size_t classInfoBufferSize = mbfCounts[Variables] * sizeof(ClassInfo);
@@ -130,20 +177,10 @@ ResultProcessorOutput NUMAResultProcessor(
 	allocNumaNodeBuffers(validationBufferSize, validationBuffers);
 	std::cout << "\033[32m[Result Processor] Allocated validation buffers. Starting result processing threads\033[39m\n" << std::flush;
 
-	struct ThreadData {
-		size_t validationBufferSize;
-		PCoeffProcessingContextEighth* context;
-		const ClassInfo* mbfClassInfos;
-		std::atomic<BetaResult*>* finalResultPtr;
-		ValidationData* validationBuffer;
-		int numaNode;
-		unsigned int Variables;
-		const std::function<void(const OutputBuffer&, const char*)>* errorBufFunc;
-	};
-	ThreadData datas[8];
+	ResultProcessingThreadData datas[8];
 	for(int i = 0; i < 8; i++) {
 		datas[i].validationBufferSize = validationBufferSize;
-		datas[i].context = context.numaQueues[i / 4].ptr;
+		datas[i].context = &context;
 		datas[i].mbfClassInfos = static_cast<const ClassInfo*>(numaClassInfos[i / 4]);
 		datas[i].finalResultPtr = &finalResultPtr;
 		datas[i].validationBuffer = static_cast<ValidationData*>(validationBuffers[i]);
@@ -152,14 +189,7 @@ ResultProcessorOutput NUMAResultProcessor(
 		datas[i].errorBufFunc = &errorBufFunc;
 	}
 
-	PThreadBundle threads = spreadThreads(8, CPUAffinityType::NUMA_DOMAIN, datas, [](void* voidData) -> void* {
-		ThreadData* tData = (ThreadData*) voidData;
-		setThreadName(("Result " + std::to_string(tData->numaNode)).c_str());
-		memset(static_cast<void*>(tData->validationBuffer), 0, tData->validationBufferSize);
-		resultprocessingThread(tData->mbfClassInfos, *tData->context, *tData->finalResultPtr, tData->validationBuffer, *tData->errorBufFunc);
-		pthread_exit(nullptr);
-		return nullptr;
-	});
+	PThreadBundle threads = spreadThreads(8, CPUAffinityType::NUMA_DOMAIN, datas, resultprocessingPThread);
 	threads.join();
 
 	std::cout << "\033[32m[Result Processor] Result processor finished.\033[39m\n" << std::flush;

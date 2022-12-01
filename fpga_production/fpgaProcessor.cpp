@@ -38,9 +38,16 @@ static uint32_t* generateDryBuf() {
 	return dryBuf;
 }
 
-constexpr size_t ZEROS_BUFSIZE = 512;
-alignas(ZEROS_BUFSIZE) static const char zeros[ZEROS_BUFSIZE]{0}; // Zero-initialized
-// memset(zeros, 0, ZEROS_BUFSIZE);
+constexpr size_t BUF_FILL_BLOCK_SIZE = 128;
+struct BufferFillData {
+	char bufFillValue[BUF_FILL_BLOCK_SIZE];
+	constexpr BufferFillData() : bufFillValue{} {
+		for(size_t i = 0; i < BUF_FILL_BLOCK_SIZE; i++) {
+			bufFillValue[i] = '\xEE';
+		}
+	}
+};
+constexpr BufferFillData bufFillData;
 
 void PCoeffKernelPart::createBuffers(cl_device_id device, cl_context context) {
 	cl_int status;
@@ -63,16 +70,18 @@ void PCoeffKernelPart::createBuffers(cl_device_id device, cl_context context) {
 	}
 
 	for(size_t i = 0; i < NUM_BUFFERS; i++) {
-		clEnqueueFillBuffer(this->queue, this->inputMems[i], zeros, ZEROS_BUFSIZE, 0, BUFFER_SIZE, 0, nullptr, nullptr);
+		checkError(clEnqueueFillBuffer(this->queue, this->inputMems[i], bufFillData.bufFillValue, BUF_FILL_BLOCK_SIZE, 0, BUFFER_SIZE * sizeof(uint32_t), 0, nullptr, nullptr), "Failed to enqueue Fill Buffer");
 	}
 	for(size_t i = 0; i < NUM_BUFFERS; i++) {
-		clEnqueueFillBuffer(this->queue, this->resultMems[i], zeros, ZEROS_BUFSIZE, 0, BUFFER_SIZE, 0, nullptr, nullptr);
+		checkError(clEnqueueFillBuffer(this->queue, this->resultMems[i], bufFillData.bufFillValue, BUF_FILL_BLOCK_SIZE, 0, BUFFER_SIZE * sizeof(uint64_t), 0, nullptr, nullptr), "Failed to enqueue Fill Buffer");
 	}
 }
 cl_event PCoeffKernelPart::launchWriteKernel(cl_kernel kernel, int memBufIdx, cl_uint bufferSize, const uint32_t* inputBuf) {
-	cl_event writeFinished;
-	checkError(clEnqueueWriteBuffer(this->queue, this->inputMems[memBufIdx], 0, 0, bufferSize*sizeof(uint32_t), inputBuf, 0, nullptr, &writeFinished), "Failed to enqueue writing to buffer");
-	
+	constexpr size_t NUM_EVENTS_BEFORE_KERNEL_LAUNCH = 1;
+	cl_event eventsBeforeKernelLaunch[NUM_EVENTS_BEFORE_KERNEL_LAUNCH];
+	checkError(clEnqueueWriteBuffer(this->queue, this->inputMems[memBufIdx], 0, 0, bufferSize*sizeof(uint32_t), inputBuf, 0, nullptr, &eventsBeforeKernelLaunch[0]), "Failed to enqueue writing to buffer");
+	//checkError(clEnqueueFillBuffer(this->queue, this->resultMems[memBufIdx], bufFillData.bufFillValue, BUF_FILL_BLOCK_SIZE, 0, BUFFER_SIZE * sizeof(uint64_t), 0, nullptr, &eventsBeforeKernelLaunch[1]), "Failed to enqueue Fill Buffer");
+
 	// Set the kernel arguments for kernel
 	// The 0th and 1st argument, mbfLUTMemA/B is a constant buffer and remains unchanged throughout a run. 
 	checkError(clSetKernelArg(kernel, 0, sizeof(cl_mem), &this->mbfLUTA), "Failed to set kernel arg 0:mbfLUTA");
@@ -85,7 +94,7 @@ cl_event PCoeffKernelPart::launchWriteKernel(cl_kernel kernel, int memBufIdx, cl
 	static const size_t gSize = 1;
 	static const size_t lSize = 1;
 	cl_event outEvent;
-	checkError(clEnqueueNDRangeKernel(this->queue, kernel, 1, NULL, &gSize, &lSize, 1, &writeFinished, &outEvent), "Failed to launch kernel");
+	checkError(clEnqueueNDRangeKernel(this->queue, kernel, 1, NULL, &gSize, &lSize, NUM_EVENTS_BEFORE_KERNEL_LAUNCH, eventsBeforeKernelLaunch, &outEvent), "Failed to launch kernel");
 	//std::cout << "Kernel launched for size " << bufferSize << std::endl;
 	return outEvent;
 }

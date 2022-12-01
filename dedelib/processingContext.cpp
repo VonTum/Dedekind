@@ -34,6 +34,14 @@ PCoeffProcessingContextEighth::~PCoeffProcessingContextEighth() {
 	resultBufferAlloc.close();
 }
 
+void PCoeffProcessingContextEighth::freeBuf(NodeIndex* bufToFree, size_t bufSize) {
+	this->inputBufferAlloc.push(bufToFree);
+}
+void PCoeffProcessingContextEighth::freeBuf(ProcessedPCoeffSum* bufToFree, size_t bufSize) {
+	memset(static_cast<void*>(bufToFree), 0xFF, sizeof(ProcessedPCoeffSum) * bufSize); // Fill with fixed data so any computation gaps are easily spotted
+	this->resultBufferAlloc.push(bufToFree);
+}
+
 template<typename T>
 void setStackToBufferParts(SynchronizedStack<T*>& target, T* bufMemory, size_t partSize, size_t numParts) {
 	T** stack = target.get();
@@ -122,11 +130,4 @@ PCoeffProcessingContextEighth& PCoeffProcessingContext::getNUMAForBuf(const Node
 }
 PCoeffProcessingContextEighth& PCoeffProcessingContext::getNUMAForBuf(const ProcessedPCoeffSum* id) const {
 	return *numaQueues[getIndexOf(numaResultMemory, id)];
-}
-
-void PCoeffProcessingContext::free(NodeIndex* inputBuf) const {
-	this->getNUMAForBuf(inputBuf).inputBufferAlloc.push(inputBuf);
-}
-void PCoeffProcessingContext::free(ProcessedPCoeffSum* resultBuf) const {
-	this->getNUMAForBuf(resultBuf).resultBufferAlloc.push(resultBuf);
 }

@@ -31,6 +31,9 @@ public:
 
 	PCoeffProcessingContextEighth();
 	~PCoeffProcessingContextEighth();
+
+	void freeBuf(NodeIndex* bufToFree, size_t bufSize);
+	void freeBuf(ProcessedPCoeffSum* bufToFree, size_t bufSize);
 };
 
 class PCoeffProcessingContext {
@@ -57,7 +60,4 @@ public:
 
 	PCoeffProcessingContextEighth& getNUMAForBuf(const NodeIndex* id) const;
 	PCoeffProcessingContextEighth& getNUMAForBuf(const ProcessedPCoeffSum* id) const;
-
-	void free(NodeIndex* inputBuf) const;
-	void free(ProcessedPCoeffSum* resultBuf) const;
 };

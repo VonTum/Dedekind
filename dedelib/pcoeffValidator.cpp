@@ -49,8 +49,9 @@ void* noValidatorPThread(void* voidData) {
 	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = context.validationQueue.pop_wait()).has_value(); ) {
 		OutputBuffer outBuf = outputBuffer.value();
 
-		context.inputBufferAlloc.push(outBuf.originalInputData.bufStart);
-		context.resultBufferAlloc.push(outBuf.outputBuf);
+		size_t bufSize = outBuf.originalInputData.bufferSize();
+		context.freeBuf(outBuf.originalInputData.bufStart, bufSize);
+		context.freeBuf(outBuf.outputBuf, bufSize);
 	}
 
 	validatorExitMessage(validatorData->complexI);

@@ -41,7 +41,8 @@ inline void benchmarkBottomBufferProduction(const std::vector<std::string>& args
 			if(optBuf.has_value()) {
 				double secondsSinceStart = ((std::chrono::high_resolution_clock::now() - startTime).count() * 1.0e-9);
 				std::cout << "Buffer " << bufferI++ << " received at " << secondsSinceStart << "s" << std::endl;
-				context.free(optBuf.value().bufStart);
+				JobInfo buf = optBuf.value();
+				context.getNUMAForBuf(buf.bufStart).freeBuf(buf.bufStart, buf.bufferSize());
 			} else {
 				break;
 			}
@@ -148,7 +149,7 @@ inline void testBottomBufferProduction(const std::vector<std::string>& args) {
 						}
 					}
 
-					context.free(buf.bufStart);
+					context.getNUMAForBuf(buf.bufStart).freeBuf(buf.bufStart, buf.bufferSize());
 				} else {
 					break;
 				}

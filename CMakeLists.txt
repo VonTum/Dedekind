@@ -14,7 +14,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   add_compile_options("$<$<CONFIG:RELEASE>:/O2 /Oi /ot /GL>")
 else()
   add_compile_options(-Wall -Wextra -march=native)
-  add_compile_options(-g -fno-inline)
+  # add_compile_options(-g -fno-inline) # no-inline slows down code considerably
   # profiling
   # add_compile_options(-g -fno-omit-frame-pointer -fno-inline-small-functions)
   # add_definitions(-DNO_MULTITHREAD)
@@ -23,11 +23,12 @@ else()
   add_link_options("$<$<CONFIG:DEBUG>:-fsanitize=address>")
   add_compile_options("$<$<CONFIG:RELEASE>:-Wno-unused-variable>")
   add_compile_options("$<$<CONFIG:RELEASE>:-O3>")
-  
+
   # add_compile_options("-fprofile-generate")
   # link_libraries("gcov")
   add_compile_options("-fprofile-use")
   add_compile_options("-fprofile-correction")
+  add_compile_options("-Wno-coverage-mismatch")
 endif()
 
 add_library(dedelib

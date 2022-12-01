@@ -63,7 +63,7 @@ std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sam
 	return resultingVector;
 }
 
-ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*), const std::function<void(const OutputBuffer&, const char*)>& errorBufFunc) {
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*), const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc) {
 	setNUMANodeAffinity(0); // Fopr buffer loading, use the ethernet socket on node 0, to save bandwidth for big flatLinksBuffer on socket 4. 
 	setThreadName("Main Thread");
 	// Alloc on node 3, because that's where the FPGA processor is located too. We want as low latency from it to the context
@@ -221,9 +221,11 @@ void computeFinalDedekindNumberFromGatheredResults(unsigned int Variables, const
 void processDedekindNumber(unsigned int Variables, void (*processorFunc)(PCoeffProcessingContext& context), void*(*validator)(void*)) {
 	std::cout << "Starting Computation..." << std::endl;
 	ResultProcessorOutput betaResults = pcoeffPipeline(Variables, [Variables]() -> std::vector<JobTopInfo> {return loadAllTops(Variables);}, processorFunc, validator, 
-		[](const OutputBuffer& outBuf, const char* name){
+		[](const OutputBuffer& outBuf, const char* name, bool recoverable){
 			std::cerr << "Error from " + std::string(name) + " of top " + std::to_string(outBuf.originalInputData.getTop()) + "\n" << std::flush;
-			std::abort();
+			if(!recoverable) {
+				std::abort();
+			}
 		}
 	);
 

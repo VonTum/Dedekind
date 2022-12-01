@@ -41,14 +41,65 @@ template<unsigned int Variables>
 void checkErrorBuffer(const std::vector<std::string>& args) {
 	const std::string& fileName = args[0];
 
-	OutputBuffer buf = readProcessingBufferPairFromFile(fileName.c_str());
+	NodeIndex* idxBuf = aligned_mallocT<NodeIndex>(mbfCounts[Variables], 4096);
+	ProcessedPCoeffSum* resultBuf = aligned_mallocT<ProcessedPCoeffSum>(mbfCounts[Variables], 4096);
+	ProcessedPCoeffSum* correctResultBuf = aligned_mallocT<ProcessedPCoeffSum>(mbfCounts[Variables], 4096);
+	uint64_t bufSize = readProcessingBufferPairFromFile(fileName.c_str(), idxBuf, resultBuf);
 
 	const Monotonic<Variables>* mbfs = readFlatBufferNoMMAP<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
-	checkBetasCPU_MultiThread(mbfs, buf);
+	ThreadPool threadPool;
+	JobInfo job;
+	job.bufStart = idxBuf;
+	job.bufEnd = idxBuf + bufSize;
+	// Don't need job.blockEnd
+	processBetasCPU_MultiThread(mbfs, job, correctResultBuf, threadPool);
+
+	size_t firstErrorIdx;
+	for(size_t i = 2; i < bufSize; i++) {
+		if(resultBuf[i] != correctResultBuf[i]) {
+			firstErrorIdx = i;
+			goto errorFound;
+		}
+	}
+	std::cout << std::to_string(bufSize) + " elements checked. All correct!" << std::flush;
+	return;
+	errorFound:
+	size_t lastErrorIdx = firstErrorIdx;
+	size_t numberOfErrors = 1;
+	for(size_t i = firstErrorIdx+1; i < bufSize; i++) {
+		if(resultBuf[i] != correctResultBuf[i]) {
+			lastErrorIdx = i;
+			numberOfErrors++;
+		}
+	}
+
+	for(size_t i = firstErrorIdx-5; i <= lastErrorIdx+5; i++) {
+		ProcessedPCoeffSum found = resultBuf[i];
+		ProcessedPCoeffSum correct = correctResultBuf[i];
+		NodeIndex idx = idxBuf[i];
+		const char* alignColor = (i % 32 >= 16) ? "\n\033[37m" : "\n\033[39m";
+		std::cout << alignColor + std::to_string(idx) + "> \033[39m";
+
+		if(found != correct) {
+			std::cout << 
+				"sum: \033[31m" + std::to_string(getPCoeffSum(found)) + "\033[39m / \033[32m" + std::to_string(getPCoeffSum(correct))
+				+ "\033[39m \tcount: \033[31m" + std::to_string(getPCoeffCount(found)) + "\033[39m / \033[32m" + std::to_string(getPCoeffCount(correct)) + "\033[39m";
+		} else {
+			std::cout << "\033[32mCorrect!\033[39m";
+		}
+	}
+
+	std::cout << std::flush;
+
+	size_t errorRangeSize = lastErrorIdx - firstErrorIdx + 1;
+	std::cout << "\nFirst Error: " + std::to_string(firstErrorIdx) + " (bot " + std::to_string(idxBuf[firstErrorIdx]) + ")";
+	std::cout << "\nLast Error: " + std::to_string(lastErrorIdx) + " (bot " + std::to_string(idxBuf[lastErrorIdx]) + ")";
+	std::cout << "\nNumber of Errors: " + std::to_string(numberOfErrors) + " / " + std::to_string(bufSize);
+	std::cout << "\nError index range size: " + std::to_string(errorRangeSize) + " (" + std::to_string(numberOfErrors * 100.0 / errorRangeSize) + ")";
+	std::cout << "\n" << std::flush;
 }
 
 CommandSet superCommands {"Supercomputing Commands", {}, {
-
 	{"initializeSupercomputingProject", [](const std::vector<std::string>& args) {
 		std::string projectFolderPath = args[0];
 		unsigned int targetDedekindNumber = std::stoi(args[1]);
