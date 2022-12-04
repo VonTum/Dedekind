@@ -25,6 +25,8 @@ uint64_t readProcessingBufferPairFromFile(const char* fileName, NodeIndex* idxBu
 // Returns true if computation finished without detected errors
 bool processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*) = nullptr);
 
+std::vector<BetaResult> readResultsFile(unsigned int Variables, const char* filePath, ValidationData& checkSum);
+
 void resetUnfinishedJobs(const std::string& computeFolder);
 
 void collectAndProcessResults(unsigned int Variables, const std::string& computeFolder);

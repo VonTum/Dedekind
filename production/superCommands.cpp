@@ -2,6 +2,7 @@
 
 #include "../dedelib/supercomputerJobs.h"
 #include "../dedelib/pcoeffValidator.h"
+#include "../dedelib/singleTopVerification.h"
 
 #include <sstream>
 
@@ -146,6 +147,51 @@ void printErrorBuffer(const std::vector<std::string>& args) {
 	std::cout << "Up to idx " + std::to_string(to) << "\n";
 }
 
+template<unsigned int Variables>
+void checkSingleTopResult(BetaResult originalResult) {
+	std::cout << "Checking top " + std::to_string(originalResult.topIndex) + "..." << std::endl;
+
+	std::cout << "Original result: " + toString(originalResult) << std::endl;
+	SingleTopResult realSol = computeSingleTopWithAllCores<Variables, true>(originalResult.topIndex);
+
+	std::cout << "Original result: " + toString(originalResult) << std::endl;
+	std::cout << "Correct result:  result: " + toString(realSol.resultSum) + ", dual: " + toString(realSol.dualSum) << std::endl;
+
+	if(originalResult.dataForThisTop.betaSum == realSol.resultSum && originalResult.dataForThisTop.betaSumDualDedup == realSol.dualSum) {
+		std::cout << "\033[32mCorrect!\033[39m\n" << std::flush;
+	} else {
+		std::cout << "\033[31mBad Result!\033[39m\n" << std::flush;
+		std::abort();
+	}
+}
+
+template<unsigned int Variables>
+void checkResultsFileSamples(const std::vector<std::string>& args) {
+	const std::string& filePath = args[0];
+
+	ValidationData unused_checkSum;
+	std::vector<BetaResult> results = readResultsFile(Variables, filePath.c_str(), unused_checkSum);
+
+	if(args.size() > 1) {
+		for(size_t i = 1; i < args.size(); i++) {
+			size_t elemIndex = std::stoi(args[i]);
+			std::cout << "Checking result idx " + std::to_string(elemIndex) + " / " + std::to_string(results.size()) << std::endl;
+			if(elemIndex >= results.size()) {
+				std::cerr << "ERROR Result index out of bounds! " + std::to_string(elemIndex) + " / " + std::to_string(results.size()) << std::endl;
+				std::abort();
+			}
+
+			checkSingleTopResult<Variables>(results[elemIndex]);
+		}
+	} else {
+		std::default_random_engine generator;
+		std::uniform_int_distribution<size_t> distr(0, results.size() - 1);
+		size_t selectedResult = distr(generator);
+		std::cout << "Checking result idx " + std::to_string(selectedResult) + " / " + std::to_string(results.size()) << std::endl;
+		checkSingleTopResult<Variables>(results[selectedResult]);
+	}
+}
+
 CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"initializeSupercomputingProject", [](const std::vector<std::string>& args) {
 		std::string projectFolderPath = args[0];
@@ -199,4 +245,12 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"checkErrorBuffer7", checkErrorBuffer<7>},
 
 	{"printErrorBuffer", printErrorBuffer},
+
+	{"checkResultsFileSamples1", checkResultsFileSamples<1>},
+	{"checkResultsFileSamples2", checkResultsFileSamples<2>},
+	{"checkResultsFileSamples3", checkResultsFileSamples<3>},
+	{"checkResultsFileSamples4", checkResultsFileSamples<4>},
+	{"checkResultsFileSamples5", checkResultsFileSamples<5>},
+	{"checkResultsFileSamples6", checkResultsFileSamples<6>},
+	{"checkResultsFileSamples7", checkResultsFileSamples<7>},
 }};

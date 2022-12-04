@@ -643,9 +643,9 @@ void resetUnfinishedJobs(const std::string& computeFolder) {
 	std::cout << "Resulting new sbatch array: --array=" + totalResetString.substr(0, totalResetString.length() - 1) << std::endl;
 }
 
-std::vector<BetaResult> readResultsFile(unsigned int Variables, const std::filesystem::path& filePath, ValidationData& checkSum) {
+std::vector<BetaResult> readResultsFile(unsigned int Variables, const char* filePath, ValidationData& checkSum) {
 	ResultsFileHeader header;
-	int resultsFD = checkOpen(filePath.c_str(), O_RDONLY, "Failed to open results file! ");
+	int resultsFD = checkOpen(filePath, O_RDONLY, "Failed to open results file! ");
 	checkRead(resultsFD, &header, sizeof(ResultsFileHeader), "Results read failed! ");
 
 	if(Variables != header.Variables) {
@@ -685,7 +685,7 @@ static std::vector<NamedResultFile> loadAllResultsFiles(unsigned int Variables, 
 			ValidationData checkSum;
 			checkSum.dualBetaSum.betaSum = 0;
 			checkSum.dualBetaSum.countedIntervalSizeDown = 0;
-			std::vector<BetaResult> results = readResultsFile(Variables, path, checkSum);
+			std::vector<BetaResult> results = readResultsFile(Variables, path.c_str(), checkSum);
 
 			std::pair<std::string, std::string> jobDevicePair = parseFileName(path, ".results");
 			
@@ -718,7 +718,7 @@ BetaResultCollector collectAllResultFiles(unsigned int Variables, const std::str
 		if(file.is_regular_file() && filePath.substr(filePath.find_last_of(".")) == ".results") {
 			// Results file
 			std::cout << "Reading results file " << filePath << std::endl;
-			std::vector<BetaResult> results = readResultsFile(Variables, path, checkSum);
+			std::vector<BetaResult> results = readResultsFile(Variables, path.c_str(), checkSum);
 			collector.addBetaResults(results);
 		} else {
 			std::cerr << "Unknown file found, expected results file: " << filePath << std::endl;
