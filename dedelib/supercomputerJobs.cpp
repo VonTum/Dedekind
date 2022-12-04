@@ -508,7 +508,13 @@ uint64_t readProcessingBufferPairFromFile(const char* fileName, NodeIndex* idxBu
 
 	checkRead(outFile, &bufSize, sizeof(uint64_t), "error reading size from errorBufFile");
 
+	if(idxBuf == nullptr) {
+		idxBuf = aligned_mallocT<NodeIndex>(bufSize, 4096);
+	}
 	checkRead(outFile, idxBuf, bufSize * sizeof(NodeIndex), "error reading originalInputData from errorBufFile");
+	if(resultsBuf == nullptr) {
+		resultsBuf = aligned_mallocT<ProcessedPCoeffSum>(bufSize, 4096);
+	}
 	checkRead(outFile, resultsBuf, bufSize * sizeof(ProcessedPCoeffSum), "error reading outputBuf from errorBufFile");
 
 	check(close(outFile), "error closing errorBufFile");

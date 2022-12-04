@@ -99,6 +99,53 @@ void checkErrorBuffer(const std::vector<std::string>& args) {
 	std::cout << "\n" << std::flush;
 }
 
+template<typename IntType>
+std::string toHex(IntType v) {
+	constexpr char chars[16]{'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'};
+	char outStr[sizeof(IntType)*2];
+	for(size_t i = 0; i < sizeof(IntType) * 2; i++) {
+		IntType quartet = (v >> (sizeof(IntType) * 8 - 4 * i - 4)) & 0b00001111;
+		outStr[i] = chars[quartet];
+	}
+	return std::string(outStr, sizeof(IntType) * 2);
+}
+
+void printErrorBuffer(const std::vector<std::string>& args) {
+	std::string fileName = args[0];
+
+	NodeIndex* idxBuf = aligned_mallocT<NodeIndex>(mbfCounts[7], 4096);
+	ProcessedPCoeffSum* resultsBuf = aligned_mallocT<ProcessedPCoeffSum>(mbfCounts[7], 4096);
+	uint64_t bufSize = readProcessingBufferPairFromFile(fileName.c_str(), idxBuf, resultsBuf);
+
+	uint64_t from = 0;
+	uint64_t to;
+	if(args.size() > 1) {
+		from = std::stoll(args[1]);
+		to = std::stoll(args[2]);
+		if(bufSize < to) to = bufSize;
+	} else {
+		to = bufSize;
+	}
+
+	std::cout << "Buffer for top " + std::to_string(idxBuf[0] & 0x7FFFFFFF) + " of size " + std::to_string(bufSize) + "\n";
+
+	std::cout << "Start at idx " + std::to_string(from) << ":\n";
+	for(uint64_t i = from; i < to; i++) {
+		ProcessedPCoeffSum ps = resultsBuf[i];
+		const char* selectedColor = (i % 32 >= 16) ? "\033[37m" : "\033[39m";
+		if(i % 512 == 0) selectedColor = "\033[34m";
+		std::string hexText = toHex(ps);
+		if(hexText[0] == 'e') {
+			hexText = "\033[31m" + hexText + selectedColor;
+		}
+		if(hexText[0] == 'f') {
+			hexText = "\033[32m" + hexText + selectedColor;
+		}
+		std::cout << selectedColor + std::to_string(idxBuf[i]) + "> " + hexText + "  sum: " + std::to_string(getPCoeffSum(ps)) + " count: " + std::to_string(getPCoeffCount(ps)) + "\033[39m\n";
+	}
+	std::cout << "Up to idx " + std::to_string(to) << "\n";
+}
+
 CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"initializeSupercomputingProject", [](const std::vector<std::string>& args) {
 		std::string projectFolderPath = args[0];
@@ -150,4 +197,6 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"checkErrorBuffer5", checkErrorBuffer<5>},
 	{"checkErrorBuffer6", checkErrorBuffer<6>},
 	{"checkErrorBuffer7", checkErrorBuffer<7>},
+
+	{"printErrorBuffer", printErrorBuffer},
 }};

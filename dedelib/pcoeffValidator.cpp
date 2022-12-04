@@ -49,7 +49,7 @@ void* noValidatorPThread(void* voidData) {
 	for(std::optional<OutputBuffer> outputBuffer; (outputBuffer = context.validationQueue.pop_wait()).has_value(); ) {
 		OutputBuffer outBuf = outputBuffer.value();
 
-		size_t bufSize = outBuf.originalInputData.bufferSize();
+		size_t bufSize = outBuf.originalInputData.alignedBufferSize();
 		context.freeBuf(outBuf.originalInputData.bufStart, bufSize);
 		context.freeBuf(outBuf.outputBuf, bufSize);
 	}

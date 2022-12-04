@@ -43,8 +43,12 @@ struct JobInfo {
 	NodeIndex* begin() const {return bufStart + 2;}
 	NodeIndex* end() const {return bufEnd;}
 
-	size_t bufferSize() const {
+	size_t alignedBufferSize() const {
 		return blockEnd - bufStart;
+	}
+
+	size_t bufferSize() const {
+		return bufEnd - bufStart;
 	}
 
 	size_t getNumberOfBottoms() const {

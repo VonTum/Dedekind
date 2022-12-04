@@ -131,13 +131,13 @@ static void* resultprocessingPThread(void* voidData) {
 				errCat = "missingInFPGA";
 				recoverable = true;
 			}
-			std::cerr << errorMessage + std::to_string(errorLocation - buf.outputBuf) + ", value was: " + std::to_string(errorValue) + "/n" << std::flush;
+			std::cerr << errorMessage + std::to_string(errorLocation - buf.outputBuf) + ", value was: " + std::to_string(errorValue) + "\n" << std::flush;
 			errorBufFunc(buf, errCat, recoverable);
 
 			if(recoverable) {
 				std::cout << "\033[32m[Result Processor] Retrying buffer for top " + std::to_string(buf.originalInputData.getTop()) + "!\033[39m\n" << std::flush;
 				tData->context->inputQueue.push(tData->numaNode / 4, buf.originalInputData); // Return the buffer to try again
-				subContext.freeBuf(buf.outputBuf, buf.originalInputData.bufferSize());
+				subContext.freeBuf(buf.outputBuf, buf.originalInputData.alignedBufferSize());
 				continue;
 			}
 		}
@@ -148,7 +148,6 @@ static void* resultprocessingPThread(void* voidData) {
 		BetaResult* allocatedSlot = finalResultPtr.fetch_add(1);
 		*allocatedSlot = std::move(curBetaResult);
 	}
-	subContext.validationQueue.close();
 	std::cout << "\033[32m[Result Processor] Result processor Thread finished.\033[39m\n" << std::flush;
 
 	pthread_exit(nullptr);
@@ -191,6 +190,10 @@ ResultProcessorOutput NUMAResultProcessor(
 
 	PThreadBundle threads = spreadThreads(8, CPUAffinityType::NUMA_DOMAIN, datas, resultprocessingPThread);
 	threads.join();
+
+	for(size_t i = 0; i < NUMA_SLICE_COUNT; i++) {
+		context.numaQueues[i]->validationQueue.close();
+	}
 
 	std::cout << "\033[32m[Result Processor] Result processor finished.\033[39m\n" << std::flush;
 

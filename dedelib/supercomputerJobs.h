@@ -20,7 +20,7 @@ ValidationData getIntactnessCheckSum(const ValidationData* buf, unsigned int Var
 void initializeComputeProject(unsigned int Variables, std::string computeFolder, size_t numberOfJobs, size_t numberOfJobsToActuallyGenerate);
 
 void writeProcessingBufferPairToFile(const char* fileName, const OutputBuffer& outBuf);
-uint64_t readProcessingBufferPairFromFile(const char* fileName, NodeIndex* idxBuf, ProcessedPCoeffSum* resultsBuf);
+uint64_t readProcessingBufferPairFromFile(const char* fileName, NodeIndex* idxBuf = nullptr, ProcessedPCoeffSum* resultsBuf = nullptr);
 
 // Returns true if computation finished without detected errors
 bool processJob(unsigned int Variables, const std::string& computeFolder, const std::string& jobID, const std::string& methodName, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*) = nullptr);

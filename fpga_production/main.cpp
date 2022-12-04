@@ -125,7 +125,7 @@ static void pushJob(FPGAGlobalData& data, int deviceI, int slotI) {
 		std::cout << "\033[31m[FPGA Processor " + std::to_string(deviceI) + "] Processed " + std::to_string(thisCount) + " jobs, device temperature: " + std::to_string(temperature) + "°C.\033[39m\n" << std::flush;
 	}
 
-	cl_uint bufSize = static_cast<cl_uint>(slot.totalJob.originalInputData.bufferSize());
+	cl_uint bufSize = static_cast<cl_uint>(slot.totalJob.originalInputData.alignedBufferSize());
 	PCoeffKernelPart& subKernel = data.multiKernel.kernelParts[deviceI];
 	NodeIndex* jobBuf = slot.totalJob.originalInputData.bufStart;
 
@@ -144,7 +144,7 @@ static void pushJob(FPGAGlobalData& data, int deviceI, int slotI) {
 		int deviceI = slotID / NUM_BUFFERS;
 		int slotI = slotID % NUM_BUFFERS;
 
-		//size_t bufSize = slot->totalJob.originalInputData.bufferSize();
+		//size_t bufSize = slot->totalJob.originalInputData.alignedBufferSize();
 		//std::cout << "\033[31m[FPGA Processor " + std::to_string(deviceI) + "] Finished slot " + std::to_string(slotI) + "\033[39m\n" << std::flush;
 
 		//PCoeffKernelPart& kPart = slot->globalData->multiKernel.kernelParts[deviceI];

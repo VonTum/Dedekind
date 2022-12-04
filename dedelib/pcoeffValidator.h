@@ -335,7 +335,7 @@ void* basicValidatorPThread(void* voidData) {
 			errorBufFunc(outBuf, "validator", false);
 		}
 
-		size_t bufSize = outBuf.originalInputData.bufferSize();
+		size_t bufSize = outBuf.originalInputData.alignedBufferSize();
 		context.freeBuf(outBuf.originalInputData.bufStart, bufSize);
 		context.freeBuf(outBuf.outputBuf, bufSize);
 	}
