@@ -27,7 +27,7 @@ bool processJob(unsigned int Variables, const std::string& computeFolder, const 
 
 std::vector<BetaResult> readResultsFile(unsigned int Variables, const char* filePath, ValidationData& checkSum);
 
-void resetUnfinishedJobs(const std::string& computeFolder);
+void resetUnfinishedJobs(const std::string& computeFolder, const std::string& folderName, size_t jobLowerBound, size_t jobUpperBound);
 
 void collectAndProcessResults(unsigned int Variables, const std::string& computeFolder);
 

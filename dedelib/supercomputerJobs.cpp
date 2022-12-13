@@ -622,9 +622,9 @@ static std::pair<std::string, std::string> parseFileName(const std::filesystem::
 	return std::make_pair(jobID, deviceID);
 }
 
-void resetUnfinishedJobs(const std::string& computeFolder) {
+void resetUnfinishedJobs(const std::string& computeFolder, const std::string& folderName, size_t jobLowerBound, size_t jobUpperBound) {
 	std::string jobsFolder = computeFolderPath(computeFolder, "jobs");
-	std::string wrongFinishedFolder = computeFolderPath(computeFolder, "wrong_finished");
+	std::string wrongFinishedFolder = computeFolderPath(computeFolder, folderName.c_str());
 
 	std::ofstream log("resetJobsLog.txt", std::ios::app);
 
@@ -632,6 +632,9 @@ void resetUnfinishedJobs(const std::string& computeFolder) {
 
 	for(std::filesystem::directory_entry unfinishedJob : std::filesystem::directory_iterator(wrongFinishedFolder)) {
 		std::pair<std::string, std::string> jobDevicePair = parseFileName(unfinishedJob.path(), ".job");
+
+		size_t jobIndex = std::stoi(jobDevicePair.first);
+		if(!(jobIndex >= jobLowerBound && jobIndex <= jobUpperBound)) continue;
 
 		log << "Job " + jobDevicePair.first + " reset from node " + jobDevicePair.second << "\n";
 

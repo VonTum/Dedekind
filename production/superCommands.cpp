@@ -205,7 +205,16 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 		initializeComputeProject(targetDedekindNumber - 2, projectFolderPath, numberOfJobs, numberOfJobsToActuallyGenerate);
 	}},
 
-	{"resetUnfinishedJobs", [](const std::vector<std::string>& args){resetUnfinishedJobs(args[0]);}},
+	{"resetUnfinishedJobs", [](const std::vector<std::string>& args){
+		size_t lowerBound = 0;
+		size_t upperBound = 99999999;
+		if(args.size() >= 3) {
+			lowerBound = std::stoi(args[2]);
+			upperBound = std::stoi(args[3]);
+		}
+
+		resetUnfinishedJobs(args[0], args[1], lowerBound, upperBound);
+	}},
 	{"checkProjectResultsIdentical", [](const std::vector<std::string>& args){checkProjectResultsIdentical(std::stoi(args[0]) - 2, args[1], args[2]);}},
 
 	{"collectAllSupercomputingProjectResults", [](const std::vector<std::string>& args){collectAndProcessResults(std::stoi(args[0]) - 2, args[1]);}},

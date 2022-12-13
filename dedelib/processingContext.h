@@ -39,8 +39,8 @@ public:
 class PCoeffProcessingContext {
 public:
 	unsigned int Variables;
-	NUMAArray<NodeIndex> numaInputMemory[NUMA_SLICE_COUNT];
-	NUMAArray<ProcessedPCoeffSum> numaResultMemory[NUMA_SLICE_COUNT];
+	NodeIndex* numaInputMemory[NUMA_SLICE_COUNT];
+	ProcessedPCoeffSum* numaResultMemory[NUMA_SLICE_COUNT];
 	unique_numa_ptr<PCoeffProcessingContextEighth> numaQueues[NUMA_SLICE_COUNT];
 
 	SynchronizedMultiQueue<JobInfo> inputQueue;

@@ -12,15 +12,20 @@
 #include "fileNames.h"
 #include <string.h>
 
-constexpr size_t NUM_INPUT_BUFFERS_PER_NODE = 160; // 320 buffers in total
-constexpr size_t NUM_RESULT_BUFFERS_PER_NODE = 70; // 120 buffers in total
+#define USE_NUMA_ALLOC_FOR_FPGA_BUFFERS
 
-// Try for at least 2MB huge pages
+
+constexpr size_t NUM_INPUT_BUFFERS_PER_NODE = 150; // 300 buffers in total
+constexpr size_t NUM_RESULT_BUFFERS_PER_NODE = 60; // 120 buffers in total
+
 // Also alignment is required for openCL buffer sending and receiving methods
-constexpr size_t ALLOC_ALIGN = 1 << 21;
+constexpr size_t ALLOC_ALIGN = 1 << 15;
 
 static size_t getAlignedBufferSize(unsigned int Variables) {
-	return alignUpTo(getMaxDeduplicatedBufferSize(Variables)+20, size_t(32) * 16);
+	return alignUpTo(getMaxDeduplicatedBufferSize(Variables)+20, ALLOC_ALIGN);
+	// Trust virtual memory. Only uses the max real buffer size of physical memory. 
+	// Big alignment, to make sure the buffer alignment isn't the cause of the FPGA DMA issue alignment
+	// return alignUpTo(mbfCounts[Variables] + ALLOC_ALIGN, ALLOC_ALIGN);
 }
 
 PCoeffProcessingContextEighth::PCoeffProcessingContextEighth() : 
@@ -58,6 +63,17 @@ void setQueueToBufferParts(SynchronizedQueue<T*>& target, T* bufMemory, size_t p
 	}
 }
 
+static void* posix_aligned_alloc(size_t size, size_t align) {
+	void *result = NULL;
+	int rc;
+	rc = posix_memalign(&result, align, size);
+	if(rc != 0) {
+		perror("Error posix_memalign in PCoeffProcessingContext");
+		std::abort();
+	}
+	return result;
+}
+
 PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables) : Variables(Variables), inputQueue(NUMA_SLICE_COUNT, NUM_INPUT_BUFFERS_PER_NODE), topsAreReady(1), mbfs0Ready(1), mbfsBothReady(1) {
 	std::cout 
 		<< "Create PCoeffProcessingContext in 2 parts with " 
@@ -70,12 +86,17 @@ PCoeffProcessingContext::PCoeffProcessingContext(unsigned int Variables) : Varia
 
 	size_t alignedBufSize = getAlignedBufferSize(Variables);
 	for(int socketI = 0; socketI < NUMA_SLICE_COUNT; socketI++) {
-		this->numaInputMemory[socketI] = NUMAArray<NodeIndex>::alloc_onsocket(alignedBufSize * NUM_INPUT_BUFFERS_PER_NODE, socketI);
-		this->numaResultMemory[socketI] = NUMAArray<ProcessedPCoeffSum>::alloc_onsocket(alignedBufSize * NUM_RESULT_BUFFERS_PER_NODE, socketI);
+#ifdef USE_NUMA_ALLOC_FOR_FPGA_BUFFERS
+		this->numaInputMemory[socketI] = (NodeIndex*) numa_alloc_onsocket(alignedBufSize * NUM_INPUT_BUFFERS_PER_NODE * sizeof(NodeIndex), socketI);
+		this->numaResultMemory[socketI] = (ProcessedPCoeffSum*) numa_alloc_onsocket(alignedBufSize * NUM_RESULT_BUFFERS_PER_NODE * sizeof(ProcessedPCoeffSum), socketI);
+#else
+		this->numaInputMemory[socketI] = (NodeIndex*) posix_aligned_alloc(alignedBufSize * NUM_INPUT_BUFFERS_PER_NODE * sizeof(NodeIndex), ALLOC_ALIGN * sizeof(NodeIndex));
+		this->numaResultMemory[socketI] = (ProcessedPCoeffSum*) posix_aligned_alloc(alignedBufSize * NUM_RESULT_BUFFERS_PER_NODE * sizeof(ProcessedPCoeffSum), ALLOC_ALIGN * sizeof(ProcessedPCoeffSum));
+#endif
 		this->numaQueues[socketI] = unique_numa_ptr<PCoeffProcessingContextEighth>::alloc_onnode(socketI * 4 + 3); // Prefer nodes 3 and 7 because that's where the FPGAs are
 
-		setQueueToBufferParts(this->numaQueues[socketI]->inputBufferAlloc, this->numaInputMemory[socketI].buf, alignedBufSize, NUM_INPUT_BUFFERS_PER_NODE);
-		setQueueToBufferParts(this->numaQueues[socketI]->resultBufferAlloc, this->numaResultMemory[socketI].buf, alignedBufSize, NUM_RESULT_BUFFERS_PER_NODE);
+		setQueueToBufferParts(this->numaQueues[socketI]->inputBufferAlloc, this->numaInputMemory[socketI], alignedBufSize, NUM_INPUT_BUFFERS_PER_NODE);
+		setQueueToBufferParts(this->numaQueues[socketI]->resultBufferAlloc, this->numaResultMemory[socketI], alignedBufSize, NUM_RESULT_BUFFERS_PER_NODE);
 	}
 
 	std::cout << "Finished PCoeffProcessingContext\n" << std::flush;
@@ -92,6 +113,18 @@ static void freeNUMA_MBFs(unsigned int Variables, const void* mbfs[2]) {
 PCoeffProcessingContext::~PCoeffProcessingContext() {
 	std::cout << "Destroy PCoeffProcessingContext, Deleting input and output buffers..." << std::endl;
 	freeNUMA_MBFs(this->Variables, this->mbfs);
+
+	size_t alignedBufSize = getAlignedBufferSize(this->Variables);
+
+	for(size_t socketI = 0; socketI < NUMA_SLICE_COUNT; socketI++) {
+#ifdef USE_NUMA_ALLOC_FOR_FPGA_BUFFERS
+		numa_free(this->numaInputMemory[socketI], alignedBufSize * NUM_INPUT_BUFFERS_PER_NODE * sizeof(NodeIndex));
+		numa_free(this->numaResultMemory[socketI], alignedBufSize * NUM_RESULT_BUFFERS_PER_NODE * sizeof(ProcessedPCoeffSum));
+#else
+		free(this->numaInputMemory[socketI]);
+		free(this->numaResultMemory[socketI]);
+#endif
+	}
 }
 
 void PCoeffProcessingContext::initTops(std::vector<JobTopInfo> tops) {
@@ -114,20 +147,27 @@ void PCoeffProcessingContext::initMBFS() {
 }
 
 
-template<typename T, size_t N>
-size_t getIndexOf(const NUMAArray<T> (&arrs)[N], const T* ptr) {
+template<size_t N, typename T>
+static size_t getIndexOf(T* const (&arrs)[N], size_t bufSize, const T* ptr) {
 	for(size_t i = 0; i < N; i++) {
-		if(arrs[i].owns(ptr)) {
+		const T* bufStart = arrs[i];
+		const T* bufEnd = bufStart + bufSize;
+		if(ptr >= bufStart && ptr < bufEnd) {
 			return i;
 		}
 	}
 	// unreachable
+	__builtin_unreachable();
 	assert(false);
 }
 
 PCoeffProcessingContextEighth& PCoeffProcessingContext::getNUMAForBuf(const NodeIndex* id) const {
-	return *numaQueues[getIndexOf(numaInputMemory, id)];
+	size_t alignedBufSize = getAlignedBufferSize(this->Variables);
+	size_t totalBufSize = alignedBufSize * NUM_INPUT_BUFFERS_PER_NODE;
+	return *numaQueues[getIndexOf(numaInputMemory, totalBufSize, id)];
 }
 PCoeffProcessingContextEighth& PCoeffProcessingContext::getNUMAForBuf(const ProcessedPCoeffSum* id) const {
-	return *numaQueues[getIndexOf(numaResultMemory, id)];
+	size_t alignedBufSize = getAlignedBufferSize(this->Variables);
+	size_t totalBufSize = alignedBufSize * NUM_RESULT_BUFFERS_PER_NODE;
+	return *numaQueues[getIndexOf(numaResultMemory, totalBufSize, id)];
 }
