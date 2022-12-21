@@ -88,7 +88,8 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 	procData.processorFunc = processorFunc;
 
 	// FPGAs are on nodes 3 and 7, context is on 3, so start main thread on node 3
-	pthread_t processorThread = createNUMANodePThread(3, [](void* voidProcData) -> void* {
+	// createNUMANodePThread(3)
+	pthread_t processorThread = createCPUPThread(3*CORES_PER_NUMA_NODE+0, [](void* voidProcData) -> void* {
 		setThreadName("Processor");
 		ProcData* procData = (ProcData*) voidProcData;
 

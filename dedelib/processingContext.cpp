@@ -15,8 +15,8 @@
 #define USE_NUMA_ALLOC_FOR_FPGA_BUFFERS
 
 
-constexpr size_t NUM_INPUT_BUFFERS_PER_NODE = 150; // 300 buffers in total
-constexpr size_t NUM_RESULT_BUFFERS_PER_NODE = 60; // 120 buffers in total
+constexpr size_t NUM_INPUT_BUFFERS_PER_NODE = 120; // 240 buffers in total
+constexpr size_t NUM_RESULT_BUFFERS_PER_NODE = 80; // 160 buffers in total
 
 // Also alignment is required for openCL buffer sending and receiving methods
 constexpr size_t ALLOC_ALIGN = 1 << 15;

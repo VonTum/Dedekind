@@ -5,6 +5,7 @@
 #include "../dedelib/singleTopVerification.h"
 
 #include <sstream>
+#include <filesystem>
 
 template<unsigned int Variables>
 static void processSuperComputingJob_FromArgs(const std::vector<std::string>& args, const char* name, void (*processorFunc)(PCoeffProcessingContext&)) {
@@ -95,9 +96,50 @@ void checkErrorBuffer(const std::vector<std::string>& args) {
 	size_t errorRangeSize = lastErrorIdx - firstErrorIdx + 1;
 	std::cout << "\nFirst Error: " + std::to_string(firstErrorIdx) + " (bot " + std::to_string(idxBuf[firstErrorIdx]) + ")";
 	std::cout << "\nLast Error: " + std::to_string(lastErrorIdx) + " (bot " + std::to_string(idxBuf[lastErrorIdx]) + ")";
-	std::cout << "\nNumber of Errors: " + std::to_string(numberOfErrors) + " / " + std::to_string(bufSize);
-	std::cout << "\nError index range size: " + std::to_string(errorRangeSize) + " (" + std::to_string(numberOfErrors * 100.0 / errorRangeSize) + ")";
+	std::cout << "\nNumber of Errors: " + std::to_string(numberOfErrors) + " = " + std::to_string(numberOfErrors%512) + " mod 512 / " + std::to_string(bufSize);
+	std::cout << "\nError index range size: " + std::to_string(errorRangeSize) + " = " + std::to_string(errorRangeSize%512) + " mod 512 --> (" + std::to_string(numberOfErrors * 100.0 / errorRangeSize) + "%)";
 	std::cout << "\n" << std::flush;
+
+	bool longStreakFound = false;
+	for(size_t chunkOffset = 0; chunkOffset < errorRangeSize; chunkOffset += 512) {
+		size_t longestErrorStreak = 0;
+		size_t longestErrorStart = 0;
+
+		for(size_t i = 0; i < bufSize; i++) {
+			for(size_t streamLength = 0; streamLength < errorRangeSize - chunkOffset; streamLength++) {
+				if(__builtin_expect(resultBuf[firstErrorIdx + chunkOffset + streamLength] != correctResultBuf[i], 1)) {
+					if(longestErrorStreak < streamLength) {
+						longestErrorStreak = streamLength;
+						longestErrorStart = i;
+					}
+					break;
+				}
+			}
+		}
+
+		if(longestErrorStreak > 8) {
+			longStreakFound = true;
+			std::cout << "Significant Streak found elsewhere: Chunk offset " + std::to_string(chunkOffset) + ":\n" << std::flush;
+			std::cout << "    Streak found at: " + std::to_string(longestErrorStart) + " = " + std::to_string(longestErrorStart%512)
+			+ " mod 512\n    Streak length: " + std::to_string(longestErrorStreak) + " = " + std::to_string(longestErrorStreak%512) + " mod 512\n" << std::flush;
+		}
+	}
+
+	if(!longStreakFound) {
+		std::cout << "Error streak found nowhere else" << std::endl;
+	}
+}
+
+template<unsigned int Variables>
+void checkAllErrorBuffers(const std::vector<std::string>& args) {
+	const std::string& errorsFolder = args[0];
+
+	for(std::filesystem::directory_entry errFile : std::filesystem::directory_iterator(errorsFolder)) {
+		std::string errFilePath = errFile.path().string();
+		std::cout << "Error file " + errFilePath << std::endl;
+		std::vector<std::string> argVec{errFilePath};
+		checkErrorBuffer<Variables>(argVec);
+	}
 }
 
 template<typename IntType>
@@ -252,6 +294,14 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"checkErrorBuffer5", checkErrorBuffer<5>},
 	{"checkErrorBuffer6", checkErrorBuffer<6>},
 	{"checkErrorBuffer7", checkErrorBuffer<7>},
+
+	{"checkAllErrorBuffers1", checkAllErrorBuffers<1>},
+	{"checkAllErrorBuffers2", checkAllErrorBuffers<2>},
+	{"checkAllErrorBuffers3", checkAllErrorBuffers<3>},
+	{"checkAllErrorBuffers4", checkAllErrorBuffers<4>},
+	{"checkAllErrorBuffers5", checkAllErrorBuffers<5>},
+	{"checkAllErrorBuffers6", checkAllErrorBuffers<6>},
+	{"checkAllErrorBuffers7", checkAllErrorBuffers<7>},
 
 	{"printErrorBuffer", printErrorBuffer},
 
