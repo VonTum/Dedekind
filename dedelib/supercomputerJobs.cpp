@@ -708,14 +708,8 @@ static std::vector<NamedResultFile> loadAllResultsFiles(unsigned int Variables, 
 	return allResultFileContents;
 }
 
-BetaResultCollector collectAllResultFiles(unsigned int Variables, const std::string& computeFolder, ValidationData& checkSum) {
-	checkSum.dualBetaSum.betaSum = 0;
-	checkSum.dualBetaSum.countedIntervalSizeDown = 0;
-	
-	BetaResultCollector collector(Variables);
-
-	std::string resultsDirectory = computeFolderPath(computeFolder, "results");
-	for(const auto& file : std::filesystem::directory_iterator(resultsDirectory)) {
+static void collectResultFilesInFolder(unsigned int Variables, BetaResultCollector& collector, const std::string& directory, ValidationData& checkSum) {
+	for(const auto& file : std::filesystem::directory_iterator(directory)) {
 		std::filesystem::path path = file.path();
 		std::string filePath = path.string();
 		if(file.is_regular_file() && filePath.substr(filePath.find_last_of(".")) == ".results") {
@@ -725,6 +719,38 @@ BetaResultCollector collectAllResultFiles(unsigned int Variables, const std::str
 			collector.addBetaResults(results);
 		} else {
 			std::cerr << "Unknown file found, expected results file: " << filePath << std::endl;
+		}
+	}
+}
+
+BetaResultCollector collectAllResultFiles(unsigned int Variables, const std::string& computeFolder, ValidationData& checkSum) {
+	checkSum.dualBetaSum.betaSum = 0;
+	checkSum.dualBetaSum.countedIntervalSizeDown = 0;
+	
+	BetaResultCollector collector(Variables);
+
+	collectResultFilesInFolder(Variables, collector, computeFolderPath(computeFolder, "results"), checkSum);
+
+	return collector;
+}
+
+BetaResultCollector collectAllResultFilesAndRecoverFailures(unsigned int Variables, const std::string& computeFolder) {
+	BetaResultCollector collector(Variables);
+
+	ValidationData unusedCheckSum;
+	collectResultFilesInFolder(Variables, collector, computeFolderPath(computeFolder, "results"), unusedCheckSum);
+	collectResultFilesInFolder(Variables, collector, computeFolderPath(computeFolder, "wrong_results"), unusedCheckSum);
+	std::string errorFolder = computeFolderPath(computeFolder, "errors");
+	for(const auto& file : std::filesystem::directory_iterator(errorFolder)) {
+		std::filesystem::path path = file.path();
+		std::string fileName = path.filename();
+		if(file.is_regular_file() && fileName.substr(fileName.find_last_of(".")) == ".flatBuf") {
+			// Results file
+			std::string badBotIndexStr = fileName.substr(10, fileName.find_first_of("_")); // "jvalidator"
+			int badBotIndex = std::stoi(badBotIndexStr);
+			collector.removeBetaResult(badBotIndex);
+		} else {
+			std::cerr << "Unknown file found, expected .flatBuf file: " << path.string() << std::endl;
 		}
 	}
 

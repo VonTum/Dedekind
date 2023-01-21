@@ -10,7 +10,7 @@ BetaResultCollector::BetaResultCollector(unsigned int Variables) :
 void BetaResultCollector::addBetaResult(BetaResult result) {
 	if(hasSeenResult[result.topIndex]) {
 		std::cerr << "Error: Duplicate beta result for topIdx " << result.topIndex << "! Aborting!" << std::endl;
-		std::abort();
+		//std::abort();
 	} else {
 		hasSeenResult[result.topIndex] = true;
 		allBetaSums[result.topIndex] = result.dataForThisTop;
@@ -20,6 +20,24 @@ void BetaResultCollector::addBetaResults(const std::vector<BetaResult>& results)
 	for(BetaResult r : results) {
 		this->addBetaResult(r);
 	}
+}
+
+void BetaResultCollector::removeBetaResult(int resultIndex) {
+	if(!hasSeenResult[resultIndex]) {
+		std::cerr << "Error: Trying to remove un-added betaResult " << resultIndex << "! Aborting!" << std::endl;
+		std::abort();
+	} else {
+		hasSeenResult[resultIndex] = false;
+	}
+}
+
+bool BetaResultCollector::hasAllResults() const {
+	for(size_t i = 0; i < hasSeenResult.size(); i++) {
+		if(!hasSeenResult[i]) {
+			return false;
+		}
+	}
+	return true;
 }
 
 std::vector<BetaSumPair> BetaResultCollector::getResultingSums() {

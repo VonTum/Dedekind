@@ -167,13 +167,15 @@ inline bool operator!=(BetaResult a, BetaResult b) {
 
 
 class BetaResultCollector {
+public:
 	std::vector<BetaSumPair> allBetaSums;
 	std::vector<bool> hasSeenResult;
 
-public:
 	BetaResultCollector(unsigned int Variables);
 	void addBetaResult(BetaResult result);
 	void addBetaResults(const std::vector<BetaResult>& results);
+	void removeBetaResult(int resultIndex);
+	bool hasAllResults() const;
 	std::vector<BetaSumPair> getResultingSums();
 };
 

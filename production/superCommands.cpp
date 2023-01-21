@@ -312,4 +312,38 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"checkResultsFileSamples5", checkResultsFileSamples<5>},
 	{"checkResultsFileSamples6", checkResultsFileSamples<6>},
 	{"checkResultsFileSamples7", checkResultsFileSamples<7>},
+
+	{"generateMissingTopJobs", [](const std::vector<std::string>& args){
+		unsigned int Variables = std::stoi(args[0]) - 2;
+		std::string projectFolder = args[1];
+		BetaResultCollector collector = collectAllResultFilesAndRecoverFailures(Variables, projectFolder);
+
+		size_t numFoundTops = 0;
+		u128 maxBetaSum = 0;
+		u128 maxBetaSumDedup = 0;
+		for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+			if(collector.hasSeenResult[i]) {
+				numFoundTops++;
+				BetaSumPair bsp = collector.allBetaSums[i];
+				if(bsp.betaSum.betaSum > maxBetaSum) maxBetaSum = bsp.betaSum.betaSum;
+				if(bsp.betaSumDualDedup.betaSum > maxBetaSumDedup) maxBetaSumDedup = bsp.betaSumDualDedup.betaSum;
+			}
+		}
+		size_t missingTopCount = mbfCounts[Variables] - numFoundTops;
+
+		std::cout << "Found " + std::to_string(numFoundTops) + "/" + std::to_string(mbfCounts[Variables]) + "  (" + std::to_string(missingTopCount) + " missing)" << std::endl;
+		std::cout << "Maximum betaSum: " << toString(maxBetaSum) << "\nMaximum betaSumDualDedup: " << toString(maxBetaSumDedup) << std::endl;
+
+
+		std::vector<int> missingIndices;
+		missingIndices.reserve(missingTops);
+		for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+			if(!collector.hasSeenTop[i]) {
+				missingIndices.push_back((int) i);
+			}
+		}
+
+		std::default_random_engine generator;
+		std::shuffle(missingIndices.begin(), missingIndices.end(), generator);
+	}},
 }};
