@@ -11,10 +11,9 @@ void BetaResultCollector::addBetaResult(BetaResult result) {
 	if(hasSeenResult[result.topIndex]) {
 		std::cerr << "Error: Duplicate beta result for topIdx " << result.topIndex << "! Aborting!" << std::endl;
 		//std::abort();
-	} else {
-		hasSeenResult[result.topIndex] = true;
-		allBetaSums[result.topIndex] = result.dataForThisTop;
 	}
+	hasSeenResult[result.topIndex] = true;
+	allBetaSums[result.topIndex] = result.dataForThisTop;
 }
 void BetaResultCollector::addBetaResults(const std::vector<BetaResult>& results) {
 	for(BetaResult r : results) {

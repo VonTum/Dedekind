@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <fstream>
+#include <vector>
 
 #include "fileNames.h"
 #include "knownData.h"
@@ -12,8 +13,31 @@
 
 #include "serialization.h"
 
+struct ValidationFileData{
+	unsigned int Variables;
+	std::unique_ptr<char[]> memory;
+	ValidationData* savedValidationBuffer;
+	uint8_t* savedTopsBitset;
+
+	ValidationFileData() = default;
+	ValidationFileData(unsigned int Variables);
+	size_t getTotalMemorySize() const;
+	void initializeZero();
+	void readFromFile(int validationFD);
+	void readFromFile(const char* filePath);
+	void writeToFile(int validationFD) const;
+	bool isTopPresent(NodeIndex topIdx) const;
+	void checkHasAllTops() const;
+	void addTop(NodeIndex topIdx);
+	// Returns the number of tops added
+	size_t mergeIntoThis(const ValidationFileData& other);
+	ValidationData getCheckSum() const;
+};
 
 ValidationData getIntactnessCheckSum(const ValidationData* buf, unsigned int Variables);
+
+std::string computeFilePath(std::string computeFolder, const char* folder, const std::string& jobID, const std::string& extention);
+void writeJobToFile(unsigned int Variables, const std::string& jobFileName, const std::vector<JobTopInfo>& topVector);
 
 // Creates all necessary files and folders for a project to compute the given dedekind number
 // Requires that the compute folder does not already exist to prevent data loss
@@ -32,7 +56,10 @@ BetaResultCollector collectAllResultFilesAndRecoverFailures(unsigned int Variabl
 void resetUnfinishedJobs(const std::string& computeFolder, const std::string& folderName, size_t jobLowerBound, size_t jobUpperBound);
 
 void collectAndProcessResults(unsigned int Variables, const std::string& computeFolder);
+void collectAndProcessResultsMessy(unsigned int Variables, const std::string& computeFolder);
 
 void checkProjectResultsIdentical(unsigned int Variables, const std::string& computeFolderA, const std::string& computeFolderB);
 
 void checkProjectIntegrity(unsigned int Variables, const std::string& computeFolder);
+
+void createJobForEasyWrongTops(unsigned int Variables, const std::string& computeFolder, const std::string& jobID);

@@ -14,26 +14,6 @@
 
 #include "crossPlatformIntrinsics.h"
 
-struct ValidationFileData{
-	unsigned int Variables;
-	std::unique_ptr<char[]> memory;
-	ValidationData* savedValidationBuffer;
-	uint8_t* savedTopsBitset;
-
-	ValidationFileData() = default;
-	ValidationFileData(unsigned int Variables);
-	size_t getTotalMemorySize() const;
-	void initializeZero();
-	void readFromFile(int validationFD);
-	void writeToFile(int validationFD) const;
-	bool isTopPresent(NodeIndex topIdx) const;
-	void checkHasAllTops() const;
-	void addTop(NodeIndex topIdx);
-	// Returns the number of tops added
-	size_t mergeIntoThis(const ValidationFileData& other);
-	ValidationData getCheckSum() const;
-};
-
 
 // Utilities for easily working with syscall open
 static void check(int retVal, const char* err) {
@@ -116,7 +96,7 @@ static std::string computeFolderPath(std::string computeFolder, const char* fold
 	return computeFolder;
 }
 
-static std::string computeFilePath(std::string computeFolder, const char* folder, const std::string& jobID, const std::string& extention) {
+std::string computeFilePath(std::string computeFolder, const char* folder, const std::string& jobID, const std::string& extention) {
 	return computeFolderPath(computeFolder, folder) + computeFileName(jobID, extention);
 }
 
@@ -156,6 +136,11 @@ void ValidationFileData::initializeZero() {
 
 void ValidationFileData::readFromFile(int validationFD) {
 	checkRead(validationFD, memory.get(), getTotalMemorySize(), "Validation file is too short! ");
+}
+void ValidationFileData::readFromFile(const char* filePath) {
+	int validationFD = checkOpen(filePath, O_RDONLY, "Failed to open validation file! ");
+	this->readFromFile(validationFD);
+	check(close(validationFD), "Failed to close validation file! ");
 }
 void ValidationFileData::writeToFile(int validationFD) const {
 	checkWrite(validationFD, memory.get(), getTotalMemorySize(), "Could not write full validation file for some reason! ");
@@ -261,7 +246,7 @@ static void checkNotExists(const std::string& fileName) {
 	}
 }
 
-static void writeJobToFile(unsigned int Variables, const std::string& jobFileName, const std::vector<JobTopInfo>& topVector) {
+void writeJobToFile(unsigned int Variables, const std::string& jobFileName, const std::vector<JobTopInfo>& topVector) {
 	std::ofstream jobFile(jobFileName, std::ios::binary);
 
 	serializeU32(Variables, jobFile);
@@ -738,7 +723,6 @@ BetaResultCollector collectAllResultFilesAndRecoverFailures(unsigned int Variabl
 	BetaResultCollector collector(Variables);
 
 	ValidationData unusedCheckSum;
-	collectResultFilesInFolder(Variables, collector, computeFolderPath(computeFolder, "results"), unusedCheckSum);
 	collectResultFilesInFolder(Variables, collector, computeFolderPath(computeFolder, "wrong_results"), unusedCheckSum);
 	std::string errorFolder = computeFolderPath(computeFolder, "errors");
 	for(const auto& file : std::filesystem::directory_iterator(errorFolder)) {
@@ -753,6 +737,7 @@ BetaResultCollector collectAllResultFilesAndRecoverFailures(unsigned int Variabl
 			std::cerr << "Unknown file found, expected .flatBuf file: " << path.string() << std::endl;
 		}
 	}
+	collectResultFilesInFolder(Variables, collector, computeFolderPath(computeFolder, "results"), unusedCheckSum);
 
 	return collector;
 }
@@ -771,11 +756,9 @@ ValidationFileData collectAllValidationFiles(unsigned int Variables, const std::
 		if(file.is_regular_file() && filePath.substr(filePath.find_last_of(".")) == ".validation") {
 			// Results file
 			std::cout << "Reading validation file " + filePath << std::endl;
-			int validationFD = checkOpen(filePath.c_str(), O_RDONLY, "Failed to open validation file! ");
-			currentlyAddingFile.readFromFile(validationFD);
+			currentlyAddingFile.readFromFile(filePath.c_str());
 			size_t numberOfTopsInOther = summer.mergeIntoThis(currentlyAddingFile);
 			std::cout << "Successfully added validation file " + filePath + ", added " + std::to_string(numberOfTopsInOther) + " tops." << std::endl;
-			check(close(validationFD), "Failed to close validation file! ");
 		} else {
 			std::cerr << "Unknown file found, expected validation file: " << filePath << std::endl;
 		}
@@ -802,6 +785,83 @@ void collectAndProcessResults(unsigned int Variables, const std::string& compute
 
 	computeFinalDedekindNumberFromGatheredResults(Variables, allResults.getResultingSums(), completeValidationBuffer.savedValidationBuffer);
 }
+
+void collectAndProcessResultsMessy(unsigned int Variables, const std::string& computeFolder) {
+	BetaResultCollector allResults = collectAllResultFilesAndRecoverFailures(Variables, computeFolder);
+
+	std::vector<BetaSumPair> fullResultsList = allResults.getResultingSums();
+	{
+		std::ofstream allResultsFile(computeFolder + "/allResults.BetaSumPair");
+		allResultsFile.write(reinterpret_cast<const char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+	}
+	std::cout << "Computation finished." << std::endl;
+	u192 dedekindNumber = computeDedekindNumberFromBetaSums(Variables, fullResultsList);
+	std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;
+}
+
+
+
+void createJobForEasyWrongTops(unsigned int Variables, const std::string& computeFolder, const std::string& jobID) {
+	std::cout << "Loading allResults file..." << std::endl;
+	std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
+	std::ifstream allResultsFile(computeFolder + "/allResults.BetaSumPair");
+	allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+	std::cout << "allResults file loaded. Checking..." << std::endl;
+
+	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
+
+	std::vector<JobTopInfo> topsFoundToBeWrong;
+
+	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
+		BetaSumPair& curResult = fullResultsList[i];
+		if(
+			curResult.betaSum.countedIntervalSizeDown == 0 ||
+			curResult.betaSum.betaSum % factorial(Variables) != 0 ||
+			curResult.betaSum.countedIntervalSizeDown % factorial(Variables) != 0 ||
+			curResult.betaSumDualDedup.betaSum % factorial(Variables) != 0 ||
+			curResult.betaSumDualDedup.countedIntervalSizeDown % factorial(Variables) != 0
+		) {
+			std::cout << "Top " + std::to_string(i) + " is certainly wrong!\n" << std::flush;
+			topsFoundToBeWrong.push_back(JobTopInfo{i, static_cast<NodeIndex>(flatNodes[i].dual)});
+		}
+	}
+	std::cout << topsFoundToBeWrong.size() << " certainly wrong tops found! submitting job!" << std::endl;
+/*
+	int cnt = 0;
+	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
+		BetaSumPair& curResult = fullResultsList[i];
+		if(
+			curResult.betaSum.betaSum % factorial(Variables) != 0 ||
+			curResult.betaSum.countedIntervalSizeDown % factorial(Variables) != 0 ||
+			curResult.betaSumDualDedup.betaSum % factorial(Variables) != 0 ||
+			curResult.betaSumDualDedup.countedIntervalSizeDown % factorial(Variables) != 0
+		) {
+			std::cout << "Fixing top " + std::to_string(i) + "...\n" << std::flush;
+			SingleTopResult correctResult = computeSingleTopWithAllCores<Variables, true>(i);
+			curResult.betaSum = correctResult.resultSum;
+			curResult.betaSumDualDedup = correctResult.dualSum;
+
+			cnt++;
+			if(cnt % 10 == 0) {
+				// Save intermediary results
+				std::ofstream allResultsFileCorrected(computeFolder + "/allResultsCorrected.BetaSumPair");
+				allResultsFileCorrected.write(reinterpret_cast<const char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+			}
+		}
+	}
+
+	{
+		std::ofstream allResultsFileCorrected(computeFolder + "/allResultsCorrected.BetaSumPair");
+		allResultsFileCorrected.write(reinterpret_cast<const char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+	}
+
+	std::cout << "Computation finished." << std::endl;
+	u192 dedekindNumber = computeDedekindNumberFromBetaSums(Variables, fullResultsList);
+	std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;*/
+
+	writeJobToFile(Variables, computeFilePath(computeFolder, "jobs", jobID, ".job"), topsFoundToBeWrong);
+}
+
 
 void checkProjectResultsIdentical(unsigned int Variables, const std::string& computeFolderA, const std::string& computeFolderB) {
 	std::vector<NamedResultFile> resultsA = loadAllResultsFiles(Variables, computeFolderA);

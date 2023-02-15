@@ -55,6 +55,7 @@ add_library(dedelib
   dedelib/numaMem.cpp
   dedelib/threadPool.cpp
   dedelib/latch.cpp
+  dedelib/validationSetVerification.cpp
 
   dedelib/bigint/uint128_t.cpp
   dedelib/bigint/uint256_t.cpp

@@ -11,4 +11,4 @@ rm -r ./supercomputeTest
 ./production processJobCPU5_SMT:./supercomputeTest,4,validate_adv &&
 
 ./production collectAllSupercomputingProjectResults:7,./supercomputeTest
-
+./production collectAllSupercomputingProjectResultsMessy:7,./supercomputeTest

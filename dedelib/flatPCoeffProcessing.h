@@ -166,7 +166,9 @@ void cpuProcessor_FineMultiThread(PCoeffProcessingContext& context) {
 	cpuProcessor_FineMultiThread_MBF(context, static_cast<const Monotonic<Variables>*>(context.mbfs[0]));
 }
 
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext& context), void*(*validator)(void*), const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc, std::function<void(unsigned int Variables, PCoeffProcessingContext& context)> bufProducer, std::function<ResultProcessorOutput(unsigned int Variables, PCoeffProcessingContext& context, const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc)> resultProcessor);
 ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext& context), void*(*validator)(void*), const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc);
+
 
 std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf);
 

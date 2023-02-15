@@ -69,6 +69,7 @@ u192 computeDedekindNumberFromBetaSums(unsigned int Variables, const std::vector
 		std::abort();
 	}
 	u192 total = 0;
+	u128 totalCheckD1 = 0;
 	for(size_t i = 0; i < betaSums.size(); i++) {
 		BetaSumPair bPair = betaSums[i];
 		BetaSum betaSum = bPair.getBetaSum(Variables);
@@ -81,8 +82,11 @@ u192 computeDedekindNumberFromBetaSums(unsigned int Variables, const std::vector
 		uint64_t topIntervalSizeUp = allClassInfos[allNodes[i].dual].intervalSizeDown;
 		uint64_t topFactor = topIntervalSizeUp * topInfo.classSize; // max log2(2414682040998*5040) = 53.4341783883
 		total += umul192(betaSum.betaSum, topFactor);
+		totalCheckD1 += umul128(betaSum.countedIntervalSizeDown, topInfo.classSize);
 	}
 
+	std::cout << "D(" << (Variables + 2) << ") = " << toString(total) << std::endl;
+	std::cout << "D(" << (Variables + 1) << ") = " << toString(totalCheckD1) << std::endl;
 
 	freeFlatBuffer<FlatNode>(allNodes, mbfCounts[Variables]);
 	freeFlatBuffer<ClassInfo>(allClassInfos, mbfCounts[Variables]);

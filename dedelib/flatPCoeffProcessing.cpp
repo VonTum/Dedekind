@@ -63,29 +63,31 @@ std::vector<NodeIndex> generateRangeSample(unsigned int Variables, NodeIndex sam
 	return resultingVector;
 }
 
-ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*), const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc) {
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext& context), void*(*validator)(void*), const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc, std::function<void(unsigned int Variables, PCoeffProcessingContext& context)> bufProducer, std::function<ResultProcessorOutput(unsigned int Variables, PCoeffProcessingContext& context, const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc)> resultProcessor) {
 	setNUMANodeAffinity(0); // Fopr buffer loading, use the ethernet socket on node 0, to save bandwidth for big flatLinksBuffer on socket 4. 
 	setThreadName("Main Thread");
 	// Alloc on node 3, because that's where the FPGA processor is located too. We want as low latency from it to the context
 	unique_numa_ptr<PCoeffProcessingContext> contextPtr = unique_numa_ptr<PCoeffProcessingContext>::alloc_onnode(3, Variables);
 	PCoeffProcessingContext& context = *contextPtr;
-
-	// Set it on second socket, because that is where 2 ethernet links are for faster buffer download
-	pthread_t inputProducerThread = createNUMANodePThread(4, [](void* voidContext) -> void* {
-		PCoeffProcessingContext* typedContext = (PCoeffProcessingContext*) voidContext;
-		setThreadName("InputProducer");
-		runBottomBufferCreator(typedContext->Variables, *typedContext);
-		pthread_exit(nullptr);
-		return nullptr;
-	}, &context);
 	
 	struct ProcData {
 		PCoeffProcessingContext* context;
 		void (*processorFunc)(PCoeffProcessingContext&);
+		std::function<void(unsigned int Variables, PCoeffProcessingContext& context)> bufProducer;
 	};
 	ProcData procData;
 	procData.context = &context;
 	procData.processorFunc = processorFunc;
+	procData.bufProducer = std::move(bufProducer);
+
+	// Set it on second socket, because that is where 2 ethernet links are for faster buffer download
+	pthread_t inputProducerThread = createNUMANodePThread(4, [](void* voidProcData) -> void* {
+		ProcData* typedData = (ProcData*) voidProcData;
+		setThreadName("InputProducer");
+		typedData->bufProducer(typedData->context->Variables, *typedData->context);
+		pthread_exit(nullptr);
+		return nullptr;
+	}, &procData);
 
 	// FPGAs are on nodes 3 and 7, context is on 3, so start main thread on node 3
 	// createNUMANodePThread(3)
@@ -151,7 +153,7 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 		validatorThreads = spreadThreads(NUMA_SLICE_COUNT, CPUAffinityType::SOCKET, validatorDatas, noValidatorPThread);
 	}
 
-	ResultProcessorOutput results = NUMAResultProcessor(Variables, context, errorBufFunc);
+	ResultProcessorOutput results = resultProcessor(Variables, context, errorBufFunc);
 	assert(results.results.size() == context.tops.size());
 
 	pthread_join(inputProducerThread, nullptr);
@@ -160,6 +162,10 @@ ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function
 	validatorThreads.join();
 
 	return results;
+}
+
+ResultProcessorOutput pcoeffPipeline(unsigned int Variables, const std::function<std::vector<JobTopInfo>()>& topLoader, void (*processorFunc)(PCoeffProcessingContext&), void*(*validator)(void*), const std::function<void(const OutputBuffer&, const char*, bool)>& errorBufFunc) {
+	return pcoeffPipeline(Variables, topLoader, processorFunc, validator, errorBufFunc, runBottomBufferCreator, NUMAResultProcessor);
 }
 
 std::unique_ptr<u128[]> mergeResultsAndValidationForFinalBuffer(unsigned int Variables, const std::vector<BetaSumPair>& betaSums, const ValidationData* validationBuf) {

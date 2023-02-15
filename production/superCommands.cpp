@@ -234,6 +234,110 @@ void checkResultsFileSamples(const std::vector<std::string>& args) {
 	}
 }
 
+template<unsigned int Variables>
+void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
+	std::string allResultsPath = args[0];
+
+	std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
+	{
+		std::ifstream allResultsFile(allResultsPath);
+		allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+	}
+
+	std::cout << "Checking for 0 and " << factorial(Variables) << " divisibility..." << std::endl;
+	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
+		BetaSumPair& curResult = fullResultsList[i];
+		if(
+			curResult.betaSum.countedIntervalSizeDown == 0 ||
+			curResult.betaSum.betaSum % factorial(Variables) != 0 ||
+			curResult.betaSum.countedIntervalSizeDown % factorial(Variables) != 0 ||
+			curResult.betaSumDualDedup.betaSum % factorial(Variables) != 0 ||
+			curResult.betaSumDualDedup.countedIntervalSizeDown % factorial(Variables) != 0
+		) {
+			std::cout << "Top " + std::to_string(i) + " is certainly wrong!" << std::endl;
+		}
+	}
+	std::cout << "0 and " << factorial(Variables) << " divisibility check done." << std::endl;
+
+	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
+	const ClassInfo* classInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
+	const Monotonic<Variables>* allMBFs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+
+	std::cout << "Loaded all files. Checking intervalSizeDown..." << std::endl;
+	size_t lowestLayer = 0;
+	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
+		//if(i % 1000000 == 0) std::cout << i << "..." << std::endl;
+		NodeIndex dual = static_cast<NodeIndex>(flatNodes[i].dual);
+
+		uint64_t foundIntervalSize = fullResultsList[i].betaSum.countedIntervalSizeDown + fullResultsList[i].betaSumDualDedup.countedIntervalSizeDown;
+
+		if(i >= dual) {
+			Monotonic<Variables> mbfI = allMBFs[i];
+
+			Monotonic<Variables> mbfIPermutes[factorial(Variables)];
+			{
+				size_t j = 0;
+				mbfI.forEachPermutation([&](Monotonic<Variables> permut){
+					mbfIPermutes[j++] = permut;
+				});
+			}
+			size_t mbfLayer = mbfI.size();
+			if(mbfLayer != lowestLayer) {
+				std::cout << "Layer " << mbfLayer << std::endl;
+				lowestLayer = mbfLayer;
+			}
+			// Skip i's layer, contains only i, and is very wide. 
+			/*size_t layerIStart = flatNodeLayerOffsets[Variables][mbfLayer];
+			foundIntervalSize += factorial(Variables);*/
+			for(NodeIndex inbetween = dual + 1; inbetween <= i; inbetween++) {
+				Monotonic<Variables> inbetweenMBF = allMBFs[inbetween];
+				for(size_t j = 0; j < factorial(Variables); j++) {
+					if(inbetweenMBF <= mbfIPermutes[j]) {
+						foundIntervalSize += classInfos[i].classSize;
+					}
+				}
+			}
+		}
+
+		if(foundIntervalSize / factorial(Variables) != classInfos[i].intervalSizeDown) {
+			std::cout << "Top " + std::to_string(i) + " is certainly wrong! Bad intervalSizeDown: (should be: " << classInfos[i].intervalSizeDown << ", found: " << foundIntervalSize << ")" << std::endl;
+		}
+	}
+	std::cout << "All Checks done" << std::endl;
+}
+
+template<unsigned int Variables>
+void correctOneTop(const std::vector<std::string>& args) {
+	NodeIndex topToCorrect = std::stoi(args[0]);
+	std::string allResultsPath = args[1];
+	std::string newResultsPath = args[2];
+
+	std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
+	{
+		std::ifstream allResultsFile(allResultsPath);
+		allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+	}
+
+	std::cout << "Computing new top..." << std::endl;
+	BetaSumPair oldValue = fullResultsList[topToCorrect];
+	SingleTopResult newTopResult = computeSingleTopWithAllCores<Variables, true>(topToCorrect);
+
+	fullResultsList[topToCorrect].betaSum = newTopResult.resultSum;
+	fullResultsList[topToCorrect].betaSumDualDedup = newTopResult.dualSum;
+
+	std::cout << "Top " << topToCorrect << std::endl;
+	std::cout << "Old value: " << toString(oldValue.betaSum) << "; " << toString(oldValue.betaSumDualDedup) << std::endl;
+	std::cout << "New value: " << toString(newTopResult.resultSum) << "; " << toString(newTopResult.dualSum) << std::endl;
+	
+	{
+		std::ofstream allResultsFileCorrected(newResultsPath);
+		allResultsFileCorrected.write(reinterpret_cast<const char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+	}
+	std::cout << "Computation finished." << std::endl;
+	u192 dedekindNumber = computeDedekindNumberFromBetaSums(Variables, fullResultsList);
+	std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;
+}
+
 CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"initializeSupercomputingProject", [](const std::vector<std::string>& args) {
 		std::string projectFolderPath = args[0];
@@ -260,6 +364,8 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"checkProjectResultsIdentical", [](const std::vector<std::string>& args){checkProjectResultsIdentical(std::stoi(args[0]) - 2, args[1], args[2]);}},
 
 	{"collectAllSupercomputingProjectResults", [](const std::vector<std::string>& args){collectAndProcessResults(std::stoi(args[0]) - 2, args[1]);}},
+
+	{"collectAllSupercomputingProjectResultsMessy", [](const std::vector<std::string>& args){collectAndProcessResultsMessy(std::stoi(args[0]) - 2, args[1]);}},
 
 	{"checkProjectIntegrity", [](const std::vector<std::string>& args){checkProjectIntegrity(std::stoi(args[0]) - 2, args[1]);}},
 
@@ -318,6 +424,9 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 		std::string projectFolder = args[1];
 		BetaResultCollector collector = collectAllResultFilesAndRecoverFailures(Variables, projectFolder);
 
+		unsigned int startJobIndex = std::stoi(args[2]);
+		unsigned int numberOfTopsPerJob = std::stoi(args[3]);
+
 		size_t numFoundTops = 0;
 		u128 maxBetaSum = 0;
 		u128 maxBetaSumDedup = 0;
@@ -336,14 +445,135 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 
 
 		std::vector<int> missingIndices;
-		missingIndices.reserve(missingTops);
+		missingIndices.reserve(missingTopCount);
 		for(size_t i = 0; i < mbfCounts[Variables]; i++) {
-			if(!collector.hasSeenTop[i]) {
+			if(!collector.hasSeenResult[i]) {
 				missingIndices.push_back((int) i);
 			}
 		}
 
 		std::default_random_engine generator;
 		std::shuffle(missingIndices.begin(), missingIndices.end(), generator);
+
+		// TODO Generate new jobs
+
+		const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
+		unsigned int jobIndex = startJobIndex;
+		size_t curTopIdx = 0;
+		while(curTopIdx < missingIndices.size()) {
+			std::vector<JobTopInfo> thisJobTops;
+			thisJobTops.reserve(numberOfTopsPerJob);
+			for(size_t j = 0; j < numberOfTopsPerJob; j++) {
+				if(curTopIdx >= missingIndices.size()) break;
+				NodeIndex selectedTop = missingIndices[curTopIdx++];
+				thisJobTops.push_back(JobTopInfo{selectedTop, static_cast<NodeIndex>(flatNodes[selectedTop].dual)});
+			}
+
+			writeJobToFile(Variables, computeFilePath(projectFolder, "jobs", std::to_string(jobIndex++), ".job"), thisJobTops);
+		}
+		freeFlatBuffer<FlatNode>(flatNodes, mbfCounts[Variables]);
 	}},
+
+	/*{"tryCorrectAllResults1", tryCorrectAllResults<1>},
+	{"tryCorrectAllResults2", tryCorrectAllResults<2>},
+	{"tryCorrectAllResults3", tryCorrectAllResults<3>},
+	{"tryCorrectAllResults4", tryCorrectAllResults<4>},
+	{"tryCorrectAllResults5", tryCorrectAllResults<5>},
+	{"tryCorrectAllResults6", tryCorrectAllResults<6>},
+	{"tryCorrectAllResults7", tryCorrectAllResults<7>},*/
+
+	{"createJobForEasyWrongTops", [](const std::vector<std::string>& args){
+		unsigned int Variables = std::stoi(args[0]);
+		std::string computeFolder = args[1];
+		std::string jobID = args[2];
+		createJobForEasyWrongTops(Variables, computeFolder, jobID);
+	}},
+
+	{"checkResultsCountsLowerHalf", [](const std::vector<std::string>& args){
+		unsigned int Variables = std::stoi(args[0]);
+		std::string resultsPath = args[1];
+
+		std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
+		std::ifstream allResultsFile(resultsPath);
+		allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+
+		for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+			if(fullResultsList[i].betaSum.countedIntervalSizeDown == 0) {
+				std::cout << "Counted interval size for top " << i << " is 0???" << std::endl;
+			}
+			/*if(fullResultsList[i].betaSumDualDedup.countedIntervalSizeDown == 0) {
+				std::cout << "DualDedup interval size for top " << i << " is 0???" << std::endl;
+			}*/
+		}
+
+		const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
+		const ClassInfo* classInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
+
+		std::cout << "Loaded all files." << std::endl;
+
+		for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+			if(flatNodes[i].dual > i) {
+				uint64_t foundIntervalSizeDown = fullResultsList[i].betaSum.countedIntervalSizeDown + fullResultsList[i].betaSumDualDedup.countedIntervalSizeDown;
+				if(foundIntervalSizeDown != classInfos[i].intervalSizeDown * factorial(Variables)) {
+					std::cout 
+						<< "Incorrect intervalSizeDown for top " 
+						<< i 
+						<< ": " 
+						<< fullResultsList[i].betaSum.countedIntervalSizeDown
+						<< " + " 
+						<< fullResultsList[i].betaSumDualDedup.countedIntervalSizeDown
+						<< " != "
+						<< classInfos[i].intervalSizeDown
+						<< std::endl;
+				}
+			}
+		}
+	}},
+
+	{"applyFPGAResultFileToAllResults", [](const std::vector<std::string>& args){
+		unsigned int Variables = std::stoi(args[0]);
+		std::string allResultsPath = args[1];
+		std::string jobResultsPath = args[2];
+		std::string outputAllResultsPath = args[3];
+
+		std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
+		{
+			std::ifstream allResultsFile(allResultsPath);
+			allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+		}
+
+		ValidationData checkSum_unused;
+		checkSum_unused.dualBetaSum.betaSum = 0;
+		checkSum_unused.dualBetaSum.countedIntervalSizeDown = 0;
+		std::vector<BetaResult> additionalResults = readResultsFile(Variables, jobResultsPath.c_str(), checkSum_unused);
+
+		std::cout << "Applying new results\n" << std::endl;
+		for(BetaResult r : additionalResults) {
+			fullResultsList[r.topIndex] = r.dataForThisTop;
+		}
+
+		{
+			std::ofstream allResultsFileCorrected(outputAllResultsPath);
+			allResultsFileCorrected.write(reinterpret_cast<const char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+		}
+		std::cout << "Computation finished." << std::endl;
+		u192 dedekindNumber = computeDedekindNumberFromBetaSums(Variables, fullResultsList);
+		std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;
+	}},
+
+	{"findErrorInNearlyCorrectResults1", findErrorInNearlyCorrectResults<1>},
+	{"findErrorInNearlyCorrectResults2", findErrorInNearlyCorrectResults<2>},
+	{"findErrorInNearlyCorrectResults3", findErrorInNearlyCorrectResults<3>},
+	{"findErrorInNearlyCorrectResults4", findErrorInNearlyCorrectResults<4>},
+	{"findErrorInNearlyCorrectResults5", findErrorInNearlyCorrectResults<5>},
+	{"findErrorInNearlyCorrectResults6", findErrorInNearlyCorrectResults<6>},
+	{"findErrorInNearlyCorrectResults7", findErrorInNearlyCorrectResults<7>},
+
+	{"correctOneTop1", correctOneTop<1>},
+	{"correctOneTop2", correctOneTop<2>},
+	{"correctOneTop3", correctOneTop<3>},
+	{"correctOneTop4", correctOneTop<4>},
+	{"correctOneTop5", correctOneTop<5>},
+	{"correctOneTop6", correctOneTop<6>},
+	{"correctOneTop7", correctOneTop<7>},
 }};
