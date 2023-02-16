@@ -90,6 +90,23 @@ template<unsigned int Variables, bool SkipValidationSum = true>
 SingleTopResult computeSingleTopWithAllCores(NodeIndex topIdx) {
 	std::cout << "Computing correct results for top " + std::to_string(topIdx) << std::endl;
 
+	// The following code doesn't deal well with the final top
+	if(topIdx == mbfCounts[Variables] - 1) {
+		SingleTopResult result;
+		result.resultSum.betaSum = 0;
+		result.resultSum.countedIntervalSizeDown = 0;
+		ClassInfo finalDualClassInfo;
+		finalDualClassInfo.classSize = 1;
+		finalDualClassInfo.intervalSizeDown = dedekindNumbers[Variables];
+		ProcessedPCoeffSum dualPCoeff = processPCoeffSum(Monotonic<Variables>(BooleanFunction<Variables>::full()), Monotonic<Variables>(BooleanFunction<Variables>::empty()));
+		result.dualSum = produceBetaTerm(finalDualClassInfo, dualPCoeff);
+		if constexpr(!SkipValidationSum) {
+			result.validationSum.betaSum = dedekindNumbers[Variables + 1];
+			result.validationSum.countedIntervalSizeDown = dedekindNumbers[Variables];
+		}
+		return result;
+	}
+
 	SingleTopPThreadData data(Variables);
 	data.run(topIdx, computeSingleTopWithAllCoresPThread<Variables, SkipValidationSum>);
 	ClassInfo dualInfo = data.classInfos[data.topDual];
