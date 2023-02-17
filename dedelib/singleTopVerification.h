@@ -63,12 +63,15 @@ void* computeSingleTopWithAllCoresPThread(void* voidData) {
 			claimedSetEnd = endAt+1;
 		}
 		for(NodeIndex botIdx = claimedSet; botIdx < claimedSetEnd; botIdx++) {
+			if(botIdx == topDual) continue;
+
 			bool isValidation = botIdx > topDual;
 			// if(SkipValidationSum && isValidation) continue; // Not needed, should be covered more efficiently by endAt, but this is the correct logic
 			Monotonic<Variables> bot = mbfLUT[botIdx];
 			ProcessedPCoeffSum result = processPCoeffSum(top, bot, graphBuf);
 			ClassInfo botInfo = classInfos[botIdx];
 			BetaSum subSum = produceBetaTerm(botInfo, result);
+
 			if(isValidation) {
 				validationSum += subSum;
 			} else {
@@ -90,29 +93,19 @@ template<unsigned int Variables, bool SkipValidationSum = true>
 SingleTopResult computeSingleTopWithAllCores(NodeIndex topIdx) {
 	std::cout << "Computing correct results for top " + std::to_string(topIdx) << std::endl;
 
-	// The following code doesn't deal well with the final top
-	if(topIdx == mbfCounts[Variables] - 1) {
-		SingleTopResult result;
-		result.resultSum.betaSum = 0;
-		result.resultSum.countedIntervalSizeDown = 0;
-		ClassInfo finalDualClassInfo;
-		finalDualClassInfo.classSize = 1;
-		finalDualClassInfo.intervalSizeDown = dedekindNumbers[Variables];
-		ProcessedPCoeffSum dualPCoeff = processPCoeffSum(Monotonic<Variables>(BooleanFunction<Variables>::full()), Monotonic<Variables>(BooleanFunction<Variables>::empty()));
-		result.dualSum = produceBetaTerm(finalDualClassInfo, dualPCoeff);
-		if constexpr(!SkipValidationSum) {
-			result.validationSum.betaSum = dedekindNumbers[Variables + 1];
-			result.validationSum.countedIntervalSizeDown = dedekindNumbers[Variables];
-		}
-		return result;
-	}
-
 	SingleTopPThreadData data(Variables);
-	data.run(topIdx, computeSingleTopWithAllCoresPThread<Variables, SkipValidationSum>);
-	ClassInfo dualInfo = data.classInfos[data.topDual];
-	const Monotonic<Variables>* mbfLUT = (const Monotonic<Variables>*) data.mbfLUT;
-	ProcessedPCoeffSum result = processPCoeffSum(mbfLUT[data.topIdx], mbfLUT[data.topDual]);
-	data.result.dualSum = produceBetaTerm(dualInfo, result);
-	data.result.resultSum -= data.result.dualSum;
+	if(topIdx != mbfCounts[Variables]-1) {
+		data.run(topIdx, computeSingleTopWithAllCoresPThread<Variables, SkipValidationSum>);
+		ClassInfo dualInfo = data.classInfos[data.topDual];
+		const Monotonic<Variables>* mbfLUT = (const Monotonic<Variables>*) data.mbfLUT;
+		ProcessedPCoeffSum result = processPCoeffSum(mbfLUT[data.topIdx], mbfLUT[data.topDual]);
+		data.result.dualSum = produceBetaTerm(dualInfo, result);
+		//data.result.resultSum -= data.result.dualSum;
+	} else {
+		data.result.resultSum.betaSum = 0;
+		data.result.resultSum.countedIntervalSizeDown = 0;
+		data.result.dualSum.betaSum = 2*factorial(Variables);
+		data.result.dualSum.countedIntervalSizeDown = factorial(Variables);
+	}
 	return data.result;
 }
