@@ -4,6 +4,7 @@
 #include <vector>
 #include <thread>
 #include <mutex>
+#include <atomic>
 #include <condition_variable>
 
 #include <pthread.h>
@@ -95,10 +96,12 @@ class PThreadPool {
 
 	// No explicit protection required since only the main thread may write to it and only in the destructor, so not when a new job is presented
 	bool shouldExit = false;
-
+	
+	friend void* threadFunc(void*);
 public:
 	// One thread is the calling thread
 	PThreadPool(size_t numThreads);
+	PThreadPool(size_t numThreads, size_t startAtCPU);
 	PThreadPool() : PThreadPool(std::thread::hardware_concurrency()) {}
 
 	// cleanup
@@ -110,9 +113,26 @@ public:
 	// this work function may only return once all work has been completed
 	void doInParallel(std::function<void()>&& work, std::function<void()>&& mainThreadFunc);
 
-	/*void setPriority(int priority);
-	void setPriorityMin();
-	void setPriorityMax();*/
+	// Expects a function of type void(size_t chunkStart, size_t chunkSize)
+	template<typename Func>
+	void iterRangeInParallel(size_t size, size_t chunkSize, const Func& work) {
+		std::atomic<size_t> atomic_idx;
+		atomic_idx.store(0);
+
+		this->doInParallel([&](){
+			while(true) {
+				size_t blockStart = atomic_idx.fetch_add(chunkSize);
+				if(blockStart >= size) {
+					break;
+				}
+				size_t iterSize = chunkSize;
+				if(blockStart + chunkSize > size) {
+					iterSize = size - blockStart;
+				}
+				work(blockStart, iterSize);
+			}
+		});
+	}
 };
 
 typedef PThreadPool ThreadPool;
@@ -143,4 +163,33 @@ PThreadBundle spreadThreads(size_t threadCount, CPUAffinityType affinity, T* dat
 		threads[i] = createPThreadAffinity(i, affinity, func, (void*) selectedData);
 	}
 	return PThreadBundle(threads, threadCount);
+}
+
+// Expects a function of the form void(int threadID)
+template<typename Func>
+void runInParallel(int threadCount, CPUAffinityType affinity, const Func& func) {
+	struct ThreadData {
+		int threadID;
+		const Func* f;
+		pthread_t thread;
+	};
+	ThreadData* datas = new ThreadData[threadCount];
+
+	for(int i = 0; i < threadCount; i++) {
+		datas[i].threadID = i;
+		datas[i].f = &func;
+		datas[i].thread = createPThreadAffinity(i, affinity, [](void* voidData) -> void* {
+			ThreadData* d = (ThreadData*) voidData;
+			(*(d->f))(d->threadID);
+			pthread_exit(NULL);
+			return NULL;
+		}, (void*) &datas[i]);
+	}
+
+	for(int i = 0; i < threadCount; i++) {
+		void* ret = NULL;
+		pthread_join(datas[i].thread, &ret);
+	}
+
+	delete[] datas;
 }

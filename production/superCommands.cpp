@@ -6,6 +6,7 @@
 
 #include <sstream>
 #include <filesystem>
+#include "../dedelib/threadPool.h"
 
 template<unsigned int Variables>
 static void processSuperComputingJob_FromArgs(const std::vector<std::string>& args, const char* name, void (*processorFunc)(PCoeffProcessingContext&)) {
@@ -244,13 +245,17 @@ void produceBasicResultsList(const std::vector<std::string>& args) {
 		fullResultsList[i] = BetaSumPair{r.resultSum, r.dualSum};
 	}
 
+	std::cout << "Computation finished." << std::endl;
+	u192 dedekindNumber = computeDedekindNumberFromBetaSums(Variables, fullResultsList);
+	std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;
+
 	{
 		std::ofstream allResultsFileCorrected(newResultsPath);
 		allResultsFileCorrected.write(reinterpret_cast<const char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
 	}
 }
 
-template<unsigned int Variables>
+/*template<unsigned int Variables>
 uint64_t countNumberOfMonotonicDownFrom(const Monotonic<Variables>& top, size_t levelsToGo) {
 	struct StackElem {
 		Monotonic<Variables> mbf;
@@ -277,7 +282,7 @@ uint64_t countNumberOfMonotonicDownFrom(const Monotonic<Variables>& top, size_t 
 	if(stackTop->curBit != stackTop->numBits) {
 
 	}
-}
+}*/
 
 template<unsigned int Variables>
 void getAllLayerSizes(const BooleanFunction<Variables>& bf, int layerSizeBuf[Variables+1]) {
@@ -567,7 +572,7 @@ static void checkTopsSecondHalfNaive(const std::vector<BetaSumPair>& fullResults
 }
 
 template<unsigned int Variables, size_t MaxBlockSize>
-static void checkResultsBlock(NodeIndex startAt, size_t numInThisBlock, MBFSwapper<MaxBlockSize>& swapper, const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, const uint32_t* flatLinks) {
+static void checkResultsBlock(NodeIndex startAt, size_t numInThisBlock, MBFSwapper<MaxBlockSize>& swapper, const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, const uint32_t* flatLinks, ThreadPool& pool) {
 	int blockLayer = getFlatLayerOfIndex(Variables, startAt);
 
 	if(blockLayer <= (1 << Variables) / 2) {
@@ -577,15 +582,15 @@ static void checkResultsBlock(NodeIndex startAt, size_t numInThisBlock, MBFSwapp
 	int dualsLayer = (1 << Variables) - blockLayer;
 	swapper.initRange(startAt - flatNodeLayerOffsets[Variables][blockLayer], numInThisBlock, layerSizes[Variables][blockLayer]);
 
-	uint64_t totalIntervalSizesDown[MaxBlockSize];
+	std::atomic<uint64_t> totalIntervalSizesDown[MaxBlockSize];
 	for(size_t i = 0; i < numInThisBlock; i++) {
-		totalIntervalSizesDown[i] = fullResultsList[startAt + i].betaSum.countedIntervalSizeDown
-			 + fullResultsList[startAt + i].betaSumDualDedup.countedIntervalSizeDown
-			 + factorial(Variables); // For the top itself, we don't include it in the swapper run
+		totalIntervalSizesDown[i].store(fullResultsList[startAt + i].betaSum.countedIntervalSizeDown
+			// + fullResultsList[startAt + i].betaSumDualDedup.countedIntervalSizeDown
+			 + factorial(Variables)); // For the top itself, we don't include it in the swapper run
 	}
 
 	for(int layer = blockLayer-1; layer >= dualsLayer; layer--) {
-		std::cout << "Iter layer " << layer << std::endl;
+		//std::cout << "Iter layer " << layer << std::endl;
 
 		NodeIndex thisLayerSize = layerSizes[Variables][layer];
 		NodeIndex thisLayerOffset = flatNodeLayerOffsets[Variables][layer];
@@ -593,52 +598,62 @@ static void checkResultsBlock(NodeIndex startAt, size_t numInThisBlock, MBFSwapp
 
 		swapper.followLinksToNextLayer(flatLinks + flatLinkOffsets[Variables][(1 << Variables) - layer-1], thisLayerSize, numLinksBetweenLayers); // mbfStructure is ordered in referse, seems I thought that optimization worth the confusion
 
-		for(NodeIndex localBottom = 0; localBottom < thisLayerSize; localBottom++) {
-			NodeIndex realBottom = thisLayerOffset + localBottom;
-			
-			NodeIndex localTopsForThisBottom[MaxBlockSize];
-			size_t numLocalTopsForThisBottom = 0;
+		pool.iterRangeInParallel(thisLayerSize, 1024*64, [&](NodeIndex localBottomStart, NodeIndex numLocalBottomsInThisBlock){
+			uint64_t subtotalIntervalSizesDown[MaxBlockSize];
+			for(size_t i = 0; i < MaxBlockSize; i++) {
+				subtotalIntervalSizesDown[i] = 0;
+			}
+			for(NodeIndex localBottom = localBottomStart; localBottom < localBottomStart + numLocalBottomsInThisBlock; localBottom++) {
 
-			swapper.upper[localBottom].forEachOne([&](size_t localTop){
-				size_t realTop = startAt + localTop;
-				size_t realTopDual = flatNodes[realTop].dual;
-				if(realBottom >= realTopDual) {
-					localTopsForThisBottom[numLocalTopsForThisBottom++] = localTop;
-				}
-			});
-			if(numLocalTopsForThisBottom >= 1) {
-				Monotonic<Variables> botMBF = allMBFs[realBottom];
+				NodeIndex realBottom = thisLayerOffset + localBottom;
+				
+				NodeIndex localTopsForThisBottom[MaxBlockSize];
+				size_t numLocalTopsForThisBottom = 0;
 
-				Monotonic<Variables> botMBFPermutes[factorial(Variables)];
-				{
-					size_t j = 0;
-					botMBF.forEachPermutation([&](Monotonic<Variables> permut){
-						botMBFPermutes[j++] = permut;
-					});
-				}
-				uint64_t botClassSize = classInfos[realBottom].classSize;
-
-				for(NodeIndex* localTop = localTopsForThisBottom; localTop != localTopsForThisBottom + numLocalTopsForThisBottom; localTop++) {
-					NodeIndex realTop = startAt + *localTop;
-					
-					Monotonic<Variables> topMBF = allMBFs[realTop];
-
-					uint64_t countForThisBotTop = 0;
-					for(Monotonic<Variables> botPermut : botMBFPermutes) {
-						if(botPermut <= topMBF) {
-							countForThisBotTop++;
-						}
+				swapper.upper[localBottom].forEachOne([&](size_t localTop){
+					size_t realTop = startAt + localTop;
+					size_t realTopDual = flatNodes[realTop].dual;
+					if(realBottom >= realTopDual) {
+						localTopsForThisBottom[numLocalTopsForThisBottom++] = localTop;
 					}
-					assert(countForThisBotTop != 0);
-					totalIntervalSizesDown[*localTop] += botClassSize * countForThisBotTop;
+				});
+				if(numLocalTopsForThisBottom >= 1) {
+					Monotonic<Variables> botMBF = allMBFs[realBottom];
+
+					Monotonic<Variables> botMBFPermutes[factorial(Variables)];
+					{
+						size_t j = 0;
+						botMBF.forEachPermutation([&](Monotonic<Variables> permut){
+							botMBFPermutes[j++] = permut;
+						});
+					}
+					uint64_t botClassSize = classInfos[realBottom].classSize;
+
+					for(NodeIndex* localTop = localTopsForThisBottom; localTop != localTopsForThisBottom + numLocalTopsForThisBottom; localTop++) {
+						NodeIndex realTop = startAt + *localTop;
+						
+						Monotonic<Variables> topMBF = allMBFs[realTop];
+
+						uint64_t countForThisBotTop = 0;
+						for(Monotonic<Variables> botPermut : botMBFPermutes) {
+							if(botPermut <= topMBF) {
+								countForThisBotTop++;
+							}
+						}
+						assert(countForThisBotTop != 0);
+						subtotalIntervalSizesDown[*localTop] += botClassSize * countForThisBotTop;
+					}
 				}
 			}
-		}
+			for(size_t i = 0; i < MaxBlockSize; i++) {
+				if(subtotalIntervalSizesDown[i] != 0) totalIntervalSizesDown[i].fetch_add(subtotalIntervalSizesDown[i]);
+			}
+		});
 	}
 
-	std::cout << "Checking these tops..." << std::endl;
+	//std::cout << "Checking tops..." << std::endl;
 	for(size_t localI = 0; localI < numInThisBlock; localI++) {
-		uint64_t foundIntervalSize = totalIntervalSizesDown[localI];
+		uint64_t foundIntervalSize = totalIntervalSizesDown[localI].load();
 		size_t i = startAt + localI;
 		foundIntervalSize /= factorial(Variables);
 		if(foundIntervalSize != classInfos[i].intervalSizeDown) {
@@ -653,20 +668,49 @@ static void checkResultsBlock(NodeIndex startAt, size_t numInThisBlock, MBFSwapp
 
 template<unsigned int Variables>
 static void checkTopsSecondHalfWithSwapper(const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, const uint32_t* flatLinks) {
+	constexpr size_t MAX_BLOCK_SIZE = 1024*8;
+
 	std::cout << "Checking intervalSizeDown SECOND HALF... (" << flatNodeLayerOffsets[Variables][(1 << Variables) / 2 + 1] << " - " << mbfCounts[Variables] << ")" << std::endl;
 
-	constexpr size_t MAX_BLOCK_SIZE = 16;
-	MBFSwapper<MAX_BLOCK_SIZE> swapper(Variables, 0);
-
 	for(size_t layer = (1 << Variables) / 2 + 1; layer < (1 << Variables); layer++) {
+		std::cout << "Swapper Layer " << layer << std::endl;
 		NodeIndex layerTopsStart = flatNodeLayerOffsets[Variables][layer];
 		NodeIndex layerTopsEnd = flatNodeLayerOffsets[Variables][layer+1];
+		NodeIndex numberOfTopsInLayer = layerTopsEnd - layerTopsStart;
 
+		std::atomic<NodeIndex> curTopStart;
+		curTopStart.store(0);
+
+		runInParallel(16, CPUAffinityType::COMPLEX, [&](int complexI){
+			int numaNode = complexI / 2;
+			ThreadPool pool(8, complexI * 8);
+			MBFSwapper<MAX_BLOCK_SIZE> swapper(Variables, numaNode);
+
+			while(true) {
+				NodeIndex blockStart = curTopStart.fetch_add(MAX_BLOCK_SIZE);
+
+				if(blockStart >= numberOfTopsInLayer) {
+					break;
+				}
+				if(blockStart % (1024*128) == 0) std::cout << "Block> " << layerTopsStart + blockStart << std::endl;
+				size_t iterSize = MAX_BLOCK_SIZE;
+				if(blockStart + MAX_BLOCK_SIZE > numberOfTopsInLayer) {
+					iterSize = numberOfTopsInLayer - blockStart;
+				}
+				
+				checkResultsBlock<Variables, MAX_BLOCK_SIZE>(layerTopsStart + blockStart, iterSize, swapper, fullResultsList, flatNodes, classInfos, allMBFs, flatLinks, pool);
+			}
+		});
+
+		/*ThreadPool pool(8);
+		MBFSwapper<MAX_BLOCK_SIZE> swapper(Variables, 0);
 		NodeIndex topsBatch;
-		for(topsBatch = layerTopsStart; topsBatch < layerTopsEnd - MAX_BLOCK_SIZE; topsBatch+=MAX_BLOCK_SIZE) {
-			checkResultsBlock<Variables, MAX_BLOCK_SIZE>(topsBatch, MAX_BLOCK_SIZE, swapper, fullResultsList, flatNodes, classInfos, allMBFs, flatLinks);
+		for(topsBatch = layerTopsStart; topsBatch + MAX_BLOCK_SIZE < layerTopsEnd; topsBatch+=MAX_BLOCK_SIZE) {
+			if((topsBatch - layerTopsStart) % (1024*64) == 0) std::cout << topsBatch;
+			checkResultsBlock<Variables, MAX_BLOCK_SIZE>(topsBatch, MAX_BLOCK_SIZE, swapper, fullResultsList, flatNodes, classInfos, allMBFs, flatLinks, pool);
 		}
-		checkResultsBlock<Variables, MAX_BLOCK_SIZE>(topsBatch, layerTopsEnd - topsBatch, swapper, fullResultsList, flatNodes, classInfos, allMBFs, flatLinks);
+		checkResultsBlock<Variables, MAX_BLOCK_SIZE>(topsBatch, layerTopsEnd - topsBatch, swapper, fullResultsList, flatNodes, classInfos, allMBFs, flatLinks, pool);
+		*/
 	}
 }
 
@@ -680,18 +724,22 @@ void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
 		std::ifstream allResultsFile(allResultsPath);
 		allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
 	}
+	if(fullResultsList[20].betaSum.betaSum == 0) {
+		std::cerr << "results file not read properly!\n";
+		exit(-1);
+	}
 	
 
-	// std::cout << "Running check0AndModuloVariables..." << std::endl;
-	// check0AndModuloVariables(Variables, fullResultsList);
+	std::cout << "Running check0AndModuloVariables..." << std::endl;
+	check0AndModuloVariables(Variables, fullResultsList);
 
 	std::cout << "Loading flatNodes..." << std::endl;
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
 	std::cout << "Loading classInfos..." << std::endl;
 	const ClassInfo* classInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
 
-	//std::cout << "Running checkTopsFirstHalf..." << std::endl;
-	//checkTopsFirstHalf(Variables, fullResultsList, flatNodes, classInfos);
+	std::cout << "Running checkTopsFirstHalf..." << std::endl;
+	checkTopsFirstHalf(Variables, fullResultsList, flatNodes, classInfos);
 
 	std::cout << "Loading allMBFs..." << std::endl;
 	const Monotonic<Variables>* allMBFs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
@@ -707,6 +755,15 @@ void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
 	//checkTopsTail<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
 
 	std::cout << "All Checks done" << std::endl;
+
+	std::cout << "Computation finished." << std::endl;
+	u192 dedekindNumber = computeDedekindNumberFromBetaSums(Variables, fullResultsList);
+	std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;
+
+	freeFlatBuffer(flatNodes, mbfCounts[Variables]);
+	freeFlatBuffer(classInfos, mbfCounts[Variables]);
+	freeFlatBuffer(allMBFs, mbfCounts[Variables]);
+	freeFlatBuffer(flatLinks, getTotalLinkCount(Variables));
 }
 
 template<unsigned int Variables>
@@ -993,4 +1050,40 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"correctTops5", correctTops<5>},
 	{"correctTops6", correctTops<6>},
 	{"correctTops7", correctTops<7>},
+
+	{"compareResultsFiles", [](const std::vector<std::string>& args){
+		unsigned int Variables = std::stoi(args[0]);
+		std::string pathA = args[1];
+		std::string pathB = args[2];
+
+		std::vector<BetaSumPair> resultsA(mbfCounts[Variables]);
+		{
+			std::ifstream allResultsFile(pathA);
+			allResultsFile.read(reinterpret_cast<char*>(&resultsA[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+		}
+
+		std::vector<BetaSumPair> resultsB(mbfCounts[Variables]);
+		{
+			std::ifstream allResultsFile(pathB);
+			allResultsFile.read(reinterpret_cast<char*>(&resultsB[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+		}
+
+		for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+			BetaSumPair a = resultsA[i];
+			BetaSumPair b = resultsB[i];
+
+			if(a.betaSum.betaSum != b.betaSum.betaSum) {
+				std::cout << i << ": betaSum.betaSum: " << toString(a.betaSum.betaSum) << " != " << toString(b.betaSum.betaSum) << std::endl;
+			}
+			if(a.betaSum.countedIntervalSizeDown != b.betaSum.countedIntervalSizeDown) {
+				std::cout << i << ": betaSum.countedIntervalSizeDown: " << toString(a.betaSum.countedIntervalSizeDown) << " != " << toString(b.betaSum.countedIntervalSizeDown) << std::endl;
+			}
+			if(a.betaSumDualDedup.betaSum != b.betaSumDualDedup.betaSum) {
+				std::cout << i << ": betaSumDualDedup.betaSum: " << toString(a.betaSumDualDedup.betaSum) << " != " << toString(b.betaSumDualDedup.betaSum) << std::endl;
+			}
+			if(a.betaSumDualDedup.countedIntervalSizeDown != b.betaSumDualDedup.countedIntervalSizeDown) {
+				std::cout << i << ": betaSumDualDedup.countedIntervalSizeDown: " << toString(a.betaSumDualDedup.countedIntervalSizeDown) << " != " << toString(b.betaSumDualDedup.countedIntervalSizeDown) << std::endl;
+			}
+		}
+	}},
 }};

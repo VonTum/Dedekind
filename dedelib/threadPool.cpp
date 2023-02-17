@@ -2,33 +2,39 @@
 
 #include <cassert>
 
+void* threadFunc(void* thisVoid) {
+	PThreadPool* self = (PThreadPool*) thisVoid;
+
+	std::unique_lock<std::mutex> selfLock(self->mtx); // locks mtx
+	while(true) {
+		self->threadStarter.wait(selfLock, [self]() -> bool {return self->shouldStart; }); // this unlocks the mutex. And relocks when exiting
+		self->threadsWorking++;
+		selfLock.unlock();
+
+		if(self->shouldExit) break;
+		self->funcToRun();
+
+		selfLock.lock();
+		self->shouldStart = false; // once any thread finishes we assume we've reached the end, keep all threads from 
+		self->threadsWorking--;
+		if(self->threadsWorking == 0) {
+			self->threadsFinished.notify_one();
+		}
+	}
+	pthread_exit(nullptr);
+	return nullptr;
+}
+
 // One thread is the calling thread
 PThreadPool::PThreadPool(size_t numThreads) : threads(new pthread_t[numThreads-1]), numThreads(numThreads) {
-	auto threadFunc = [](void* thisVoid) -> void* {
-		PThreadPool* self = (PThreadPool*) thisVoid;
-
-		std::unique_lock<std::mutex> selfLock(self->mtx); // locks mtx
-		while(true) {
-			self->threadStarter.wait(selfLock, [self]() -> bool {return self->shouldStart; }); // this unlocks the mutex. And relocks when exiting
-			self->threadsWorking++;
-			selfLock.unlock();
-
-			if(self->shouldExit) break;
-			self->funcToRun();
-
-			selfLock.lock();
-			self->shouldStart = false; // once any thread finishes we assume we've reached the end, keep all threads from 
-			self->threadsWorking--;
-			if(self->threadsWorking == 0) {
-				self->threadsFinished.notify_one();
-			}
-		}
-		pthread_exit(nullptr);
-		return nullptr;
-	};
-
 	for(size_t threadI = 0; threadI < numThreads-1; threadI++) {
 		threads[threadI] = copyThreadAffinity(threadFunc, (void*) this);
+	}
+}
+
+PThreadPool::PThreadPool(size_t numThreads, size_t startAtCPU) : threads(new pthread_t[numThreads-1]), numThreads(numThreads) {
+	for(size_t threadI = 0; threadI < numThreads-1; threadI++) {
+		threads[threadI] = createCPUPThread(startAtCPU + threadI, threadFunc, (void*) this);
 	}
 }
 
