@@ -292,6 +292,17 @@ void getAllLayerSizes(const BooleanFunction<Variables>& bf, int layerSizeBuf[Var
 }
 
 template<unsigned int Variables>
+int getLowestEmptyLayer(const BooleanFunction<Variables>& bf) {
+	for(int l = 0; l < Variables + 1; l++) {
+		BitSet<(1 << Variables)> bitsInLayer = BooleanFunction<Variables>::layerMask(l) & bf.bitset;
+		if(bitsInLayer.isEmpty()) {
+			return l;
+		}
+	}
+	return Variables;
+}
+
+template<unsigned int Variables>
 int getHighestFullLayer(const BooleanFunction<Variables>& bf) {
 	for(int l = 0; l < Variables + 1; l++) {
 		BitSet<(1 << Variables)> missingBitsInLayer = andnot(BooleanFunction<Variables>::layerMask(l), bf.bitset);
@@ -299,7 +310,7 @@ int getHighestFullLayer(const BooleanFunction<Variables>& bf) {
 			return l - 1;
 		}
 	}
-	return Variables + 1;
+	return Variables;
 }
 
 template<unsigned int Variables>
@@ -332,39 +343,274 @@ static void check0AndModuloVariables(unsigned int Variables, const std::vector<B
 }
 
 template<unsigned int Variables>
+class FastPermutationCounter {
+	Monotonic<Variables> permutes[factorial(Variables)];
+public:
+	void init(Monotonic<Variables> mbf) {
+		size_t j = 0;
+		mbf.forEachPermutation([&](Monotonic<Variables> permut){
+			permutes[j++] = permut;
+		});
+	}
+
+	template<bool isTop>
+	unsigned int countPermutes(Monotonic<Variables> mbf2) {
+		unsigned int totalCount = 0;
+		for(size_t i = 0; i < factorial(Variables); i++) {
+			Monotonic<Variables> mbf1 = permutes[i];
+			if constexpr(isTop) {
+				if(mbf1 <= mbf2) totalCount++;
+			} else {
+				if(mbf2 <= mbf1) totalCount++;
+			}
+		}
+		return totalCount;
+	}
+};
+
+/*template<>
+class FastPermutationCounter<7> {
+	alignas(32) __int128_t permutes[factorial(7) / 6];
+
+public:
+	void init(Monotonic<7> mbf) {
+		size_t blockI = 0;
+		for(int v0 = 0; v0 < 7; v0++) {
+			Monotonic<7> mbf0 = mbf;
+			if(v0 != 0) mbf0.swap(v0, 0);
+			for(int v1 = 1; v1 < 7; v1++) {
+				Monotonic<7> mbf1 = mbf0;
+				if(v1 != 1) mbf1.swap(v1, 1);
+				for(int v2 = 2; v2 < 7; v2++) {
+					Monotonic<7> mbf2 = mbf1;
+					if(v2 != 2) mbf2.swap(v2, 2);
+					for(int v3 = 3; v3 < 7; v3++) {
+						Monotonic<7> mbf3 = mbf2;
+						if(v3 != 3) mbf3.swap(v3, 3);
+						
+						union {
+							__m128i b;
+							__int128_t asU128;
+						};
+						b = mbf3.bf.bitset.data;
+						permutes[blockI++] = asU128;
+					}
+				}
+			}
+		}
+	}
+
+	template<bool isTop>
+	uint32_t countPermutes(Monotonic<7> mbf2) {
+		union {
+			__m128i mbits;
+			int32_t swizzled[24];
+			__int128_t permute6[6];
+		};
+		mbits = mbf2.bf.bitset.data;
+
+		swizzled[4] = swizzled[0];
+		swizzled[5] = swizzled[1];
+		swizzled[6] = swizzled[3];
+		swizzled[7] = swizzled[2];
+
+		swizzled[8] = swizzled[0];
+		swizzled[9] = swizzled[2];
+		swizzled[10] = swizzled[1];
+		swizzled[11] = swizzled[3];
+
+		swizzled[12] = swizzled[0];
+		swizzled[13] = swizzled[2];
+		swizzled[14] = swizzled[3];
+		swizzled[15] = swizzled[1];
+
+		swizzled[16] = swizzled[0];
+		swizzled[17] = swizzled[3];
+		swizzled[18] = swizzled[1];
+		swizzled[19] = swizzled[2];
+
+		swizzled[20] = swizzled[0];
+		swizzled[21] = swizzled[3];
+		swizzled[22] = swizzled[2];
+		swizzled[23] = swizzled[1];
+
+		unsigned int totalCount = 0;
+		for(size_t i = 0; i < factorial(7) / 6; i++) {
+			for(int p = 0; p < 6; p++) {
+				if constexpr(!isTop) {
+					if((permute6[p] & ~permutes[i]) == 0) totalCount++;
+				} else {
+					if((~permute6[p] & permutes[i]) == 0) totalCount++;
+				}
+			}
+		}
+		return totalCount;
+	}
+};*/
+
+
+template<>
+class FastPermutationCounter<7> {
+	static constexpr size_t CHUNK_SIZE = 8;
+
+	alignas(32) int32_t permutes[4 * factorial(7) / 6];
+
+	static void swizzle(BooleanFunction<7> bf, int32_t* swizzled) {
+		union {
+			__m128i b;
+			int16_t asIntPtr[8];
+		};
+		b = bf.bitset.data;
+		swizzled[0] = (static_cast<int32_t>(asIntPtr[0]) << 16) | asIntPtr[7];
+		swizzled[1] = (static_cast<int32_t>(asIntPtr[1]) << 16) | asIntPtr[6];
+		swizzled[2] = (static_cast<int32_t>(asIntPtr[2]) << 16) | asIntPtr[5];
+		swizzled[3] = (static_cast<int32_t>(asIntPtr[4]) << 16) | asIntPtr[3];
+	}
+public:
+	void init(Monotonic<7> mbf) {
+		size_t blockI = 0;
+		for(int v0 = 0; v0 < 7; v0++) {
+			Monotonic<7> mbf0 = mbf;
+			if(v0 != 0) mbf0.swap(v0, 0);
+			for(int v1 = 1; v1 < 7; v1++) {
+				Monotonic<7> mbf1 = mbf0;
+				if(v1 != 1) mbf1.swap(v1, 1);
+				for(int v2 = 2; v2 < 7; v2++) {
+					Monotonic<7> mbf2 = mbf1;
+					if(v2 != 2) mbf2.swap(v2, 2);
+					for(int v3 = 3; v3 < 7; v3++) {
+						Monotonic<7> mbf3 = mbf2;
+						if(v3 != 3) mbf3.swap(v3, 3);
+						
+						size_t chunkI = blockI / CHUNK_SIZE;
+						size_t inChunkI = blockI % CHUNK_SIZE;
+						int32_t swizzled[4];
+						swizzle(mbf3.bf, swizzled);
+
+						for(size_t i = 0; i < 4; i++) {
+							permutes[(chunkI * 4 + i) * CHUNK_SIZE + inChunkI] = swizzled[i];
+						}
+						blockI++;
+					}
+				}
+			}
+		}
+	}
+
+	template<bool isTop>
+	uint32_t countPermutes(Monotonic<7> mbf2) {
+		int32_t swizzled[4];
+		swizzle(mbf2.bf, swizzled);
+		union {
+			__m256i totalCounts = _mm256_setzero_si256();
+			int32_t countsInts[8];
+		};
+
+		__m256i sh2 = _mm256_set1_epi32(swizzled[0]);
+		__m256i a2 = _mm256_set1_epi32(swizzled[1]);
+		__m256i b2 = _mm256_set1_epi32(swizzled[2]);
+		__m256i c2 = _mm256_set1_epi32(swizzled[3]);
+
+		const __m256i* permutesM256 = reinterpret_cast<const __m256i*>(permutes);
+		for(size_t i = 0; i < factorial(7) / 6 / 8; i++) {
+			__m256i sh1 = permutesM256[4*i];
+			__m256i a1 = permutesM256[4*i+1];
+			__m256i b1 = permutesM256[4*i+2];
+			__m256i c1 = permutesM256[4*i+3];
+
+			if constexpr(isTop) { // Swap bot and top, compiler should optimize this swap out
+				__m256i shTMP = sh1; sh1 = sh2; sh2 = shTMP;
+				__m256i aTMP = a1; a1 = a2; a2 = aTMP;
+				__m256i bTMP = b1; b1 = b2; b2 = bTMP;
+				__m256i cTMP = c1; c1 = c2; c2 = cTMP;
+			}
+			#define IS_SUBSET(x, y) _mm256_cmpeq_epi32(_mm256_andnot_si256(x, y), _mm256_setzero_si256())
+			__m256i sh = IS_SUBSET(sh1, sh2);
+			__m256i aa = IS_SUBSET(a1, a2);
+			__m256i ab = IS_SUBSET(a1, b2);
+			__m256i ac = IS_SUBSET(a1, c2);
+			__m256i ba = IS_SUBSET(b1, a2);
+			__m256i bb = IS_SUBSET(b1, b2);
+			__m256i bc = IS_SUBSET(b1, c2);
+			__m256i ca = IS_SUBSET(c1, a2);
+			__m256i cb = IS_SUBSET(c1, b2);
+			__m256i cc = IS_SUBSET(c1, c2);
+
+			//#define AND_M256(x, y, z) _mm256_and_si256(x, _mm256_and_si256(y, z))
+			//__m256i abc = AND_M256(aa, bb, cc);
+			//__m256i acb = AND_M256(aa, bc, cb);
+			//__m256i bac = AND_M256(ab, ba, cc);
+			//__m256i bca = AND_M256(ab, bc, ca);
+			//__m256i cab = AND_M256(ac, ba, cb);
+			//__m256i cba = AND_M256(ac, bb, ca);
+			//__m256i perm6Total = _mm256_add_epi32(_mm256_add_epi32(_mm256_add_epi32(abc, acb), _mm256_add_epi32(bac, bca)), _mm256_add_epi32(cab, cba));
+			
+			#define AND_ADD_AND(shared, xx, yy, xy, yx) _mm256_and_si256(shared, _mm256_add_epi32(_mm256_and_si256(xx, yy), _mm256_and_si256(xy, yx)))
+			__m256i abc_acb = AND_ADD_AND(aa, bb, cc, cb, bc);
+			__m256i bac_bca = AND_ADD_AND(ab, ba, cc, bc, ca);
+			__m256i cab_cba = AND_ADD_AND(ac, ba, cb, bb, ca);
+
+			__m256i perm6Total = _mm256_add_epi32(_mm256_add_epi32(abc_acb, bac_bca), cab_cba);
+			totalCounts = _mm256_add_epi32(totalCounts, _mm256_and_si256(sh, perm6Total));
+		}
+		uint32_t total = 0;
+		for(int i = 0; i < 8; i++) {
+			total += countsInts[i];
+		}
+		return -total;
+	}
+};
+
+
+template<unsigned int Variables>
 static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs) {
 	std::cout << "Checking tops tail" << std::endl;
 
-	struct TopToCheck {
-		NodeIndex top;
-		NodeIndex topDual;
-		int highestFullLayer;
-	};
+	// Don't count stuff that's been covered by checkTopsSecondHalfWithSwapper
+	constexpr int OFFSET_LAYER_FROM_CENTER = 3;
 
 	// Start halfway, because lower tops are trivial to check
-	NodeIndex startAt = flatNodeLayerOffsets[Variables][(1 << Variables) / 2 + 1];
-	std::vector<TopToCheck> topToCheckVector;
-	topToCheckVector.reserve(mbfCounts[Variables] - startAt);
+	NodeIndex startAt = flatNodeLayerOffsets[Variables][(1 << Variables) / 2 + 1 + OFFSET_LAYER_FROM_CENTER];
+	NodeIndex bottomsEndAt = flatNodeLayerOffsets[Variables][(1 << Variables) / 2 - OFFSET_LAYER_FROM_CENTER];
+
+	std::vector<JobTopInfo> topToCheckVectors[Variables+1];
 	for(NodeIndex top = startAt; top < mbfCounts[Variables]; top++) {
 		Monotonic<Variables> topMBF = allMBFs[top];
-		TopToCheck newElem;
+		JobTopInfo newElem;
 		newElem.top = top;
 		newElem.topDual = static_cast<NodeIndex>(flatNodes[top].dual);
-		newElem.highestFullLayer = getHighestFullLayer(topMBF.bf);
-		topToCheckVector.push_back(std::move(newElem));
+		int highestFullLayer = getHighestFullLayer(topMBF.bf);
+		topToCheckVectors[highestFullLayer].push_back(std::move(newElem));
 	}
 
-	// Do easy tops first
-	std::sort(topToCheckVector.begin(), topToCheckVector.end(), [](TopToCheck a, TopToCheck b) -> bool {
-		if(a.highestFullLayer != b.highestFullLayer) {
-			return a.highestFullLayer > b.highestFullLayer; // Higher first full layer is easier
-		} else {
+	struct PrecomputeStruct {
+		std::unique_ptr<uint64_t[]> trivialBottomRunningSum;
+		std::vector<Monotonic<Variables>> exceptionMBFs;
+		std::vector<NodeIndex> exceptionMBFsIndices;
+	} preComputedForHighestLayers[Variables+1];
+
+	for(unsigned int i = 0; i < Variables+1; i++) {
+		preComputedForHighestLayers[i].trivialBottomRunningSum = std::unique_ptr<uint64_t[]>(new uint64_t[bottomsEndAt]);
+	}
+
+	for(NodeIndex i = 0; i < bottomsEndAt; i++) {
+		Monotonic<Variables> botMBF = allMBFs[i];
+		int lowestEmptyLayer = getLowestEmptyLayer(botMBF.bf);
+		
+	}
+
+	for(int i = 0; i < Variables+1; i++) {
+		std::cout << "Tops with highest full layer " << i << ": " << topToCheckVectors[i].size() << std::endl;
+
+		// Do easy tops first
+		std::sort(topToCheckVectors[i].begin(), topToCheckVectors[i].end(), [](JobTopInfo a, JobTopInfo b) -> bool {
 			return a.topDual < b.topDual; // Lower dual is easier
-		}
-	});
+		});
+	}
 
 
 
+/*
 	int lastHighest = 0;
 	BooleanFunction<Variables> upToLayerMask;
 	for(size_t idx = 0; idx < topToCheckVector.size(); idx++) {
@@ -410,7 +656,7 @@ static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const
 		if(totalCountForThisTop != fullResultsList[ttc.top].betaSum.countedIntervalSizeDown) {
 			std::cout << "Top " + std::to_string(ttc.top) + " is certainly wrong! Bad intervalSizeDown: (should be: " << classInfos[ttc.top].intervalSizeDown << ", found: " << totalCountForThisTop << std::endl;
 		}
-	}
+	}*/
 }
 
 #include "../dedelib/bitSet.h"
@@ -521,14 +767,9 @@ static void checkTopsSecondHalfNaive(const std::vector<BetaSumPair>& fullResults
 
 		Monotonic<Variables> mbfI = allMBFs[i];
 
-		Monotonic<Variables> mbfIPermutes[factorial(Variables)];
-		{
-			size_t j = 0;
-			mbfI.forEachPermutation([&](Monotonic<Variables> permut){
-				mbfIPermutes[j++] = permut;
-			});
-			assert(j == factorial(Variables));
-		}
+		FastPermutationCounter<Variables> permutationCounter;
+		permutationCounter.init(mbfI);
+		
 		size_t mbfLayer = mbfI.size();
 		if(mbfLayer != lowestLayer) {
 			std::cout << "Layer " << mbfLayer << std::endl;
@@ -546,12 +787,7 @@ static void checkTopsSecondHalfNaive(const std::vector<BetaSumPair>& fullResults
 		for(NodeIndex inbetween = dual; inbetween <= i; inbetween++) {
 			Monotonic<Variables> inbetweenMBF = allMBFs[inbetween];
 			//if(couldHavePermutationSubset(inbetweenMBF.bf, mbfILayerSizes)) { // Optimization. Early exit for mbfs that can't be below
-				uint64_t countForThisBot = 0;
-				for(size_t j = 0; j < factorial(Variables); j++) {
-					if(inbetweenMBF <= mbfIPermutes[j]) {
-						countForThisBot++;
-					}
-				}
+				unsigned int countForThisBot = permutationCounter.countPermutes<false>(inbetweenMBF);
 				if(countForThisBot != 0) std::cout << inbetween << " ";
 				assert(countForThisBot * classInfos[inbetween].classSize % factorial(Variables) == 0);
 				foundIntervalSize += countForThisBot * classInfos[inbetween].classSize;
@@ -620,13 +856,8 @@ static void checkResultsBlock(NodeIndex startAt, size_t numInThisBlock, MBFSwapp
 				if(numLocalTopsForThisBottom >= 1) {
 					Monotonic<Variables> botMBF = allMBFs[realBottom];
 
-					Monotonic<Variables> botMBFPermutes[factorial(Variables)];
-					{
-						size_t j = 0;
-						botMBF.forEachPermutation([&](Monotonic<Variables> permut){
-							botMBFPermutes[j++] = permut;
-						});
-					}
+					FastPermutationCounter<Variables> permutationCounter;
+					permutationCounter.init(botMBF);
 					uint64_t botClassSize = classInfos[realBottom].classSize;
 
 					for(NodeIndex* localTop = localTopsForThisBottom; localTop != localTopsForThisBottom + numLocalTopsForThisBottom; localTop++) {
@@ -634,12 +865,7 @@ static void checkResultsBlock(NodeIndex startAt, size_t numInThisBlock, MBFSwapp
 						
 						Monotonic<Variables> topMBF = allMBFs[realTop];
 
-						uint64_t countForThisBotTop = 0;
-						for(Monotonic<Variables> botPermut : botMBFPermutes) {
-							if(botPermut <= topMBF) {
-								countForThisBotTop++;
-							}
-						}
+						uint64_t countForThisBotTop = permutationCounter.template countPermutes<true>(topMBF);
 						assert(countForThisBotTop != 0);
 						subtotalIntervalSizesDown[*localTop] += botClassSize * countForThisBotTop;
 					}
@@ -667,12 +893,12 @@ static void checkResultsBlock(NodeIndex startAt, size_t numInThisBlock, MBFSwapp
 }
 
 template<unsigned int Variables>
-static void checkTopsSecondHalfWithSwapper(const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, const uint32_t* flatLinks) {
+static void checkTopsSecondHalfWithSwapper(const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, const uint32_t* flatLinks, size_t layer) {
 	constexpr size_t MAX_BLOCK_SIZE = 1024*8;
 
 	std::cout << "Checking intervalSizeDown SECOND HALF... (" << flatNodeLayerOffsets[Variables][(1 << Variables) / 2 + 1] << " - " << mbfCounts[Variables] << ")" << std::endl;
 
-	for(size_t layer = (1 << Variables) / 2 + 1; layer < (1 << Variables); layer++) {
+	//for(size_t layer = (1 << Variables) / 2 + 1; layer < (1 << Variables); layer++) {
 		std::cout << "Swapper Layer " << layer << std::endl;
 		NodeIndex layerTopsStart = flatNodeLayerOffsets[Variables][layer];
 		NodeIndex layerTopsEnd = flatNodeLayerOffsets[Variables][layer+1];
@@ -711,12 +937,36 @@ static void checkTopsSecondHalfWithSwapper(const std::vector<BetaSumPair>& fullR
 		}
 		checkResultsBlock<Variables, MAX_BLOCK_SIZE>(topsBatch, layerTopsEnd - topsBatch, swapper, fullResultsList, flatNodes, classInfos, allMBFs, flatLinks, pool);
 		*/
-	}
+	//}
 }
 
 template<unsigned int Variables>
 void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
+	/*
+	std::cout << "Loading allMBFs..." << std::endl;
+	const Monotonic<Variables>* allMBFsBench = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+
+	for(int run = 0; run < 10; run++) {
+		FastPermutationCounter<Variables> cntr;
+		cntr.init(allMBFsBench[300000000+run]);
+
+		std::cout << "Starting test..." << std::endl;
+		auto start = std::chrono::high_resolution_clock::now();
+		unsigned int totalPermutes = 0;
+		for(int i = 0; i < 10000000; i++) {
+			totalPermutes += cntr.template countPermutes<false>(allMBFsBench[200000000+i]);
+		}
+		auto duration = std::chrono::high_resolution_clock::now() - start;
+		std::cout << "Took " << (duration.count() / 1.0e9) << " seconds. totalPermutes=" << totalPermutes << std::endl;
+	}
+	return;
+*/
+
+
+
+
 	std::string allResultsPath = args[0];
+	int layer = std::stoi(args[1]);
 
 	std::cout << "Loading fullResultsList..." << std::endl;
 	std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
@@ -745,14 +995,15 @@ void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
 	const Monotonic<Variables>* allMBFs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
 
 	//checkTopsSecondHalfNaive<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
+	
+	//std::cout << "Running checkTopsTail..." << std::endl;
+	//checkTopsTail<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
 
 	std::cout << "Loading flatLinks..." << std::endl;
 	const uint32_t* flatLinks = readFlatBuffer<uint32_t>(FileName::mbfStructure(Variables), getTotalLinkCount(Variables));
 	
-	//std::cout << "Running checkTopsSecondHalf..." << std::endl;
-	checkTopsSecondHalfWithSwapper<Variables>(fullResultsList, flatNodes, classInfos, allMBFs, flatLinks);
-	
-	//checkTopsTail<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
+	std::cout << "Running checkTopsSecondHalfWithSwapper..." << std::endl;
+	checkTopsSecondHalfWithSwapper<Variables>(fullResultsList, flatNodes, classInfos, allMBFs, flatLinks, layer);
 
 	std::cout << "All Checks done" << std::endl;
 
