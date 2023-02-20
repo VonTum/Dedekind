@@ -506,10 +506,10 @@ public:
 			int32_t countsInts[8];
 		};
 
-		__m256i sh2 = _mm256_set1_epi32(swizzled[0]);
-		__m256i a2 = _mm256_set1_epi32(swizzled[1]);
-		__m256i b2 = _mm256_set1_epi32(swizzled[2]);
-		__m256i c2 = _mm256_set1_epi32(swizzled[3]);
+		__m256i sh2const = _mm256_set1_epi32(swizzled[0]);
+		__m256i a2const = _mm256_set1_epi32(swizzled[1]);
+		__m256i b2const = _mm256_set1_epi32(swizzled[2]);
+		__m256i c2const = _mm256_set1_epi32(swizzled[3]);
 
 		const __m256i* permutesM256 = reinterpret_cast<const __m256i*>(permutes);
 		for(size_t i = 0; i < factorial(7) / 6 / 8; i++) {
@@ -517,6 +517,11 @@ public:
 			__m256i a1 = permutesM256[4*i+1];
 			__m256i b1 = permutesM256[4*i+2];
 			__m256i c1 = permutesM256[4*i+3];
+
+			__m256i sh2 = sh2const;
+			__m256i a2 = a2const;
+			__m256i b2 = b2const;
+			__m256i c2 = c2const;
 
 			if constexpr(isTop) { // Swap bot and top, compiler should optimize this swap out
 				__m256i shTMP = sh1; sh1 = sh2; sh2 = shTMP;
@@ -942,25 +947,30 @@ static void checkTopsSecondHalfWithSwapper(const std::vector<BetaSumPair>& fullR
 
 template<unsigned int Variables>
 void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
-	/*
-	std::cout << "Loading allMBFs..." << std::endl;
+	
+	/*std::cout << "Loading allMBFs..." << std::endl;
 	const Monotonic<Variables>* allMBFsBench = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
 
 	for(int run = 0; run < 10; run++) {
 		FastPermutationCounter<Variables> cntr;
-		cntr.init(allMBFsBench[300000000+run]);
+		Monotonic<Variables> bot = allMBFsBench[300000000+run];
+		cntr.init(bot);
 
 		std::cout << "Starting test..." << std::endl;
 		auto start = std::chrono::high_resolution_clock::now();
 		unsigned int totalPermutes = 0;
-		for(int i = 0; i < 10000000; i++) {
-			totalPermutes += cntr.template countPermutes<false>(allMBFsBench[200000000+i]);
+		for(int i = 0; i < 490000; i++) {
+			Monotonic<Variables> top = allMBFsBench[i * 1000];
+			top.forEachPermutation([&](Monotonic<Variables> permut){
+				if(bot <= permut) totalPermutes++;
+			});
+			//totalPermutes += cntr.template countPermutes<true>(top);
 		}
 		auto duration = std::chrono::high_resolution_clock::now() - start;
 		std::cout << "Took " << (duration.count() / 1.0e9) << " seconds. totalPermutes=" << totalPermutes << std::endl;
 	}
-	return;
-*/
+	return;*/
+
 
 
 
