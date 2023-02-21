@@ -304,9 +304,9 @@ int getLowestEmptyLayer(const BooleanFunction<Variables>& bf) {
 
 template<unsigned int Variables>
 int getHighestFullLayer(const BooleanFunction<Variables>& bf) {
-	for(int l = 0; l < Variables + 1; l++) {
+	for(int l = Variables; l >= 0; l--) {
 		BitSet<(1 << Variables)> missingBitsInLayer = andnot(BooleanFunction<Variables>::layerMask(l), bf.bitset);
-		if(!missingBitsInLayer.isEmpty()) {
+		if(missingBitsInLayer.isEmpty()) {
 			return l - 1;
 		}
 	}
@@ -506,10 +506,10 @@ public:
 			int32_t countsInts[8];
 		};
 
-		__m256i sh2const = _mm256_set1_epi32(swizzled[0]);
-		__m256i a2const = _mm256_set1_epi32(swizzled[1]);
-		__m256i b2const = _mm256_set1_epi32(swizzled[2]);
-		__m256i c2const = _mm256_set1_epi32(swizzled[3]);
+		__m256i sh2 = _mm256_set1_epi32(swizzled[0]);
+		__m256i a2 = _mm256_set1_epi32(swizzled[1]);
+		__m256i b2 = _mm256_set1_epi32(swizzled[2]);
+		__m256i c2 = _mm256_set1_epi32(swizzled[3]);
 
 		const __m256i* permutesM256 = reinterpret_cast<const __m256i*>(permutes);
 		for(size_t i = 0; i < factorial(7) / 6 / 8; i++) {
@@ -518,18 +518,7 @@ public:
 			__m256i b1 = permutesM256[4*i+2];
 			__m256i c1 = permutesM256[4*i+3];
 
-			__m256i sh2 = sh2const;
-			__m256i a2 = a2const;
-			__m256i b2 = b2const;
-			__m256i c2 = c2const;
-
-			if constexpr(isTop) { // Swap bot and top, compiler should optimize this swap out
-				__m256i shTMP = sh1; sh1 = sh2; sh2 = shTMP;
-				__m256i aTMP = a1; a1 = a2; a2 = aTMP;
-				__m256i bTMP = b1; b1 = b2; b2 = bTMP;
-				__m256i cTMP = c1; c1 = c2; c2 = cTMP;
-			}
-			#define IS_SUBSET(x, y) _mm256_cmpeq_epi32(_mm256_andnot_si256(x, y), _mm256_setzero_si256())
+			#define IS_SUBSET(x, y) _mm256_cmpeq_epi32(_mm256_andnot_si256(isTop ? y : x, isTop ? x : y), _mm256_setzero_si256())
 			__m256i sh = IS_SUBSET(sh1, sh2);
 			__m256i aa = IS_SUBSET(a1, a2);
 			__m256i ab = IS_SUBSET(a1, b2);
@@ -566,6 +555,73 @@ public:
 	}
 };
 
+struct TailPreCompute {
+	static constexpr int16_t NO_PRECOMPUTE = -1;
+	size_t numMBFs;
+	// -1 values mean that this bottom is not precomputed
+	std::unique_ptr<int16_t[]> precomputedCounts;
+
+	TailPreCompute(size_t numMBFs) : numMBFs(numMBFs), precomputedCounts(new int16_t[numMBFs]) {}
+	void initFromHighestFullLayer(int highestFullLayerOfTop, const int8_t* highestNonEmptyLayersForBottoms, const ClassInfo* classInfos) {
+		for(size_t i = 0; i < numMBFs; i++) {
+			// If the bottom fits fully under the highest full layer of the top, then all 5040 permutations will be valid. 
+			// In fact, this condition goes both ways, if all 5040 permutations are valid, 
+			// the bottom's highest nonempty layer is <= the highest full layer of top
+			if(highestNonEmptyLayersForBottoms[i] <= highestFullLayerOfTop) {
+				precomputedCounts[i] = static_cast<int16_t>(classInfos[i].classSize);
+			} else {
+				precomputedCounts[i] = NO_PRECOMPUTE;
+			}
+		}
+	}
+};
+
+template<unsigned int Variables>
+struct TailRunningSumOptimization {
+	struct RunningSumElement {
+		uint64_t runningSum;
+		size_t exceptionCount;
+	};
+	std::unique_ptr<RunningSumElement[]> runningSums;
+	std::unique_ptr<Monotonic<Variables>[]> exceptionMBFs;
+	std::unique_ptr<int16_t[]> exceptionMBFClassSizes;
+
+	TailRunningSumOptimization(size_t numMBFs) : runningSums(new RunningSumElement[numMBFs]), exceptionMBFs(new Monotonic<Variables>[numMBFs]), exceptionMBFClassSizes(new int16_t[numMBFs]) {}
+
+	void opimizeTailPreCompute(const TailPreCompute& tailPreCompute, size_t upToBotMBF, const Monotonic<Variables>* mbfs, const ClassInfo* classInfos) {
+		RunningSumElement running;
+		running.runningSum = 0;
+		running.exceptionCount = 0;
+		for(size_t i = 0; i < upToBotMBF; i++) {
+			runningSums[i] = running;
+
+			if(tailPreCompute.precomputedCounts[i] != TailPreCompute::NO_PRECOMPUTE) {
+				running.runningSum += tailPreCompute.precomputedCounts[i];
+			} else {
+				exceptionMBFClassSizes[running.exceptionCount] = static_cast<int16_t>(classInfos[i].classSize);
+				exceptionMBFs[running.exceptionCount] = mbfs[i];
+				running.exceptionCount++;
+			}
+		}
+	}
+
+	uint64_t computeCountForTop(Monotonic<Variables> top, NodeIndex topDualIdx) const {
+		RunningSumElement sumInfo = runningSums[topDualIdx];
+		uint64_t exceptionSum = 0;
+		if(sumInfo.exceptionCount > 0) {
+			FastPermutationCounter<Variables> fastPermuter;
+			fastPermuter.init(top);
+
+			std::cout << "Exceptions: " << sumInfo.exceptionCount << std::endl;
+			for(size_t i = 0; i < sumInfo.exceptionCount; i++) {
+				exceptionSum += static_cast<uint64_t>(fastPermuter.template countPermutes<false>(exceptionMBFs[i])) * exceptionMBFClassSizes[i];
+			}
+		}
+
+		//std::cout << "Cached sum: " << sumInfo.runningSum << "    Exception Sum: " << exceptionSum / factorial(Variables) << std::endl;
+		return sumInfo.runningSum * factorial(Variables) + exceptionSum;
+	}
+};
 
 template<unsigned int Variables>
 static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs) {
@@ -588,80 +644,36 @@ static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const
 		topToCheckVectors[highestFullLayer].push_back(std::move(newElem));
 	}
 
-	struct PrecomputeStruct {
-		std::unique_ptr<uint64_t[]> trivialBottomRunningSum;
-		std::vector<Monotonic<Variables>> exceptionMBFs;
-		std::vector<NodeIndex> exceptionMBFsIndices;
-	} preComputedForHighestLayers[Variables+1];
-
-	for(unsigned int i = 0; i < Variables+1; i++) {
-		preComputedForHighestLayers[i].trivialBottomRunningSum = std::unique_ptr<uint64_t[]>(new uint64_t[bottomsEndAt]);
+	std::unique_ptr<int8_t[]> highestNonEmptyLayerForBottoms(new int8_t[bottomsEndAt]);
+	for(size_t i = 0; i < bottomsEndAt; i++) {
+		highestNonEmptyLayerForBottoms[i] = getLowestEmptyLayer(allMBFs[i].bf) - 1;
 	}
 
-	for(NodeIndex i = 0; i < bottomsEndAt; i++) {
-		Monotonic<Variables> botMBF = allMBFs[i];
-		int lowestEmptyLayer = getLowestEmptyLayer(botMBF.bf);
-		
-	}
+	size_t processedTops = 0;
+	for(int highestFullLayerOfTop = Variables; highestFullLayerOfTop >= 0; highestFullLayerOfTop--) {
+		std::cout << "Highest full layer: " << highestFullLayerOfTop << std::endl;
+		size_t highestDual = bottomsEndAt;
+		TailPreCompute preCompute(highestDual);
+		preCompute.initFromHighestFullLayer(highestFullLayerOfTop, highestNonEmptyLayerForBottoms.get(), classInfos);
 
-	for(int i = 0; i < Variables+1; i++) {
-		std::cout << "Tops with highest full layer " << i << ": " << topToCheckVectors[i].size() << std::endl;
+		TailRunningSumOptimization<Variables> optimizer(highestDual);
 
-		// Do easy tops first
-		std::sort(topToCheckVectors[i].begin(), topToCheckVectors[i].end(), [](JobTopInfo a, JobTopInfo b) -> bool {
-			return a.topDual < b.topDual; // Lower dual is easier
-		});
-	}
+		optimizer.opimizeTailPreCompute(preCompute, highestDual, allMBFs, classInfos);
 
-
-
-/*
-	int lastHighest = 0;
-	BooleanFunction<Variables> upToLayerMask;
-	for(size_t idx = 0; idx < topToCheckVector.size(); idx++) {
-		if(idx % 10000 == 0) {
-			std::cout << idx << std::endl;
+		processedTops++;
+		if(processedTops % 10000 == 0) {
+			std::cout << processedTops << std::endl;
 		}
+		for(JobTopInfo info : topToCheckVectors[highestFullLayerOfTop]) {
+			uint64_t resultForThisTop = optimizer.computeCountForTop(allMBFs[info.top], info.topDual);
 
-		TopToCheck ttc = topToCheckVector[idx];
-		if(ttc.highestFullLayer != lastHighest) {
-			lastHighest = ttc.highestFullLayer;
-			std::cout << "highestFullLayer: " << lastHighest << std::endl;
-			upToLayerMask = BooleanFunction<Variables>::empty();
-			for(int l = 0; l <= lastHighest; l++) {
-				upToLayerMask.bitset |= BooleanFunction<Variables>::layerMask(l);
-			}
-		}
-
-		uint64_t totalCountForThisTop = 0;
-		Monotonic<Variables> topMBF = allMBFs[ttc.top];
-
-		Monotonic<Variables> topMBFPermutes[factorial(Variables)];
-		{
-			size_t j = 0;
-			topMBF.forEachPermutation([&](Monotonic<Variables> permut){
-				topMBFPermutes[j++] = permut;
-			});
-		}
-
-		for(NodeIndex bot = 0; bot < ttc.topDual; bot++) {
-			Monotonic<Variables> botMBF = allMBFs[bot];
-			if(botMBF.bf.isSubSetOf(upToLayerMask)) {
-				// All permutations are valid
-				totalCountForThisTop += factorial(Variables) * classInfos[bot].classSize;
+			if(resultForThisTop != fullResultsList[info.top].betaSum.countedIntervalSizeDown) {
+				std::cout << "Top " + std::to_string(info.top) + " is certainly wrong! Bad intervalSizeDown: (should be: " << resultForThisTop / factorial(Variables) << ", found: " << fullResultsList[info.top].betaSum.countedIntervalSizeDown / factorial(Variables) << ") // classSize=" << classInfos[info.top].classSize << ", bs_dual=" << fullResultsList[info.top].betaSumDualDedup.countedIntervalSizeDown << std::endl;
 			} else {
-				// Check permutations individually
-				for(size_t j = 0; j < factorial(Variables); j++) {
-					if(botMBF <= topMBFPermutes[j]) {
-						totalCountForThisTop += classInfos[bot].classSize;
-					}
-				}
+				//std::cout << "Top " + std::to_string(info.top) + " correct.\n" << std::flush;
 			}
 		}
-		if(totalCountForThisTop != fullResultsList[ttc.top].betaSum.countedIntervalSizeDown) {
-			std::cout << "Top " + std::to_string(ttc.top) + " is certainly wrong! Bad intervalSizeDown: (should be: " << classInfos[ttc.top].intervalSizeDown << ", found: " << totalCountForThisTop << std::endl;
-		}
-	}*/
+	}
 }
 
 #include "../dedelib/bitSet.h"
@@ -945,6 +957,16 @@ static void checkTopsSecondHalfWithSwapper(const std::vector<BetaSumPair>& fullR
 	//}
 }
 
+
+
+
+
+
+
+
+
+
+
 template<unsigned int Variables>
 void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
 	
@@ -1006,8 +1028,8 @@ void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
 
 	//checkTopsSecondHalfNaive<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
 	
-	//std::cout << "Running checkTopsTail..." << std::endl;
-	//checkTopsTail<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
+	std::cout << "Running checkTopsTail..." << std::endl;
+	checkTopsTail<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
 
 	std::cout << "Loading flatLinks..." << std::endl;
 	const uint32_t* flatLinks = readFlatBuffer<uint32_t>(FileName::mbfStructure(Variables), getTotalLinkCount(Variables));
