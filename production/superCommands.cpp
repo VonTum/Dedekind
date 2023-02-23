@@ -637,6 +637,8 @@ static std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> categor
 	return result;
 }
 
+static std::atomic<int> totalNumberOfCheckedTops;
+
 template<unsigned int Variables>
 struct TailThreadContext {
 	TailPreCompute preComputeBuffers[Variables];
@@ -694,6 +696,9 @@ struct TailThreadContext {
 			} else {
 				//std::cout << "Top " + std::to_string(info.top) + " correct.\n" << std::flush;
 			}
+			if(totalNumberOfCheckedTops.fetch_add(1) % (1024*128) == 0) {
+				std::cout << totalNumberOfCheckedTops.load() << std::endl;
+			}
 		}
 	}
 
@@ -736,6 +741,9 @@ struct TailThreadContext {
 				std::cout << "Top " + std::to_string(info.top) + " is certainly wrong! Bad intervalSizeDown: (should be: " << totalSum / factorial(Variables) << ", found: " << fullResultsList[info.top].betaSum.countedIntervalSizeDown / factorial(Variables) << ") // classSize=" << classInfos[info.top].classSize << ", bs_dual=" << fullResultsList[info.top].betaSumDualDedup.countedIntervalSizeDown << std::endl;
 			} else {
 				//std::cout << "Top " + std::to_string(info.top) + " correct.\n" << std::flush;
+			}
+			if(totalNumberOfCheckedTops.fetch_add(1) % (1024*128) == 0) {
+				std::cout << totalNumberOfCheckedTops.load() << std::endl;
 			}
 		}
 	}
@@ -786,6 +794,7 @@ static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const
 		highestNonEmptyLayers[i] = getLowestEmptyLayer(allMBFs[i].bf) - 1;
 	}
 
+	totalNumberOfCheckedTops.store(0);
 	for(int highestFullLayerOfTop = Variables; highestFullLayerOfTop >= 0; highestFullLayerOfTop--) {
 		std::vector<JobTopInfo>& curTopsVec = topToCheckVectors[highestFullLayerOfTop];
 		std::cout << "Highest full layer: " << highestFullLayerOfTop << std::endl;
@@ -820,12 +829,12 @@ static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const
 
 				iterMutex.lock();
 				while(topCategoriesIter != topCategoriesIterEnd) {
-					++topCategoriesIter;
 					const auto& entry = *topCategoriesIter;
+					Monotonic<Variables> sharedTopStub = entry.first;
+					std::vector<JobTopInfo> topsThatShareThisStub = entry.second;
+					++topCategoriesIter;
 					iterMutex.unlock();
 
-					Monotonic<Variables> sharedTopStub = entry.first;
-					const std::vector<JobTopInfo>& topsThatShareThisStub = entry.second;
 					threadContext.checkTopsTailRecurse(preCompute, 0, topsThatShareThisStub, sharedTopStub, highestFullLayerOfTop+1);
 
 					iterMutex.lock();
