@@ -1151,3 +1151,43 @@ unsigned int getModifiedLayer(const BooleanFunction<Variables>& a, const Boolean
 }
 
 
+template<unsigned int Variables>
+int getLowestEmptyLayer(const BooleanFunction<Variables>& bf) {
+	for(int l = 0; l < Variables + 1; l++) {
+		BitSet<(1 << Variables)> bitsInLayer = BooleanFunction<Variables>::layerMask(l) & bf.bitset;
+		if(bitsInLayer.isEmpty()) {
+			return l;
+		}
+	}
+	return Variables;
+}
+
+template<unsigned int Variables>
+int getHighestFullLayer(const BooleanFunction<Variables>& bf) {
+	for(int l = Variables; l >= 0; l--) {
+		BitSet<(1 << Variables)> missingBitsInLayer = andnot(BooleanFunction<Variables>::layerMask(l), bf.bitset);
+		if(missingBitsInLayer.isEmpty()) {
+			return l - 1;
+		}
+	}
+	return Variables;
+}
+
+template<unsigned int Variables>
+void getAllLayerSizes(const BooleanFunction<Variables>& bf, int layerSizeBuf[Variables+1]) {
+	for(int l = 0; l < Variables + 1; l++) {
+		layerSizeBuf[l] = bf.getLayer(l).size();
+	}
+}
+
+template<unsigned int Variables>
+bool couldHavePermutationSubset(const BooleanFunction<Variables>& bf, const int layerSizeBuf[Variables+1]) {
+	for(int l = 0; l < Variables + 1; l++) {
+		int thisLayerSize = bf.getLayer(l).size();
+
+		if(thisLayerSize > layerSizeBuf[l]) {
+			return false;
+		}
+	}
+	return true;
+}

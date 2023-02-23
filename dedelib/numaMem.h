@@ -131,6 +131,7 @@ struct NUMAArray {
 	NUMAArray(const NUMAArray& other) = delete;
 	NUMAArray& operator=(const NUMAArray& other) = delete;
 	
+	const T& operator[](size_t idx) const {assert(buf + idx < bufEnd); return buf[idx];}
 	T& operator[](size_t idx) {assert(buf + idx < bufEnd); return buf[idx];}
 
 	bool owns(const T* ptr) const {

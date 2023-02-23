@@ -6,6 +6,7 @@
 
 #include <sstream>
 #include <filesystem>
+#include <unordered_map>
 #include "../dedelib/threadPool.h"
 
 template<unsigned int Variables>
@@ -284,47 +285,6 @@ uint64_t countNumberOfMonotonicDownFrom(const Monotonic<Variables>& top, size_t 
 	}
 }*/
 
-template<unsigned int Variables>
-void getAllLayerSizes(const BooleanFunction<Variables>& bf, int layerSizeBuf[Variables+1]) {
-	for(int l = 0; l < Variables + 1; l++) {
-		layerSizeBuf[l] = bf.getLayer(l).size();
-	}
-}
-
-template<unsigned int Variables>
-int getLowestEmptyLayer(const BooleanFunction<Variables>& bf) {
-	for(int l = 0; l < Variables + 1; l++) {
-		BitSet<(1 << Variables)> bitsInLayer = BooleanFunction<Variables>::layerMask(l) & bf.bitset;
-		if(bitsInLayer.isEmpty()) {
-			return l;
-		}
-	}
-	return Variables;
-}
-
-template<unsigned int Variables>
-int getHighestFullLayer(const BooleanFunction<Variables>& bf) {
-	for(int l = Variables; l >= 0; l--) {
-		BitSet<(1 << Variables)> missingBitsInLayer = andnot(BooleanFunction<Variables>::layerMask(l), bf.bitset);
-		if(missingBitsInLayer.isEmpty()) {
-			return l - 1;
-		}
-	}
-	return Variables;
-}
-
-template<unsigned int Variables>
-bool couldHavePermutationSubset(const BooleanFunction<Variables>& bf, const int layerSizeBuf[Variables+1]) {
-	for(int l = 0; l < Variables + 1; l++) {
-		int thisLayerSize = bf.getLayer(l).size();
-
-		if(thisLayerSize > layerSizeBuf[l]) {
-			return false;
-		}
-	}
-	return true;
-}
-
 static void check0AndModuloVariables(unsigned int Variables, const std::vector<BetaSumPair>& fullResultsList) {
 	std::cout << "Checking for 0 and " << factorial(Variables) << " divisibility..." << std::endl;
 	for(NodeIndex i = 0; i < mbfCounts[Variables]; i++) {
@@ -557,78 +517,227 @@ public:
 
 struct TailPreCompute {
 	static constexpr int16_t NO_PRECOMPUTE = -1;
-	size_t numMBFs;
+	size_t capacity;
 	// -1 values mean that this bottom is not precomputed
-	std::unique_ptr<int16_t[]> precomputedCounts;
+	NUMAArray<int16_t> precomputedCounts;
 
-	TailPreCompute(size_t numMBFs) : numMBFs(numMBFs), precomputedCounts(new int16_t[numMBFs]) {}
-	void initFromHighestFullLayer(int highestFullLayerOfTop, const int8_t* highestNonEmptyLayersForBottoms, const ClassInfo* classInfos) {
-		for(size_t i = 0; i < numMBFs; i++) {
+	TailPreCompute() = default;
+	TailPreCompute(size_t capacity, int numaNode) : capacity(capacity), precomputedCounts(NUMAArray<int16_t>::alloc_onnode(capacity, numaNode)) {}
+	void initFromHighestFullLayer(size_t highestDual, int highestFullLayerOfTop, const int8_t* highestNonEmptyLayers, const ClassInfo* classInfos) {
+		assert(highestDual < capacity);
+		for(size_t i = 0; i <= highestDual; i++) {
 			// If the bottom fits fully under the highest full layer of the top, then all 5040 permutations will be valid. 
 			// In fact, this condition goes both ways, if all 5040 permutations are valid, 
 			// the bottom's highest nonempty layer is <= the highest full layer of top
-			if(highestNonEmptyLayersForBottoms[i] <= highestFullLayerOfTop) {
+			if(highestNonEmptyLayers[i] <= highestFullLayerOfTop) {
 				precomputedCounts[i] = static_cast<int16_t>(classInfos[i].classSize);
 			} else {
 				precomputedCounts[i] = NO_PRECOMPUTE;
 			}
 		}
 	}
+
+	template<unsigned int Variables>
+	void initFromExtendingPreviousPreCompute(const TailPreCompute& parent, size_t highestDual, int highestLayerOfTopStub, Monotonic<Variables> topStub, const Monotonic<Variables>* allMBFs, const int8_t* highestNonEmptyLayers, const ClassInfo* classInfos) {
+		assert(highestLayerOfTopStub >= getLowestEmptyLayer(topStub.bf) - 1);
+		assert(highestDual < capacity);
+
+		FastPermutationCounter<Variables> counter;
+		counter.init(topStub);
+		for(size_t i = 0; i <= highestDual; i++) {
+			if(parent.precomputedCounts[i] != TailPreCompute::NO_PRECOMPUTE) {
+				this->precomputedCounts[i] = parent.precomputedCounts[i];
+			} else if(highestNonEmptyLayers[i] <= highestLayerOfTopStub) {
+				this->precomputedCounts[i] = counter.template countPermutes<false>(allMBFs[i]) * classInfos[i].classSize / factorial(Variables);
+			} else {
+				this->precomputedCounts[i] = TailPreCompute::NO_PRECOMPUTE;
+			}
+		}
+	}
 };
 
 template<unsigned int Variables>
-struct TailRunningSumOptimization {
-	struct RunningSumElement {
-		uint64_t runningSum;
-		size_t exceptionCount;
-	};
-	std::unique_ptr<RunningSumElement[]> runningSums;
-	std::unique_ptr<Monotonic<Variables>[]> exceptionMBFs;
-	std::unique_ptr<int16_t[]> exceptionMBFClassSizes;
+struct TailThreadContext {
+	TailPreCompute preComputeBuffers[Variables];
 
-	TailRunningSumOptimization(size_t numMBFs) : runningSums(new RunningSumElement[numMBFs]), exceptionMBFs(new Monotonic<Variables>[numMBFs]), exceptionMBFClassSizes(new int16_t[numMBFs]) {}
+	const Monotonic<Variables>* allMBFs;
+	const ClassInfo* classInfos;
+	const int8_t* highestNonEmptyLayers;
+	const std::vector<BetaSumPair>* fullResultListPtr;
 
-	void opimizeTailPreCompute(const TailPreCompute& tailPreCompute, size_t upToBotMBF, const Monotonic<Variables>* mbfs, const ClassInfo* classInfos) {
-		RunningSumElement running;
-		running.runningSum = 0;
-		running.exceptionCount = 0;
-		for(size_t i = 0; i < upToBotMBF; i++) {
-			runningSums[i] = running;
+	NUMAArray<NodeIndex> exceptionBuffer;
 
-			if(tailPreCompute.precomputedCounts[i] != TailPreCompute::NO_PRECOMPUTE) {
-				running.runningSum += tailPreCompute.precomputedCounts[i];
+	TailThreadContext(size_t numBottoms, int numaNode, const Monotonic<Variables>* allMBFs, const ClassInfo* classInfos, const int8_t* highestNonEmptyLayers, const std::vector<BetaSumPair>& fullResultList) :
+		allMBFs(allMBFs), 
+		classInfos(classInfos),
+		highestNonEmptyLayers(highestNonEmptyLayers),
+		fullResultListPtr(&fullResultList) {
+		for(unsigned int i = 0; i < Variables; i++) {
+			preComputeBuffers[i] = TailPreCompute(numBottoms, numaNode);
+		}
+
+		exceptionBuffer = NUMAArray<NodeIndex>::alloc_onsocket(numBottoms, numaNode);
+	}
+
+	void checkWithRunningSumsOptimization(
+		const TailPreCompute& tailPreCompute,
+		const std::vector<JobTopInfo>& tops) { // Expects tops to be sorted
+		
+		uint64_t runningSum = 0;
+		NodeIndex curBot = 0;
+		size_t exceptionUpTo = 0;
+		
+		for(JobTopInfo info : tops) {
+			for(; curBot < info.topDual; curBot++) {
+				if(tailPreCompute.precomputedCounts[curBot] != TailPreCompute::NO_PRECOMPUTE) {
+					runningSum += tailPreCompute.precomputedCounts[curBot];
+				} else {
+					exceptionBuffer[exceptionUpTo++] = curBot;
+				}
+			}
+
+			FastPermutationCounter<Variables> counter;
+			if(exceptionUpTo > 0) counter.init(allMBFs[info.top]);
+
+			uint64_t totalExceptionSum = 0;
+			for(size_t i = 0; i < exceptionUpTo; i++) {
+				NodeIndex exceptionBot = exceptionBuffer[i];
+				totalExceptionSum += counter.template countPermutes<false>(allMBFs[exceptionBot]) * classInfos[exceptionBot].classSize;
+			}
+
+			uint64_t totalSum = runningSum * factorial(Variables) + totalExceptionSum;
+
+			const std::vector<BetaSumPair>& fullResultsList = *fullResultListPtr;
+			if(totalSum != fullResultsList[info.top].betaSum.countedIntervalSizeDown) {
+				std::cout << "Top " + std::to_string(info.top) + " is certainly wrong! Bad intervalSizeDown: (should be: " << totalSum / factorial(Variables) << ", found: " << fullResultsList[info.top].betaSum.countedIntervalSizeDown / factorial(Variables) << ") // classSize=" << classInfos[info.top].classSize << ", bs_dual=" << fullResultsList[info.top].betaSumDualDedup.countedIntervalSizeDown << std::endl;
 			} else {
-				exceptionMBFClassSizes[running.exceptionCount] = static_cast<int16_t>(classInfos[i].classSize);
-				exceptionMBFs[running.exceptionCount] = mbfs[i];
-				running.exceptionCount++;
+				//std::cout << "Top " + std::to_string(info.top) + " correct.\n" << std::flush;
 			}
 		}
 	}
 
-	uint64_t computeCountForTop(Monotonic<Variables> top, NodeIndex topDualIdx) const {
-		RunningSumElement sumInfo = runningSums[topDualIdx];
-		uint64_t exceptionSum = 0;
-		if(sumInfo.exceptionCount > 0) {
-			FastPermutationCounter<Variables> fastPermuter;
-			fastPermuter.init(top);
+	void checkWithRunningSumsOptimizationAndSharedTopStub(
+		const TailPreCompute& tailPreCompute,
+		const std::vector<JobTopInfo>& tops,
+		Monotonic<Variables> topStub,
+		int topStubHighestLayer) { // Expects tops to be sorted
+		
+		uint64_t runningSum = 0;
+		NodeIndex curBot = 0;
+		size_t exceptionUpTo = 0;
+		
+		FastPermutationCounter<Variables> topStubCounter;
+		topStubCounter.init(topStub);
+		for(JobTopInfo info : tops) {
+			for(; curBot < info.topDual; curBot++) {
+				if(tailPreCompute.precomputedCounts[curBot] != TailPreCompute::NO_PRECOMPUTE) {
+					runningSum += tailPreCompute.precomputedCounts[curBot] * factorial(Variables);
+				} else if(highestNonEmptyLayers[curBot] <= topStubHighestLayer) {
+					runningSum += topStubCounter.template countPermutes<false>(allMBFs[curBot]) * classInfos[curBot].classSize;
+				} else {
+					exceptionBuffer[exceptionUpTo++] = curBot;
+				}
+			}
 
-			std::cout << "Exceptions: " << sumInfo.exceptionCount << std::endl;
-			for(size_t i = 0; i < sumInfo.exceptionCount; i++) {
-				exceptionSum += static_cast<uint64_t>(fastPermuter.template countPermutes<false>(exceptionMBFs[i])) * exceptionMBFClassSizes[i];
+			FastPermutationCounter<Variables> counter;
+			if(exceptionUpTo > 0) counter.init(allMBFs[info.top]);
+
+			uint64_t totalExceptionSum = 0;
+			for(size_t i = 0; i < exceptionUpTo; i++) {
+				NodeIndex exceptionBot = exceptionBuffer[i];
+				totalExceptionSum += counter.template countPermutes<false>(allMBFs[exceptionBot]) * classInfos[exceptionBot].classSize;
+			}
+
+			uint64_t totalSum = runningSum + totalExceptionSum;
+
+			const std::vector<BetaSumPair>& fullResultsList = *fullResultListPtr;
+			if(totalSum != fullResultsList[info.top].betaSum.countedIntervalSizeDown) {
+				std::cout << "Top " + std::to_string(info.top) + " is certainly wrong! Bad intervalSizeDown: (should be: " << totalSum / factorial(Variables) << ", found: " << fullResultsList[info.top].betaSum.countedIntervalSizeDown / factorial(Variables) << ") // classSize=" << classInfos[info.top].classSize << ", bs_dual=" << fullResultsList[info.top].betaSumDualDedup.countedIntervalSizeDown << std::endl;
+			} else {
+				//std::cout << "Top " + std::to_string(info.top) + " correct.\n" << std::flush;
 			}
 		}
-
-		//std::cout << "Cached sum: " << sumInfo.runningSum << "    Exception Sum: " << exceptionSum / factorial(Variables) << std::endl;
-		return sumInfo.runningSum * factorial(Variables) + exceptionSum;
 	}
 };
+
+template<unsigned int Variables>
+struct std::hash<BooleanFunction<Variables>> {
+	size_t operator()(const BooleanFunction<Variables>& bf) const noexcept {
+		return bf.hash();
+	}
+};
+
+template<unsigned int Variables>
+struct std::hash<Monotonic<Variables>> {
+	size_t operator()(const Monotonic<Variables>& mbf) const noexcept {
+		return mbf.bf.hash();
+	}
+};
+
+template<unsigned int Variables>
+struct std::hash<AntiChain<Variables>> {
+	size_t operator()(const AntiChain<Variables>& ac) const noexcept {
+		return ac.bf.hash();
+	}
+};
+
+template<unsigned int Variables>
+struct std::hash<Layer<Variables>> {
+	size_t operator()(const Layer<Variables>& layer) const noexcept {
+		return layer.bf.hash();
+	}
+};
+
+template<unsigned int Variables>
+static std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> categoriseTops(int upToLayer, const std::vector<JobTopInfo>& tops, const Monotonic<Variables>* allMBFs) {
+	std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> result;
+
+	BooleanFunction<Variables> topMask = BooleanFunction<Variables>::empty();
+	for(int l = 0; l <= upToLayer; l++) {
+		topMask.bitset |= BooleanFunction<Variables>::layerMask(l);
+	}
+
+	for(JobTopInfo topInfo : tops) {
+		Monotonic<Variables> topMBF = allMBFs[topInfo.top];
+		topMBF.bf &= topMask;
+
+		Monotonic<Variables> canonized = topMBF.canonize();
+
+		auto found = result.find(canonized);
+		if(found != result.end()) {
+			found->second.push_back(topInfo);
+		} else {
+			result.emplace(canonized, std::vector<JobTopInfo>{topInfo});
+		}
+	}
+
+	return result;
+}
+
+template<typename K, typename V>
+std::vector<std::pair<K, V>> mapToVector(std::unordered_map<K, V>&& map) {
+	std::vector<std::pair<K, V>> result;
+	result.reserve(map.size());
+	for(std::pair<K, V>& entry : map) {
+		result.push_back(std::move(entry));
+	}
+	return result;
+}
+
+static NodeIndex getHighestDual(const std::vector<JobTopInfo>& tops) {
+	NodeIndex highestDual = 0;
+	for(JobTopInfo info : tops) {
+		if(info.topDual > highestDual) highestDual = info.topDual;
+	}
+	return highestDual;
+}
 
 template<unsigned int Variables>
 static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs) {
 	std::cout << "Checking tops tail" << std::endl;
 
 	// Don't count stuff that's been covered by checkTopsSecondHalfWithSwapper
-	constexpr int OFFSET_LAYER_FROM_CENTER = 3;
+	constexpr int OFFSET_LAYER_FROM_CENTER = 0;
 
 	// Start halfway, because lower tops are trivial to check
 	NodeIndex startAt = flatNodeLayerOffsets[Variables][(1 << Variables) / 2 + 1 + OFFSET_LAYER_FROM_CENTER];
@@ -644,34 +753,35 @@ static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const
 		topToCheckVectors[highestFullLayer].push_back(std::move(newElem));
 	}
 
-	std::unique_ptr<int8_t[]> highestNonEmptyLayerForBottoms(new int8_t[bottomsEndAt]);
-	for(size_t i = 0; i < bottomsEndAt; i++) {
-		highestNonEmptyLayerForBottoms[i] = getLowestEmptyLayer(allMBFs[i].bf) - 1;
+	std::unique_ptr<int8_t[]> highestNonEmptyLayers(new int8_t[mbfCounts[Variables]]);
+	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+		highestNonEmptyLayers[i] = getLowestEmptyLayer(allMBFs[i].bf) - 1;
 	}
 
-	size_t processedTops = 0;
 	for(int highestFullLayerOfTop = Variables; highestFullLayerOfTop >= 0; highestFullLayerOfTop--) {
+		std::vector<JobTopInfo>& curTopsVec = topToCheckVectors[highestFullLayerOfTop];
 		std::cout << "Highest full layer: " << highestFullLayerOfTop << std::endl;
-		size_t highestDual = bottomsEndAt;
-		TailPreCompute preCompute(highestDual);
-		preCompute.initFromHighestFullLayer(highestFullLayerOfTop, highestNonEmptyLayerForBottoms.get(), classInfos);
+		std::cout << "Number of tops with this: " << curTopsVec.size() << std::endl;
+		std::cout << "Sorting tops by ascending duals..." << std::endl;
+		std::sort(curTopsVec.begin(), curTopsVec.end(), [](JobTopInfo a, JobTopInfo b){return a.topDual < b.topDual;});
+		std::cout << "Sorting tops done." << std::endl;
 
-		TailRunningSumOptimization<Variables> optimizer(highestDual);
+		size_t highestDual = getHighestDual(curTopsVec);
+		TailPreCompute preCompute(highestDual+1, 0);
+		preCompute.initFromHighestFullLayer(highestDual, highestFullLayerOfTop, highestNonEmptyLayers.get(), classInfos);
+		
+		TailThreadContext<Variables> threadContext(highestDual+1, 0, allMBFs, classInfos, highestNonEmptyLayers.get(), fullResultsList);
+		
+		if(highestFullLayerOfTop < Variables) {
+			std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> topCategories = categoriseTops(highestFullLayerOfTop+1, curTopsVec, allMBFs);
+			for(const auto& entry : topCategories) {
+				Monotonic<Variables> sharedTopStub = entry.first;
+				const std::vector<JobTopInfo>& topsThatShareThisStub = entry.second;
 
-		optimizer.opimizeTailPreCompute(preCompute, highestDual, allMBFs, classInfos);
-
-		processedTops++;
-		if(processedTops % 10000 == 0) {
-			std::cout << processedTops << std::endl;
-		}
-		for(JobTopInfo info : topToCheckVectors[highestFullLayerOfTop]) {
-			uint64_t resultForThisTop = optimizer.computeCountForTop(allMBFs[info.top], info.topDual);
-
-			if(resultForThisTop != fullResultsList[info.top].betaSum.countedIntervalSizeDown) {
-				std::cout << "Top " + std::to_string(info.top) + " is certainly wrong! Bad intervalSizeDown: (should be: " << resultForThisTop / factorial(Variables) << ", found: " << fullResultsList[info.top].betaSum.countedIntervalSizeDown / factorial(Variables) << ") // classSize=" << classInfos[info.top].classSize << ", bs_dual=" << fullResultsList[info.top].betaSumDualDedup.countedIntervalSizeDown << std::endl;
-			} else {
-				//std::cout << "Top " + std::to_string(info.top) + " correct.\n" << std::flush;
+				threadContext.checkWithRunningSumsOptimizationAndSharedTopStub(preCompute, topsThatShareThisStub, sharedTopStub, highestFullLayerOfTop+1);
 			}
+		} else {
+			threadContext.checkWithRunningSumsOptimization(preCompute, curTopsVec);
 		}
 	}
 }
@@ -1031,7 +1141,7 @@ void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
 	std::cout << "Running checkTopsTail..." << std::endl;
 	checkTopsTail<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
 
-	std::cout << "Loading flatLinks..." << std::endl;
+	/*std::cout << "Loading flatLinks..." << std::endl;
 	const uint32_t* flatLinks = readFlatBuffer<uint32_t>(FileName::mbfStructure(Variables), getTotalLinkCount(Variables));
 	
 	std::cout << "Running checkTopsSecondHalfWithSwapper..." << std::endl;
@@ -1041,12 +1151,12 @@ void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
 
 	std::cout << "Computation finished." << std::endl;
 	u192 dedekindNumber = computeDedekindNumberFromBetaSums(Variables, fullResultsList);
-	std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;
+	std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;*/
 
 	freeFlatBuffer(flatNodes, mbfCounts[Variables]);
 	freeFlatBuffer(classInfos, mbfCounts[Variables]);
 	freeFlatBuffer(allMBFs, mbfCounts[Variables]);
-	freeFlatBuffer(flatLinks, getTotalLinkCount(Variables));
+	//freeFlatBuffer(flatLinks, getTotalLinkCount(Variables));
 }
 
 template<unsigned int Variables>
