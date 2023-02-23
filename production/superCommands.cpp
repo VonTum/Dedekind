@@ -796,20 +796,52 @@ static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const
 
 		size_t highestDual = getHighestDual(curTopsVec);
 		TailPreCompute preCompute(highestDual+1, 0);
+
+		std::cout << "initFromHighestFullLayer..." << std::endl;
 		preCompute.initFromHighestFullLayer(highestDual, highestFullLayerOfTop, highestNonEmptyLayers.get(), classInfos);
 		
-		TailThreadContext<Variables> threadContext(highestDual+1, 0, allMBFs, classInfos, highestNonEmptyLayers.get(), fullResultsList);
-		
 		if(highestFullLayerOfTop < int(Variables) - 2) { // Don't bother using advanced techniques for really high tops
+			std::cout << "Categorising tops..." << std::endl;
 			std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> topCategories = categoriseTops(highestFullLayerOfTop+1, curTopsVec, allMBFs);
-			for(const auto& entry : topCategories) {
+			std::cout << "Categorising tops done" << std::endl;
+
+			/*std::vector<std::pair<Monotonic<Variables>, std::vector<JobTopInfo>>> topCategoriesVector = mapToVector(topCategories);
+			std::cout << "Converted to vector. " << topCategoriesVector.size() << " top categories found!" << std::endl;
+
+			std::sort(topCategoriesVector.begin(), topCategoriesVector.end(), [](const auto& a, const auto& b){
+				return a.second.size() > b.second.size(); // Sort big vectors first, that way we do expensive stuff first
+			});*/
+
+			std::mutex iterMutex;
+			auto topCategoriesIter = topCategories.begin();
+			auto topCategoriesIterEnd = topCategories.end();
+			runInParallelOnAllCores([&](int threadID){
+				TailThreadContext<Variables> threadContext(highestDual+1, threadID / 16, allMBFs, classInfos, highestNonEmptyLayers.get(), fullResultsList);
+
+				iterMutex.lock();
+				while(topCategoriesIter != topCategoriesIterEnd) {
+					++topCategoriesIter;
+					const auto& entry = *topCategoriesIter;
+					iterMutex.unlock();
+
+					Monotonic<Variables> sharedTopStub = entry.first;
+					const std::vector<JobTopInfo>& topsThatShareThisStub = entry.second;
+					threadContext.checkTopsTailRecurse(preCompute, 0, topsThatShareThisStub, sharedTopStub, highestFullLayerOfTop+1);
+
+					iterMutex.lock();
+				}
+				iterMutex.unlock();
+			});
+			/*for(const auto& entry : topCategories) {
 				Monotonic<Variables> sharedTopStub = entry.first;
 				const std::vector<JobTopInfo>& topsThatShareThisStub = entry.second;
 				std::cout << "Top subset of size " << topsThatShareThisStub.size() << std::endl;
 
 				threadContext.checkTopsTailRecurse(preCompute, 0, topsThatShareThisStub, sharedTopStub, highestFullLayerOfTop+1);
-			}
+			}*/
 		} else {
+			std::cout << "Running checkWithRunningSumsOptimization" << std::endl;
+			TailThreadContext<Variables> threadContext(highestDual+1, 0, allMBFs, classInfos, highestNonEmptyLayers.get(), fullResultsList);
 			threadContext.checkWithRunningSumsOptimization(preCompute, curTopsVec);
 		}
 	}

@@ -193,3 +193,9 @@ void runInParallel(int threadCount, CPUAffinityType affinity, const Func& func) 
 
 	delete[] datas;
 }
+
+// Expects a function of the form void(int threadID)
+template<typename Func>
+void runInParallelOnAllCores(const Func& func) {
+	runInParallel(std::thread::hardware_concurrency(), CPUAffinityType::CORE, func);
+}

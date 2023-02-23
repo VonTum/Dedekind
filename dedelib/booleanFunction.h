@@ -1167,10 +1167,10 @@ int getHighestFullLayer(const BooleanFunction<Variables>& bf) {
 	for(int l = Variables; l >= 0; l--) {
 		BitSet<(1 << Variables)> missingBitsInLayer = andnot(BooleanFunction<Variables>::layerMask(l), bf.bitset);
 		if(missingBitsInLayer.isEmpty()) {
-			return l - 1;
+			return l;
 		}
 	}
-	return Variables;
+	return -1;
 }
 
 template<unsigned int Variables>
