@@ -556,6 +556,87 @@ struct TailPreCompute {
 	}
 };
 
+static NodeIndex getHighestDual(const std::vector<JobTopInfo>& tops) {
+	NodeIndex highestDual = 0;
+	for(JobTopInfo info : tops) {
+		if(info.topDual > highestDual) highestDual = info.topDual;
+	}
+	return highestDual;
+}
+
+static int8_t getHighestLayerOfTopVector(const std::vector<JobTopInfo>& tops, const int8_t* highestLayerBuffer) {
+	int8_t highest = 0;
+	for(JobTopInfo inf : tops) {
+		if(highestLayerBuffer[inf.top] > highest) highest = highestLayerBuffer[inf.top];
+	}
+	return highest;
+}
+
+template<unsigned int Variables>
+struct std::hash<BooleanFunction<Variables>> {
+	size_t operator()(const BooleanFunction<Variables>& bf) const noexcept {
+		return bf.hash();
+	}
+};
+
+template<unsigned int Variables>
+struct std::hash<Monotonic<Variables>> {
+	size_t operator()(const Monotonic<Variables>& mbf) const noexcept {
+		return mbf.bf.hash();
+	}
+};
+
+template<unsigned int Variables>
+struct std::hash<AntiChain<Variables>> {
+	size_t operator()(const AntiChain<Variables>& ac) const noexcept {
+		return ac.bf.hash();
+	}
+};
+
+template<unsigned int Variables>
+struct std::hash<Layer<Variables>> {
+	size_t operator()(const Layer<Variables>& layer) const noexcept {
+		return layer.bf.hash();
+	}
+};
+
+
+template<typename K, typename V>
+std::vector<std::pair<K, V>> mapToVector(std::unordered_map<K, V>&& map) {
+	std::vector<std::pair<K, V>> result;
+	result.reserve(map.size());
+	for(std::pair<K, V>& entry : map) {
+		result.push_back(std::move(entry));
+	}
+	return result;
+}
+
+template<unsigned int Variables>
+static std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> categoriseTops(int upToLayer, const std::vector<JobTopInfo>& tops, const Monotonic<Variables>* allMBFs) {
+	std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> result;
+
+	BooleanFunction<Variables> topMask = BooleanFunction<Variables>::empty();
+	for(int l = 0; l <= upToLayer; l++) {
+		topMask.bitset |= BooleanFunction<Variables>::layerMask(l);
+	}
+
+	for(JobTopInfo topInfo : tops) {
+		Monotonic<Variables> topMBF = allMBFs[topInfo.top];
+		topMBF.bf &= topMask;
+
+		Monotonic<Variables> canonized = topMBF.canonize();
+
+		auto found = result.find(canonized);
+		if(found != result.end()) {
+			found->second.push_back(topInfo);
+		} else {
+			result.emplace(canonized, std::vector<JobTopInfo>{topInfo});
+		}
+	}
+
+	return result;
+}
+
 template<unsigned int Variables>
 struct TailThreadContext {
 	TailPreCompute preComputeBuffers[Variables];
@@ -572,8 +653,8 @@ struct TailThreadContext {
 		classInfos(classInfos),
 		highestNonEmptyLayers(highestNonEmptyLayers),
 		fullResultListPtr(&fullResultList) {
-		for(unsigned int i = 0; i < Variables; i++) {
-			preComputeBuffers[i] = TailPreCompute(numBottoms, numaNode);
+		for(TailPreCompute& pre : preComputeBuffers) {
+			pre = TailPreCompute(numBottoms, numaNode);
 		}
 
 		exceptionBuffer = NUMAArray<NodeIndex>::alloc_onsocket(numBottoms, numaNode);
@@ -658,79 +739,26 @@ struct TailThreadContext {
 			}
 		}
 	}
-};
 
-template<unsigned int Variables>
-struct std::hash<BooleanFunction<Variables>> {
-	size_t operator()(const BooleanFunction<Variables>& bf) const noexcept {
-		return bf.hash();
-	}
-};
+	void checkTopsTailRecurse(const TailPreCompute& parentPreCompute, int recurseDepth, const std::vector<JobTopInfo>& tops, Monotonic<Variables> topStub, int topStubHighestLayer) {
+		int highestLayerOfTops = getHighestLayerOfTopVector(tops, highestNonEmptyLayers);
+		
+		if(highestLayerOfTops > topStubHighestLayer + 1) {
+			TailPreCompute& childPreCompute = this->preComputeBuffers[recurseDepth];
+			childPreCompute.initFromExtendingPreviousPreCompute(parentPreCompute, getHighestDual(tops), topStubHighestLayer, topStub, allMBFs, highestNonEmptyLayers, classInfos);
 
-template<unsigned int Variables>
-struct std::hash<Monotonic<Variables>> {
-	size_t operator()(const Monotonic<Variables>& mbf) const noexcept {
-		return mbf.bf.hash();
-	}
-};
+			std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> topCategories = categoriseTops(topStubHighestLayer + 1, tops, allMBFs);
+			for(const auto& entry : topCategories) {
+				Monotonic<Variables> sharedTopStub = entry.first;
+				const std::vector<JobTopInfo>& topsThatShareThisStub = entry.second;
 
-template<unsigned int Variables>
-struct std::hash<AntiChain<Variables>> {
-	size_t operator()(const AntiChain<Variables>& ac) const noexcept {
-		return ac.bf.hash();
-	}
-};
-
-template<unsigned int Variables>
-struct std::hash<Layer<Variables>> {
-	size_t operator()(const Layer<Variables>& layer) const noexcept {
-		return layer.bf.hash();
-	}
-};
-
-template<unsigned int Variables>
-static std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> categoriseTops(int upToLayer, const std::vector<JobTopInfo>& tops, const Monotonic<Variables>* allMBFs) {
-	std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> result;
-
-	BooleanFunction<Variables> topMask = BooleanFunction<Variables>::empty();
-	for(int l = 0; l <= upToLayer; l++) {
-		topMask.bitset |= BooleanFunction<Variables>::layerMask(l);
-	}
-
-	for(JobTopInfo topInfo : tops) {
-		Monotonic<Variables> topMBF = allMBFs[topInfo.top];
-		topMBF.bf &= topMask;
-
-		Monotonic<Variables> canonized = topMBF.canonize();
-
-		auto found = result.find(canonized);
-		if(found != result.end()) {
-			found->second.push_back(topInfo);
+				this->checkTopsTailRecurse(childPreCompute, recurseDepth+1, topsThatShareThisStub, sharedTopStub, topStubHighestLayer+1);
+			}
 		} else {
-			result.emplace(canonized, std::vector<JobTopInfo>{topInfo});
+			this->checkWithRunningSumsOptimizationAndSharedTopStub(parentPreCompute, tops, topStub, topStubHighestLayer);
 		}
 	}
-
-	return result;
-}
-
-template<typename K, typename V>
-std::vector<std::pair<K, V>> mapToVector(std::unordered_map<K, V>&& map) {
-	std::vector<std::pair<K, V>> result;
-	result.reserve(map.size());
-	for(std::pair<K, V>& entry : map) {
-		result.push_back(std::move(entry));
-	}
-	return result;
-}
-
-static NodeIndex getHighestDual(const std::vector<JobTopInfo>& tops) {
-	NodeIndex highestDual = 0;
-	for(JobTopInfo info : tops) {
-		if(info.topDual > highestDual) highestDual = info.topDual;
-	}
-	return highestDual;
-}
+};
 
 template<unsigned int Variables>
 static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs) {
@@ -741,7 +769,7 @@ static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const
 
 	// Start halfway, because lower tops are trivial to check
 	NodeIndex startAt = flatNodeLayerOffsets[Variables][(1 << Variables) / 2 + 1 + OFFSET_LAYER_FROM_CENTER];
-	NodeIndex bottomsEndAt = flatNodeLayerOffsets[Variables][(1 << Variables) / 2 - OFFSET_LAYER_FROM_CENTER];
+	//NodeIndex bottomsEndAt = flatNodeLayerOffsets[Variables][(1 << Variables) / 2 - OFFSET_LAYER_FROM_CENTER];
 
 	std::vector<JobTopInfo> topToCheckVectors[Variables+1];
 	for(NodeIndex top = startAt; top < mbfCounts[Variables]; top++) {
@@ -772,13 +800,14 @@ static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const
 		
 		TailThreadContext<Variables> threadContext(highestDual+1, 0, allMBFs, classInfos, highestNonEmptyLayers.get(), fullResultsList);
 		
-		if(highestFullLayerOfTop < Variables) {
+		if(highestFullLayerOfTop < int(Variables) - 2) { // Don't bother using advanced techniques for really high tops
 			std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> topCategories = categoriseTops(highestFullLayerOfTop+1, curTopsVec, allMBFs);
 			for(const auto& entry : topCategories) {
 				Monotonic<Variables> sharedTopStub = entry.first;
 				const std::vector<JobTopInfo>& topsThatShareThisStub = entry.second;
+				std::cout << "Top subset of size " << topsThatShareThisStub.size() << std::endl;
 
-				threadContext.checkWithRunningSumsOptimizationAndSharedTopStub(preCompute, topsThatShareThisStub, sharedTopStub, highestFullLayerOfTop+1);
+				threadContext.checkTopsTailRecurse(preCompute, 0, topsThatShareThisStub, sharedTopStub, highestFullLayerOfTop+1);
 			}
 		} else {
 			threadContext.checkWithRunningSumsOptimization(preCompute, curTopsVec);
