@@ -659,7 +659,7 @@ struct TailThreadContext {
 			pre = TailPreCompute(numBottoms, numaNode);
 		}
 
-		exceptionBuffer = NUMAArray<NodeIndex>::alloc_onsocket(numBottoms, numaNode);
+		exceptionBuffer = NUMAArray<NodeIndex>::alloc_onnode(numBottoms, numaNode);
 	}
 
 	void checkWithRunningSumsOptimization(
@@ -768,16 +768,16 @@ struct TailThreadContext {
 	}
 };
 
+// Don't count stuff that's been covered by checkTopsSecondHalfWithSwapper
 template<unsigned int Variables>
-static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs) {
+static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, int offsetLayerFromCenter) {
 	std::cout << "Checking tops tail" << std::endl;
 
-	// Don't count stuff that's been covered by checkTopsSecondHalfWithSwapper
-	constexpr int OFFSET_LAYER_FROM_CENTER = 0;
+	
 
 	// Start halfway, because lower tops are trivial to check
-	NodeIndex startAt = flatNodeLayerOffsets[Variables][(1 << Variables) / 2 + 1 + OFFSET_LAYER_FROM_CENTER];
-	//NodeIndex bottomsEndAt = flatNodeLayerOffsets[Variables][(1 << Variables) / 2 - OFFSET_LAYER_FROM_CENTER];
+	NodeIndex startAt = flatNodeLayerOffsets[Variables][(1 << Variables) / 2 + 1 + offsetLayerFromCenter];
+	//NodeIndex bottomsEndAt = flatNodeLayerOffsets[Variables][(1 << Variables) / 2 - offsetLayerFromCenter];
 
 	std::vector<JobTopInfo> topToCheckVectors[Variables+1];
 	for(NodeIndex top = startAt; top < mbfCounts[Variables]; top++) {
@@ -1209,7 +1209,7 @@ void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
 	//checkTopsSecondHalfNaive<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
 	
 	std::cout << "Running checkTopsTail..." << std::endl;
-	checkTopsTail<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
+	checkTopsTail<Variables>(fullResultsList, flatNodes, classInfos, allMBFs, layer);
 
 	/*std::cout << "Loading flatLinks..." << std::endl;
 	const uint32_t* flatLinks = readFlatBuffer<uint32_t>(FileName::mbfStructure(Variables), getTotalLinkCount(Variables));
