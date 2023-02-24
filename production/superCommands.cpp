@@ -638,6 +638,41 @@ static std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> categor
 }
 
 static std::atomic<int> totalNumberOfCheckedTops;
+/*static std::atomic<size_t> totalBenchmarkPoints;
+
+
+struct Benchmarker{
+	std::atomic<uint64_t> v;
+	Benchmarker() {
+		v.store(0);
+		totalBenchmarkPoints.store(0);
+	}
+
+	uint64_t getTotalMillis() const {
+		return v.load() >> 20;
+	}
+
+	uint64_t getCount() const {
+		return v.load() & ((1ULL << 20) - 1);
+	}
+
+	static Benchmarker categoriseTopsTime;
+	static Benchmarker runningSumTime;
+	static Benchmarker extendingTime;
+	static Benchmarker otherTime;
+
+	void addBenchData(std::chrono::duration<std::chrono::nanoseconds, > time) {
+		v.fetch_add(((uint64_t(time.count().count()) / 1000000) << 20) + 1);
+
+		if(totalBenchmarkPoints.fetch_add(1) % 1000 == 0) {
+			std::cout << "categoriseTopsTime: " + std::to_string(categoriseTopsTime.getTotalMillis()) + "ms #" + std::to_string(categoriseTopsTime.getCount())
+			+ "\nrunningSumTime: " + std::to_string(runningSumTime.getTotalMillis()) + "ms #" + std::to_string(runningSumTime.getCount())
+			+ "\nextendingTime: " + std::to_string(extendingTime.getTotalMillis()) + "ms #" + std::to_string(extendingTime.getCount())
+			+ "\notherTime: " + std::to_string(otherTime.getTotalMillis()) + "ms #" + std::to_string(otherTime.getCount()) + "\n" << std::flush;
+		}	
+	}
+};*/
+
 
 template<unsigned int Variables>
 struct TailThreadContext {
@@ -749,13 +784,23 @@ struct TailThreadContext {
 	}
 
 	void checkTopsTailRecurse(const TailPreCompute& parentPreCompute, int recurseDepth, const std::vector<JobTopInfo>& tops, Monotonic<Variables> topStub, int topStubHighestLayer) {
+		//auto startTime = std::chrono::high_resolution_clock::now();
+
 		int highestLayerOfTops = getHighestLayerOfTopVector(tops, highestNonEmptyLayers);
+		//auto highestLayerOfTopsDoneTime = std::chrono::high_resolution_clock::now();
+		//Benchmarker::otherTime.addBenchData(highestLayerOfTopsDoneTime - startTime);
+		
 		
 		if(highestLayerOfTops > topStubHighestLayer + 1) {
 			TailPreCompute& childPreCompute = this->preComputeBuffers[recurseDepth];
 			childPreCompute.initFromExtendingPreviousPreCompute(parentPreCompute, getHighestDual(tops), topStubHighestLayer, topStub, allMBFs, highestNonEmptyLayers, classInfos);
+			//auto extendingDoneTime = std::chrono::high_resolution_clock::now();
+			//Benchmarker::extendingTime.addBenchData(extendingDoneTime - highestLayerOfTopsDoneTime);
 
 			std::unordered_map<Monotonic<Variables>, std::vector<JobTopInfo>> topCategories = categoriseTops(topStubHighestLayer + 1, tops, allMBFs);
+			//auto categoriseTime = std::chrono::high_resolution_clock::now();
+			//Benchmarker::categoriseTopsTime.addBenchData(categoriseTime - extendingDoneTime);
+
 			for(const auto& entry : topCategories) {
 				Monotonic<Variables> sharedTopStub = entry.first;
 				const std::vector<JobTopInfo>& topsThatShareThisStub = entry.second;
@@ -764,6 +809,8 @@ struct TailThreadContext {
 			}
 		} else {
 			this->checkWithRunningSumsOptimizationAndSharedTopStub(parentPreCompute, tops, topStub, topStubHighestLayer);
+			//auto runningSumTime = std::chrono::high_resolution_clock::now();
+			//Benchmarker::runningSumTime.addBenchData(runningSumTime - highestLayerOfTopsDoneTime);
 		}
 	}
 };
@@ -829,12 +876,13 @@ static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const
 
 				iterMutex.lock();
 				while(topCategoriesIter != topCategoriesIterEnd) {
-					const auto& entry = *topCategoriesIter;
+					auto entry = std::move(*topCategoriesIter);
 					Monotonic<Variables> sharedTopStub = entry.first;
-					std::vector<JobTopInfo> topsThatShareThisStub = entry.second;
+					const std::vector<JobTopInfo>& topsThatShareThisStub = entry.second;
 					++topCategoriesIter;
 					iterMutex.unlock();
 
+					std::cout << "Category Size " << sharedTopStub.size() << std::endl;
 					threadContext.checkTopsTailRecurse(preCompute, 0, topsThatShareThisStub, sharedTopStub, highestFullLayerOfTop+1);
 
 					iterMutex.lock();
@@ -1147,36 +1195,38 @@ static void checkTopsSecondHalfWithSwapper(const std::vector<BetaSumPair>& fullR
 
 
 
-template<unsigned int Variables>
-void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
-	
-	/*std::cout << "Loading allMBFs..." << std::endl;
-	const Monotonic<Variables>* allMBFsBench = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+void findErrorInNearlyCorrectResultsCheckBasicsAndFirstHalf(const std::vector<std::string>& args) {
+	unsigned int Variables = std::stoi(args[0]);
+	std::string allResultsPath = args[1];
 
-	for(int run = 0; run < 10; run++) {
-		FastPermutationCounter<Variables> cntr;
-		Monotonic<Variables> bot = allMBFsBench[300000000+run];
-		cntr.init(bot);
-
-		std::cout << "Starting test..." << std::endl;
-		auto start = std::chrono::high_resolution_clock::now();
-		unsigned int totalPermutes = 0;
-		for(int i = 0; i < 490000; i++) {
-			Monotonic<Variables> top = allMBFsBench[i * 1000];
-			top.forEachPermutation([&](Monotonic<Variables> permut){
-				if(bot <= permut) totalPermutes++;
-			});
-			//totalPermutes += cntr.template countPermutes<true>(top);
-		}
-		auto duration = std::chrono::high_resolution_clock::now() - start;
-		std::cout << "Took " << (duration.count() / 1.0e9) << " seconds. totalPermutes=" << totalPermutes << std::endl;
+	std::cout << "Loading fullResultsList..." << std::endl;
+	std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
+	{
+		std::ifstream allResultsFile(allResultsPath);
+		allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
 	}
-	return;*/
+	if(fullResultsList[20].betaSum.betaSum == 0) {
+		std::cerr << "results file not read properly!\n";
+		exit(-1);
+	}
+	
+	std::cout << "Running check0AndModuloVariables..." << std::endl;
+	check0AndModuloVariables(Variables, fullResultsList);
 
+	std::cout << "Loading flatNodes..." << std::endl;
+	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
+	std::cout << "Loading classInfos..." << std::endl;
+	const ClassInfo* classInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
 
+	std::cout << "Running checkTopsFirstHalf..." << std::endl;
+	checkTopsFirstHalf(Variables, fullResultsList, flatNodes, classInfos);
 
+	freeFlatBuffer(flatNodes, mbfCounts[Variables]);
+	freeFlatBuffer(classInfos, mbfCounts[Variables]);
+}
 
-
+template<unsigned int Variables>
+void findErrorInNearlyCorrectResultsCheckMiddleLayer(const std::vector<std::string>& args) {
 	std::string allResultsPath = args[0];
 	int layer = std::stoi(args[1]);
 
@@ -1191,42 +1241,56 @@ void findErrorInNearlyCorrectResults(const std::vector<std::string>& args) {
 		exit(-1);
 	}
 	
-
-	std::cout << "Running check0AndModuloVariables..." << std::endl;
-	check0AndModuloVariables(Variables, fullResultsList);
-
 	std::cout << "Loading flatNodes..." << std::endl;
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
 	std::cout << "Loading classInfos..." << std::endl;
 	const ClassInfo* classInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
-
-	std::cout << "Running checkTopsFirstHalf..." << std::endl;
-	checkTopsFirstHalf(Variables, fullResultsList, flatNodes, classInfos);
-
 	std::cout << "Loading allMBFs..." << std::endl;
 	const Monotonic<Variables>* allMBFs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
-
-	//checkTopsSecondHalfNaive<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
-	
-	std::cout << "Running checkTopsTail..." << std::endl;
-	checkTopsTail<Variables>(fullResultsList, flatNodes, classInfos, allMBFs, layer);
-
-	/*std::cout << "Loading flatLinks..." << std::endl;
+	std::cout << "Loading flatLinks..." << std::endl;
 	const uint32_t* flatLinks = readFlatBuffer<uint32_t>(FileName::mbfStructure(Variables), getTotalLinkCount(Variables));
+	
+	//checkTopsSecondHalfNaive<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
 	
 	std::cout << "Running checkTopsSecondHalfWithSwapper..." << std::endl;
 	checkTopsSecondHalfWithSwapper<Variables>(fullResultsList, flatNodes, classInfos, allMBFs, flatLinks, layer);
 
 	std::cout << "All Checks done" << std::endl;
 
-	std::cout << "Computation finished." << std::endl;
-	u192 dedekindNumber = computeDedekindNumberFromBetaSums(Variables, fullResultsList);
-	std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;*/
+	freeFlatBuffer(flatNodes, mbfCounts[Variables]);
+	freeFlatBuffer(classInfos, mbfCounts[Variables]);
+	freeFlatBuffer(allMBFs, mbfCounts[Variables]);
+	freeFlatBuffer(flatLinks, getTotalLinkCount(Variables));
+}
+
+template<unsigned int Variables>
+void findErrorInNearlyCorrectResultsCheckTail(const std::vector<std::string>& args) {
+	std::string allResultsPath = args[0];
+	int layer = std::stoi(args[1]);
+
+	std::cout << "Loading fullResultsList..." << std::endl;
+	std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
+	{
+		std::ifstream allResultsFile(allResultsPath);
+		allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+	}
+	if(fullResultsList[20].betaSum.betaSum == 0) {
+		std::cerr << "results file not read properly!\n";
+		exit(-1);
+	}
+	
+	std::cout << "Loading flatNodes..." << std::endl;
+	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
+	std::cout << "Loading classInfos..." << std::endl;
+	const ClassInfo* classInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
+	std::cout << "Loading allMBFs..." << std::endl;
+	const Monotonic<Variables>* allMBFs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+	std::cout << "Running checkTopsTail..." << std::endl;
+	checkTopsTail<Variables>(fullResultsList, flatNodes, classInfos, allMBFs, layer);
 
 	freeFlatBuffer(flatNodes, mbfCounts[Variables]);
 	freeFlatBuffer(classInfos, mbfCounts[Variables]);
 	freeFlatBuffer(allMBFs, mbfCounts[Variables]);
-	//freeFlatBuffer(flatLinks, getTotalLinkCount(Variables));
 }
 
 template<unsigned int Variables>
@@ -1498,13 +1562,24 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 		std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;
 	}},
 
-	{"findErrorInNearlyCorrectResults1", findErrorInNearlyCorrectResults<1>},
-	{"findErrorInNearlyCorrectResults2", findErrorInNearlyCorrectResults<2>},
-	{"findErrorInNearlyCorrectResults3", findErrorInNearlyCorrectResults<3>},
-	{"findErrorInNearlyCorrectResults4", findErrorInNearlyCorrectResults<4>},
-	{"findErrorInNearlyCorrectResults5", findErrorInNearlyCorrectResults<5>},
-	{"findErrorInNearlyCorrectResults6", findErrorInNearlyCorrectResults<6>},
-	{"findErrorInNearlyCorrectResults7", findErrorInNearlyCorrectResults<7>},
+
+	{"findErrorInNearlyCorrectResultsCheckBasicsAndFirstHalf", findErrorInNearlyCorrectResultsCheckBasicsAndFirstHalf},
+
+	{"findErrorInNearlyCorrectResultsCheckMiddleLayer1", findErrorInNearlyCorrectResultsCheckMiddleLayer<1>},
+	{"findErrorInNearlyCorrectResultsCheckMiddleLayer2", findErrorInNearlyCorrectResultsCheckMiddleLayer<2>},
+	{"findErrorInNearlyCorrectResultsCheckMiddleLayer3", findErrorInNearlyCorrectResultsCheckMiddleLayer<3>},
+	{"findErrorInNearlyCorrectResultsCheckMiddleLayer4", findErrorInNearlyCorrectResultsCheckMiddleLayer<4>},
+	{"findErrorInNearlyCorrectResultsCheckMiddleLayer5", findErrorInNearlyCorrectResultsCheckMiddleLayer<5>},
+	{"findErrorInNearlyCorrectResultsCheckMiddleLayer6", findErrorInNearlyCorrectResultsCheckMiddleLayer<6>},
+	{"findErrorInNearlyCorrectResultsCheckMiddleLayer7", findErrorInNearlyCorrectResultsCheckMiddleLayer<7>},
+
+	{"findErrorInNearlyCorrectResultsCheckTail1", findErrorInNearlyCorrectResultsCheckTail<1>},
+	{"findErrorInNearlyCorrectResultsCheckTail2", findErrorInNearlyCorrectResultsCheckTail<2>},
+	{"findErrorInNearlyCorrectResultsCheckTail3", findErrorInNearlyCorrectResultsCheckTail<3>},
+	{"findErrorInNearlyCorrectResultsCheckTail4", findErrorInNearlyCorrectResultsCheckTail<4>},
+	{"findErrorInNearlyCorrectResultsCheckTail5", findErrorInNearlyCorrectResultsCheckTail<5>},
+	{"findErrorInNearlyCorrectResultsCheckTail6", findErrorInNearlyCorrectResultsCheckTail<6>},
+	{"findErrorInNearlyCorrectResultsCheckTail7", findErrorInNearlyCorrectResultsCheckTail<7>},
 
 	{"correctTops1", correctTops<1>},
 	{"correctTops2", correctTops<2>},
