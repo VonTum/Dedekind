@@ -173,7 +173,7 @@ void runInParallel(int threadCount, CPUAffinityType affinity, const Func& func) 
 		const Func* f;
 		pthread_t thread;
 	};
-	ThreadData* datas = new ThreadData[threadCount];
+	ThreadData* datas = (ThreadData*) alloca(sizeof(ThreadData) * threadCount);
 
 	for(int i = 0; i < threadCount; i++) {
 		datas[i].threadID = i;
@@ -190,12 +190,69 @@ void runInParallel(int threadCount, CPUAffinityType affinity, const Func& func) 
 		void* ret = NULL;
 		pthread_join(datas[i].thread, &ret);
 	}
-
-	delete[] datas;
 }
 
 // Expects a function of the form void(int threadID)
 template<typename Func>
 void runInParallelOnAllCores(const Func& func) {
 	runInParallel(std::thread::hardware_concurrency(), CPUAffinityType::CORE, func);
+}
+
+// Expects a function of the form void(int threadID, IterT curElem)
+template<typename IterT, typename IntT, typename Func>
+void iterRangeInParallelBlocks(int threadCount, CPUAffinityType affinity, IterT start, IterT end, IntT blockSize, const Func& func) {
+	std::atomic<IterT> idxAtomic;
+	idxAtomic.store(start);
+
+	struct ThreadData {
+		int threadID;
+		std::atomic<IterT>* idxAtomic;
+		IterT idxEnd;
+		IntT blockSize;
+		const Func* f;
+		pthread_t thread;
+	};
+	ThreadData* datas = (ThreadData*) alloca(sizeof(ThreadData) * threadCount);
+
+	for(int i = 0; i < threadCount; i++) {
+		datas[i].threadID = i;
+		datas[i].idxAtomic = &idxAtomic;
+		datas[i].idxEnd = end;
+		datas[i].blockSize = blockSize;
+		datas[i].f = &func;
+		datas[i].thread = createPThreadAffinity(i, affinity, [](void* voidData) -> void* {
+			ThreadData* d = (ThreadData*) voidData;
+			int threadID = d->threadID;
+			const Func& func = *(d->f);
+			std::atomic<IterT>& idxAtomic = *(d->idxAtomic);
+			IterT end = d->idxEnd;
+			IntT blockSize = d->blockSize;
+			while(true) {
+				IterT grabbedBlock = idxAtomic.fetch_add(blockSize);
+				if(grabbedBlock >= end) {
+					pthread_exit(NULL);
+					return NULL;
+				}
+				IterT myEnd = grabbedBlock + blockSize;
+				if(myEnd >= end) {
+					myEnd = end;
+				}
+				do {
+					func(threadID, grabbedBlock);
+					++grabbedBlock;
+				} while(grabbedBlock < myEnd);
+			}
+		}, (void*) &datas[i]);
+	}
+
+	for(int i = 0; i < threadCount; i++) {
+		void* ret = NULL;
+		pthread_join(datas[i].thread, &ret);
+	}
+}
+
+// Expects a function of the form void(int threadID, IterT curElem)
+template<typename IterT, typename IntT, typename Func>
+void iterRangeInParallelBlocksOnAllCores(IterT start, IterT end, IntT blockSize, const Func& func) {
+	iterRangeInParallelBlocks<IterT, IntT, Func>(std::thread::hardware_concurrency(), CPUAffinityType::CORE, start, end, blockSize, func);
 }
