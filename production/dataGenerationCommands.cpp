@@ -306,7 +306,7 @@ void pawelskiAllIntervalsToTop() {
 		if(intervalSize != correctIntervalSize) {
 			std::cout << "Incorrect interval size for idx " << i << ": found=" << intervalSize << ", but correct=" << correctIntervalSize << std::endl;
 		}
-		uint64_t partialIntervalSize = partialIntervalCounter.intervalToTopSizeAboveSize(bot, 200);
+		uint64_t partialIntervalSize = partialIntervalCounter.intervalToTopSizeAboveSize(bot, 3);
 		if(partialIntervalSize != correctIntervalSize) {
 			std::cout << "Incorrect partial interval size for idx " << i << ": found=" << partialIntervalSize << ", but correct=" << correctIntervalSize << std::endl;
 		}

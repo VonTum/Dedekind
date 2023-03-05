@@ -935,6 +935,64 @@ static void checkTopsTail(const std::vector<BetaSumPair>& fullResultsList, const
 	std::cout << "Number of tops checked in this highestFullLayer: " << totalTopsProcessedAccordingToCategories << std::endl;
 }
 
+template<bool baseIsBottom, unsigned int Variables>
+uint64_t sumSegmentPermutations(Monotonic<Variables> base, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, NodeIndex from, NodeIndex to) {
+	uint64_t totalSum = 0;
+
+	FastPermutationCounter<Variables> permutationCounter;
+	permutationCounter.init(base);
+
+	for(NodeIndex i = from; i < to; i++) {
+		uint64_t count = permutationCounter.template countPermutes<baseIsBottom>(allMBFs[i]);
+		uint64_t classSize = classInfos[i].classSize;
+		uint64_t thisTerm = count * classSize;
+		totalSum += thisTerm;
+		assert(thisTerm % factorial(Variables) == 0);
+	}
+	return totalSum;
+}
+
+#include "../dedelib/pawelski.h"
+template<unsigned int Variables>
+static void checkTopsTailUsingPawelskiIntervalCounting(const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, NodeIndex firstMBF, NodeIndex mbfToCheckEnd) {
+	std::cout << "Checking tops tail with Pawelski IntervalCounting" << std::endl;
+
+	PawelskiPartialIntervalCounter<Variables> partialIntervalCounter;
+	std::cout << "Initialized partialIntervalCounter" << std::endl;
+
+	//for(NodeIndex topI = firstMBF; topI < mbfToCheckEnd; topI++) {
+	iterRangeInParallelBlocksOnAllCores(firstMBF, mbfToCheckEnd, 64, [&](int core, NodeIndex topI){
+		if(topI % (16*1024) == 0) std::cout << std::to_string(topI) + "\n" << std::flush;
+		int topLayer = getFlatLayerOfIndex(Variables, topI);
+		int topDualLayer = (1 << Variables) - topLayer;
+		NodeIndex topDual = flatNodes[topI].dual;
+		NodeIndex topDualLayerStart = flatNodeLayerOffsets[Variables][topDualLayer];
+		NodeIndex topDualLayerEnd = flatNodeLayerOffsets[Variables][topDualLayer+1];
+
+		// Optimization, include dual layer in partialIntervalCounter too, to reduce number of countPermutes calls
+		bool includeDualLayerOptimization = double(topDual - topDualLayerStart) / (topDualLayerEnd - topDualLayerStart) >= 0.5;
+		
+		uint64_t totalSum;
+
+		if(includeDualLayerOptimization) {
+			uint64_t intervalSizeBelowDualLayer = partialIntervalCounter.intervalToTopSizeAboveSize(allMBFs[topDual], topLayer);
+			uint64_t remainingIntervalSize = sumSegmentPermutations<false>(allMBFs[topI], classInfos, allMBFs, topDual, topDualLayerEnd);
+			totalSum = intervalSizeBelowDualLayer * factorial(Variables) - remainingIntervalSize;
+		} else {
+			uint64_t intervalSizeBelowDualLayer = partialIntervalCounter.intervalToTopSizeAboveSize(allMBFs[topDual], topLayer+1);
+			uint64_t remainingIntervalSize = sumSegmentPermutations<false>(allMBFs[topI], classInfos, allMBFs, topDualLayerStart, topDual);
+			totalSum = intervalSizeBelowDualLayer * factorial(Variables) + remainingIntervalSize;
+		}
+		
+		//std::cout << intervalSizeBelowDualLayer << ", " << remainingIntervalSize / factorial(Variables) << std::endl;
+		if(totalSum != fullResultsList[topI].betaSum.countedIntervalSizeDown) {
+			std::cout << "Top " + std::to_string(topI) + " is certainly wrong! Bad intervalSizeDown: (should be: " << totalSum / factorial(Variables) << ", found: " << fullResultsList[topI].betaSum.countedIntervalSizeDown / factorial(Variables) << ") // classSize=" << classInfos[topI].classSize << ", bs_dual=" << fullResultsList[topI].betaSumDualDedup.countedIntervalSizeDown << std::endl;
+		} else {
+			//std::cout << "Top " + std::to_string(topI) + " correct.\n" << std::flush;
+		}
+	});
+}
+
 #include "../dedelib/bitSet.h"
 template<size_t Width>
 struct MBFSwapper {
@@ -1216,30 +1274,25 @@ static void checkTopsSecondHalfWithSwapper(const std::vector<BetaSumPair>& fullR
 	//}
 }
 
-
-
-
-
-
-
-
-
-
-
-void findErrorInNearlyCorrectResultsCheckBasicsAndFirstHalf(const std::vector<std::string>& args) {
-	unsigned int Variables = std::stoi(args[0]);
-	std::string allResultsPath = args[1];
-
-	std::cout << "Loading fullResultsList..." << std::endl;
+static std::vector<BetaSumPair> loadFullResultsList(unsigned int Variables, const std::string& file) {
 	std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
 	{
-		std::ifstream allResultsFile(allResultsPath);
+		std::ifstream allResultsFile(file);
 		allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
 	}
 	if(fullResultsList[20].betaSum.betaSum == 0) {
 		std::cerr << "results file not read properly!\n";
 		exit(-1);
 	}
+	return fullResultsList;
+}
+
+void findErrorInNearlyCorrectResultsCheckBasicsAndFirstHalf(const std::vector<std::string>& args) {
+	unsigned int Variables = std::stoi(args[0]);
+	std::string allResultsPath = args[1];
+
+	std::cout << "Loading fullResultsList..." << std::endl;
+	std::vector<BetaSumPair> fullResultsList = loadFullResultsList(Variables, allResultsPath);
 	
 	std::cout << "Running check0AndModuloVariables..." << std::endl;
 	check0AndModuloVariables(Variables, fullResultsList);
@@ -1271,15 +1324,7 @@ void findErrorInNearlyCorrectResultsCheckMiddleLayer(const std::vector<std::stri
 	}
 
 	std::cout << "Loading fullResultsList..." << std::endl;
-	std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
-	{
-		std::ifstream allResultsFile(allResultsPath);
-		allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
-	}
-	if(fullResultsList[20].betaSum.betaSum == 0) {
-		std::cerr << "results file not read properly!\n";
-		exit(-1);
-	}
+	std::vector<BetaSumPair> fullResultsList = loadFullResultsList(Variables, allResultsPath);
 	
 	std::cout << "Loading flatNodes..." << std::endl;
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
@@ -1308,15 +1353,7 @@ void findErrorInNearlyCorrectResultsCheckTail(const std::vector<std::string>& ar
 	std::string allResultsPath = args[0];
 
 	std::cout << "Loading fullResultsList..." << std::endl;
-	std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
-	{
-		std::ifstream allResultsFile(allResultsPath);
-		allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
-	}
-	if(fullResultsList[20].betaSum.betaSum == 0) {
-		std::cerr << "results file not read properly!\n";
-		exit(-1);
-	}
+	std::vector<BetaSumPair> fullResultsList = loadFullResultsList(Variables, allResultsPath);
 	
 	std::cout << "Loading flatNodes..." << std::endl;
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
@@ -1344,6 +1381,32 @@ void findErrorInNearlyCorrectResultsCheckTail(const std::vector<std::string>& ar
 }
 
 template<unsigned int Variables>
+void findErrorInNearlyCorrectResultsCheckPawelskiTail(const std::vector<std::string>& args) {
+	std::string allResultsPath = args[0];
+
+	std::cout << "Loading fullResultsList..." << std::endl;
+	std::vector<BetaSumPair> fullResultsList = loadFullResultsList(Variables, allResultsPath);
+	
+	std::cout << "Loading flatNodes..." << std::endl;
+	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
+	std::cout << "Loading classInfos..." << std::endl;
+	const ClassInfo* classInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
+	std::cout << "Loading allMBFs..." << std::endl;
+	const Monotonic<Variables>* allMBFs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+	std::cout << "Running checkTopsTail..." << std::endl;
+	NodeIndex fromMBF = std::stoi(args[1]);
+	NodeIndex toMBF = mbfCounts[Variables];
+	if(args.size() >= 3) {
+		toMBF = std::stoi(args[2]);
+	}
+	checkTopsTailUsingPawelskiIntervalCounting<Variables>(fullResultsList, flatNodes, classInfos, allMBFs, fromMBF, toMBF);
+
+	freeFlatBuffer(flatNodes, mbfCounts[Variables]);
+	freeFlatBuffer(classInfos, mbfCounts[Variables]);
+	freeFlatBuffer(allMBFs, mbfCounts[Variables]);
+}
+
+template<unsigned int Variables>
 void correctTops(const std::vector<std::string>& args) {
 	std::string allResultsPath = args[0];
 	std::string newResultsPath = args[1];
@@ -1352,11 +1415,7 @@ void correctTops(const std::vector<std::string>& args) {
 		topsToCorrect.push_back(std::stoi(args[i]));
 	}
 
-	std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
-	{
-		std::ifstream allResultsFile(allResultsPath);
-		allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
-	}
+	std::vector<BetaSumPair> fullResultsList = loadFullResultsList(Variables, allResultsPath);
 
 	for(NodeIndex topToCorrect : topsToCorrect) {
 		std::cout << "Computing new top..." << std::endl;
@@ -1379,6 +1438,81 @@ void correctTops(const std::vector<std::string>& args) {
 	std::cout << "Computation finished." << std::endl;
 	u192 dedekindNumber = computeDedekindNumberFromBetaSums(Variables, fullResultsList);
 	std::cout << "D(" << (Variables + 2) << ") = " << toString(dedekindNumber) << std::endl;
+}
+
+#include <string.h>
+static std::vector<NodeIndex> parseBadTopsFromFile(const std::string& fileName) {
+	std::cout << "Parsing " << fileName << std::endl;
+	char* buf;
+	size_t length;
+
+	{
+		std::ifstream file(fileName);
+		file.seekg(0,std::ios::end);
+		length = file.tellg();
+		file.seekg(0,std::ios::beg);
+
+		buf = new char[length];
+		file.read(buf, length);
+	}
+
+	std::vector<NodeIndex> result;
+	for(size_t i = 0; i < length - 20; i++) {
+		if(buf[i] == 'T' && buf[i] == 'T' && buf[i+1] == 'o' && buf[i+2] == 'p' && buf[i+3] == ' ') {
+			const char* digit = buf + i + 4;
+			NodeIndex totalDigitSum = 0;
+			while(*digit >= '0' && *digit <= '9') {
+				totalDigitSum *= 10;
+				totalDigitSum += *digit - '0';
+				digit++;
+			}
+			if(strncmp(digit, " is certainly wrong!", sizeof(" is certainly wrong!") - 1) == 0) {
+				result.push_back(totalDigitSum);
+			}
+		}
+	}
+
+	return result;
+}
+
+template<unsigned int Variables>
+void parseAndCheckPossiblyBadTops(const std::vector<std::string>& args) {
+	const std::string& allResultsPath = args[0];
+	std::vector<NodeIndex> possiblyBadTops = parseBadTopsFromFile(args[1]);
+
+	std::vector<BetaSumPair> fullResultsList = loadFullResultsList(Variables, allResultsPath);
+
+	std::cout << possiblyBadTops.size() << " possibly bad tops found!\n" << std::flush;
+
+	std::cout << "Loading flatNodes..." << std::endl;
+	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
+	std::cout << "Loading classInfos..." << std::endl;
+	const ClassInfo* classInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
+	std::cout << "Loading allMBFs..." << std::endl;
+	const Monotonic<Variables>* allMBFs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+
+	std::mutex trueErrorMutex;
+	std::vector<NodeIndex> trueErrors;
+	iterRangeInParallelBlocksOnAllCores<size_t>(0, possiblyBadTops.size(), 8, [&](int core, size_t idx){
+		NodeIndex claimedTop = possiblyBadTops[idx];
+
+		uint64_t foundIntervalSizeDown = fullResultsList[claimedTop].betaSum.countedIntervalSizeDown;
+
+		uint64_t realIntervalSizeDown = sumSegmentPermutations<false>(allMBFs[claimedTop], classInfos, allMBFs, 0, flatNodes[claimedTop].dual);
+		
+		if(realIntervalSizeDown != foundIntervalSizeDown) {
+			std::cout << "Found real bad top! " + std::to_string(claimedTop) + ":  Bad intervalSizeDown: (should be: " + std::to_string(realIntervalSizeDown) + ", found: " + std::to_string(foundIntervalSizeDown) + "\n" << std::flush;
+			trueErrorMutex.lock();
+			trueErrors.push_back(claimedTop);
+			trueErrorMutex.unlock();
+		}
+	});
+
+	std::cout << trueErrors.size() << " true errors found!\n" << std::flush;
+	for(NodeIndex badTop : trueErrors) {
+		std::cout << "," << badTop;
+	}
+	std::cout << std::endl;
 }
 
 CommandSet superCommands {"Supercomputing Commands", {}, {
@@ -1542,11 +1676,9 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 
 	{"checkResultsCountsLowerHalf", [](const std::vector<std::string>& args){
 		unsigned int Variables = std::stoi(args[0]);
-		std::string resultsPath = args[1];
+		std::string allResultsPath = args[1];
 
-		std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
-		std::ifstream allResultsFile(resultsPath);
-		allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
+		std::vector<BetaSumPair> fullResultsList = loadFullResultsList(Variables, allResultsPath);
 
 		for(size_t i = 0; i < mbfCounts[Variables]; i++) {
 			if(fullResultsList[i].betaSum.countedIntervalSizeDown == 0) {
@@ -1587,11 +1719,7 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 		std::string jobResultsPath = args[2];
 		std::string outputAllResultsPath = args[3];
 
-		std::vector<BetaSumPair> fullResultsList(mbfCounts[Variables]);
-		{
-			std::ifstream allResultsFile(allResultsPath);
-			allResultsFile.read(reinterpret_cast<char*>(&fullResultsList[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
-		}
+		std::vector<BetaSumPair> fullResultsList = loadFullResultsList(Variables, allResultsPath);
 
 		ValidationData checkSum_unused;
 		checkSum_unused.dualBetaSum.betaSum = 0;
@@ -1631,6 +1759,22 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"findErrorInNearlyCorrectResultsCheckTail6", findErrorInNearlyCorrectResultsCheckTail<6>},
 	{"findErrorInNearlyCorrectResultsCheckTail7", findErrorInNearlyCorrectResultsCheckTail<7>},
 
+	//{"findErrorInNearlyCorrectResultsCheckPawelskiTail1", findErrorInNearlyCorrectResultsCheckPawelskiTail<1>},
+	//{"findErrorInNearlyCorrectResultsCheckPawelskiTail2", findErrorInNearlyCorrectResultsCheckPawelskiTail<2>},
+	//{"findErrorInNearlyCorrectResultsCheckPawelskiTail3", findErrorInNearlyCorrectResultsCheckPawelskiTail<3>},
+	//{"findErrorInNearlyCorrectResultsCheckPawelskiTail4", findErrorInNearlyCorrectResultsCheckPawelskiTail<4>},
+	{"findErrorInNearlyCorrectResultsCheckPawelskiTail5", findErrorInNearlyCorrectResultsCheckPawelskiTail<5>},
+	{"findErrorInNearlyCorrectResultsCheckPawelskiTail6", findErrorInNearlyCorrectResultsCheckPawelskiTail<6>},
+	{"findErrorInNearlyCorrectResultsCheckPawelskiTail7", findErrorInNearlyCorrectResultsCheckPawelskiTail<7>},
+
+	{"parseAndCheckPossiblyBadTops1", parseAndCheckPossiblyBadTops<1>},
+	{"parseAndCheckPossiblyBadTops2", parseAndCheckPossiblyBadTops<2>},
+	{"parseAndCheckPossiblyBadTops3", parseAndCheckPossiblyBadTops<3>},
+	{"parseAndCheckPossiblyBadTops4", parseAndCheckPossiblyBadTops<4>},
+	{"parseAndCheckPossiblyBadTops5", parseAndCheckPossiblyBadTops<5>},
+	{"parseAndCheckPossiblyBadTops6", parseAndCheckPossiblyBadTops<6>},
+	{"parseAndCheckPossiblyBadTops7", parseAndCheckPossiblyBadTops<7>},
+
 	{"correctTops1", correctTops<1>},
 	{"correctTops2", correctTops<2>},
 	{"correctTops3", correctTops<3>},
@@ -1644,17 +1788,9 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 		std::string pathA = args[1];
 		std::string pathB = args[2];
 
-		std::vector<BetaSumPair> resultsA(mbfCounts[Variables]);
-		{
-			std::ifstream allResultsFile(pathA);
-			allResultsFile.read(reinterpret_cast<char*>(&resultsA[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
-		}
+		std::vector<BetaSumPair> resultsA = loadFullResultsList(Variables, pathA);
 
-		std::vector<BetaSumPair> resultsB(mbfCounts[Variables]);
-		{
-			std::ifstream allResultsFile(pathB);
-			allResultsFile.read(reinterpret_cast<char*>(&resultsB[0]), sizeof(BetaSumPair) * mbfCounts[Variables]);
-		}
+		std::vector<BetaSumPair> resultsB = loadFullResultsList(Variables, pathB);
 
 		for(size_t i = 0; i < mbfCounts[Variables]; i++) {
 			BetaSumPair a = resultsA[i];

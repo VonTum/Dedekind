@@ -249,8 +249,8 @@ uint64_t pawelskiIntervalToTopSizeAboveSize(const Monotonic<Variables>& bot, int
 			uint16_t f7Idx = thisRowAboveLUT[1+i];
 			int f7Size = mbfLUT[f7Idx].size();
 
-			int minimumSize = f2Size + f4MinSize + f6MinSize + f7Size;
-			int maximumSize = f2Size + f7Size + f7Size + f7Size;
+			//int minimumSize = f2Size + f4MinSize + f6MinSize + f7Size;
+			//int maximumSize = f2Size + f7Size + f7Size + f7Size;
 
 			for(int mbfSize4 = f4MinSize; mbfSize4 <= f7Size; mbfSize4++) {
 				uint32_t intervalSizeF4 = smallerIntervalSizeMatrix3D[mbfSize4 * smallMBFCount * smallMBFCount + f7Idx + f4MinIntervalLUTOffset];
