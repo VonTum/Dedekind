@@ -198,7 +198,7 @@ void runInParallelOnAllCores(const Func& func) {
 	runInParallel(std::thread::hardware_concurrency(), CPUAffinityType::CORE, func);
 }
 
-// Expects a function of the form void(int threadID, IterT curElem)
+// Expects a function of the form void(int threadID, IterT from, IterT to)
 template<typename IterT, typename IntT, typename Func>
 void iterRangeInParallelBlocks(int threadCount, CPUAffinityType affinity, IterT start, IterT end, IntT blockSize, const Func& func) {
 	std::atomic<IterT> idxAtomic;
@@ -237,10 +237,7 @@ void iterRangeInParallelBlocks(int threadCount, CPUAffinityType affinity, IterT 
 				if(myEnd >= end) {
 					myEnd = end;
 				}
-				do {
-					func(threadID, grabbedBlock);
-					++grabbedBlock;
-				} while(grabbedBlock < myEnd);
+				func(threadID, grabbedBlock, myEnd);
 			}
 		}, (void*) &datas[i]);
 	}
@@ -254,5 +251,19 @@ void iterRangeInParallelBlocks(int threadCount, CPUAffinityType affinity, IterT 
 // Expects a function of the form void(int threadID, IterT curElem)
 template<typename IterT, typename IntT, typename Func>
 void iterRangeInParallelBlocksOnAllCores(IterT start, IterT end, IntT blockSize, const Func& func) {
-	iterRangeInParallelBlocks<IterT, IntT, Func>(std::thread::hardware_concurrency(), CPUAffinityType::CORE, start, end, blockSize, func);
+	iterRangeInParallelBlocks<IterT, IntT>(std::thread::hardware_concurrency(), CPUAffinityType::CORE, start, end, blockSize, [&func](int threadID, IterT from, IterT to){
+		do {
+			func(threadID, from);
+			++from;
+		} while(from != to);
+	});
+}
+
+// Used for debugging
+// Expects a function of the form void(int threadID, IterT curElem)
+template<typename IterT, typename IntT, typename Func>
+void iterRangeInParallelBlocksOnOneCore(IterT start, IterT end, IntT blockSize, const Func& func) {
+	for(; start != end; ++start) {
+		func(0, start);
+	}
 }

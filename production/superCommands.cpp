@@ -413,18 +413,17 @@ template<>
 class FastPermutationCounter<7> {
 	static constexpr size_t CHUNK_SIZE = 8;
 
-	alignas(32) int32_t permutes[4 * factorial(7) / 6];
+	alignas(64) uint32_t permutesSH[factorial(7) / 6];
+	alignas(64) uint32_t permutesA[factorial(7) / 6];
+	alignas(64) uint32_t permutesB[factorial(7) / 6];
+	alignas(64) uint32_t permutesC[factorial(7) / 6];
 
 	static void swizzle(BooleanFunction<7> bf, int32_t* swizzled) {
-		union {
-			__m128i b;
-			int16_t asIntPtr[8];
-		};
-		b = bf.bitset.data;
-		swizzled[0] = (static_cast<int32_t>(asIntPtr[0]) << 16) | asIntPtr[7];
-		swizzled[1] = (static_cast<int32_t>(asIntPtr[1]) << 16) | asIntPtr[6];
-		swizzled[2] = (static_cast<int32_t>(asIntPtr[2]) << 16) | asIntPtr[5];
-		swizzled[3] = (static_cast<int32_t>(asIntPtr[4]) << 16) | asIntPtr[3];
+		__m128i b = bf.bitset.data;
+		swizzled[0] = (static_cast<int32_t>(_mm_extract_epi16(b, 0)) << 16) | _mm_extract_epi16(b, 7);
+		swizzled[1] = (static_cast<int32_t>(_mm_extract_epi16(b, 1)) << 16) | _mm_extract_epi16(b, 6);
+		swizzled[2] = (static_cast<int32_t>(_mm_extract_epi16(b, 2)) << 16) | _mm_extract_epi16(b, 5);
+		swizzled[3] = (static_cast<int32_t>(_mm_extract_epi16(b, 4)) << 16) | _mm_extract_epi16(b, 3);
 	}
 public:
 	void init(Monotonic<7> mbf) {
@@ -442,14 +441,13 @@ public:
 						Monotonic<7> mbf3 = mbf2;
 						if(v3 != 3) mbf3.swap(v3, 3);
 						
-						size_t chunkI = blockI / CHUNK_SIZE;
-						size_t inChunkI = blockI % CHUNK_SIZE;
 						int32_t swizzled[4];
 						swizzle(mbf3.bf, swizzled);
 
-						for(size_t i = 0; i < 4; i++) {
-							permutes[(chunkI * 4 + i) * CHUNK_SIZE + inChunkI] = swizzled[i];
-						}
+						permutesSH[blockI] = swizzled[0];
+						permutesA[blockI] = swizzled[1];
+						permutesB[blockI] = swizzled[2];
+						permutesC[blockI] = swizzled[3];
 						blockI++;
 					}
 				}
@@ -459,37 +457,48 @@ public:
 
 	template<bool isTop>
 	uint32_t countPermutes(Monotonic<7> mbf2) {
-		constexpr unsigned int LOOP_COUNT = 105;//factorial(7) / 6 / 8;
 		int32_t swizzled[4];
 		swizzle(mbf2.bf, swizzled);
-		union {
-			__m256i totalCounts = _mm256_setzero_si256();
-			int32_t countsInts[8];
-		};
+		
+		__m256i totalCounts = _mm256_setzero_si256();
 
 		__m256i sh2 = _mm256_set1_epi32(swizzled[0]);
 		__m256i a2 = _mm256_set1_epi32(swizzled[1]);
 		__m256i b2 = _mm256_set1_epi32(swizzled[2]);
 		__m256i c2 = _mm256_set1_epi32(swizzled[3]);
 
-		const __m256i* permutesM256 = reinterpret_cast<const __m256i*>(permutes);
-		for(unsigned int i = 0; i < LOOP_COUNT; i++) {
-			__m256i sh1 = permutesM256[4*i];
-			__m256i a1 = permutesM256[4*i+1];
-			__m256i b1 = permutesM256[4*i+2];
-			__m256i c1 = permutesM256[4*i+3];
+		for(unsigned int i = 0; i < factorial(7) / 6; i+=8) {
+			__m256i sh1 = _mm256_load_si256((const __m256i*) &permutesSH[i]);
+			__m256i a1  = _mm256_load_si256((const __m256i*) &permutesA[i]);
+			__m256i b1  = _mm256_load_si256((const __m256i*) &permutesB[i]);
+			__m256i c1  = _mm256_load_si256((const __m256i*) &permutesC[i]);
 
-			#define IS_SUBSET(x, y) _mm256_cmpeq_epi32(_mm256_andnot_si256(isTop ? y : x, isTop ? x : y), _mm256_setzero_si256())
-			__m256i sh = IS_SUBSET(sh1, sh2);
-			__m256i aa = IS_SUBSET(a1, a2);
-			__m256i ab = IS_SUBSET(a1, b2);
-			__m256i ac = IS_SUBSET(a1, c2);
-			__m256i ba = IS_SUBSET(b1, a2);
-			__m256i bb = IS_SUBSET(b1, b2);
-			__m256i bc = IS_SUBSET(b1, c2);
-			__m256i ca = IS_SUBSET(c1, a2);
-			__m256i cb = IS_SUBSET(c1, b2);
-			__m256i cc = IS_SUBSET(c1, c2);
+			__m256i sh, aa, ab, ac, ba, bb, bc, ca, cb, cc;
+
+			#define IS_SUBSET(x, y) _mm256_cmpeq_epi32(_mm256_andnot_si256(x, y), _mm256_setzero_si256())
+			if constexpr(isTop) {
+				sh = IS_SUBSET(sh2, sh1);
+				aa = IS_SUBSET(a2, a1);
+				ab = IS_SUBSET(a2, b1);
+				ac = IS_SUBSET(a2, c1);
+				ba = IS_SUBSET(b2, a1);
+				bb = IS_SUBSET(b2, b1);
+				bc = IS_SUBSET(b2, c1);
+				ca = IS_SUBSET(c2, a1);
+				cb = IS_SUBSET(c2, b1);
+				cc = IS_SUBSET(c2, c1);
+			} else {
+				sh = IS_SUBSET(sh1, sh2);
+				aa = IS_SUBSET(a1, a2);
+				ab = IS_SUBSET(a1, b2);
+				ac = IS_SUBSET(a1, c2);
+				ba = IS_SUBSET(b1, a2);
+				bb = IS_SUBSET(b1, b2);
+				bc = IS_SUBSET(b1, c2);
+				ca = IS_SUBSET(c1, a2);
+				cb = IS_SUBSET(c1, b2);
+				cc = IS_SUBSET(c1, c2);
+			}
 
 			//#define AND_M256(x, y, z) _mm256_and_si256(x, _mm256_and_si256(y, z))
 			//__m256i abc = AND_M256(aa, bb, cc);
@@ -506,13 +515,12 @@ public:
 			__m256i cab_cba = AND_ADD_AND(ac, ba, cb, bb, ca);
 
 			__m256i perm6Total = _mm256_add_epi32(_mm256_add_epi32(abc_acb, bac_bca), cab_cba);
-			totalCounts = _mm256_add_epi32(totalCounts, _mm256_and_si256(sh, perm6Total));
+			totalCounts = _mm256_sub_epi32(totalCounts, _mm256_and_si256(sh, perm6Total));
 		}
-		uint32_t total = 0;
-		for(int i = 0; i < 8; i++) {
-			total += countsInts[i];
-		}
-		return -total;
+		
+		__m256i totalCountsH1 = _mm256_hadd_epi32(totalCounts, totalCounts);
+		__m256i totalCountsH2 = _mm256_hadd_epi32(totalCountsH1, totalCountsH1);
+		return _mm256_extract_epi32(totalCountsH2, 0) + _mm256_extract_epi32(totalCountsH2, 4);
 	}
 };
 
@@ -943,13 +951,47 @@ uint64_t sumSegmentPermutations(Monotonic<Variables> base, const ClassInfo* clas
 	permutationCounter.init(base);
 
 	for(NodeIndex i = from; i < to; i++) {
-		uint64_t count = permutationCounter.template countPermutes<baseIsBottom>(allMBFs[i]);
+		Monotonic<Variables> bot = allMBFs[i];
 		uint64_t classSize = classInfos[i].classSize;
+		uint64_t count = permutationCounter.template countPermutes<baseIsBottom>(bot);
+
+		/*uint64_t correctCount = 0;
+		bot.forEachPermutation([&](Monotonic<Variables> permuted){if(permuted <= base) correctCount++;});
+		assert(count == correctCount);*/
+
 		uint64_t thisTerm = count * classSize;
 		totalSum += thisTerm;
 		assert(thisTerm % factorial(Variables) == 0);
 	}
 	return totalSum;
+}
+
+template<bool baseIsBottom, unsigned int Variables>
+uint64_t sumSegmentPermutationsOnAllCores(Monotonic<Variables> base, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, NodeIndex from, NodeIndex to) {
+	std::atomic<uint64_t> totalSum;
+	totalSum.store(0);
+
+	FastPermutationCounter<Variables> permutationCounter;
+	permutationCounter.init(base);
+
+	iterRangeInParallelBlocks(std::thread::hardware_concurrency(), CPUAffinityType::CORE, from, to, 4096, [&](int core, NodeIndex iStart, NodeIndex iEnd) {
+		uint64_t localSum = 0;
+		for(NodeIndex i = iStart; i != iEnd; i++) {
+			Monotonic<Variables> bot = allMBFs[i];
+			uint64_t classSize = classInfos[i].classSize;
+			uint64_t count = permutationCounter.template countPermutes<baseIsBottom>(bot);
+
+			/*uint64_t correctCount = 0;
+			bot.forEachPermutation([&](Monotonic<Variables> permuted){if(permuted <= base) correctCount++;});
+			assert(count == correctCount);*/
+
+			uint64_t thisTerm = count * classSize;
+			localSum += thisTerm;
+			assert(thisTerm % factorial(Variables) == 0);
+		}
+		totalSum.fetch_add(localSum);
+	});
+	return totalSum.load();
 }
 
 #include "../dedelib/pawelski.h"
@@ -1493,18 +1535,21 @@ void parseAndCheckPossiblyBadTops(const std::vector<std::string>& args) {
 
 	std::mutex trueErrorMutex;
 	std::vector<NodeIndex> trueErrors;
-	iterRangeInParallelBlocksOnAllCores<size_t>(0, possiblyBadTops.size(), 8, [&](int core, size_t idx){
+	std::cout << "Rechecking these tops." << std::endl;
+	iterRangeInParallelBlocksOnOneCore<size_t>(0, possiblyBadTops.size(), 1, [&](int core, size_t idx){
 		NodeIndex claimedTop = possiblyBadTops[idx];
 
 		uint64_t foundIntervalSizeDown = fullResultsList[claimedTop].betaSum.countedIntervalSizeDown;
 
-		uint64_t realIntervalSizeDown = sumSegmentPermutations<false>(allMBFs[claimedTop], classInfos, allMBFs, 0, flatNodes[claimedTop].dual);
+		uint64_t realIntervalSizeDown = sumSegmentPermutationsOnAllCores<false>(allMBFs[claimedTop], classInfos, allMBFs, 0, flatNodes[claimedTop].dual);
 		
 		if(realIntervalSizeDown != foundIntervalSizeDown) {
 			std::cout << "Found real bad top! " + std::to_string(claimedTop) + ":  Bad intervalSizeDown: (should be: " + std::to_string(realIntervalSizeDown) + ", found: " + std::to_string(foundIntervalSizeDown) + "\n" << std::flush;
 			trueErrorMutex.lock();
 			trueErrors.push_back(claimedTop);
 			trueErrorMutex.unlock();
+		} else {
+			std::cout << '.' << std::flush;
 		}
 	});
 
