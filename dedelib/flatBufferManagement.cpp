@@ -1,6 +1,6 @@
 #include "flatBufferManagement.h"
 
-#include "aligned_alloc.h"
+#include "numaMem.h"
 
 #include <fstream>
 #include <iostream>
@@ -45,7 +45,7 @@ void readFlatVoidBufferNoMMAP(const std::string& fileName, size_t size, void* bu
 }*/
 
 void* readFlatVoidBufferNoMMAP(const std::string& fileName, size_t size) {
-	void* buffer = aligned_malloc(size, 4096); // Strong alignment is required for DMA access with OpenCL
+	void* buffer = numa_alloc_interleaved(size); // Strong alignment is required for DMA access with OpenCL
 	readFlatVoidBufferNoMMAP(fileName, size, buffer);
 	return buffer;
 }
@@ -104,6 +104,6 @@ void freeFlatVoidBuffer(const void* buffer, size_t size) {
 	if(BUFMANAGEMENT_MMAP) {
 		munmapFlatVoidBuffer(buffer, size);
 	} else {
-		aligned_free(const_cast<void*>(buffer));
+		numa_free(const_cast<void*>(buffer), size);
 	}
 }

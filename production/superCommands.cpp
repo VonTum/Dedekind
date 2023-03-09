@@ -1004,7 +1004,7 @@ static void checkTopsTailUsingPawelskiIntervalCounting(const std::vector<BetaSum
 
 	//for(NodeIndex topI = firstMBF; topI < mbfToCheckEnd; topI++) {
 	iterRangeInParallelBlocksOnAllCores(firstMBF, mbfToCheckEnd, 64, [&](int core, NodeIndex topI){
-		if(topI % (16*1024) == 0) std::cout << std::to_string(topI) + "\n" << std::flush;
+		if(topI % 100000 == 0) std::cout << std::to_string(topI) + "\n" << std::flush;
 		int topLayer = getFlatLayerOfIndex(Variables, topI);
 		int topDualLayer = (1 << Variables) - topLayer;
 		NodeIndex topDual = flatNodes[topI].dual;
@@ -1028,7 +1028,8 @@ static void checkTopsTailUsingPawelskiIntervalCounting(const std::vector<BetaSum
 		
 		//std::cout << intervalSizeBelowDualLayer << ", " << remainingIntervalSize / factorial(Variables) << std::endl;
 		if(totalSum != fullResultsList[topI].betaSum.countedIntervalSizeDown) {
-			std::cout << "Top " + std::to_string(topI) + " is certainly wrong! Bad intervalSizeDown: (should be: " << totalSum / factorial(Variables) << ", found: " << fullResultsList[topI].betaSum.countedIntervalSizeDown / factorial(Variables) << ") // classSize=" << classInfos[topI].classSize << ", bs_dual=" << fullResultsList[topI].betaSumDualDedup.countedIntervalSizeDown << std::endl;
+			std::cout << "PawelskiTail Sais: Top " + std::to_string(topI) + " is certainly wrong! Bad intervalSizeDown: (should be: " << totalSum / factorial(Variables) << ", found: " << fullResultsList[topI].betaSum.countedIntervalSizeDown / factorial(Variables) << ") // classSize=" << classInfos[topI].classSize << ", bs_dual=" << fullResultsList[topI].betaSumDualDedup.countedIntervalSizeDown << std::endl;
+			// exit(-1);
 		} else {
 			//std::cout << "Top " + std::to_string(topI) + " correct.\n" << std::flush;
 		}
@@ -1038,8 +1039,8 @@ static void checkTopsTailUsingPawelskiIntervalCounting(const std::vector<BetaSum
 #include "../dedelib/bitSet.h"
 template<size_t Width>
 struct MBFSwapper {
-	alignas(4096) BitSet<Width>* upper;
-	alignas(4096) BitSet<Width>* lower;
+	alignas(4096) BitSet<Width>* __restrict__ upper;
+	alignas(4096) BitSet<Width>* __restrict__ lower;
 	size_t byteSize;
 	
 	MBFSwapper(unsigned int Variables, int numaNode) {
@@ -1184,7 +1185,7 @@ static void checkTopsSecondHalfNaive(const std::vector<BetaSumPair>& fullResults
 }
 
 template<unsigned int Variables, size_t MaxBlockSize>
-static void checkResultsBlock(NodeIndex startAt, size_t numInThisBlock, MBFSwapper<MaxBlockSize>& swapper, const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, const uint32_t* flatLinks, ThreadPool& pool) {
+static void checkResultsBlock(NodeIndex startAt, size_t numInThisBlock, MBFSwapper<MaxBlockSize>& swapper, const BetaSumPair* fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, const uint32_t* flatLinks, ThreadPool& pool) {
 	int blockLayer = getFlatLayerOfIndex(Variables, startAt);
 
 	if(blockLayer <= (1 << Variables) / 2) {
@@ -1269,8 +1270,7 @@ static void checkResultsBlock(NodeIndex startAt, size_t numInThisBlock, MBFSwapp
 }
 
 template<unsigned int Variables>
-static void checkTopsSecondHalfWithSwapper(const std::vector<BetaSumPair>& fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, const uint32_t* flatLinks, size_t layer, NodeIndex layerTopsStart, NodeIndex layerTopsEnd) {
-	constexpr size_t MAX_BLOCK_SIZE = 1024*8;
+static void checkTopsSecondHalfWithSwapper(const BetaSumPair* fullResultsList, const FlatNode* flatNodes, const ClassInfo* classInfos, const Monotonic<Variables>* allMBFs, const uint32_t* flatLinks, size_t layer, NodeIndex layerTopsStart, NodeIndex layerTopsEnd) {
 
 	std::cout << "Checking intervalSizeDown SECOND HALF... (" << flatNodeLayerOffsets[Variables][(1 << Variables) / 2 + 1] << " - " << mbfCounts[Variables] << ")" << std::endl;
 
@@ -1284,9 +1284,9 @@ static void checkTopsSecondHalfWithSwapper(const std::vector<BetaSumPair>& fullR
 		curTopStart.store(0);
 
 		runInParallel(16, CPUAffinityType::COMPLEX, [&](int complexI){
-			int numaNode = complexI / 2;
+			constexpr size_t MAX_BLOCK_SIZE = 512*4;// Cache lines
 			ThreadPool pool(8, complexI * 8);
-			MBFSwapper<MAX_BLOCK_SIZE> swapper(Variables, numaNode);
+			MBFSwapper<MAX_BLOCK_SIZE> swapper(Variables, complexI / 2);
 
 			while(true) {
 				NodeIndex blockStart = curTopStart.fetch_add(MAX_BLOCK_SIZE);
@@ -1357,16 +1357,21 @@ void findErrorInNearlyCorrectResultsCheckMiddleLayer(const std::vector<std::stri
 	int layer = std::stoi(args[1]);
 	NodeIndex layerTopsStart = flatNodeLayerOffsets[Variables][layer];
 	NodeIndex layerTopsEnd = flatNodeLayerOffsets[Variables][layer+1];
+	NodeIndex layerSize = layerTopsEnd - layerTopsStart;
 
+	int numParts = 1;
+	int selectedPart = 0;
 	if(args.size() >= 3) {
-		layerTopsStart = std::stoi(args[2]);
-		if(args.size() >= 4) {
-			layerTopsEnd = std::stoi(args[3]);
-		}
+		numParts = std::stoi(args[2]);
+		selectedPart = std::stoi(args[3]);
 	}
-
+	NodeIndex selectedStart = layerTopsStart + layerSize * selectedPart / numParts;
+	NodeIndex selectedEnd = layerTopsStart + layerSize * (selectedPart+1) / numParts;
+	std::cout << "Processing Part " << selectedPart << "/" << numParts << " of layer " << layer << ": from idx " << selectedStart << " to " << selectedEnd << " = " << (selectedEnd - selectedStart) << std::endl;
+	
 	std::cout << "Loading fullResultsList..." << std::endl;
-	std::vector<BetaSumPair> fullResultsList = loadFullResultsList(Variables, allResultsPath);
+	//std::vector<BetaSumPair> fullResultsList = loadFullResultsList(Variables, allResultsPath);
+	const BetaSumPair* fullResultsList = readFlatBuffer<BetaSumPair>(allResultsPath, mbfCounts[Variables]);
 	
 	std::cout << "Loading flatNodes..." << std::endl;
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
@@ -1380,7 +1385,7 @@ void findErrorInNearlyCorrectResultsCheckMiddleLayer(const std::vector<std::stri
 	//checkTopsSecondHalfNaive<Variables>(fullResultsList, flatNodes, classInfos, allMBFs);
 	
 	std::cout << "Running checkTopsSecondHalfWithSwapper..." << std::endl;
-	checkTopsSecondHalfWithSwapper<Variables>(fullResultsList, flatNodes, classInfos, allMBFs, flatLinks, layer, layerTopsStart, layerTopsEnd);
+	checkTopsSecondHalfWithSwapper<Variables>(fullResultsList, flatNodes, classInfos, allMBFs, flatLinks, layer, selectedStart, selectedEnd);
 
 	std::cout << "All Checks done" << std::endl;
 
@@ -1396,7 +1401,6 @@ void findErrorInNearlyCorrectResultsCheckTail(const std::vector<std::string>& ar
 
 	std::cout << "Loading fullResultsList..." << std::endl;
 	std::vector<BetaSumPair> fullResultsList = loadFullResultsList(Variables, allResultsPath);
-	
 	std::cout << "Loading flatNodes..." << std::endl;
 	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
 	std::cout << "Loading classInfos..." << std::endl;
@@ -1558,6 +1562,32 @@ void parseAndCheckPossiblyBadTops(const std::vector<std::string>& args) {
 		std::cout << "," << badTop;
 	}
 	std::cout << std::endl;
+}
+
+template<unsigned int Variables>
+void checkAllDedupTerms(const std::vector<std::string>& args) {
+	const std::string& allResultsPath = args[0];
+
+	std::vector<BetaSumPair> fullResultsList = loadFullResultsList(Variables, allResultsPath);
+
+	std::cout << "Loading flatNodes..." << std::endl;
+	const FlatNode* flatNodes = readFlatBuffer<FlatNode>(FileName::flatNodes(Variables), mbfCounts[Variables]);
+	std::cout << "Loading classInfos..." << std::endl;
+	const ClassInfo* classInfos = readFlatBuffer<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
+	std::cout << "Loading allMBFs..." << std::endl;
+	const Monotonic<Variables>* allMBFs = readFlatBuffer<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+
+	std::cout << "Iterating betaSumDualDedups\n" << std::flush;
+	iterRangeInParallelBlocksOnAllCores<NodeIndex>(0, mbfCounts[Variables], 8192, [&](int core, NodeIndex topIdx){
+		if(topIdx % 1000000 == 0) std::cout << std::to_string(topIdx) + "\n" << std::flush;
+		NodeIndex topDual = flatNodes[topIdx].dual;
+		ClassInfo dualInfo = classInfos[topDual];
+		ProcessedPCoeffSum result = processPCoeffSum(allMBFs[topIdx], allMBFs[topDual]);
+		BetaSum trueDualSum = produceBetaTerm(dualInfo, result);
+		if(fullResultsList[topIdx].betaSumDualDedup != trueDualSum) {
+			std::cout << "Top " + std::to_string(topIdx) + " has incorrect betaSumDualDedup!\n" << std::flush;
+		}
+	});
 }
 
 CommandSet superCommands {"Supercomputing Commands", {}, {
@@ -1820,6 +1850,22 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"parseAndCheckPossiblyBadTops6", parseAndCheckPossiblyBadTops<6>},
 	{"parseAndCheckPossiblyBadTops7", parseAndCheckPossiblyBadTops<7>},
 
+	{"checkAllDedupTerms1", checkAllDedupTerms<1>},
+	{"checkAllDedupTerms2", checkAllDedupTerms<2>},
+	{"checkAllDedupTerms3", checkAllDedupTerms<3>},
+	{"checkAllDedupTerms4", checkAllDedupTerms<4>},
+	{"checkAllDedupTerms5", checkAllDedupTerms<5>},
+	{"checkAllDedupTerms6", checkAllDedupTerms<6>},
+	{"checkAllDedupTerms7", checkAllDedupTerms<7>},
+
+	{"computeDedekindFromResultsList", [](const std::vector<std::string>& args){
+		unsigned int Variables = std::stoi(args[0]);
+		std::string fullResultsPath = args[1];
+		std::vector<BetaSumPair> results = loadFullResultsList(Variables, fullResultsPath);
+
+		u192 dedekindNumber = computeDedekindNumberFromBetaSums(Variables, results);
+	}},
+
 	{"correctTops1", correctTops<1>},
 	{"correctTops2", correctTops<2>},
 	{"correctTops3", correctTops<3>},
@@ -1827,6 +1873,32 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 	{"correctTops5", correctTops<5>},
 	{"correctTops6", correctTops<6>},
 	{"correctTops7", correctTops<7>},
+
+	{"showResultFileEnds", [](const std::vector<std::string>& args){
+		unsigned int Variables = std::stoi(args[0]);
+		const std::string& allResultsPath = args[1];
+		const BetaSumPair* fullResultsList = readFlatBuffer<BetaSumPair>(allResultsPath, mbfCounts[Variables]);
+
+		auto printPart = [&](NodeIndex idx){
+			BetaSumPair bsp = fullResultsList[idx];
+			std::cout
+				 << idx << ":      "
+				 << "\tbs: " << toString(bsp.betaSum.betaSum / factorial(Variables))
+				 << "\tsz: " << bsp.betaSum.countedIntervalSizeDown / factorial(Variables)
+				 << "\tDbs: " << toString(bsp.betaSumDualDedup.betaSum / factorial(Variables))
+				 << "\tDsz: " << bsp.betaSumDualDedup.countedIntervalSizeDown / factorial(Variables)
+				 << std::endl;
+		};
+
+		printPart(0);
+		printPart(1);
+		printPart(2);
+		std::cout << std::endl;
+		printPart(mbfCounts[Variables] - 3);
+		printPart(mbfCounts[Variables] - 2);
+		printPart(mbfCounts[Variables] - 1);
+		printPart(mbfCounts[Variables] - 0);
+	}},
 
 	{"compareResultsFiles", [](const std::vector<std::string>& args){
 		unsigned int Variables = std::stoi(args[0]);
