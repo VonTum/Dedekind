@@ -16,6 +16,7 @@ std::string allIntervals(unsigned int Variables);
 std::string allIntervalSymmetries(unsigned int Variables);
 std::string benchmarkSet(unsigned int Variables);
 std::string benchmarkSetTopBots(unsigned int Variables);
+std::string firstRunBetaSums(unsigned int Variables);
 
 // Test sets for the hardware accelerator
 std::string pipelineTestSet(unsigned int Variables);

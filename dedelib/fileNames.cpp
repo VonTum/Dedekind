@@ -64,6 +64,10 @@ std::string benchmarkSetTopBots(unsigned int Variables) {
 	return makeBasicName(Variables, "benchmarkSet", ".topBots");
 }
 
+std::string firstRunBetaSums(unsigned int Variables) {
+	return makeBasicName(Variables, "firstRunBetaSums", ".u128");
+}
+
 std::string pipelineTestSet(unsigned int Variables) {
 	return makeBasicName(Variables, "pipelineTestSet", ".mem");
 }

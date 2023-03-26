@@ -1927,4 +1927,17 @@ CommandSet superCommands {"Supercomputing Commands", {}, {
 			}
 		}
 	}},
+
+	{"extractFirstRunBetaSums", [](const std::vector<std::string>& args){
+		unsigned int Variables = std::stoi(args[0]);
+		std::string allResultsPath = args[1];
+
+		const BetaSumPair* allBetaSums = readFlatBuffer<BetaSumPair>(allResultsPath, mbfCounts[Variables]);
+		std::unique_ptr<u128[]> resultBuffer(new u128[mbfCounts[Variables]]);
+		for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+			resultBuffer[i] = allBetaSums[i].betaSum.betaSum;
+		}
+
+		writeFlatBuffer<u128>(resultBuffer.get(), FileName::firstRunBetaSums(Variables), mbfCounts[Variables]);
+	}},
 }};
