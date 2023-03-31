@@ -576,6 +576,30 @@ void testMixingPattern() {
 	printReversingMixInfo(expensivenessValues, 7);
 }
 
+#include <math.h>
+static double a(int n) {
+	int ch = choose(n, n / 2 - 1);
+	double powers = pow(2.0, -n/2) + n*n*pow(2.0, -n-5) - n * pow(2.0, -n-4);
+	return ch * powers;
+}
+static double b(int n) {
+	int ch = choose(n, (n - 3) / 2);
+	double powers = pow(2.0, -(n+3) / 2) + n*n*pow(2.0, -n-6) - n * pow(2.0, -n-3);
+	return ch * powers;
+}
+static double c(int n) {
+	int ch = choose(n, (n - 1) / 2);
+	double powers = pow(2.0, -(n+1) / 2) + n*n*pow(2.0, -n-4);
+	return ch * powers;
+}
+static double estimateDedekindNumber(int n) {
+	if(n % 2 == 0) {
+		return pow(2.0, choose(n, n / 2)) * exp(a(n));
+	} else {
+		return pow(2.0, choose(n, n / 2) + 1) * exp(b(n) + c(n));
+	}
+}
+
 CommandSet miscCommands{"Misc", {
 	{"ramTest", []() {doRAMTest(); }},
 	{"testMixingPattern", [](){testMixingPattern();}},
@@ -702,5 +726,13 @@ CommandSet miscCommands{"Misc", {
 	{"pcoeffLayerElementStats4", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<4>(std::stoi(size[0])); }},
 	{"pcoeffLayerElementStats5", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<5>(std::stoi(size[0])); }},
 	{"pcoeffLayerElementStats6", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<6>(std::stoi(size[0])); }},
-	{"pcoeffLayerElementStats7", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<7>(std::stoi(size[0])); }}
+	{"pcoeffLayerElementStats7", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<7>(std::stoi(size[0])); }},
+
+	{"estimateDedekind", [](const std::vector<std::string>& vars) {
+		int n = std::stoi(vars[0]);
+
+		for(int i = 0; i <= n; i++) {
+			std::cout << "D(" << i << ") = " << estimateDedekindNumber(i) << std::endl;
+		}
+	}}
 }};

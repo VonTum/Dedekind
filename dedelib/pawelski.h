@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <string.h>
 #include "booleanFunction.h"
 #include "funcTypes.h"
 
