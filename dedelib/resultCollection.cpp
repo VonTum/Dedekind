@@ -17,6 +17,8 @@
 #include <string.h>
 #include <immintrin.h>
 
+#define SECOND_RUN
+
 // does the necessary math with annotated number of bits, no overflows possible for D(9). 
 BetaSum produceBetaTerm(ClassInfo info, uint64_t pcoeffSum, uint64_t pcoeffCount) {
 	// the multiply is max log2(2^35 * 5040 * 5040) = 59.5984160368 bits long, fits in 64 bits
@@ -46,7 +48,7 @@ static ProcessedPCoeffSum* checkBuffer(ProcessedPCoeffSum* buf, ProcessedPCoeffS
 	return nullptr;
 }
 
-static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, ClassInfo topDualClassInfo, ValidationData* validationBuf) {
+static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, bool& failed) {
 	BetaSum total = BetaSum{0,0};
 
 	ProcessedPCoeffSum* countConnectedSumBuf = buf.outputBuf + BUF_BOTTOM_OFFSET;
@@ -57,23 +59,33 @@ static BetaSum sumOverBetas(const ClassInfo* mbfClassInfos, const OutputBuffer& 
 
 		ProcessedPCoeffSum processedPCoeff = *countConnectedSumBuf++;
 
-		total += produceBetaTerm(info, processedPCoeff);
+		if(__builtin_expect((processedPCoeff >> 61) != uint64_t(0), 0)) {
+			failed = true;
+			return total;
+		}
 
-		// This is the sum to be added to the top "inv(bot)", because we deduplicated it off from that top
-		validationBuf[*cur].dualBetaSum += produceBetaTerm(topDualClassInfo, processedPCoeff);
+		total += produceBetaTerm(info, processedPCoeff);
 	}
 
 	return total;
 }
 
-static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, ValidationData* validationBuf) {
+static void addValidationData(const OutputBuffer& buf, ClassInfo topDualClassInfo, ValidationData* validationBuf) {
+	ProcessedPCoeffSum* countConnectedSumBuf = buf.outputBuf + BUF_BOTTOM_OFFSET;
+	NodeIndex* bufStart = buf.originalInputData.bufStart + BUF_BOTTOM_OFFSET;
+	NodeIndex* bufEnd = buf.originalInputData.bufEnd;
+	for(const NodeIndex* cur = bufStart; cur != bufEnd; cur++) {
+		ProcessedPCoeffSum processedPCoeff = *countConnectedSumBuf++;
+
+		// This is the sum to be added to the top "inv(bot)", because we deduplicated it off from that top
+		validationBuf[*cur].dualBetaSum += produceBetaTerm(topDualClassInfo, processedPCoeff);
+	}
+}
+
+static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const OutputBuffer& buf, bool& failed) {
 	BetaSumPair result;
 
-	// Skip the first elements, as it is the top
-	NodeIndex topDualIdx = buf.originalInputData.bufStart[TOP_DUAL_INDEX];
-	ClassInfo topDualClassInfo = mbfClassInfos[topDualIdx];	
-
-	result.betaSum = sumOverBetas(mbfClassInfos, buf, topDualClassInfo, validationBuf);
+	result.betaSum = sumOverBetas(mbfClassInfos, buf, failed);
 
 #ifdef PCOEFF_DEDUPLICATE
 	ProcessedPCoeffSum nonDuplicateTopDual = buf.outputBuf[TOP_DUAL_INDEX]; // Index of dual
@@ -87,6 +99,7 @@ static BetaSumPair produceBetaResult(const ClassInfo* mbfClassInfos, const Outpu
 	return result;
 }
 
+
 struct ResultProcessingThreadData {
 	size_t validationBufferSize;
 	PCoeffProcessingContext* context;
@@ -96,6 +109,10 @@ struct ResultProcessingThreadData {
 	int numaNode;
 	unsigned int Variables;
 	const std::function<void(const OutputBuffer&, const char*, bool)>* errorBufFunc;
+
+#ifdef SECOND_RUN
+	const u128* firstRunBetaSums;
+#endif
 };
 static void* resultprocessingPThread(void* voidData) {
 	ResultProcessingThreadData* tData = (ResultProcessingThreadData*) voidData;
@@ -116,6 +133,7 @@ static void* resultprocessingPThread(void* voidData) {
 		//if constexpr(Variables == 7) std::cout << "Results for job " << buf.originalInputData.getTop() << std::endl;
 		curBetaResult.topIndex = buf.originalInputData.getTop();
 
+#ifndef SECOND_RUN
 		ProcessedPCoeffSum* errorLocation = checkBuffer(buf.outputBuf + 2, buf.outputBuf + buf.originalInputData.bufferSize());
 		if(errorLocation != nullptr) {
 			ProcessedPCoeffSum errorValue = *errorLocation;
@@ -141,12 +159,25 @@ static void* resultprocessingPThread(void* voidData) {
 				continue;
 			}
 		}
+#endif
 
-		curBetaResult.dataForThisTop = produceBetaResult(mbfClassInfos, buf, validationBuffer);
-		subContext.validationQueue.push(buf);
+		bool failed = false;
+		curBetaResult.dataForThisTop = produceBetaResult(mbfClassInfos, buf, failed);
 
-		BetaResult* allocatedSlot = finalResultPtr.fetch_add(1);
-		*allocatedSlot = std::move(curBetaResult);
+#ifdef SECOND_RUN
+		//if(curBetaResult.dataForThisTop.betaSum.betaSum != tData->)
+#endif
+		if(!failed) {
+#ifdef PCOEFF_DEDUPLICATE
+			NodeIndex topDualIdx = buf.originalInputData.bufStart[TOP_DUAL_INDEX];
+			ClassInfo topDualClassInfo = mbfClassInfos[topDualIdx];	
+			addValidationData(buf, topDualClassInfo, validationBuffer);
+#endif
+
+			subContext.validationQueue.push(buf);
+			BetaResult* allocatedSlot = finalResultPtr.fetch_add(1);
+			*allocatedSlot = std::move(curBetaResult);
+		}
 	}
 	std::cout << "\033[32m[Result Processor] Result processor Thread finished.\033[39m\n" << std::flush;
 
@@ -176,6 +207,10 @@ ResultProcessorOutput NUMAResultProcessor(
 	allocNumaNodeBuffers(validationBufferSize, validationBuffers);
 	std::cout << "\033[32m[Result Processor] Allocated validation buffers. Starting result processing threads\033[39m\n" << std::flush;
 
+#ifdef SECOND_RUN
+	const u128* firstRunBetaSums = readFlatBuffer<u128>(FileName::firstRunBetaSums(Variables), mbfCounts[Variables]);
+#endif
+
 	ResultProcessingThreadData datas[8];
 	for(int i = 0; i < 8; i++) {
 		datas[i].validationBufferSize = validationBufferSize;
@@ -186,6 +221,9 @@ ResultProcessorOutput NUMAResultProcessor(
 		datas[i].numaNode = i;
 		datas[i].Variables = Variables;
 		datas[i].errorBufFunc = &errorBufFunc;
+#ifdef SECOND_RUN
+		datas[i].firstRunBetaSums = firstRunBetaSums;
+#endif
 	}
 
 	PThreadBundle threads = spreadThreads(8, CPUAffinityType::NUMA_DOMAIN, datas, resultprocessingPThread);

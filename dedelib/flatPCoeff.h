@@ -96,7 +96,7 @@ void processBetasCPU_MultiThread(const Monotonic<Variables>* mbfs, const JobInfo
 	const NodeIndex* jobEnd = job.end();
 
 	threadPool.doInParallel([&](){
-		BooleanFunction<Variables> graphsBuf[factorial(Variables)];
+		//BooleanFunction<Variables> graphsBuf[factorial(Variables)];
 		const NodeIndex* nextNodeBlock = i.fetch_add(NODE_BLOCK_SIZE);
 		while(true) {
 			const NodeIndex* claimedNodeBlock = nextNodeBlock;
@@ -111,7 +111,7 @@ void processBetasCPU_MultiThread(const Monotonic<Variables>* mbfs, const JobInfo
 			for(const NodeIndex* claimedNodeIndex = claimedNodeBlock; claimedNodeIndex != claimedNodeBlockEnd; claimedNodeIndex++) {
 				Monotonic<Variables> bot = mbfs[*claimedNodeIndex];
 
-				countConnectedSumBuf[job.indexOf(claimedNodeIndex)] = processPCoeffSum<Variables>(top, bot, graphsBuf);
+				countConnectedSumBuf[job.indexOf(claimedNodeIndex)] = processPCoeffSum<Variables>(top, bot/*, graphsBuf*/);
 			}
 		}
 	});

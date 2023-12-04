@@ -253,8 +253,8 @@ void eliminateLeavesUp(BooleanFunction<Variables>& graph) {
 }
 
 
-static uint64_t singletonCountHistogram[50];
-static uint64_t connectedHistogram[50];
+//static uint64_t singletonCountHistogram[50];
+//static uint64_t connectedHistogram[50];
 
 
 template<unsigned int Variables>
@@ -266,7 +266,7 @@ uint64_t eliminateSingletons(BooleanFunction<Variables>& graph) {
 
 	graph = graph & groupingMask; // remove singleton elements, reduces rest of the workload
 
-	singletonCountHistogram[singletonCount]++;
+	// singletonCountHistogram[singletonCount]++;
 
 	return singletonCount;
 }
@@ -372,7 +372,7 @@ template<unsigned int Variables>
 uint64_t countConnectedSingletonElimination(BooleanFunction<Variables> graph) {
 	uint64_t connectCount = eliminateSingletons(graph); // seems to have no effect, or slight pessimization
 	connectCount += countConnectedFloodFill(graph);
-	++connectedHistogram[connectCount];
+	//++connectedHistogram[connectCount];
 	return connectCount;
 }
 

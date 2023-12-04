@@ -334,6 +334,16 @@ public:
 		}
 	}
 
+	void invertVariable(unsigned int var) {
+		assert(!this->hasVariable(var));
+
+		Bits mask = BooleanFunction::varMask(var);
+
+		unsigned int shift = 1 << var;
+
+		bitset = ((bitset & mask) >> shift) | (andnot(bitset, mask) << shift);
+	}
+
 	void swap(unsigned int var1, unsigned int var2) {
 		if(var1 > var2) std::swap(var1, var2);
 		// var1 <= var2
