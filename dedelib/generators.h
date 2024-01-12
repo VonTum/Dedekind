@@ -103,6 +103,42 @@ void permuteRandom(BooleanFunction<Variables>& bf, RandomEngine& generator, unsi
 	}
 }
 
+// Doesn't seem to be faster :(
+/*template<unsigned int Variables, typename RandomEngine>
+void permuteRandomFast(BooleanFunction<Variables>& bf, RandomEngine& generator) {
+	if constexpr(Variables == 7) {
+		// Only do a single rand call
+		uint16_t selectedIndex = std::uniform_int_distribution<uint16_t>(0, 5039)(generator);
+		// Efficient divisions and mods by constants
+		uint16_t s6 = selectedIndex % 7;
+		bf.swap(6, s6);
+		selectedIndex /= 7;
+		uint16_t s5 = selectedIndex % 6;
+		bf.swap(5, s5);
+		selectedIndex /= 6;
+		uint16_t s4 = selectedIndex % 5;
+		bf.swap(4, s4);
+		selectedIndex /= 5;
+		uint16_t s3 = selectedIndex % 4;
+		bf.swap(3, s3);
+		selectedIndex /= 4;
+		uint16_t s2 = selectedIndex % 3;
+		bf.swap(2, s2);
+		selectedIndex /= 3;
+		uint16_t s1 = selectedIndex % 2;
+		bf.swap(1, s1);
+		selectedIndex /= 2;
+		uint16_t s0 = selectedIndex;
+		bf.swap(0, s0);
+	} else {
+		for(unsigned int i = 0; i < Variables; i++) {
+			unsigned int selectedIndex = std::uniform_int_distribution<unsigned int>(i, Variables - 1)(generator);
+			if(selectedIndex == i) continue; // leave i where it is
+			bf.swap(i, selectedIndex); // put selectedIndex in position i
+		}
+	}
+}*/
+
 template<unsigned int Variables, typename RandomEngine>
 void permuteRandom(AntiChain<Variables>& ac, RandomEngine& generator, unsigned int from = 0, unsigned int to = Variables) {
 	permuteRandom<Variables, RandomEngine>(ac.bf, generator, from, to);

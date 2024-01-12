@@ -6,6 +6,7 @@
 #include <map>
 #include <string>
 #include <chrono>
+#include <algorithm>
 
 #include "../dedelib/funcTypes.h"
 #include "../dedelib/dedekindDecomposition.h"
@@ -28,6 +29,9 @@
 #include "../dedelib/allMBFsMap.h"
 
 #include "../dedelib/timeTracker.h"
+
+#include "../dedelib/pcoeffClasses.h"
+#include "../dedelib/flatBufferManagement.h"
 
 void RAMTestBenchFunc(size_t numHops, size_t numCurs, uint32_t* curs, uint32_t* jumpTable) {
 	for(size_t i = 0; i < numHops; i++) {
@@ -584,7 +588,7 @@ static double a(int n) {
 }
 static double b(int n) {
 	int ch = choose(n, (n - 3) / 2);
-	double powers = pow(2.0, -(n+3) / 2) + n*n*pow(2.0, -n-6) - n * pow(2.0, -n-3);
+	double powers = pow(2.0, -(n+3) / 2) - n*n*pow(2.0, -n-5) - n * pow(2.0, -n-3);
 	return ch * powers;
 }
 static double c(int n) {
@@ -596,9 +600,153 @@ static double estimateDedekindNumber(int n) {
 	if(n % 2 == 0) {
 		return pow(2.0, choose(n, n / 2)) * exp(a(n));
 	} else {
-		return pow(2.0, choose(n, n / 2) + 1) * exp(b(n) + c(n));
+		return pow(2.0, choose(n, (n-1) / 2) + 1) * exp(b(n) + c(n));
 	}
 }
+
+
+template<unsigned int Variables>
+void computeUnateNumbers() {
+	const Monotonic<Variables>* mbfs = readFlatBufferNoMMAP<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+	const ClassInfo* allBigIntervalSizes = readFlatBufferNoMMAP<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
+
+	uint64_t totalUnates = 0;
+	uint64_t totalInequivalentUnates = 0;
+	uint64_t totalUnatesPerSize[(1 << Variables) + 1]{0};
+	uint64_t totalMBFsPerSize[(1 << Variables) + 1]{0};
+	uint64_t totalInequivalentUnatesPerSize[(1 << Variables) + 1]{0}; // == totalInequivalentMBFsPerSize
+
+	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+		uint64_t nonSymmetricVariables = 0;
+		BooleanFunction<Variables> bf = mbfs[i].bf;
+		for(unsigned int v = 0; v < Variables; v++) {
+			BooleanFunction<Variables> copy = bf;
+			copy.invertVariable(v);
+			if(copy != bf) {
+				nonSymmetricVariables++;
+			}
+		}
+		
+		uint64_t unateCount = allBigIntervalSizes[i].classSize * (1 << nonSymmetricVariables);
+
+		totalUnates += unateCount;
+		totalInequivalentUnates += (1 << nonSymmetricVariables);
+		size_t sz = mbfs[i].bf.size();
+		/*if(sz <= (1 << Variables) / 2) {
+			totalInequivalentUnates++;
+		}*/
+		totalUnatesPerSize[sz] += unateCount;
+		totalInequivalentUnatesPerSize[sz] += (1 << nonSymmetricVariables);
+		totalMBFsPerSize[sz] += allBigIntervalSizes[i].classSize;
+	}
+
+	std::cout << "Size\t\t\tUnates\t\t\tMBFs\t\t\tEq Classes" << std::endl;
+	for(size_t sz = 0; sz <= 1 << Variables; sz++) {
+		std::cout << sz << ":\t\t\t" << totalUnatesPerSize[sz] << "\t\t\t" << totalMBFsPerSize[sz] << "\t\t\t" << totalInequivalentUnatesPerSize[sz] << std::endl;
+	}
+	std::cout << std::endl;
+	std::cout << "Total Unates: " << totalUnates << std::endl;
+	std::cout << "Total Inequivalent Unates: " << totalInequivalentUnates << std::endl;
+}
+
+
+template<unsigned int Variables>
+void benchmarkRandomMBFGeneration() {
+	constexpr int VAR_FACTORIAL = factorial(Variables);
+	std::cout << "Reading buffers..." << std::endl;
+	const Monotonic<Variables>* mbfs = readFlatBufferNoMMAP<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+	const ClassInfo* allBigIntervalSizes = readFlatBufferNoMMAP<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
+	
+	std::cout << "Sorting buffers..." << std::endl;
+	struct BufferStruct {
+		int classSize;
+		std::vector<Monotonic<Variables>> mbfs;
+	};
+	std::vector<BufferStruct> buffers;
+	
+	// Have sizes sorted in decending order, because most likely classes have full 5040 permutations!
+	for(int i = VAR_FACTORIAL; i > 0; i--) {
+		if(VAR_FACTORIAL % i == 0) {
+			BufferStruct newStruct{i, std::vector<Monotonic<Variables>>{}};
+			buffers.push_back(std::move(newStruct));
+		}
+	}
+
+	// Add all MBFs to these groups
+	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+		uint64_t classSize = allBigIntervalSizes[i].classSize;
+		for(BufferStruct& bf : buffers) {
+			if(bf.classSize == classSize) {
+				bf.mbfs.push_back(mbfs[i]);
+				break;
+			}
+		}
+	}
+
+	std::cout << "Regrouping buffers..." << std::endl;
+	// Now move them all to one large buffer (not really necessary but makes everything a little neater)
+	std::unique_ptr<Monotonic<Variables>[]> mbfsByClassSize = std::unique_ptr<Monotonic<Variables>[]>(new Monotonic<Variables>[mbfCounts[Variables]]);
+	struct CumulativeBuffer{
+		uint64_t mbfCountHere;
+		uint64_t inverseClassSize; // factorial(Variables) / classSize // Used to get rid of a division
+		Monotonic<Variables>* mbfs;
+	};
+	Monotonic<Variables>* curMBFsPtr = mbfsByClassSize.get();
+	std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers = std::unique_ptr<CumulativeBuffer[]>(new CumulativeBuffer[buffers.size()]);
+	for(size_t i = 0; i < buffers.size(); i++) {
+		BufferStruct& bf = buffers[i];
+		uint64_t mbfCountHere = bf.classSize * bf.mbfs.size();
+		cumulativeBuffers[i] = CumulativeBuffer{mbfCountHere, VAR_FACTORIAL / bf.classSize, curMBFsPtr};
+		for(Monotonic<Variables>& mbf : bf.mbfs) {
+			*curMBFsPtr++ = mbf;
+		}
+	}
+
+	std::cout << "Random Generation!" << std::endl;
+	std::default_random_engine generator;
+
+	uint64_t dont_optimize_summer = 0;
+	constexpr uint64_t SAMPLE_SIZE = 1000000000;
+
+	// Perform 3 benchmarks, one without permuteRandom, one with it once, and one with it twice.
+	// This is to see what effect it has on runtime compared to the main memory read
+	for(int numPermuteRandoms = 0; numPermuteRandoms < 3; numPermuteRandoms++) {
+		auto start = std::chrono::high_resolution_clock::now();
+		for(uint64_t i = 0; i < SAMPLE_SIZE; i++) {
+			uint64_t chosenMBFIdx = std::uniform_int_distribution<uint64_t>(0, dedekindNumbers[Variables] - 1)(generator);
+
+			Monotonic<Variables> mbfFound;
+			CumulativeBuffer* cb = cumulativeBuffers.get();
+			while(true) { // Cheap iteration through data in L1 cache
+				if(chosenMBFIdx < cb->mbfCountHere) { // will nearly always hit first cumulative buffer, because it's the largest and has the largest factor
+					size_t idxInBuffer = chosenMBFIdx * cb->inverseClassSize / VAR_FACTORIAL; // Division by constant is cheap!
+					mbfFound = cb->mbfs[idxInBuffer]; // Expensive Main Memory access
+					break;
+				} else {
+					chosenMBFIdx -= cb->mbfCountHere;
+				}
+				cb++;
+			}
+
+			for(int i = 0; i < numPermuteRandoms; i++) {
+				permuteRandom(mbfFound, generator);
+			}
+
+			if constexpr(Variables == 7) {
+				dont_optimize_summer += _mm_extract_epi64(mbfFound.bf.bitset.data, 0) + _mm_extract_epi64(mbfFound.bf.bitset.data, 1);
+			} else {
+				dont_optimize_summer += mbfFound.bf.bitset.data;
+			}
+			//if(i % (SAMPLE_SIZE / 100) == 0) std::cout << i << std::endl;
+		}
+		auto time = std::chrono::high_resolution_clock::now() - start;
+		uint64_t millis = std::chrono::duration_cast<std::chrono::milliseconds>(time).count();
+		std::cout << "Took " << millis << "ms: " << (SAMPLE_SIZE / (millis / 1000.0)) << " MBF7 per second! with " << numPermuteRandoms << " permuteRandom() calls" << std::endl;
+	}
+
+	std::cout << "Don't optimize print: " << dont_optimize_summer << std::endl;
+}
+
 
 CommandSet miscCommands{"Misc", {
 	{"ramTest", []() {doRAMTest(); }},
@@ -700,6 +848,22 @@ CommandSet miscCommands{"Misc", {
 	{"computeIntervalSizesFast5", []() {computeIntervalSizesFast<5>(); }},
 	{"computeIntervalSizesFast6", []() {computeIntervalSizesFast<6>(); }},
 	{"computeIntervalSizesFast7", []() {computeIntervalSizesFast<7>(); }},
+
+	{"computeUnateNumbers1", computeUnateNumbers<1>},
+	{"computeUnateNumbers2", computeUnateNumbers<2>},
+	{"computeUnateNumbers3", computeUnateNumbers<3>},
+	{"computeUnateNumbers4", computeUnateNumbers<4>},
+	{"computeUnateNumbers5", computeUnateNumbers<5>},
+	{"computeUnateNumbers6", computeUnateNumbers<6>},
+	{"computeUnateNumbers7", computeUnateNumbers<7>},
+
+	{"benchmarkRandomMBFGeneration1", benchmarkRandomMBFGeneration<1>},
+	{"benchmarkRandomMBFGeneration2", benchmarkRandomMBFGeneration<2>},
+	{"benchmarkRandomMBFGeneration3", benchmarkRandomMBFGeneration<3>},
+	{"benchmarkRandomMBFGeneration4", benchmarkRandomMBFGeneration<4>},
+	{"benchmarkRandomMBFGeneration5", benchmarkRandomMBFGeneration<5>},
+	{"benchmarkRandomMBFGeneration6", benchmarkRandomMBFGeneration<6>},
+	{"benchmarkRandomMBFGeneration7", benchmarkRandomMBFGeneration<7>},
 
 	{"countValidPermutationSetFraction7_0", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 0); }},
 	{"countValidPermutationSetFraction7_1", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 1); }},
