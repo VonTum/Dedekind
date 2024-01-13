@@ -8,6 +8,8 @@
 #include <chrono>
 #include <algorithm>
 
+#include <sys/mman.h>
+
 #include "../dedelib/funcTypes.h"
 #include "../dedelib/dedekindDecomposition.h"
 #include "../dedelib/valuedDecomposition.h"
@@ -658,7 +660,7 @@ struct MBFSampler{
 	};
 
 	std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers;
-	std::unique_ptr<Monotonic<Variables>[]> mbfsByClassSize;
+	Monotonic<Variables>* mbfsByClassSize;
 
 	MBFSampler() {
 		constexpr int VAR_FACTORIAL = factorial(Variables);
@@ -685,8 +687,19 @@ struct MBFSampler{
 
 		// Add all MBFs to these groups
 		// Already push the biggest group into the final buffer, saves on a big allocation
-		std::unique_ptr<Monotonic<Variables>[]> mbfsByClassSize = std::unique_ptr<Monotonic<Variables>[]>(new Monotonic<Variables>[mbfCounts[Variables]]);
-		Monotonic<Variables>* curMBFsPtr = mbfsByClassSize.get();
+		size_t allocSizeBytes = sizeof(Monotonic<Variables>) * mbfCounts[Variables];
+		std::cout << "Allocating huge pages..." << std::endl;
+		Monotonic<Variables>* mbfsByClassSize = (Monotonic<Variables>*) aligned_alloc(1024*1024*1024, allocSizeBytes);
+		madvise(mbfsByClassSize, allocSizeBytes, MADV_HUGEPAGE);
+		madvise(mbfsByClassSize, allocSizeBytes, MADV_WILLNEED);
+
+		// MMAP to force 1GB pages gives segmentation fault
+		//Monotonic<Variables>* mbfsByClassSize = (Monotonic<Variables>*) mmap(nullptr, allocSizeBytes, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB | (30 << MAP_HUGE_SHIFT), -1, 0);
+		if(mbfsByClassSize == nullptr) {
+			perror("While allocating 1GB pages");
+			exit(1);
+		}
+		Monotonic<Variables>* curMBFsPtr = mbfsByClassSize;
 		for(size_t i = 0; i < mbfCounts[Variables]; i++) {
 			uint64_t classSize = allBigIntervalSizes[i].classSize;
 			if(classSize == VAR_FACTORIAL) {
@@ -706,7 +719,7 @@ struct MBFSampler{
 		freeFlatBufferNoMMAP(allBigIntervalSizes, mbfCounts[Variables]); // Free up memory
 		// Now move them all to one large buffer (not really necessary but makes everything a little neater)
 		std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers = std::unique_ptr<CumulativeBuffer[]>(new CumulativeBuffer[1 + buffers.size()]);
-		cumulativeBuffers[0] = CumulativeBuffer{(curMBFsPtr - mbfsByClassSize.get()) * VAR_FACTORIAL, 1, mbfsByClassSize.get()};
+		cumulativeBuffers[0] = CumulativeBuffer{(curMBFsPtr - mbfsByClassSize) * VAR_FACTORIAL, 1, mbfsByClassSize};
 		for(size_t i = 0; i < buffers.size(); i++) {
 			BufferStruct& bf = buffers[i];
 			uint64_t mbfCountHere = bf.classSize * bf.mbfs.size();
