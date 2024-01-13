@@ -684,6 +684,8 @@ void benchmarkRandomMBFGeneration() {
 	}
 
 	std::cout << "Regrouping buffers..." << std::endl;
+	freeFlatBufferNoMMAP(mbfs, mbfCounts[Variables]); // Free up memory
+	freeFlatBufferNoMMAP(allBigIntervalSizes, mbfCounts[Variables]); // Free up memory
 	// Now move them all to one large buffer (not really necessary but makes everything a little neater)
 	std::unique_ptr<Monotonic<Variables>[]> mbfsByClassSize = std::unique_ptr<Monotonic<Variables>[]>(new Monotonic<Variables>[mbfCounts[Variables]]);
 	struct CumulativeBuffer{
@@ -701,6 +703,7 @@ void benchmarkRandomMBFGeneration() {
 			*curMBFsPtr++ = mbf;
 		}
 	}
+	buffers.clear(); // Free up memory
 
 	std::cout << "Random Generation!" << std::endl;
 	std::default_random_engine generator;

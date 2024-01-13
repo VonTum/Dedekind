@@ -19,6 +19,7 @@ void writeFlatVoidBuffer(const void* data, const std::string& fileName, size_t s
 void* readFlatVoidBuffer(const std::string& fileName, size_t size);
 void readFlatVoidBufferNoMMAP(const std::string& fileName, size_t size, void* buffer);
 void* readFlatVoidBufferNoMMAP(const std::string& fileName, size_t size);
+void freeFlatVoidBufferNoMMAP(const void* buffer, size_t size);
 void* mmapFlatVoidBuffer(const std::string& fileName, size_t size);
 void munmapFlatVoidBuffer(const void* buf, size_t size);
 void freeFlatVoidBuffer(const void* buffer, size_t size);
@@ -42,4 +43,8 @@ const T* readFlatBufferNoMMAP(const std::string& fileName, size_t size) {
 template<typename T>
 void freeFlatBuffer(const T* buffer, size_t size) {
 	freeFlatVoidBuffer(buffer, sizeof(T) * size);
+}
+template<typename T>
+void freeFlatBufferNoMMAP(const T* buffer, size_t size) {
+	freeFlatVoidBufferNoMMAP(buffer, sizeof(T) * size);
 }

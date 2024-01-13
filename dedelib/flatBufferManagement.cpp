@@ -49,6 +49,9 @@ void* readFlatVoidBufferNoMMAP(const std::string& fileName, size_t size) {
 	readFlatVoidBufferNoMMAP(fileName, size, buffer);
 	return buffer;
 }
+void freeFlatVoidBufferNoMMAP(const void* buffer, size_t size) {
+	numa_free(const_cast<void*>(buffer), size);
+}
 void* mmapFlatVoidBuffer(const std::string& fileName, size_t size) {
 	#ifdef __linux__
 	int fd = open(fileName.c_str(), O_RDONLY);
