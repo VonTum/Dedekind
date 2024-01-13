@@ -649,67 +649,99 @@ void computeUnateNumbers() {
 	std::cout << "Total Inequivalent Unates: " << totalInequivalentUnates << std::endl;
 }
 
-
 template<unsigned int Variables>
-void benchmarkRandomMBFGeneration() {
-	constexpr int VAR_FACTORIAL = factorial(Variables);
-	std::cout << "Reading buffers..." << std::endl;
-	const Monotonic<Variables>* mbfs = readFlatBufferNoMMAP<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
-	const ClassInfo* allBigIntervalSizes = readFlatBufferNoMMAP<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
-	
-	std::cout << "Sorting buffers..." << std::endl;
-	struct BufferStruct {
-		int classSize;
-		std::vector<Monotonic<Variables>> mbfs;
-	};
-	std::vector<BufferStruct> buffers;
-	
-	// Have sizes sorted in decending order, because most likely classes have full 5040 permutations!
-	for(int i = VAR_FACTORIAL / 2; i > 0; i--) {
-		if(VAR_FACTORIAL % i == 0) {
-			BufferStruct newStruct{i, std::vector<Monotonic<Variables>>{}};
-			buffers.push_back(std::move(newStruct));
-		}
-	}
-
-	// Add all MBFs to these groups
-	// Already push the biggest group into the final buffer, saves on a big allocation
-	std::unique_ptr<Monotonic<Variables>[]> mbfsByClassSize = std::unique_ptr<Monotonic<Variables>[]>(new Monotonic<Variables>[mbfCounts[Variables]]);
-	Monotonic<Variables>* curMBFsPtr = mbfsByClassSize.get();
-	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
-		uint64_t classSize = allBigIntervalSizes[i].classSize;
-		if(classSize == VAR_FACTORIAL) {
-			*curMBFsPtr++ = mbfs[i];
-		} else {
-			for(BufferStruct& bf : buffers) {
-				if(bf.classSize == classSize) {
-					bf.mbfs.push_back(mbfs[i]);
-					break;
-				}
-			}
-		}
-	}
-
-	std::cout << "Regrouping buffers..." << std::endl;
-	freeFlatBufferNoMMAP(mbfs, mbfCounts[Variables]); // Free up memory
-	freeFlatBufferNoMMAP(allBigIntervalSizes, mbfCounts[Variables]); // Free up memory
-	// Now move them all to one large buffer (not really necessary but makes everything a little neater)
+struct MBFSampler{
 	struct CumulativeBuffer{
 		uint64_t mbfCountHere;
 		uint64_t inverseClassSize; // factorial(Variables) / classSize // Used to get rid of a division
 		Monotonic<Variables>* mbfs;
 	};
-	std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers = std::unique_ptr<CumulativeBuffer[]>(new CumulativeBuffer[1 + buffers.size()]);
-	cumulativeBuffers[0] = CumulativeBuffer{(curMBFsPtr - mbfsByClassSize.get()) * VAR_FACTORIAL, 1, mbfsByClassSize.get()};
-	for(size_t i = 0; i < buffers.size(); i++) {
-		BufferStruct& bf = buffers[i];
-		uint64_t mbfCountHere = bf.classSize * bf.mbfs.size();
-		cumulativeBuffers[i+1] = CumulativeBuffer{mbfCountHere, VAR_FACTORIAL / bf.classSize, curMBFsPtr};
-		for(Monotonic<Variables>& mbf : bf.mbfs) {
-			*curMBFsPtr++ = mbf;
+
+	std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers;
+	std::unique_ptr<Monotonic<Variables>[]> mbfsByClassSize;
+
+	MBFSampler() {
+		constexpr int VAR_FACTORIAL = factorial(Variables);
+		struct BufferStruct {
+			int classSize;
+			std::vector<Monotonic<Variables>> mbfs;
+		};
+
+		std::cout << "Reading buffers..." << std::endl;
+		const Monotonic<Variables>* mbfs = readFlatBufferNoMMAP<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+		const ClassInfo* allBigIntervalSizes = readFlatBufferNoMMAP<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
+		
+		std::cout << "Sorting buffers..." << std::endl;
+		
+		std::vector<BufferStruct> buffers;
+		
+		// Have sizes sorted in decending order, because most likely classes have full 5040 permutations!
+		for(int i = VAR_FACTORIAL / 2; i > 0; i--) {
+			if(VAR_FACTORIAL % i == 0) {
+				BufferStruct newStruct{i, std::vector<Monotonic<Variables>>{}};
+				buffers.push_back(std::move(newStruct));
+			}
+		}
+
+		// Add all MBFs to these groups
+		// Already push the biggest group into the final buffer, saves on a big allocation
+		std::unique_ptr<Monotonic<Variables>[]> mbfsByClassSize = std::unique_ptr<Monotonic<Variables>[]>(new Monotonic<Variables>[mbfCounts[Variables]]);
+		Monotonic<Variables>* curMBFsPtr = mbfsByClassSize.get();
+		for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+			uint64_t classSize = allBigIntervalSizes[i].classSize;
+			if(classSize == VAR_FACTORIAL) {
+				*curMBFsPtr++ = mbfs[i];
+			} else {
+				for(BufferStruct& bf : buffers) {
+					if(bf.classSize == classSize) {
+						bf.mbfs.push_back(mbfs[i]);
+						break;
+					}
+				}
+			}
+		}
+
+		std::cout << "Regrouping buffers..." << std::endl;
+		freeFlatBufferNoMMAP(mbfs, mbfCounts[Variables]); // Free up memory
+		freeFlatBufferNoMMAP(allBigIntervalSizes, mbfCounts[Variables]); // Free up memory
+		// Now move them all to one large buffer (not really necessary but makes everything a little neater)
+		std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers = std::unique_ptr<CumulativeBuffer[]>(new CumulativeBuffer[1 + buffers.size()]);
+		cumulativeBuffers[0] = CumulativeBuffer{(curMBFsPtr - mbfsByClassSize.get()) * VAR_FACTORIAL, 1, mbfsByClassSize.get()};
+		for(size_t i = 0; i < buffers.size(); i++) {
+			BufferStruct& bf = buffers[i];
+			uint64_t mbfCountHere = bf.classSize * bf.mbfs.size();
+			cumulativeBuffers[i+1] = CumulativeBuffer{mbfCountHere, VAR_FACTORIAL / bf.classSize, curMBFsPtr};
+			for(Monotonic<Variables>& mbf : bf.mbfs) {
+				*curMBFsPtr++ = mbf;
+			}
+		}
+
+		this->mbfsByClassSize = std::move(mbfsByClassSize);
+		this->cumulativeBuffers = std::move(cumulativeBuffers);
+	}
+
+	Monotonic<Variables> sample(std::default_random_engine& generator) {
+		constexpr int VAR_FACTORIAL = factorial(Variables);
+		
+		uint64_t chosenMBFIdx = std::uniform_int_distribution<uint64_t>(0, dedekindNumbers[Variables] - 1)(generator);
+			
+		CumulativeBuffer* cb = cumulativeBuffers.get();
+		while(true) { // Cheap iteration through data in L1 cache
+			if(chosenMBFIdx < cb->mbfCountHere) { // will nearly always hit first cumulative buffer, because it's the largest and has the largest factor
+				size_t idxInBuffer = chosenMBFIdx * cb->inverseClassSize / VAR_FACTORIAL; // Division by constant is cheap!
+				return cb->mbfs[idxInBuffer];// Expensive Main Memory access
+			} else {
+				chosenMBFIdx -= cb->mbfCountHere;
+			}
+			cb++;
 		}
 	}
-	buffers.clear(); // Free up memory
+};
+
+
+template<unsigned int Variables>
+void benchmarkRandomMBFGeneration() {
+	MBFSampler<Variables> sampler;
 
 	std::cout << "Random Generation!" << std::endl;
 	std::default_random_engine generator;
@@ -721,21 +753,9 @@ void benchmarkRandomMBFGeneration() {
 	// This is to see what effect it has on runtime compared to the main memory read
 	for(int numPermuteRandoms = 0; numPermuteRandoms < 3; numPermuteRandoms++) {
 		auto start = std::chrono::high_resolution_clock::now();
-		for(uint64_t i = 0; i < SAMPLE_SIZE; i++) {
-			uint64_t chosenMBFIdx = std::uniform_int_distribution<uint64_t>(0, dedekindNumbers[Variables] - 1)(generator);
 
-			Monotonic<Variables> mbfFound;
-			CumulativeBuffer* cb = cumulativeBuffers.get();
-			while(true) { // Cheap iteration through data in L1 cache
-				if(chosenMBFIdx < cb->mbfCountHere) { // will nearly always hit first cumulative buffer, because it's the largest and has the largest factor
-					size_t idxInBuffer = chosenMBFIdx * cb->inverseClassSize / VAR_FACTORIAL; // Division by constant is cheap!
-					mbfFound = cb->mbfs[idxInBuffer]; // Expensive Main Memory access
-					break;
-				} else {
-					chosenMBFIdx -= cb->mbfCountHere;
-				}
-				cb++;
-			}
+		for(uint64_t i = 0; i < SAMPLE_SIZE; i++) {
+			Monotonic<Variables> mbfFound = sampler.sample(generator);
 
 			for(int i = 0; i < numPermuteRandoms; i++) {
 				permuteRandom(mbfFound, generator);
