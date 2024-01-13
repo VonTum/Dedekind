@@ -665,7 +665,7 @@ void benchmarkRandomMBFGeneration() {
 	std::vector<BufferStruct> buffers;
 	
 	// Have sizes sorted in decending order, because most likely classes have full 5040 permutations!
-	for(int i = VAR_FACTORIAL; i > 0; i--) {
+	for(int i = VAR_FACTORIAL / 2; i > 0; i--) {
 		if(VAR_FACTORIAL % i == 0) {
 			BufferStruct newStruct{i, std::vector<Monotonic<Variables>>{}};
 			buffers.push_back(std::move(newStruct));
@@ -673,12 +673,19 @@ void benchmarkRandomMBFGeneration() {
 	}
 
 	// Add all MBFs to these groups
+	// Already push the biggest group into the final buffer, saves on a big allocation
+	std::unique_ptr<Monotonic<Variables>[]> mbfsByClassSize = std::unique_ptr<Monotonic<Variables>[]>(new Monotonic<Variables>[mbfCounts[Variables]]);
+	Monotonic<Variables>* curMBFsPtr = mbfsByClassSize.get();
 	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
 		uint64_t classSize = allBigIntervalSizes[i].classSize;
-		for(BufferStruct& bf : buffers) {
-			if(bf.classSize == classSize) {
-				bf.mbfs.push_back(mbfs[i]);
-				break;
+		if(classSize == VAR_FACTORIAL) {
+			*curMBFsPtr++ = mbfs[i];
+		} else {
+			for(BufferStruct& bf : buffers) {
+				if(bf.classSize == classSize) {
+					bf.mbfs.push_back(mbfs[i]);
+					break;
+				}
 			}
 		}
 	}
@@ -687,18 +694,17 @@ void benchmarkRandomMBFGeneration() {
 	freeFlatBufferNoMMAP(mbfs, mbfCounts[Variables]); // Free up memory
 	freeFlatBufferNoMMAP(allBigIntervalSizes, mbfCounts[Variables]); // Free up memory
 	// Now move them all to one large buffer (not really necessary but makes everything a little neater)
-	std::unique_ptr<Monotonic<Variables>[]> mbfsByClassSize = std::unique_ptr<Monotonic<Variables>[]>(new Monotonic<Variables>[mbfCounts[Variables]]);
 	struct CumulativeBuffer{
 		uint64_t mbfCountHere;
 		uint64_t inverseClassSize; // factorial(Variables) / classSize // Used to get rid of a division
 		Monotonic<Variables>* mbfs;
 	};
-	Monotonic<Variables>* curMBFsPtr = mbfsByClassSize.get();
-	std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers = std::unique_ptr<CumulativeBuffer[]>(new CumulativeBuffer[buffers.size()]);
+	std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers = std::unique_ptr<CumulativeBuffer[]>(new CumulativeBuffer[1 + buffers.size()]);
+	cumulativeBuffers[0] = CumulativeBuffer{(curMBFsPtr - mbfsByClassSize.get()) * VAR_FACTORIAL, 1, mbfsByClassSize.get()};
 	for(size_t i = 0; i < buffers.size(); i++) {
 		BufferStruct& bf = buffers[i];
 		uint64_t mbfCountHere = bf.classSize * bf.mbfs.size();
-		cumulativeBuffers[i] = CumulativeBuffer{mbfCountHere, VAR_FACTORIAL / bf.classSize, curMBFsPtr};
+		cumulativeBuffers[i+1] = CumulativeBuffer{mbfCountHere, VAR_FACTORIAL / bf.classSize, curMBFsPtr};
 		for(Monotonic<Variables>& mbf : bf.mbfs) {
 			*curMBFsPtr++ = mbf;
 		}
