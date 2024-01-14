@@ -651,7 +651,7 @@ void computeUnateNumbers() {
 	std::cout << "Total Inequivalent Unates: " << totalInequivalentUnates << std::endl;
 }
 
-template<unsigned int Variables>
+template<unsigned int Variables, size_t PREFETCH_CACHE_SIZE = 64>
 struct MBFSampler{
 	struct CumulativeBuffer{
 		uint64_t mbfCountHere;
@@ -661,6 +661,9 @@ struct MBFSampler{
 
 	std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers;
 	Monotonic<Variables>* mbfsByClassSize;
+
+	Monotonic<Variables>* prefetchCache[PREFETCH_CACHE_SIZE];
+	size_t curPrefetchLine;
 
 	MBFSampler() {
 		constexpr int VAR_FACTORIAL = factorial(Variables);
@@ -731,18 +734,34 @@ struct MBFSampler{
 
 		this->mbfsByClassSize = std::move(mbfsByClassSize);
 		this->cumulativeBuffers = std::move(cumulativeBuffers);
+
+		for(size_t i = 0; i < PREFETCH_CACHE_SIZE; i++) {
+			this->prefetchCache[i] = this->mbfsByClassSize;
+		}
+		this->curPrefetchLine = 0;
+		// Get some samples to initialize prefetchCache with good random samples
+		std::default_random_engine tmpGenerator;
+		for(size_t i = 0; i < PREFETCH_CACHE_SIZE; i++) {
+			this->sample(tmpGenerator);
+		}
 	}
 
 	Monotonic<Variables> sample(std::default_random_engine& generator) {
 		constexpr int VAR_FACTORIAL = factorial(Variables);
 		
 		uint64_t chosenMBFIdx = std::uniform_int_distribution<uint64_t>(0, dedekindNumbers[Variables] - 1)(generator);
-			
+		
 		CumulativeBuffer* cb = cumulativeBuffers.get();
 		while(true) { // Cheap iteration through data in L1 cache
 			if(chosenMBFIdx < cb->mbfCountHere) { // will nearly always hit first cumulative buffer, because it's the largest and has the largest factor
 				size_t idxInBuffer = chosenMBFIdx * cb->inverseClassSize / VAR_FACTORIAL; // Division by constant is cheap!
-				return cb->mbfs[idxInBuffer];// Expensive Main Memory access
+
+				Monotonic<Variables>* foundMBF = cb->mbfs + idxInBuffer;// Expensive Main Memory access, so we prefetch it and return a result that has already arrived
+				_mm_prefetch((char const *) foundMBF, _MM_HINT_T0);
+				Monotonic<Variables> thisResult = *this->prefetchCache[this->curPrefetchLine];
+				this->prefetchCache[this->curPrefetchLine] = foundMBF;
+				this->curPrefetchLine = (this->curPrefetchLine + 1) % PREFETCH_CACHE_SIZE;
+				return thisResult;
 			} else {
 				chosenMBFIdx -= cb->mbfCountHere;
 			}
