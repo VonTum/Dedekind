@@ -972,7 +972,7 @@ void benchmarkRandomMBFGeneration() {
 			Monotonic<Variables> mbfFound = sampler.sample(generator);
 
 			for(int i = 0; i < numPermuteRandoms; i++) {
-				permuter.permuteRandom(mbfFound.bf, generator);
+				mbfFound.bf = permuter.permuteRandom(mbfFound.bf, generator);
 			}
 
 			if constexpr(Variables == 7) {
