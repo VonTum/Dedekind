@@ -855,8 +855,21 @@ struct FastRandomPermuter {
 	}
 };*/
 
-template<> struct FastRandomPermuter<7> {
+template<> alignas(64) struct FastRandomPermuter<7> {
 	__m128i permute3456[24];
+
+	struct PrecomputedPermuteInfo {
+		__m128i shiftAndSwapMaskX; // stores 0, shift1, shift0, mask0
+		__m128i shiftAndSwapMaskY; // stores 0, shift2, mask2, mask1
+		__m128i shiftLeft0;
+		__m128i shiftRight0;
+		__m128i shiftLeft1;
+		__m128i shiftRight1;
+		__m128i shiftLeft2;
+		__m128i shiftRight2;
+	};
+
+	PrecomputedPermuteInfo bigPermuteInfo[210];
 
 	FastRandomPermuter() {
 		// Initialize permute4567 masks
@@ -876,33 +889,115 @@ template<> struct FastRandomPermuter<7> {
 		__m128i permutesLastThree[6]{p3456, p3465, p3654, p3645, p3546, p3564};
 		__m128i toPermute[4]{identy, swap36, _mm_shuffle_epi8(p3465, swap36), _mm_shuffle_epi8(p3564, swap36)};
 
+		{
+			size_t i = 0;
+			for(__m128i to : toPermute) {
+				for(__m128i permut : permutesLastThree) {
+					this->permute3456[i++] = _mm_shuffle_epi8(to, permut);
+				}
+			}
+		}
+
+
 		size_t i = 0;
-		for(__m128i to : toPermute) {
-			for(__m128i permut : permutesLastThree) {
-				this->permute3456[i++] = _mm_shuffle_epi8(to, permut);
+		// Remaining 7, 6, 5 permutations
+		for(unsigned int v0 = 0; v0 < 7; v0++) {
+			PrecomputedPermuteInfo permutInfo;
+
+
+			//                v0 = x x _ _ x x _ _
+			//                 0 = x _ x _ x _ x _
+			//  shiftLeft0 = _ _ x _ _ _ x _ = 0 & ~v0
+			// shiftRight0 = _ x _ _ _ x _ _ = v0 & ~0 
+			// shift = 1, swap = 0
+
+			// 64 bit crossing case
+			//                v0 = x x x x _ _ _ _
+			//                 0 = x _ x _ x _ x _
+			// shiftRight0 = _ x _ x _ _ _ _ = 0 & ~v0 // Reverse the variables
+			//  shiftLeft0 = _ _ _ _ x _ x _ = v0 & ~0 
+			// shift = 1, swap = 1
+
+			uint32_t shift0 = (1 << v0) - (1 << 0);
+			uint32_t shouldSwap0 = 0x00000000;
+			permutInfo.shiftLeft0 = andnot(BooleanFunction<7>::varMask(0), BooleanFunction<7>::varMask(v0)).data;
+			permutInfo.shiftRight0 = andnot(BooleanFunction<7>::varMask(v0), BooleanFunction<7>::varMask(0)).data;
+			if(v0 == 6) {
+				shift0 = (1 << 0);
+				shouldSwap0 = 0xFFFFFFFF;
+				__m128i tmp = permutInfo.shiftLeft0;
+				permutInfo.shiftLeft0 = permutInfo.shiftRight0;
+				permutInfo.shiftRight0 = tmp;
+			}
+			for(unsigned int v1 = 1; v1 < 7; v1++) {
+				uint32_t shift1 = (1 << v1) - (1 << 1);
+				uint32_t shouldSwap1 = 0x00000000;
+				permutInfo.shiftLeft1 = andnot(BooleanFunction<7>::varMask(1), BooleanFunction<7>::varMask(v1)).data;
+				permutInfo.shiftRight1 = andnot(BooleanFunction<7>::varMask(v1), BooleanFunction<7>::varMask(1)).data;
+				if(v1 == 6) {
+					shift1 = (1 << 1);
+					shouldSwap1 = 0xFFFFFFFF;
+					__m128i tmp = permutInfo.shiftLeft1;
+					permutInfo.shiftLeft1 = permutInfo.shiftRight1;
+					permutInfo.shiftRight1 = tmp;
+				}
+				for(unsigned int v2 = 2; v2 < 7; v2++) {
+					uint32_t shift2 = (1 << v2) - (1 << 2);
+					uint32_t shouldSwap2 = 0x00000000;
+					permutInfo.shiftLeft2 = andnot(BooleanFunction<7>::varMask(2), BooleanFunction<7>::varMask(v2)).data;
+					permutInfo.shiftRight2 = andnot(BooleanFunction<7>::varMask(v2), BooleanFunction<7>::varMask(2)).data;
+					if(v2 == 6) {
+						shift2 = (1 << 2);
+						shouldSwap2 = 0xFFFFFFFF;
+						__m128i tmp = permutInfo.shiftLeft2;
+						permutInfo.shiftLeft2 = permutInfo.shiftRight2;
+						permutInfo.shiftRight2 = tmp;
+					}
+					
+					permutInfo.shiftAndSwapMaskX = _mm_set_epi32(0, shift1, shift0, shouldSwap0);
+					permutInfo.shiftAndSwapMaskY = _mm_set_epi32(0, shift2, shouldSwap2, shouldSwap1);
+
+					this->bigPermuteInfo[i++] = permutInfo;
+				}
 			}
 		}
 	}
-	BooleanFunction<7> permuteWithIndex(uint16_t chosenPermutation, BooleanFunction<7> bf) const {
+	inline __m128i applyPreComputedSwap(__m128i bf, __m128i shiftLeft, __m128i shiftRight, __m128i shift, __m128i shouldSwap) const {
+		__m128i bitsToShiftLeft = _mm_and_si128(bf, shiftLeft);
+		__m128i bitsToShiftRight = _mm_and_si128(bf, shiftRight);
+		__m128i bitsToKeep = _mm_andnot_si128(_mm_or_si128(shiftLeft, shiftRight), bf);
+		__m128i combinedShiftedBits = _mm_or_si128(_mm_sll_epi64(bitsToShiftLeft, shift), _mm_srl_epi64(bitsToShiftRight, shift));
+		__m128i swappedCombinedShiftedBits = _mm_shuffle_epi32(combinedShiftedBits, _MM_SHUFFLE(1, 0, 3, 2));
+		__m128i shiftedAndSwapped = _mm_blendv_epi8(combinedShiftedBits, swappedCombinedShiftedBits, shouldSwap);
+		return _mm_or_si128(shiftedAndSwapped, bitsToKeep);
+	}
+	__m128i permuteWithIndex(uint16_t chosenPermutation, __m128i bf) const {
 		uint16_t permut3456 = chosenPermutation % 24;
 		chosenPermutation /= 24;
-		uint16_t v0 = chosenPermutation % 7;
-		chosenPermutation /= 7;
-		uint16_t v1 = chosenPermutation % 6 + 1;
-		chosenPermutation /= 6;
-		assert(chosenPermutation < 5);
-		uint16_t v2 = chosenPermutation + 2;
+		
+		const PrecomputedPermuteInfo& bigPermut = this->bigPermuteInfo[chosenPermutation];
+		__m128i shiftAndSwapMaskX = _mm_load_si128(&bigPermut.shiftAndSwapMaskX); // stores 0, shift1, shift0, mask0
+		__m128i shiftAndSwapMaskY = _mm_load_si128(&bigPermut.shiftAndSwapMaskY); // stores 0, shift2, mask2, mask1
 
-		bf.swap(0, v0);
-		bf.swap(1, v1);
-		bf.swap(2, v2);
-		__m128i selectedPermutation = this->permute3456[permut3456];
-		bf.bitset.data = _mm_shuffle_epi8(bf.bitset.data, selectedPermutation);
+		__m128i shift0 = _mm_shuffle_epi32(shiftAndSwapMaskX, _MM_SHUFFLE(3, 1, 3, 1));
+		__m128i shouldSwap0 = _mm_broadcastd_epi32(shiftAndSwapMaskX);
+		bf = this->applyPreComputedSwap(bf, _mm_load_si128(&bigPermut.shiftLeft0), _mm_load_si128(&bigPermut.shiftRight0), shift0, shouldSwap0);
+
+		__m128i shift1 = _mm_shuffle_epi32(shiftAndSwapMaskX, _MM_SHUFFLE(3, 2, 3, 2));
+		__m128i shouldSwap1 = _mm_broadcastd_epi32(shiftAndSwapMaskY);
+		bf = this->applyPreComputedSwap(bf, _mm_load_si128(&bigPermut.shiftLeft1), _mm_load_si128(&bigPermut.shiftRight1), shift1, shouldSwap1);
+
+		__m128i shift2 = _mm_shuffle_epi32(shiftAndSwapMaskY, _MM_SHUFFLE(3, 2, 3, 2));
+		__m128i shouldSwap2 = _mm_shuffle_epi32(shiftAndSwapMaskY, _MM_SHUFFLE(1, 1, 1, 1));
+		bf = this->applyPreComputedSwap(bf, _mm_load_si128(&bigPermut.shiftLeft2), _mm_load_si128(&bigPermut.shiftRight2), shift2, shouldSwap2);
+
+		bf = _mm_shuffle_epi8(bf, this->permute3456[permut3456]);
 		return bf;
 	}
 	BooleanFunction<7> permuteRandom(BooleanFunction<7> bf, std::default_random_engine& generator) const {
 		size_t selectedIndex = std::uniform_int_distribution<size_t>(0, 5039)(generator);
-		return this->permuteWithIndex(selectedIndex, bf);
+		bf.bitset.data = this->permuteWithIndex(selectedIndex, bf.bitset.data);
+		return bf;
 	}
 };
 
