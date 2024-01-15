@@ -651,19 +651,19 @@ void computeUnateNumbers() {
 	std::cout << "Total Inequivalent Unates: " << totalInequivalentUnates << std::endl;
 }
 
-template<unsigned int Variables, size_t PREFETCH_CACHE_SIZE = 64>
+constexpr size_t PREFETCH_CACHE_SIZE = 64;
+
+template<unsigned int Variables>
 struct MBFSampler{
 	struct CumulativeBuffer{
 		uint64_t mbfCountHere;
 		uint64_t inverseClassSize; // factorial(Variables) / classSize // Used to get rid of a division
-		Monotonic<Variables>* mbfs;
+		const Monotonic<Variables>* mbfs;
 	};
 
-	std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers;
-	Monotonic<Variables>* mbfsByClassSize;
-
-	Monotonic<Variables>* prefetchCache[PREFETCH_CACHE_SIZE];
-	size_t curPrefetchLine;
+	std::unique_ptr<const CumulativeBuffer[]> cumulativeBuffers;
+	size_t numCumulativeBuffers;
+	const Monotonic<Variables>* mbfsByClassSize;
 
 	MBFSampler() {
 		constexpr int VAR_FACTORIAL = factorial(Variables);
@@ -721,7 +721,8 @@ struct MBFSampler{
 		freeFlatBufferNoMMAP(mbfs, mbfCounts[Variables]); // Free up memory
 		freeFlatBufferNoMMAP(allBigIntervalSizes, mbfCounts[Variables]); // Free up memory
 		// Now move them all to one large buffer (not really necessary but makes everything a little neater)
-		std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers = std::unique_ptr<CumulativeBuffer[]>(new CumulativeBuffer[1 + buffers.size()]);
+		this->numCumulativeBuffers = 1 + buffers.size();
+		std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers = std::unique_ptr<CumulativeBuffer[]>(new CumulativeBuffer[this->numCumulativeBuffers]);
 		cumulativeBuffers[0] = CumulativeBuffer{(curMBFsPtr - mbfsByClassSize) * VAR_FACTORIAL, 1, mbfsByClassSize};
 		for(size_t i = 0; i < buffers.size(); i++) {
 			BufferStruct& bf = buffers[i];
@@ -734,34 +735,20 @@ struct MBFSampler{
 
 		this->mbfsByClassSize = std::move(mbfsByClassSize);
 		this->cumulativeBuffers = std::move(cumulativeBuffers);
-
-		for(size_t i = 0; i < PREFETCH_CACHE_SIZE; i++) {
-			this->prefetchCache[i] = this->mbfsByClassSize;
-		}
-		this->curPrefetchLine = 0;
-		// Get some samples to initialize prefetchCache with good random samples
-		std::default_random_engine tmpGenerator;
-		for(size_t i = 0; i < PREFETCH_CACHE_SIZE; i++) {
-			this->sample(tmpGenerator);
-		}
 	}
 
-	Monotonic<Variables> sample(std::default_random_engine& generator) {
+	// Does not actually return the Monotonic itself, because it's an expensive Main Memory access, instead the caller prefetches it and returns a result that has already arrived
+	const Monotonic<Variables>* sample(std::default_random_engine& generator) const {
 		constexpr int VAR_FACTORIAL = factorial(Variables);
 		
 		uint64_t chosenMBFIdx = std::uniform_int_distribution<uint64_t>(0, dedekindNumbers[Variables] - 1)(generator);
 		
-		CumulativeBuffer* cb = cumulativeBuffers.get();
+		const CumulativeBuffer* cb = cumulativeBuffers.get();
 		while(true) { // Cheap iteration through data in L1 cache
 			if(chosenMBFIdx < cb->mbfCountHere) { // will nearly always hit first cumulative buffer, because it's the largest and has the largest factor
 				size_t idxInBuffer = chosenMBFIdx * cb->inverseClassSize / VAR_FACTORIAL; // Division by constant is cheap!
 
-				Monotonic<Variables>* foundMBF = cb->mbfs + idxInBuffer;// Expensive Main Memory access, so we prefetch it and return a result that has already arrived
-				_mm_prefetch((char const *) foundMBF, _MM_HINT_NTA);
-				Monotonic<Variables> thisResult = *this->prefetchCache[this->curPrefetchLine];
-				this->prefetchCache[this->curPrefetchLine] = foundMBF;
-				this->curPrefetchLine = (this->curPrefetchLine + 1) % PREFETCH_CACHE_SIZE;
-				return thisResult;
+				return cb->mbfs + idxInBuffer;
 			} else {
 				chosenMBFIdx -= cb->mbfCountHere;
 			}
@@ -778,82 +765,6 @@ struct FastRandomPermuter {
 		return bf;
 	}
 };
-
- /*alignas(64) struct FastRandomPermuter<7> {
-	alignas(64) struct PrecomputedPermuteInfo {
-		__m128i masks65; // 64 bits each. _mm_shuffle_epi32 and _mm_broadcastd_epi64 to broadcast
-		__m128i masks4321; // 32 bits each. _mm_shuffle_epi32 and _mm_broadcastd_epi32 to broadcast
-		__m128i shifts0654; // 32 bits each, elem 3 is 0. _mm_shuffle_epi32 to broadcast
-		__m128i shifts0321; // 32 bits each, elem 3 is 0. _mm_shuffle_epi32 to broadcast
-	};
-
-	// The first 720 elements don't swap var 7, so we simply detect this and copy mask 5
-	PrecomputedPermuteInfo infos[5040];
-
-	FastRandomPermuter() {
-		PrecomputedPermuteInfo* curInfo = this->infos;
-		for(int v6 = 6; v6 >= 0; v6--) { // Do annoying case first where we don't swap var 6. 
-			// This first mask is special, because it shifts across the 64 bit boundary. 
-			// If there should be no swap (6 with 6), in this case just store 0
-			// Else just store the mask and shift for v6 on its own. 
-			uint64_t combined_mask6 = v6 != 6 ? BooleanFunction<6>::varMask(v6).data : uint64_t(0);
-			uint32_t shift6 = (1 << 6) - (1 << v6);
-			for(int v5 = 0; v5 < 6; v5++) {
-				uint64_t combined_mask5 = andnot(BooleanFunction<6>::varMask(v5), BooleanFunction<6>::varMask(5)).data;
-				uint32_t shift5 = (1 << 5) - (1 << v5);
-				for(int v4 = 0; v4 < 5; v4++) {
-					uint32_t combined_mask4 = andnot(BooleanFunction<5>::varMask(v4), BooleanFunction<5>::varMask(4)).data;
-					uint32_t shift4 = (1 << 4) - (1 << v4);
-					for(int v3 = 0; v3 < 4; v3++) {
-						uint32_t combined_mask3 = andnot(BooleanFunction<5>::varMask(v3), BooleanFunction<5>::varMask(3)).data;
-						uint32_t shift3 = (1 << 3) - (1 << v3);
-						for(int v2 = 0; v2 < 3; v2++) {
-							uint32_t combined_mask2 = andnot(BooleanFunction<5>::varMask(v2), BooleanFunction<5>::varMask(2)).data;
-							uint32_t shift2 = (1 << 2) - (1 << v2);
-							for(int v1 = 0; v1 < 2; v1++) {
-								uint32_t combined_mask1 = andnot(BooleanFunction<5>::varMask(v1), BooleanFunction<5>::varMask(1)).data;
-								uint32_t shift1 = (1 << 1) - (1 << v1);
-
-								curInfo->shifts0654 = _mm_set_epi32(0, shift6, shift5, shift4);
-								curInfo->shifts0321 = _mm_set_epi32(0, shift3, shift2, shift1);
-								curInfo->masks65 = _mm_set_epi64x(combined_mask6, combined_mask5);
-								curInfo->masks4321 = _mm_set_epi32(combined_mask4, combined_mask3, combined_mask2, combined_mask1);
-								curInfo++;
-							}
-						}	
-					}	
-				}
-			}
-		}
-	}
-	__m128i permuteWithIndex(size_t chosenPermutation, __m128i bf) const {
-		const PrecomputedPermuteInfo& info = this->infos[chosenPermutation];
-
-		__m128i masks65 = _mm_load_si128(&info.masks65);
-		__m128i shifts0654 = _mm_load_si128(&info.shifts0654);
-		if(chosenPermutation >= 720) { // Do swap var 6
-			// TODO
-		}
-
-		// Swap 5
-		__m128i leftMask5 = _mm_broadcastq_epi64(masks65);
-		__m128i shift5 = _mm_shuffle_epi32(shifts0654, _MM_SHUFFLE(3,1,3,1));
-		
-		__m128i rightMask5 = _mm_srl_epi64(leftMask5, shift5);
-		__m128i bitsThatAreMovedMask = _mm_or_si128(leftMask5, rightMask5);
-
-		__m128i leftBitsMovedRight = 
-
-		__m128i masks4321 = _mm_load_si128(&info.masks4321);
-		__m128i shifts0321 = _mm_load_si128(&info.shifts0321);
-
-	}
-	BooleanFunction<7> permuteRandom(BooleanFunction<7> bf, std::default_random_engine& generator) const {
-		size_t selectedIndex = std::uniform_int_distribution<size_t>(0, 5039)(generator);
-		bf.bitset.data = this->permuteWithIndex(selectedIndex, bf.bitset.data);
-		return bf;
-	}
-};*/
 
 template<> alignas(64) struct FastRandomPermuter<7> {
 	__m128i permute3456[24];
@@ -1037,41 +948,68 @@ void testFastRandomPermuter(BooleanFunction<Variables> sample5040) {
 }
 
 template<unsigned int Variables>
-void benchmarkRandomMBFGeneration() {
+struct RandomMBFGenerationSharedData {
 	MBFSampler<Variables> sampler;
 	FastRandomPermuter<Variables> permuter;
+};
 
-	testFastRandomPermuter(sampler.mbfsByClassSize[0].bf); // Will have 5040 variations
+template<unsigned int Variables>
+struct RandomMBFGenerationThreadLocalState {
+	const RandomMBFGenerationSharedData<Variables>* generationData;
+	std::default_random_engine generator;
+	size_t curPrefetchLine;
+	const Monotonic<Variables>* prefetchCache[PREFETCH_CACHE_SIZE];
+
+	RandomMBFGenerationThreadLocalState(const RandomMBFGenerationSharedData<Variables>* generationData) : generationData(generationData) {
+		for(size_t i = 0; i < PREFETCH_CACHE_SIZE; i++) {
+			this->prefetchCache[i] = generationData->sampler.mbfsByClassSize;
+		}
+		this->curPrefetchLine = 0;
+		// Get some samples to initialize prefetchCache with good random samples
+		for(size_t i = 0; i < PREFETCH_CACHE_SIZE; i++) {
+			this->sample();
+		}
+	}
+
+	Monotonic<Variables> sample() {
+		const Monotonic<Variables>* newMBFPtr = this->generationData->sampler.sample(this->generator);
+		_mm_prefetch((char const *) newMBFPtr, _MM_HINT_T0);
+		Monotonic<Variables> mbfFound = *this->prefetchCache[this->curPrefetchLine]; // Expensive Main Memory access, so we prefetch it and return a result that has already arrived
+		this->prefetchCache[this->curPrefetchLine] = newMBFPtr;
+		this->curPrefetchLine = (this->curPrefetchLine + 1) % PREFETCH_CACHE_SIZE;
+
+		mbfFound.bf = this->generationData->permuter.permuteRandom(mbfFound.bf, this->generator);
+		return mbfFound;
+	}
+};
+
+
+template<unsigned int Variables>
+void benchmarkRandomMBFGeneration() {
+	const RandomMBFGenerationSharedData<Variables> generationData;
+
+	//testFastRandomPermuter(sampler.mbfsByClassSize[0].bf); // Will have 5040 variations
 
 	std::cout << "Random Generation!" << std::endl;
-	std::default_random_engine generator;
+	RandomMBFGenerationThreadLocalState<Variables> threadState{&generationData};
 
 	uint64_t dont_optimize_summer = 0;
 	constexpr uint64_t SAMPLE_SIZE = 1000000000;
 
-	// Perform 3 benchmarks, one without permuteRandom, one with it once, and one with it twice.
-	// This is to see what effect it has on runtime compared to the main memory read
-	for(int numPermuteRandoms = 0; numPermuteRandoms < 3; numPermuteRandoms++) {
-		auto start = std::chrono::high_resolution_clock::now();
+	auto start = std::chrono::high_resolution_clock::now();
+	for(uint64_t i = 0; i < SAMPLE_SIZE; i++) {
+		Monotonic<Variables> mbfFound = threadState.sample();
 
-		for(uint64_t i = 0; i < SAMPLE_SIZE; i++) {
-			Monotonic<Variables> mbfFound = sampler.sample(generator);
-
-			for(int i = 0; i < numPermuteRandoms; i++) {
-				mbfFound.bf = permuter.permuteRandom(mbfFound.bf, generator);
-			}
-
-			if constexpr(Variables == 7) {
-				dont_optimize_summer += _mm_extract_epi64(mbfFound.bf.bitset.data, 0) + _mm_extract_epi64(mbfFound.bf.bitset.data, 1);
-			} else {
-				dont_optimize_summer += mbfFound.bf.bitset.data;
-			}
-			//if(i % (SAMPLE_SIZE / 100) == 0) std::cout << i << std::endl;
+		if constexpr(Variables == 7) {
+			dont_optimize_summer += _mm_extract_epi64(mbfFound.bf.bitset.data, 0) + _mm_extract_epi64(mbfFound.bf.bitset.data, 1);
+		} else {
+			dont_optimize_summer += mbfFound.bf.bitset.data;
 		}
-		auto time = std::chrono::high_resolution_clock::now() - start;
-		uint64_t millis = std::chrono::duration_cast<std::chrono::milliseconds>(time).count();
-		std::cout << "Took " << millis << "ms: " << (SAMPLE_SIZE / (millis / 1000.0)) << " MBF7 per second! with " << numPermuteRandoms << " permuteRandom() calls" << std::endl;
+		//if(i % (SAMPLE_SIZE / 100) == 0) std::cout << i << std::endl;
 	}
+	auto time = std::chrono::high_resolution_clock::now() - start;
+	uint64_t millis = std::chrono::duration_cast<std::chrono::milliseconds>(time).count();
+	std::cout << "Took " << millis << "ms: " << (SAMPLE_SIZE / (millis / 1000.0)) << " random MBF7 per second!" << std::endl;
 
 	std::cout << "Don't optimize print: " << dont_optimize_summer << std::endl;
 }
