@@ -694,7 +694,7 @@ struct MBFSampler{
 		std::cout << "Allocating huge pages..." << std::endl;
 		Monotonic<Variables>* mbfsByClassSize = (Monotonic<Variables>*) aligned_alloc(1024*1024*1024, allocSizeBytes);
 		madvise(mbfsByClassSize, allocSizeBytes, MADV_HUGEPAGE);
-		madvise(mbfsByClassSize, allocSizeBytes, MADV_WILLNEED);
+		//madvise(mbfsByClassSize, allocSizeBytes, MADV_WILLNEED);
 
 		// MMAP to force 1GB pages gives segmentation fault
 		//Monotonic<Variables>* mbfsByClassSize = (Monotonic<Variables>*) mmap(nullptr, allocSizeBytes, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB | (30 << MAP_HUGE_SHIFT), -1, 0);
@@ -757,7 +757,7 @@ struct MBFSampler{
 				size_t idxInBuffer = chosenMBFIdx * cb->inverseClassSize / VAR_FACTORIAL; // Division by constant is cheap!
 
 				Monotonic<Variables>* foundMBF = cb->mbfs + idxInBuffer;// Expensive Main Memory access, so we prefetch it and return a result that has already arrived
-				_mm_prefetch((char const *) foundMBF, _MM_HINT_T0);
+				_mm_prefetch((char const *) foundMBF, _MM_HINT_NTA);
 				Monotonic<Variables> thisResult = *this->prefetchCache[this->curPrefetchLine];
 				this->prefetchCache[this->curPrefetchLine] = foundMBF;
 				this->curPrefetchLine = (this->curPrefetchLine + 1) % PREFETCH_CACHE_SIZE;
@@ -862,11 +862,8 @@ template<> alignas(64) struct FastRandomPermuter<7> {
 		__m128i shiftAndSwapMaskX; // stores 0, shift1, shift0, mask0
 		__m128i shiftAndSwapMaskY; // stores 0, shift2, mask2, mask1
 		__m128i shiftLeft0;
-		__m128i shiftRight0;
 		__m128i shiftLeft1;
-		__m128i shiftRight1;
 		__m128i shiftLeft2;
-		__m128i shiftRight2;
 	};
 
 	PrecomputedPermuteInfo bigPermuteInfo[210];
@@ -905,15 +902,15 @@ template<> alignas(64) struct FastRandomPermuter<7> {
 			PrecomputedPermuteInfo permutInfo;
 
 
-			//                v0 = x x _ _ x x _ _
-			//                 0 = x _ x _ x _ x _
+			//          v0 = x x _ _ x x _ _
+			//           0 = x _ x _ x _ x _
 			//  shiftLeft0 = _ _ x _ _ _ x _ = 0 & ~v0
 			// shiftRight0 = _ x _ _ _ x _ _ = v0 & ~0 
 			// shift = 1, swap = 0
 
 			// 64 bit crossing case
-			//                v0 = x x x x _ _ _ _
-			//                 0 = x _ x _ x _ x _
+			//          v0 = x x x x _ _ _ _
+			//           0 = x _ x _ x _ x _
 			// shiftRight0 = _ x _ x _ _ _ _ = 0 & ~v0 // Reverse the variables
 			//  shiftLeft0 = _ _ _ _ x _ x _ = v0 & ~0 
 			// shift = 1, swap = 1
@@ -921,37 +918,28 @@ template<> alignas(64) struct FastRandomPermuter<7> {
 			uint32_t shift0 = (1 << v0) - (1 << 0);
 			uint32_t shouldSwap0 = 0x00000000;
 			permutInfo.shiftLeft0 = andnot(BooleanFunction<7>::varMask(0), BooleanFunction<7>::varMask(v0)).data;
-			permutInfo.shiftRight0 = andnot(BooleanFunction<7>::varMask(v0), BooleanFunction<7>::varMask(0)).data;
 			if(v0 == 6) {
 				shift0 = (1 << 0);
 				shouldSwap0 = 0xFFFFFFFF;
-				__m128i tmp = permutInfo.shiftLeft0;
-				permutInfo.shiftLeft0 = permutInfo.shiftRight0;
-				permutInfo.shiftRight0 = tmp;
+				permutInfo.shiftLeft0 = andnot(BooleanFunction<7>::varMask(6), BooleanFunction<7>::varMask(0)).data;
 			}
 			for(unsigned int v1 = 1; v1 < 7; v1++) {
 				uint32_t shift1 = (1 << v1) - (1 << 1);
 				uint32_t shouldSwap1 = 0x00000000;
 				permutInfo.shiftLeft1 = andnot(BooleanFunction<7>::varMask(1), BooleanFunction<7>::varMask(v1)).data;
-				permutInfo.shiftRight1 = andnot(BooleanFunction<7>::varMask(v1), BooleanFunction<7>::varMask(1)).data;
 				if(v1 == 6) {
 					shift1 = (1 << 1);
 					shouldSwap1 = 0xFFFFFFFF;
-					__m128i tmp = permutInfo.shiftLeft1;
-					permutInfo.shiftLeft1 = permutInfo.shiftRight1;
-					permutInfo.shiftRight1 = tmp;
+					permutInfo.shiftLeft1 = andnot(BooleanFunction<7>::varMask(6), BooleanFunction<7>::varMask(1)).data;
 				}
 				for(unsigned int v2 = 2; v2 < 7; v2++) {
 					uint32_t shift2 = (1 << v2) - (1 << 2);
 					uint32_t shouldSwap2 = 0x00000000;
 					permutInfo.shiftLeft2 = andnot(BooleanFunction<7>::varMask(2), BooleanFunction<7>::varMask(v2)).data;
-					permutInfo.shiftRight2 = andnot(BooleanFunction<7>::varMask(v2), BooleanFunction<7>::varMask(2)).data;
 					if(v2 == 6) {
 						shift2 = (1 << 2);
 						shouldSwap2 = 0xFFFFFFFF;
-						__m128i tmp = permutInfo.shiftLeft2;
-						permutInfo.shiftLeft2 = permutInfo.shiftRight2;
-						permutInfo.shiftRight2 = tmp;
+						permutInfo.shiftLeft2 = andnot(BooleanFunction<7>::varMask(6), BooleanFunction<7>::varMask(2)).data;
 					}
 					
 					permutInfo.shiftAndSwapMaskX = _mm_set_epi32(0, shift1, shift0, shouldSwap0);
@@ -962,7 +950,9 @@ template<> alignas(64) struct FastRandomPermuter<7> {
 			}
 		}
 	}
-	inline __m128i applyPreComputedSwap(__m128i bf, __m128i shiftLeft, __m128i shiftRight, __m128i shift, __m128i shouldSwap) const {
+
+	inline __m128i applyPreComputedSwap(__m128i bf, __m128i shiftLeft, __m128i shift, __m128i shouldSwap) const {
+		__m128i shiftRight = _mm_shuffle_epi32(_mm_sll_epi64(shiftLeft, shift), _MM_SHUFFLE(1, 0, 3, 2));
 		__m128i bitsToShiftLeft = _mm_and_si128(bf, shiftLeft);
 		__m128i bitsToShiftRight = _mm_and_si128(bf, shiftRight);
 		__m128i bitsToKeep = _mm_andnot_si128(_mm_or_si128(shiftLeft, shiftRight), bf);
@@ -971,6 +961,7 @@ template<> alignas(64) struct FastRandomPermuter<7> {
 		__m128i shiftedAndSwapped = _mm_blendv_epi8(combinedShiftedBits, swappedCombinedShiftedBits, shouldSwap);
 		return _mm_or_si128(shiftedAndSwapped, bitsToKeep);
 	}
+
 	__m128i permuteWithIndex(uint16_t chosenPermutation, __m128i bf) const {
 		uint16_t permut3456 = chosenPermutation % 24;
 		chosenPermutation /= 24;
@@ -981,15 +972,15 @@ template<> alignas(64) struct FastRandomPermuter<7> {
 
 		__m128i shift0 = _mm_shuffle_epi32(shiftAndSwapMaskX, _MM_SHUFFLE(3, 1, 3, 1));
 		__m128i shouldSwap0 = _mm_broadcastd_epi32(shiftAndSwapMaskX);
-		bf = this->applyPreComputedSwap(bf, _mm_load_si128(&bigPermut.shiftLeft0), _mm_load_si128(&bigPermut.shiftRight0), shift0, shouldSwap0);
+		bf = this->applyPreComputedSwap(bf, _mm_load_si128(&bigPermut.shiftLeft0), shift0, shouldSwap0);
 
 		__m128i shift1 = _mm_shuffle_epi32(shiftAndSwapMaskX, _MM_SHUFFLE(3, 2, 3, 2));
 		__m128i shouldSwap1 = _mm_broadcastd_epi32(shiftAndSwapMaskY);
-		bf = this->applyPreComputedSwap(bf, _mm_load_si128(&bigPermut.shiftLeft1), _mm_load_si128(&bigPermut.shiftRight1), shift1, shouldSwap1);
+		bf = this->applyPreComputedSwap(bf, _mm_load_si128(&bigPermut.shiftLeft1), shift1, shouldSwap1);
 
 		__m128i shift2 = _mm_shuffle_epi32(shiftAndSwapMaskY, _MM_SHUFFLE(3, 2, 3, 2));
 		__m128i shouldSwap2 = _mm_shuffle_epi32(shiftAndSwapMaskY, _MM_SHUFFLE(1, 1, 1, 1));
-		bf = this->applyPreComputedSwap(bf, _mm_load_si128(&bigPermut.shiftLeft2), _mm_load_si128(&bigPermut.shiftRight2), shift2, shouldSwap2);
+		bf = this->applyPreComputedSwap(bf, _mm_load_si128(&bigPermut.shiftLeft2), shift2, shouldSwap2);
 
 		bf = _mm_shuffle_epi8(bf, this->permute3456[permut3456]);
 		return bf;
@@ -1019,7 +1010,7 @@ void testFastRandomPermuter(BooleanFunction<Variables> sample5040) {
 	for(uint64_t& v : counts) {v = 0;}
 
 	std::default_random_engine generator;
-	constexpr uint64_t SAMPLE_COUNT = 10000000;
+	constexpr uint64_t SAMPLE_COUNT = 1000000;
 	for(uint64_t sample_i = 0; sample_i < SAMPLE_COUNT; sample_i++) {
 		BooleanFunction<Variables> sampleCopyCopy = sampleCopy;
 		BooleanFunction<Variables> permut = permuter.permuteRandom(sampleCopyCopy, generator);
