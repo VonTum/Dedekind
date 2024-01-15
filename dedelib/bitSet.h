@@ -424,11 +424,11 @@ public:
 	template<size_t OtherSize>
 	BitSet(const BitSet<OtherSize>& other) : data{} {
 		if constexpr(OtherSize <= 64) {
-			this->data = _mm_set_epi64(0, other.data);
+			this->data = _mm_set_epi64x(0, other.data);
 		} else if constexpr(OtherSize == 128) {
 			this->data = other.data;
 		} else {
-			this->data = _mm_set_epi64(other.data[1], other.data[0]);
+			this->data = _mm_set_epi64x(other.data[1], other.data[0]);
 		}
 	}
 

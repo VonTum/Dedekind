@@ -770,10 +770,192 @@ struct MBFSampler{
 	}
 };
 
+template<unsigned int Variables>
+struct FastRandomPermuter {
+	FastRandomPermuter() {};
+	BooleanFunction<Variables> permuteRandom(BooleanFunction<7> bf, std::default_random_engine& generator) const {
+		permuteRandom(bf, generator);
+		return bf;
+	}
+};
+
+ /*alignas(64) struct FastRandomPermuter<7> {
+	alignas(64) struct PrecomputedPermuteInfo {
+		__m128i masks65; // 64 bits each. _mm_shuffle_epi32 and _mm_broadcastd_epi64 to broadcast
+		__m128i masks4321; // 32 bits each. _mm_shuffle_epi32 and _mm_broadcastd_epi32 to broadcast
+		__m128i shifts0654; // 32 bits each, elem 3 is 0. _mm_shuffle_epi32 to broadcast
+		__m128i shifts0321; // 32 bits each, elem 3 is 0. _mm_shuffle_epi32 to broadcast
+	};
+
+	// The first 720 elements don't swap var 7, so we simply detect this and copy mask 5
+	PrecomputedPermuteInfo infos[5040];
+
+	FastRandomPermuter() {
+		PrecomputedPermuteInfo* curInfo = this->infos;
+		for(int v6 = 6; v6 >= 0; v6--) { // Do annoying case first where we don't swap var 6. 
+			// This first mask is special, because it shifts across the 64 bit boundary. 
+			// If there should be no swap (6 with 6), in this case just store 0
+			// Else just store the mask and shift for v6 on its own. 
+			uint64_t combined_mask6 = v6 != 6 ? BooleanFunction<6>::varMask(v6).data : uint64_t(0);
+			uint32_t shift6 = (1 << 6) - (1 << v6);
+			for(int v5 = 0; v5 < 6; v5++) {
+				uint64_t combined_mask5 = andnot(BooleanFunction<6>::varMask(v5), BooleanFunction<6>::varMask(5)).data;
+				uint32_t shift5 = (1 << 5) - (1 << v5);
+				for(int v4 = 0; v4 < 5; v4++) {
+					uint32_t combined_mask4 = andnot(BooleanFunction<5>::varMask(v4), BooleanFunction<5>::varMask(4)).data;
+					uint32_t shift4 = (1 << 4) - (1 << v4);
+					for(int v3 = 0; v3 < 4; v3++) {
+						uint32_t combined_mask3 = andnot(BooleanFunction<5>::varMask(v3), BooleanFunction<5>::varMask(3)).data;
+						uint32_t shift3 = (1 << 3) - (1 << v3);
+						for(int v2 = 0; v2 < 3; v2++) {
+							uint32_t combined_mask2 = andnot(BooleanFunction<5>::varMask(v2), BooleanFunction<5>::varMask(2)).data;
+							uint32_t shift2 = (1 << 2) - (1 << v2);
+							for(int v1 = 0; v1 < 2; v1++) {
+								uint32_t combined_mask1 = andnot(BooleanFunction<5>::varMask(v1), BooleanFunction<5>::varMask(1)).data;
+								uint32_t shift1 = (1 << 1) - (1 << v1);
+
+								curInfo->shifts0654 = _mm_set_epi32(0, shift6, shift5, shift4);
+								curInfo->shifts0321 = _mm_set_epi32(0, shift3, shift2, shift1);
+								curInfo->masks65 = _mm_set_epi64x(combined_mask6, combined_mask5);
+								curInfo->masks4321 = _mm_set_epi32(combined_mask4, combined_mask3, combined_mask2, combined_mask1);
+								curInfo++;
+							}
+						}	
+					}	
+				}
+			}
+		}
+	}
+	__m128i permuteWithIndex(size_t chosenPermutation, __m128i bf) const {
+		const PrecomputedPermuteInfo& info = this->infos[chosenPermutation];
+
+		__m128i masks65 = _mm_load_si128(&info.masks65);
+		__m128i shifts0654 = _mm_load_si128(&info.shifts0654);
+		if(chosenPermutation >= 720) { // Do swap var 6
+			// TODO
+		}
+
+		// Swap 5
+		__m128i leftMask5 = _mm_broadcastq_epi64(masks65);
+		__m128i shift5 = _mm_shuffle_epi32(shifts0654, _MM_SHUFFLE(3,1,3,1));
+		
+		__m128i rightMask5 = _mm_srl_epi64(leftMask5, shift5);
+		__m128i bitsThatAreMovedMask = _mm_or_si128(leftMask5, rightMask5);
+
+		__m128i leftBitsMovedRight = 
+
+		__m128i masks4321 = _mm_load_si128(&info.masks4321);
+		__m128i shifts0321 = _mm_load_si128(&info.shifts0321);
+
+	}
+	BooleanFunction<7> permuteRandom(BooleanFunction<7> bf, std::default_random_engine& generator) const {
+		size_t selectedIndex = std::uniform_int_distribution<size_t>(0, 5039)(generator);
+		bf.bitset.data = this->permuteWithIndex(selectedIndex, bf.bitset.data);
+		return bf;
+	}
+};*/
+
+template<> struct FastRandomPermuter<7> {
+	__m128i permute3456[24];
+
+	FastRandomPermuter() {
+		// Initialize permute4567 masks
+		__m128i identy = _mm_set_epi8(15,14,13,12,11,10,9 ,8 ,7 ,6 ,5 ,4 ,3 ,2 ,1 ,0);
+		__m128i swap56 = _mm_set_epi8(15,14,13,12,7 ,6 ,5 ,4 ,11,10,9 ,8 ,3 ,2 ,1 ,0);
+		__m128i swap46 = _mm_set_epi8(15,14,7 ,6 ,11,10,3 ,2 ,13,12,5 ,4 ,9 ,8 ,1 ,0);
+		__m128i swap36 = _mm_set_epi8(15,7 ,13,5 ,11,3 ,9 ,1 ,14,6 ,12,4 ,10,2 ,8 ,0);
+
+		// All permutations of last three
+		__m128i p3456 = identy;
+		__m128i p3465 = swap56;
+		__m128i p3654 = swap46;
+		__m128i p3645 = _mm_shuffle_epi8(p3654, swap56);
+		__m128i p3546 = _mm_shuffle_epi8(p3645, swap46);
+		__m128i p3564 = _mm_shuffle_epi8(p3546, swap56);
+
+		__m128i permutesLastThree[6]{p3456, p3465, p3654, p3645, p3546, p3564};
+		__m128i toPermute[4]{identy, swap36, _mm_shuffle_epi8(p3465, swap36), _mm_shuffle_epi8(p3564, swap36)};
+
+		size_t i = 0;
+		for(__m128i to : toPermute) {
+			for(__m128i permut : permutesLastThree) {
+				this->permute3456[i++] = _mm_shuffle_epi8(to, permut);
+			}
+		}
+	}
+	BooleanFunction<7> permuteWithIndex(uint16_t chosenPermutation, BooleanFunction<7> bf) const {
+		uint16_t permut3456 = chosenPermutation % 24;
+		chosenPermutation /= 24;
+		uint16_t v0 = chosenPermutation % 7;
+		chosenPermutation /= 7;
+		uint16_t v1 = chosenPermutation % 6 + 1;
+		chosenPermutation /= 6;
+		assert(chosenPermutation < 5);
+		uint16_t v2 = chosenPermutation + 2;
+
+		bf.swap(0, v0);
+		bf.swap(1, v1);
+		bf.swap(2, v2);
+		__m128i selectedPermutation = this->permute3456[permut3456];
+		bf.bitset.data = _mm_shuffle_epi8(bf.bitset.data, selectedPermutation);
+		return bf;
+	}
+	BooleanFunction<7> permuteRandom(BooleanFunction<7> bf, std::default_random_engine& generator) const {
+		size_t selectedIndex = std::uniform_int_distribution<size_t>(0, 5039)(generator);
+		return this->permuteWithIndex(selectedIndex, bf);
+	}
+};
+
+template<unsigned int Variables>
+void testFastRandomPermuter(BooleanFunction<Variables> sample5040) {
+	constexpr unsigned int VAR_FACTORIAL = factorial(Variables);
+
+	BooleanFunction<Variables> sampleCopy = sample5040;
+
+	std::cout << "Testing FastRandomPermuter..." << std::endl;
+	FastRandomPermuter<Variables> permuter;
+
+	BooleanFunction<Variables> table[VAR_FACTORIAL];
+	{
+		size_t i = 0;
+		sample5040.forEachPermutation([&](BooleanFunction<Variables> permut){table[i++] = permut;});
+	}
+	uint64_t counts[VAR_FACTORIAL];
+	for(uint64_t& v : counts) {v = 0;}
+
+	std::default_random_engine generator;
+	constexpr uint64_t SAMPLE_COUNT = 10000000;
+	for(uint64_t sample_i = 0; sample_i < SAMPLE_COUNT; sample_i++) {
+		BooleanFunction<Variables> sampleCopyCopy = sampleCopy;
+		BooleanFunction<Variables> permut = permuter.permuteRandom(sampleCopyCopy, generator);
+		for(size_t i = 0; i < VAR_FACTORIAL; i++) {
+			if(table[i] == permut) {
+				counts[i]++;
+				goto next;
+			}
+		}
+		std::cout << "Invalid permutation produced!" << std::endl;
+		next:;
+	}
+	std::cout << "Done testing! Exact counts:";
+	uint64_t min = SAMPLE_COUNT;
+	uint64_t max = 0;
+	for(size_t i = 0; i < VAR_FACTORIAL; i++) {
+		uint64_t v = counts[i];
+		if(v < min) min = v;
+		if(v > max) max = v;
+		if(i % 24 == 0) std::cout << "\n";
+		std::cout << v << ", ";
+	}
+	std::cout << "\nmin: " << min << ", max: " << max << std::endl;
+}
 
 template<unsigned int Variables>
 void benchmarkRandomMBFGeneration() {
 	MBFSampler<Variables> sampler;
+	FastRandomPermuter<Variables> permuter;
+
+	testFastRandomPermuter(sampler.mbfsByClassSize[0].bf); // Will have 5040 variations
 
 	std::cout << "Random Generation!" << std::endl;
 	std::default_random_engine generator;
@@ -790,7 +972,7 @@ void benchmarkRandomMBFGeneration() {
 			Monotonic<Variables> mbfFound = sampler.sample(generator);
 
 			for(int i = 0; i < numPermuteRandoms; i++) {
-				permuteRandom(mbfFound, generator);
+				permuter.permuteRandom(mbfFound.bf, generator);
 			}
 
 			if constexpr(Variables == 7) {
