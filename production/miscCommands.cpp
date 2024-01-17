@@ -896,6 +896,7 @@ template<> alignas(64) struct FastRandomPermuter<7> {
 		bf = _mm_shuffle_epi8(bf, this->permute3456[permut3456]);
 		return bf;
 	}
+
 	BooleanFunction<7> permuteRandom(BooleanFunction<7> bf, std::default_random_engine& generator) const {
 		size_t selectedIndex = std::uniform_int_distribution<size_t>(0, 5039)(generator);
 		bf.bitset.data = this->permuteWithIndex(selectedIndex, bf.bitset.data);
@@ -954,11 +955,15 @@ struct RandomMBFGenerationSharedData {
 };
 
 template<unsigned int Variables>
-struct RandomMBFGenerationThreadLocalState {
+class RandomMBFGenerationThreadLocalState {
 	const RandomMBFGenerationSharedData<Variables>* generationData;
 	std::default_random_engine generator;
 	size_t curPrefetchLine;
 	const Monotonic<Variables>* prefetchCache[PREFETCH_CACHE_SIZE];
+public:
+	uint64_t numRandomCalls;
+	uint64_t numMBFSamples;
+	uint64_t numPermutations;
 
 	RandomMBFGenerationThreadLocalState(const RandomMBFGenerationSharedData<Variables>* generationData) : generationData(generationData) {
 		for(size_t i = 0; i < PREFETCH_CACHE_SIZE; i++) {
@@ -967,22 +972,46 @@ struct RandomMBFGenerationThreadLocalState {
 		this->curPrefetchLine = 0;
 		// Get some samples to initialize prefetchCache with good random samples
 		for(size_t i = 0; i < PREFETCH_CACHE_SIZE; i++) {
-			this->sample();
+			this->sampleNonPermuted();
 		}
+		this->numRandomCalls = 0;
+		this->numMBFSamples = 0;
+		this->numPermutations = 0;
 	}
 
-	Monotonic<Variables> sample() {
+	Monotonic<Variables> sampleNonPermuted() {
 		const Monotonic<Variables>* newMBFPtr = this->generationData->sampler.sample(this->generator);
 		_mm_prefetch((char const *) newMBFPtr, _MM_HINT_T0);
 		Monotonic<Variables> mbfFound = *this->prefetchCache[this->curPrefetchLine]; // Expensive Main Memory access, so we prefetch it and return a result that has already arrived
+		this->numRandomCalls++;
+		this->numMBFSamples++;
 		this->prefetchCache[this->curPrefetchLine] = newMBFPtr;
 		this->curPrefetchLine = (this->curPrefetchLine + 1) % PREFETCH_CACHE_SIZE;
-
-		mbfFound.bf = this->generationData->permuter.permuteRandom(mbfFound.bf, this->generator);
 		return mbfFound;
 	}
+	Monotonic<Variables> permuteRandom(Monotonic<Variables> mbf) {
+		this->numRandomCalls++;
+		this->numPermutations++;
+		mbf.bf = this->generationData->permuter.permuteRandom(mbf.bf, this->generator);
+		return mbf;
+	}
+	void coPermuteRandom(Monotonic<Variables>* mbfList, size_t size) {
+		if constexpr(Variables == 7) {
+			this->numRandomCalls++;
+			this->numPermutations += size;
+			size_t selectedIndex = std::uniform_int_distribution<size_t>(0, 5039)(this->generator);
+			for(size_t i = 0; i < size; i++) {
+				Monotonic<Variables>& mbf = mbfList[i];
+				mbf.bf.bitset.data = this->generationData->permuter.permuteWithIndex(selectedIndex, mbf.bf.bitset.data);
+			}	
+		} else {
+			throw "NOT IMPLEMENTED";
+		}
+	}
+	Monotonic<Variables> samplePermuted() {
+		return this->permuteRandom(this->sampleNonPermuted());
+	}
 };
-
 
 template<unsigned int Variables>
 void benchmarkRandomMBFGeneration() {
@@ -998,7 +1027,7 @@ void benchmarkRandomMBFGeneration() {
 
 	auto start = std::chrono::high_resolution_clock::now();
 	for(uint64_t i = 0; i < SAMPLE_SIZE; i++) {
-		Monotonic<Variables> mbfFound = threadState.sample();
+		Monotonic<Variables> mbfFound = threadState.samplePermuted();
 
 		if constexpr(Variables == 7) {
 			dont_optimize_summer += _mm_extract_epi64(mbfFound.bf.bitset.data, 0) + _mm_extract_epi64(mbfFound.bf.bitset.data, 1);
@@ -1014,6 +1043,65 @@ void benchmarkRandomMBFGeneration() {
 	std::cout << "Don't optimize print: " << dont_optimize_summer << std::endl;
 }
 
+/*std::array<Monotonic<7>, 2> mbfUp8(RandomMBFGenerationThreadLocalState<7>& gen) {
+	while(true) {
+		std::array<Monotonic<7>, 2> arr{gen.sampleNonPermuted(), gen.samplePermuted()};
+		if(arr[0] <= arr[1]) {
+			return arr;
+		}
+	}
+}*/
+
+std::array<Monotonic<7>, 4> mbfUp9(RandomMBFGenerationThreadLocalState<7>& gen) {
+	std::array<Monotonic<7>, 4> arr;
+	do {
+		do {
+			arr[0] = gen.sampleNonPermuted();
+			arr[1] = gen.samplePermuted();
+		} while(!(arr[0] <= arr[1]));
+
+		do {
+			arr[2] = gen.sampleNonPermuted();
+			arr[3] = gen.samplePermuted();
+		} while(!(arr[2] <= arr[3]));
+		gen.coPermuteRandom(&arr[2], 2);
+	} while(!(arr[0] <= arr[2] && arr[1] <= arr[3]));
+	return arr;
+}
+
+void benchmarkMBF9Generation() {
+	const RandomMBFGenerationSharedData<7> generationData;
+
+	RandomMBFGenerationThreadLocalState<7> threadState{&generationData};
+
+	__m128i dont_optimize_summer = _mm_setzero_si128();
+	constexpr uint64_t SAMPLE_SIZE = 10000;
+
+	std::cout << "Random Generation..." << std::endl;
+
+	auto start = std::chrono::high_resolution_clock::now();
+	for(uint64_t i = 0; i < SAMPLE_SIZE; i++) {
+		std::array<Monotonic<7>, 4> mbf9 = mbfUp9(threadState);
+		for(int i = 3; i >= 0; i--) {
+			Monotonic<7>& mbf7 = mbf9[i];
+			//std::cout << mbf7;
+			dont_optimize_summer = _mm_add_epi64(dont_optimize_summer, mbf7.bf.bitset.data);
+		}
+		std::cout << '.' << std::flush;
+		//std::cout << std::endl;
+	}
+	uint64_t dont_optimize_summer_64 = _mm_extract_epi64(dont_optimize_summer, 0) + _mm_extract_epi64(dont_optimize_summer, 1);
+
+	auto time = std::chrono::high_resolution_clock::now() - start;
+	uint64_t millis = std::chrono::duration_cast<std::chrono::milliseconds>(time).count();
+	std::cout << "\nTook " << millis << "ms: " << (SAMPLE_SIZE / (millis / 1000.0)) << " random MBF9 per second!" << std::endl;
+
+	std::cout << "numRandomCalls: " << threadState.numRandomCalls << std::endl;
+	std::cout << "numMBFSamples: " << threadState.numMBFSamples << std::endl;
+	std::cout << "numPermutations: " << threadState.numPermutations << std::endl;
+
+	std::cout << "Don't optimize print: " << dont_optimize_summer_64 << std::endl;
+}
 
 CommandSet miscCommands{"Misc", {
 	{"ramTest", []() {doRAMTest(); }},
@@ -1131,6 +1219,8 @@ CommandSet miscCommands{"Misc", {
 	{"benchmarkRandomMBFGeneration5", benchmarkRandomMBFGeneration<5>},
 	{"benchmarkRandomMBFGeneration6", benchmarkRandomMBFGeneration<6>},
 	{"benchmarkRandomMBFGeneration7", benchmarkRandomMBFGeneration<7>},
+
+	{"benchmarkMBF9Generation", benchmarkMBF9Generation},
 
 	{"countValidPermutationSetFraction7_0", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 0); }},
 	{"countValidPermutationSetFraction7_1", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 1); }},
