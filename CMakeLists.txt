@@ -56,6 +56,7 @@ add_library(dedelib
   dedelib/threadPool.cpp
   dedelib/latch.cpp
   dedelib/validationSetVerification.cpp
+  dedelib/randomMBFGeneration.cpp
 
   dedelib/bigint/uint128_t.cpp
   dedelib/bigint/uint256_t.cpp

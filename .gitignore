@@ -4,6 +4,9 @@ Debug/
 *.user
 *.json
 *.out
+*.drawio
+*.png
+*.bkp
 Dedekind/.gitattributes
 x64/
 x86/
