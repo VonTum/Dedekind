@@ -803,5 +803,11 @@ CommandSet miscCommands{"Misc", {
 		for(int i = 0; i <= n; i++) {
 			std::cout << "D(" << i << ") = " << estimateDedekindNumber(i) << std::endl;
 		}
+	}},
+
+	{"parallelizeMBF9GenerationAcrossAllCores", [](const std::vector<std::string>& vars) {
+		int n = std::stoi(vars[0]);
+
+		parallelizeMBF9GenerationAcrossAllCores(n);
 	}}
 }};

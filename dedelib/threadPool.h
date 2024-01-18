@@ -198,9 +198,20 @@ void runInParallelOnAllCores(const Func& func) {
 	runInParallel(std::thread::hardware_concurrency(), CPUAffinityType::CORE, func);
 }
 
-// Expects a function of the form void(int threadID, IterT from, IterT to)
-template<typename IterT, typename IntT, typename Func>
-void iterRangeInParallelBlocks(int threadCount, CPUAffinityType affinity, IterT start, IterT end, IntT blockSize, const Func& func) {
+inline static int defaultInitFunc(int threadID) {
+	return threadID;
+}
+/* 
+	Expects a function of the form void(InitData& initData, IterT from, IterT to)
+	By default InitData is int threadID
+	Can also be extended with initialization data. Then requires separate InitData type
+
+	Then should be used like this:
+	InitData d = initFunc(int threadID);
+	func(d, from, to)...;
+*/
+template<typename IterT, typename IntT, typename InitData = int, typename Func, typename InitFunc = decltype(defaultInitFunc)>
+void iterRangeInParallelBlocks(int threadCount, CPUAffinityType affinity, IterT start, IterT end, IntT blockSize, const Func& func, const InitFunc& initFunc = defaultInitFunc) {
 	std::atomic<IterT> idxAtomic;
 	idxAtomic.store(start);
 
@@ -210,6 +221,7 @@ void iterRangeInParallelBlocks(int threadCount, CPUAffinityType affinity, IterT 
 		IterT idxEnd;
 		IntT blockSize;
 		const Func* f;
+		const InitFunc* initFunc;
 		pthread_t thread;
 	};
 	ThreadData* datas = (ThreadData*) alloca(sizeof(ThreadData) * threadCount);
@@ -220,9 +232,11 @@ void iterRangeInParallelBlocks(int threadCount, CPUAffinityType affinity, IterT 
 		datas[i].idxEnd = end;
 		datas[i].blockSize = blockSize;
 		datas[i].f = &func;
+		datas[i].initFunc = &initFunc;
 		datas[i].thread = createPThreadAffinity(i, affinity, [](void* voidData) -> void* {
 			ThreadData* d = (ThreadData*) voidData;
 			int threadID = d->threadID;
+			InitData initData = (*(d->initFunc))(threadID);
 			const Func& func = *(d->f);
 			std::atomic<IterT>& idxAtomic = *(d->idxAtomic);
 			IterT end = d->idxEnd;
@@ -237,7 +251,7 @@ void iterRangeInParallelBlocks(int threadCount, CPUAffinityType affinity, IterT 
 				if(myEnd >= end) {
 					myEnd = end;
 				}
-				func(threadID, grabbedBlock, myEnd);
+				func(initData, grabbedBlock, myEnd);
 			}
 		}, (void*) &datas[i]);
 	}
@@ -248,15 +262,15 @@ void iterRangeInParallelBlocks(int threadCount, CPUAffinityType affinity, IterT 
 	}
 }
 
-// Expects a function of the form void(int threadID, IterT curElem)
-template<typename IterT, typename IntT, typename Func>
-void iterRangeInParallelBlocksOnAllCores(IterT start, IterT end, IntT blockSize, const Func& func) {
-	iterRangeInParallelBlocks<IterT, IntT>(std::thread::hardware_concurrency(), CPUAffinityType::CORE, start, end, blockSize, [&func](int threadID, IterT from, IterT to){
+// Expects a function of the form void(InitData& initData, IterT curElem)
+template<typename IterT, typename IntT, typename InitData = int, typename Func, typename InitFunc = decltype(defaultInitFunc)>
+void iterRangeInParallelBlocksOnAllCores(IterT start, IterT end, IntT blockSize, const Func& func, const InitFunc& initFunc = defaultInitFunc) {
+	iterRangeInParallelBlocks<IterT, IntT, InitData>(std::thread::hardware_concurrency(), CPUAffinityType::CORE, start, end, blockSize, [&func](InitData& initData, IterT from, IterT to){
 		do {
-			func(threadID, from);
+			func(initData, from);
 			++from;
 		} while(from != to);
-	});
+	}, initFunc);
 }
 
 // Used for debugging

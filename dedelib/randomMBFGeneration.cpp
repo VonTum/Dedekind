@@ -7,12 +7,19 @@
 
 #include <sys/mman.h>
 #include <memory>
+#include <string.h>
+
+#include <thread>
+#include <fstream>
+
+#include "threadPool.h"
 
 #include "generators.h"
 #include "fileNames.h"
 #include "flatBufferManagement.h"
 #include "knownData.h"
 #include "pcoeffClasses.h"
+#include "numaMem.h"
 
 
 constexpr size_t PREFETCH_CACHE_SIZE = 64;
@@ -29,6 +36,26 @@ struct MBFSampler{
 	size_t numCumulativeBuffers;
 	const Monotonic<Variables>* mbfsByClassSize;
 
+	MBFSampler(const MBFSampler& other) : numCumulativeBuffers(other.numCumulativeBuffers) {
+        
+        std::cout << "Allocating huge pages..." << std::endl;
+		size_t allocSizeBytes = sizeof(Monotonic<Variables>) * mbfCounts[Variables];
+		Monotonic<Variables>* mbfsByClassSize = (Monotonic<Variables>*) aligned_alloc(1024*1024*1024, allocSizeBytes);
+		madvise(mbfsByClassSize, allocSizeBytes, MADV_HUGEPAGE);
+
+        std::cout << "Copying data..." << std::endl;
+        memcpy(mbfsByClassSize, other.mbfsByClassSize, allocSizeBytes);
+
+        CumulativeBuffer* cumulativeBuffers = new CumulativeBuffer[other.numCumulativeBuffers];
+        for(size_t i = 0; i < other.numCumulativeBuffers; i++) {
+            cumulativeBuffers[i] = other.cumulativeBuffers[i];
+            // Translate mbfs ptrs
+            cumulativeBuffers[i].mbfs = mbfsByClassSize + (other.cumulativeBuffers[i].mbfs - other.mbfsByClassSize);
+        }
+
+        this->cumulativeBuffers = std::unique_ptr<const CumulativeBuffer[]>(cumulativeBuffers);
+        this->mbfsByClassSize = mbfsByClassSize;
+    }
 	MBFSampler() {
 		constexpr int VAR_FACTORIAL = factorial(Variables);
 		struct BufferStruct {
@@ -54,8 +81,8 @@ struct MBFSampler{
 
 		// Add all MBFs to these groups
 		// Already push the biggest group into the final buffer, saves on a big allocation
-		size_t allocSizeBytes = sizeof(Monotonic<Variables>) * mbfCounts[Variables];
 		std::cout << "Allocating huge pages..." << std::endl;
+		size_t allocSizeBytes = sizeof(Monotonic<Variables>) * mbfCounts[Variables];
 		Monotonic<Variables>* mbfsByClassSize = (Monotonic<Variables>*) aligned_alloc(1024*1024*1024, allocSizeBytes);
 		madvise(mbfsByClassSize, allocSizeBytes, MADV_HUGEPAGE);
 		//madvise(mbfsByClassSize, allocSizeBytes, MADV_WILLNEED);
@@ -440,6 +467,7 @@ std::array<Monotonic<7>, 4> mbfUp9(RandomMBFGenerationThreadLocalState<7>& gen) 
 		} while(!(arr[2] <= arr[3]));
 		gen.coPermuteRandom(&arr[2], 2);
 	} while(!(arr[0] <= arr[2] && arr[1] <= arr[3]));
+    gen.coPermuteRandom(&arr[0], 4);
 	return arr;
 }
 
@@ -477,4 +505,50 @@ void benchmarkMBF9Generation() {
 	std::cout << "Don't optimize print: " << dont_optimize_summer_64 << std::endl;
 }
 
+void parallelizeMBF9GenerationAcrossAllCores(size_t numToGenerate) {
+    RandomMBFGenerationSharedData<7>* generationDatas[8];
+    int threadsPerNUMANode;
 
+    setNUMANodeAffinity(7);
+    generationDatas[0] = new RandomMBFGenerationSharedData<7>(); // Alloc memory in NUMA node 0
+
+    if(std::thread::hardware_concurrency() >= 128) {
+        threadsPerNUMANode = CORES_PER_NUMA_NODE;
+        struct ThreadData {
+            RandomMBFGenerationSharedData<7>* from;
+            RandomMBFGenerationSharedData<7>** to;
+        } datas[7];
+        for(int i = 0; i < 7; i++) {
+            datas[i].from = generationDatas[0];
+            datas[i].to = &generationDatas[i+1];
+        }
+        PThreadBundle copyThreads = spreadThreads(7, CPUAffinityType::NUMA_DOMAIN, datas, [](void* data) -> void* {
+            ThreadData* d = (ThreadData*) data;
+            *(d->to) = new RandomMBFGenerationSharedData<7>(*(d->from));
+            return NULL;
+        });
+        copyThreads.join();
+        std::cout << "All data copied!" << std::endl;
+    } else {
+        threadsPerNUMANode = std::thread::hardware_concurrency();
+    }
+
+    size_t bufferSize = sizeof(std::array<Monotonic<7>, 4>) * numToGenerate;
+    std::array<Monotonic<7>, 4>* resultBuf = (std::array<Monotonic<7>, 4>*) aligned_alloc(1024*4, bufferSize);
+    madvise(resultBuf, bufferSize, MADV_NOHUGEPAGE); // Preserve huge pages for buffers that need it
+    
+	std::cout << "Random Generation..." << std::endl;
+	auto start = std::chrono::high_resolution_clock::now();
+    iterRangeInParallelBlocksOnAllCores<size_t, size_t, RandomMBFGenerationThreadLocalState<7>>(0, numToGenerate, 64, [&](RandomMBFGenerationThreadLocalState<7>& threadState, size_t elem){
+        resultBuf[elem] = mbfUp9(threadState);
+    }, [&](int threadID) -> RandomMBFGenerationThreadLocalState<7> {
+        return RandomMBFGenerationThreadLocalState<7>(generationDatas[threadID / threadsPerNUMANode]);
+    });
+
+	auto time = std::chrono::high_resolution_clock::now() - start;
+	double seconds = std::chrono::duration_cast<std::chrono::milliseconds>(time).count() / 1000.0;
+	std::cout << "Took " << seconds << "s: " << (numToGenerate / seconds) << " random MBF9 per second usign " << std::thread::hardware_concurrency() << " threads." << std::endl;
+
+	std::ofstream outFile(FileName::dataPath + "randomMBF9.mbf9");
+    outFile.write((const char*) resultBuf, bufferSize);
+}
