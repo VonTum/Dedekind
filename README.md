@@ -5,6 +5,21 @@ It started as my 2020-2021 Master's thesis in Civil Engineering at KU Leuven, wh
 After finishing the thesis I continued working on it at home because our FPGA idea seemed promising. 
 On March 8th we found the 9th Dedekind Number, and published our result on April 6th right after Jäken Christian's preprint on his computation came out. 
 
+## Dedekind Numbers
+
+| D(n) |  |
+| --- | --- |
+| D(0) | 2 |
+| D(1) | 3 |
+| D(2) | 6 |
+| D(3) | 20 |
+| D(4) | 168 |
+| D(5) | 7581 |
+| D(6) | 7828354 |
+| D(7) | 2414682040998 |
+| D(8) | 56130437228687557907788 |
+| **D(9)** | **286386577668298411128469151667598498812366** |
+
 ## Components
 - [dedelib](dedelib) This contains all reuseable utilities for working with MBFs and AntiChains, Parallelization utilities, and the various algorithms needed for working in this domain. 
 - [indev](indev) Used to quickly test new developments, old and not really used anymore
