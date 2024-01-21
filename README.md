@@ -80,4 +80,4 @@ and the German [Neue Westfälische](https://www.nw.de/lokal/kreis_paderborn/pade
 - Prof. Dr. Christian Plessl
 
 ## Acknowledgements
-The authors gratefully acknowledge the computing time provided to them on the high-performance computers [Cluster name/s] at the NHR Center PC2. These are funded by the Federal Ministry of Education and Research and the state governments participating on the basis of the resolutions of the GWK for the national highperformance computing at universities (www.nhr-verein.de/unsere-partner).
+The authors gratefully acknowledge the computing time provided to them on the high-performance computers Noctua 2 at the NHR Center PC2. These are funded by the Federal Ministry of Education and Research and the state governments participating on the basis of the resolutions of the GWK for the national highperformance computing at universities (www.nhr-verein.de/unsere-partner).
