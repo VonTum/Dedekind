@@ -3,7 +3,7 @@
 This codebase contains all code I built over the course of the three years of the Quest to find the 9th Dedekind Number. 
 It started as my 2020-2021 Master's thesis in Civil Engineering at KU Leuven, which I successfully defended in June 2021. 
 After finishing the thesis I continued working on it at home because our FPGA idea seemed promising. 
-On March 8th we found the 9th Dedekind Number, and published our result on April 6th right after Jäken Christian's preprint on his computation came out. 
+On March 8th we found the 9th Dedekind Number, and published our result on April 6th right after Christian Jäkel's preprint on his computation came out. 
 
 ## Dedekind Numbers
 
