@@ -82,8 +82,10 @@ struct MBFSampler{
 		// Add all MBFs to these groups
 		// Already push the biggest group into the final buffer, saves on a big allocation
 		std::cout << "Allocating huge pages..." << std::endl;
+		constexpr size_t ALIGN = 1024*1024*1024;
 		size_t allocSizeBytes = sizeof(Monotonic<Variables>) * mbfCounts[Variables];
-		Monotonic<Variables>* mbfsByClassSize = (Monotonic<Variables>*) aligned_alloc(1024*1024*1024, allocSizeBytes);
+		allocSizeBytes = (allocSizeBytes + ALIGN - 1) & ~(ALIGN - 1);
+		Monotonic<Variables>* mbfsByClassSize = (Monotonic<Variables>*) aligned_alloc(ALIGN, allocSizeBytes);
 		madvise(mbfsByClassSize, allocSizeBytes, MADV_HUGEPAGE);
 		//madvise(mbfsByClassSize, allocSizeBytes, MADV_WILLNEED);
 
