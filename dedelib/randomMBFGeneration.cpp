@@ -1,3 +1,8 @@
+#ifdef USE_NUMA
+#define _GNU_SOURCE
+#include <sched.h>
+#endif
+
 #include "randomMBFGeneration.h"
 
 
@@ -126,6 +131,7 @@ struct MBFSampler{
 			}
 		}
 
+		std::cout << "Finished Regrouping buffers!" << std::endl;
 		this->mbfsByClassSize = std::move(mbfsByClassSize);
 		this->cumulativeBuffers = std::move(cumulativeBuffers);
 	}
@@ -521,34 +527,14 @@ void* numaNodePthreadFunc(void* voidData) {
 }
 
 #ifdef USE_NUMA
-#include <numa.h>
 #include <sched.h>
+#include <numa.h>
 int getNumNumaNodes() {
-	if numa_available() {
-		return get_num_configured_nodes();
+	if(numa_available() == 0) {
+		return numa_num_configured_nodes();
 	} else {
 		return 1;
 	}
-}
-int getNUMANodeAndBindToIt() {
-	int cur_cpu;
-	int numaNode;
-
-	if getcpu(&cur_cpu, &numaNode) {
-		perror("getNUMANodeAndBindToIt");
-		exit(1);
-	}
-
-	cpu_set_t cpuset;
-	CPU_ZERO(&cpuset);
-	CPU_SET(cur_cpu, &cpuset);
-	pthread_t current_thread = pthread_self();
-	if pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset) {
-		perror("getNUMANodeAndBindToIt");
-		exit(1);
-	}
-
-	return numaNode;
 }
 std::vector<cpu_set_t> getNUMA_CPUSets() {
 	int numNumaNodes = getNumNumaNodes();
@@ -558,85 +544,80 @@ std::vector<cpu_set_t> getNUMA_CPUSets() {
 	struct bitmask* numa_bits = numa_allocate_cpumask();
 
 	for(int numaNode = 0; numaNode < numNumaNodes; numaNode++) {
-		dataDatas[numaNode].func = func;
-		dataDatas[numaNode].data = data;
-		dataDatas[numaNode].numaNode = numaNode;
-
-		if (numa_node_to_cpus(numaNode, numa_bits) < 0) {
+		if(numa_node_to_cpus(numaNode, numa_bits) < 0) {
 			perror("numa_node_to_cpus");
 			exit(1);
 		}
 
 		cpu_set_t cpuset;
-		CPU_ZERO(cpuset);
+		CPU_ZERO(&cpuset);
 		for (unsigned int cpu = 0; cpu < std::thread::hardware_concurrency(); ++cpu) {
-            if (numa_bitmask_isbitset(numa_bits, cpu)) {
+            if(numa_bitmask_isbitset(numa_bits, cpu)) {
                 CPU_SET(cpu, &cpuset);
             }
         }
-		result.push(cpuset);
+		result.push_back(cpuset);
 	}
 
-	numa_bitset_free(numa_bits);
+	numa_bitmask_free(numa_bits);
 	
 	return result;
 }
+#else
+int getNumNumaNodes() {
+	return 1;
+}
+std::vector<cpu_set_t> getNUMA_CPUSets() {
+	cpu_set_t allCPUsSet;
+	CPU_ZERO(&allCPUsSet);
+	for(int i = 0; i < std::thread::hardware_concurrency(); i++) {
+		CPU_SET(i, &allCPUsSet);
+	}
+	return std::vector<cpu_set_t>{allCPUsSet};
+}
+int numa_node_of_cpu(int cpu) {
+	return 0;
+}
+#endif
 template<typename T>
-void runOneThreadPerNUMANode(void(func*)(int, T*), T* data) {
+void runOneThreadPerNUMANode(std::vector<cpu_set_t>& cpusPerNUMANode, void(*func)(int, T*), T* data) {
 	int numNumaNodes = getNumNumaNodes();
 	pthread_t* threads = new pthread_t[numNumaNodes];
 	CombinedData<T>* dataDatas = new CombinedData<T>[numNumaNodes];
-
-	std::vector<cpu_set_t> cpusPerNUMANode = getNUMA_CPUSets();
 
 	for(int numaNode = 0; numaNode < numNumaNodes; numaNode++) {
 		dataDatas[numaNode].func = func;
 		dataDatas[numaNode].data = data;
 		dataDatas[numaNode].numaNode = numaNode;
 
-		createPThreadAffinity(cpusPerNUMANode[numaNode], numaNodePthreadFunc<T>, &dataDatas[numaNode]);
+		threads[numaNode] = createPThreadAffinity(cpusPerNUMANode[numaNode], numaNodePthreadFunc<T>, &dataDatas[numaNode]);
 	}
+	std::cout << "Join all threads..." << std::endl;
 
-	PThreadBundle(threads, numNumaNodes).join();
+	PThreadBundle bundle(threads, numNumaNodes);
+	bundle.join();
+	std::cout << "Threads joined!" << std::endl;
 }
-#else
-int getNumNumaNodes() {
-	return 1;
-}
-int getNUMANodeAndBindToIt() {
-	return 0;
-}
-template<typename T>
-void runOneThreadPerNUMANode(void(*func)(int, T*), T* data) {
-	pthread_t* thr = new pthread_t[1];
-
-	CombinedData<T> dataData;
-	dataData.func = func;
-	dataData.data = data;
-	dataData.numaNode = 0;
-	pthread_create(thr, NULL, numaNodePthreadFunc<T>, (void*) &dataData);
-
-	PThreadBundle(thr, 1).join();
-}
-int numa_node_of_cpu(int cpu) {
-	return 0;
-}
-#endif
 
 void parallelizeMBF9GenerationAcrossAllCores(size_t numToGenerate) {
-	struct ThreadData {
-		std::vector<RandomMBFGenerationSharedData<7>*> generationDatas;
-		int initialNUMANode;
-	};
-	ThreadData data;
-	data.generationDatas = std::vector<RandomMBFGenerationSharedData<7>*>(getNumNumaNodes());
-	data.initialNUMANode = getNUMANodeAndBindToIt();
-    data.generationDatas[data.initialNUMANode] = new RandomMBFGenerationSharedData<7>();
+	std::vector<cpu_set_t> cpusPerNUMANode = getNUMA_CPUSets();
 
-	runOneThreadPerNUMANode<ThreadData>([](int nodeID, ThreadData* data){
-		if(nodeID == data->initialNUMANode) return;
-		data->generationDatas[nodeID] = new RandomMBFGenerationSharedData<7>(*data->generationDatas[data->initialNUMANode]);
-	}, &data);
+	#define INITIAL_NUMA_NODE 0
+	std::cout << "Initializing and reading file..." << std::endl;
+	RandomMBFGenerationSharedData<7>** generationDatas = new RandomMBFGenerationSharedData<7>*[getNumNumaNodes()];
+	pthread_t initial_create_thread = createPThreadAffinity(cpusPerNUMANode[INITIAL_NUMA_NODE], [](void* voidData) -> void* {
+		RandomMBFGenerationSharedData<7>** initialData = (RandomMBFGenerationSharedData<7>**) voidData;
+		*initialData = new RandomMBFGenerationSharedData<7>();
+		return NULL;
+	}, (void*) &generationDatas[0]);
+	void* nullTarget;
+	pthread_join(initial_create_thread, &nullTarget);
+
+	std::cout << "Copying data across " << getNumNumaNodes() << " NUMA Nodes..." << std::endl;
+	runOneThreadPerNUMANode<RandomMBFGenerationSharedData<7>*>(cpusPerNUMANode, [](int nodeID, RandomMBFGenerationSharedData<7>** generationDatas){
+		if(nodeID == INITIAL_NUMA_NODE) return;
+		generationDatas[nodeID] = new RandomMBFGenerationSharedData<7>(*generationDatas[INITIAL_NUMA_NODE]);
+	}, generationDatas);
 
 	std::cout << "All data copied!" << std::endl;
 
@@ -649,7 +630,7 @@ void parallelizeMBF9GenerationAcrossAllCores(size_t numToGenerate) {
     iterRangeInParallelBlocksOnAllCores<size_t, size_t, RandomMBFGenerationThreadLocalState<7>>(0, numToGenerate, 64, [&](RandomMBFGenerationThreadLocalState<7>& threadState, size_t elem){
         resultBuf[elem] = mbfUp9(threadState);
     }, [&](int threadID) -> RandomMBFGenerationThreadLocalState<7> {
-        return RandomMBFGenerationThreadLocalState<7>(data.generationDatas[numa_node_of_cpu(threadID)]);
+        return RandomMBFGenerationThreadLocalState<7>(generationDatas[numa_node_of_cpu(threadID)]);
     });
 
 	auto time = std::chrono::high_resolution_clock::now() - start;
