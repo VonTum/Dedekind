@@ -275,9 +275,10 @@ void iterRangeInParallelBlocksOnAllCores(IterT start, IterT end, IntT blockSize,
 
 // Used for debugging
 // Expects a function of the form void(int threadID, IterT curElem)
-template<typename IterT, typename IntT, typename Func>
-void iterRangeInParallelBlocksOnOneCore(IterT start, IterT end, IntT blockSize, const Func& func) {
+template<typename IterT, typename IntT, typename InitData = int, typename Func, typename InitFunc = decltype(defaultInitFunc)>
+void iterRangeInParallelBlocksOnOneCore(IterT start, IterT end, IntT blockSize, const Func& func, const InitFunc& initFunc = defaultInitFunc) {
+	InitData initData = initFunc(0);
 	for(; start != end; ++start) {
-		func(0, start);
+		func(initData, start);
 	}
 }

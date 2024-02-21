@@ -39,4 +39,7 @@ std::string flatNodes(unsigned int Variables);
 std::string flatLinks(unsigned int Variables);
 std::string mbfStructure(unsigned int Variables);
 std::string flatMBFsU64(unsigned int Variables);
+
+// File name for random MBF generation
+std::string randomMBFs(unsigned int Variables);
 };

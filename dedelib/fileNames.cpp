@@ -123,4 +123,10 @@ std::string flatMBFsU64(unsigned int Variables) {
 	return makeBasicName(Variables, "flatMBFsRandomized", ".mbfU64");
 }
 
+
+
+std::string randomMBFs(unsigned int Variables) {
+	return makeBasicName(Variables, "randomMBF", ".mbf");
+}
+
 };

@@ -26,8 +26,13 @@
 #include "pcoeffClasses.h"
 #include "numaMem.h"
 
+typedef std::mt19937_64 RandomEngine;
 
 constexpr size_t PREFETCH_CACHE_SIZE = 64;
+
+size_t align_to(size_t value, size_t align) {
+	return (value + align - 1) & ~(align - 1);
+}
 
 template<unsigned int Variables>
 struct MBFSampler{
@@ -45,6 +50,7 @@ struct MBFSampler{
         
         std::cout << "Allocating huge pages..." << std::endl;
 		size_t allocSizeBytes = sizeof(Monotonic<Variables>) * mbfCounts[Variables];
+		allocSizeBytes = align_to(allocSizeBytes, 1024*1024*1024);
 		Monotonic<Variables>* mbfsByClassSize = (Monotonic<Variables>*) aligned_alloc(1024*1024*1024, allocSizeBytes);
 		madvise(mbfsByClassSize, allocSizeBytes, MADV_HUGEPAGE);
 
@@ -89,7 +95,7 @@ struct MBFSampler{
 		std::cout << "Allocating huge pages..." << std::endl;
 		constexpr size_t ALIGN = 1024*1024*1024;
 		size_t allocSizeBytes = sizeof(Monotonic<Variables>) * mbfCounts[Variables];
-		allocSizeBytes = (allocSizeBytes + ALIGN - 1) & ~(ALIGN - 1);
+		allocSizeBytes = align_to(allocSizeBytes, ALIGN);
 		Monotonic<Variables>* mbfsByClassSize = (Monotonic<Variables>*) aligned_alloc(ALIGN, allocSizeBytes);
 		madvise(mbfsByClassSize, allocSizeBytes, MADV_HUGEPAGE);
 		//madvise(mbfsByClassSize, allocSizeBytes, MADV_WILLNEED);
@@ -137,7 +143,7 @@ struct MBFSampler{
 	}
 
 	// Does not actually return the Monotonic itself, because it's an expensive Main Memory access, instead the caller prefetches it and returns a result that has already arrived
-	const Monotonic<Variables>* sample(std::default_random_engine& generator) const {
+	const Monotonic<Variables>* sample(RandomEngine& generator) const {
 		constexpr int VAR_FACTORIAL = factorial(Variables);
 		
 		uint64_t chosenMBFIdx = std::uniform_int_distribution<uint64_t>(0, dedekindNumbers[Variables] - 1)(generator);
@@ -159,7 +165,7 @@ struct MBFSampler{
 template<unsigned int Variables>
 struct FastRandomPermuter {
 	FastRandomPermuter() {};
-	BooleanFunction<Variables> permuteRandom(BooleanFunction<7> bf, std::default_random_engine& generator) const {
+	BooleanFunction<Variables> permuteRandom(BooleanFunction<7> bf, RandomEngine& generator) const {
 		permuteRandom(bf, generator);
 		return bf;
 	}
@@ -296,7 +302,7 @@ template<> alignas(64) struct FastRandomPermuter<7> {
 		return bf;
 	}
 
-	BooleanFunction<7> permuteRandom(BooleanFunction<7> bf, std::default_random_engine& generator) const {
+	BooleanFunction<7> permuteRandom(BooleanFunction<7> bf, RandomEngine& generator) const {
 		size_t selectedIndex = std::uniform_int_distribution<size_t>(0, 5039)(generator);
 		bf.bitset.data = this->permuteWithIndex(selectedIndex, bf.bitset.data);
 		return bf;
@@ -320,7 +326,9 @@ void testFastRandomPermuter(BooleanFunction<Variables> sample5040) {
 	uint64_t counts[VAR_FACTORIAL];
 	for(uint64_t& v : counts) {v = 0;}
 
-	std::default_random_engine generator;
+	std::random_device seeder;
+	RandomEngine generator{seeder() ^ std::chrono::high_resolution_clock::now().time_since_epoch().count()};
+
 	constexpr uint64_t SAMPLE_COUNT = 1000000;
 	for(uint64_t sample_i = 0; sample_i < SAMPLE_COUNT; sample_i++) {
 		BooleanFunction<Variables> sampleCopyCopy = sampleCopy;
@@ -356,7 +364,7 @@ struct RandomMBFGenerationSharedData {
 template<unsigned int Variables>
 class RandomMBFGenerationThreadLocalState {
 	const RandomMBFGenerationSharedData<Variables>* generationData;
-	std::default_random_engine generator;
+	RandomEngine generator;
 	size_t curPrefetchLine;
 	const Monotonic<Variables>* prefetchCache[PREFETCH_CACHE_SIZE];
 public:
@@ -364,7 +372,19 @@ public:
 	uint64_t numMBFSamples;
 	uint64_t numPermutations;
 
-	RandomMBFGenerationThreadLocalState(const RandomMBFGenerationSharedData<Variables>* generationData) : generationData(generationData) {
+	RandomMBFGenerationThreadLocalState(const RandomMBFGenerationThreadLocalState&) = delete;
+	RandomMBFGenerationThreadLocalState(const RandomMBFGenerationThreadLocalState&&) = delete;
+	RandomMBFGenerationThreadLocalState& operator=(const RandomMBFGenerationThreadLocalState&) = delete;
+	RandomMBFGenerationThreadLocalState& operator=(const RandomMBFGenerationThreadLocalState&&) = delete;
+
+	RandomMBFGenerationThreadLocalState(const RandomMBFGenerationSharedData<Variables>* generationData) : 
+		generationData(generationData),
+		generator() {
+		
+		std::random_device seeder;
+		this->generator.seed(seeder() ^ std::chrono::high_resolution_clock::now().time_since_epoch().count());
+
+
 		for(size_t i = 0; i < PREFETCH_CACHE_SIZE; i++) {
 			this->prefetchCache[i] = generationData->sampler.mbfsByClassSize;
 		}
@@ -467,14 +487,14 @@ std::array<Monotonic<7>, 4> mbfUp9(RandomMBFGenerationThreadLocalState<7>& gen) 
 		do {
 			arr[0] = gen.sampleNonPermuted();
 			arr[1] = gen.samplePermuted();
-		} while(!(arr[0] <= arr[1]));
+		} while(!(arr[1] <= arr[0]));
 
 		do {
 			arr[2] = gen.sampleNonPermuted();
 			arr[3] = gen.samplePermuted();
-		} while(!(arr[2] <= arr[3]));
+		} while(!(arr[3] <= arr[2]));
 		gen.coPermuteRandom(&arr[2], 2);
-	} while(!(arr[0] <= arr[2] && arr[1] <= arr[3]));
+	} while(!(arr[2] <= arr[0] && arr[3] <= arr[1]));
     gen.coPermuteRandom(&arr[0], 4);
 	return arr;
 }
@@ -622,8 +642,9 @@ void parallelizeMBF9GenerationAcrossAllCores(size_t numToGenerate) {
 	std::cout << "All data copied!" << std::endl;
 
     size_t bufferSize = sizeof(std::array<Monotonic<7>, 4>) * numToGenerate;
-    std::array<Monotonic<7>, 4>* resultBuf = (std::array<Monotonic<7>, 4>*) aligned_alloc(1024*4, bufferSize);
-    madvise(resultBuf, bufferSize, MADV_NOHUGEPAGE); // Preserve huge pages for buffers that need it
+	size_t alignedBufferSize = align_to(bufferSize, 1024*4);
+    std::array<Monotonic<7>, 4>* resultBuf = (std::array<Monotonic<7>, 4>*) aligned_alloc(1024*4, alignedBufferSize);
+    madvise(resultBuf, alignedBufferSize, MADV_NOHUGEPAGE); // Preserve huge pages for buffers that need it
     
 	std::cout << "Random Generation..." << std::endl;
 	auto start = std::chrono::high_resolution_clock::now();
@@ -635,8 +656,103 @@ void parallelizeMBF9GenerationAcrossAllCores(size_t numToGenerate) {
 
 	auto time = std::chrono::high_resolution_clock::now() - start;
 	double seconds = std::chrono::duration_cast<std::chrono::milliseconds>(time).count() / 1000.0;
-	std::cout << "Took " << seconds << "s: " << (numToGenerate / seconds) << " random MBF9 per second usign " << std::thread::hardware_concurrency() << " threads." << std::endl;
+	std::cout << "Took " << seconds << "s: " << (numToGenerate / seconds) << " random MBF9 per second using " << std::thread::hardware_concurrency() << " threads." << std::endl;
 
-	std::ofstream outFile(FileName::dataPath + "randomMBF9.mbf9");
+	// Always append to the file, so we keep gathering more and more results
+	std::ofstream outFile(FileName::randomMBFs(9), std::ios::binary | std::ios::app);
     outFile.write((const char*) resultBuf, bufferSize);
+}
+
+void naiveD10Estimation() {
+	std::cout << "Reading " << FileName::randomMBFs(9) << std::endl;
+	std::ifstream file(FileName::randomMBFs(9), std::ios::binary | std::ios::ate);
+	std::streamsize bufferSizeInBytes = file.tellg();
+	file.seekg(0, std::ios::beg);
+
+
+
+	Monotonic<9>* randomMBF9Buf = (Monotonic<9>*) aligned_alloc(1024*4, align_to(bufferSizeInBytes, 1024*4));
+	file.read((char*) randomMBF9Buf, bufferSizeInBytes);
+
+	static_assert(sizeof(Monotonic<9>) == 64);
+
+	size_t numRandomMBF9 = bufferSizeInBytes / sizeof(Monotonic<9>);
+
+	std::cout << "Loaded " << numRandomMBF9 << " MBF9" << std::endl;
+
+	if(numRandomMBF9 == 0) {
+		std::cerr << "No MBFs in this file? File is of size " << bufferSizeInBytes << " bytes. " << std::endl;
+		exit(1);
+	}
+
+	std::cout << "Check if any are equal:" << std::endl;
+	uint64_t total = 0;
+	uint64_t numEqual = 0;
+	uint64_t lastNumCopies = 0;
+	uint64_t numEqualCopyCount = 0;
+	for(size_t a = 0; a < numRandomMBF9; a++) {	
+		uint64_t numCopies = 0;
+		for(size_t b = a + 1; b < numRandomMBF9; b++) {
+			Monotonic<9> mbfA = randomMBF9Buf[a];
+			Monotonic<9> mbfB = randomMBF9Buf[b];
+
+			total++;
+
+			if(mbfA == mbfB) {
+				std::cout << "mbf " << a << " == mbf " << b << std::endl;
+				numEqual++;
+				numCopies++;
+			}
+		}
+		if(numCopies == lastNumCopies) {
+			numEqualCopyCount++;
+		} else {
+			std::cout << numEqualCopyCount << " lines of " << numCopies << " copies!" << std::endl;
+
+			numEqualCopyCount = 1;
+			lastNumCopies = numCopies;
+		}
+	}
+	std::cout << numEqual << " / " << total << " were equal!" << std::endl;
+
+	uint64_t totalCount = 0;
+	uint64_t validMBF10Count = 0;
+
+	for(size_t a = 0; a < numRandomMBF9 / 2; a++) {
+		
+		for(size_t b = numRandomMBF9 / 2; b < numRandomMBF9; b++) {
+
+			Monotonic<9> mbfA = randomMBF9Buf[a];
+			Monotonic<9> mbfB = randomMBF9Buf[b];
+			
+			totalCount++;
+			
+			if(mbfA <= mbfB) {
+				validMBF10Count++;
+			}
+		}
+		if(a % 1000 == 0) std::cout << a << std::endl;
+	}
+	/*
+	std::random_device seeder;
+	RandomEngine generator{seeder()};
+	for(int i = 0; i < 1000000; i++) {
+		size_t a = std::uniform_int_distribution<size_t>(0, numRandomMBF9 - 1)(generator);
+		size_t b = std::uniform_int_distribution<size_t>(0, numRandomMBF9 - 1)(generator);
+
+		if(a == b) continue;
+		Monotonic<9> mbfA = randomMBF9Buf[a];
+		Monotonic<9> mbfB = randomMBF9Buf[b];
+
+		totalCount++;
+		if(mbfA <= mbfB) {
+			validMBF10Count++;
+		}
+		if(i % 1000 == 0) std::cout << i << std::endl;
+	}*/
+
+	double fraction = double(validMBF10Count) / totalCount;
+	double sigma_sq = fraction * (1 - fraction) / totalCount;
+	std::cout << validMBF10Count << " / " << totalCount << " MBF9 comparisons = " << fraction << "; σ² = " << sigma_sq << ", σ = " << sqrt(sigma_sq) << std::endl;
+	std::cout << "D(10) ~= 286386577668298411128469151667598498812366^2 * " << fraction << " = " << (286386577668298411128469151667598498812366.0*286386577668298411128469151667598498812366.0 * fraction) << std::endl;
 }
