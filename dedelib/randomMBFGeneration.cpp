@@ -140,15 +140,16 @@ struct MBFSampler{
 		freeFlatBufferNoMMAP(mbfs, mbfCounts[Variables]); // Free up memory
 		freeFlatBufferNoMMAP(allBigIntervalSizes, mbfCounts[Variables]); // Free up memory
 		// Now move them all to one large buffer (not really necessary but makes everything a little neater)
-		this->numCumulativeBuffers = 1 + buffers.size();
-		std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers = std::unique_ptr<CumulativeBuffer[]>(new CumulativeBuffer[this->numCumulativeBuffers]);
+		std::unique_ptr<CumulativeBuffer[]> cumulativeBuffers = std::unique_ptr<CumulativeBuffer[]>(new CumulativeBuffer[1 + buffers.size()]);
 		cumulativeBuffers[0] = CumulativeBuffer{(curMBFsPtr - mbfsByClassSize) * VAR_FACTORIAL, 1, mbfsByClassSize};
-		for(size_t i = 0; i < buffers.size(); i++) {
-			BufferStruct& bf = buffers[i];
-			uint64_t mbfCountHere = bf.classSize * bf.mbfs.size();
-			cumulativeBuffers[i+1] = CumulativeBuffer{mbfCountHere, VAR_FACTORIAL / bf.classSize, curMBFsPtr};
-			for(Monotonic<Variables>& mbf : bf.mbfs) {
-				*curMBFsPtr++ = mbf;
+		this->numCumulativeBuffers = 1;
+		for(BufferStruct& bf : buffers) {
+			if(bf.classSize >= 1) {
+				uint64_t mbfCountHere = bf.classSize * bf.mbfs.size();
+				cumulativeBuffers[this->numCumulativeBuffers++] = CumulativeBuffer{mbfCountHere, VAR_FACTORIAL / bf.classSize, curMBFsPtr};
+				for(Monotonic<Variables>& mbf : bf.mbfs) {
+					*curMBFsPtr++ = mbf;
+				}
 			}
 		}
 
