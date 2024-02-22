@@ -28,6 +28,15 @@
 
 typedef std::mt19937_64 RandomEngine;
 
+RandomEngine properlySeededRNG() {
+	constexpr std::size_t N = RandomEngine::state_size * sizeof(typename RandomEngine::result_type);
+    std::random_device source;
+    std::random_device::result_type random_data[(N - 1) / sizeof(source()) + 1];
+    std::generate(std::begin(random_data), std::end(random_data), std::ref(source));
+    std::seed_seq seeds(std::begin(random_data), std::end(random_data));
+    return RandomEngine(seeds);
+}
+
 constexpr size_t PREFETCH_CACHE_SIZE = 64;
 
 size_t align_to(size_t value, size_t align) {
@@ -119,6 +128,12 @@ struct MBFSampler{
 					}
 				}
 			}
+		}
+
+		std::cout << "Buffer Table:" << std::endl;
+		std::cout << "sz = " << factorial(Variables) << " , count = " << (curMBFsPtr - mbfsByClassSize) << std::endl;
+		for(BufferStruct& bf : buffers) {
+			std::cout << "sz = " << bf.classSize << " , count = " << bf.mbfs.size() << std::endl;
 		}
 
 		std::cout << "Regrouping buffers..." << std::endl;
@@ -326,8 +341,7 @@ void testFastRandomPermuter(BooleanFunction<Variables> sample5040) {
 	uint64_t counts[VAR_FACTORIAL];
 	for(uint64_t& v : counts) {v = 0;}
 
-	std::random_device seeder;
-	RandomEngine generator{seeder() ^ std::chrono::high_resolution_clock::now().time_since_epoch().count()};
+	RandomEngine generator = properlySeededRNG();
 
 	constexpr uint64_t SAMPLE_COUNT = 1000000;
 	for(uint64_t sample_i = 0; sample_i < SAMPLE_COUNT; sample_i++) {
@@ -379,11 +393,8 @@ public:
 
 	RandomMBFGenerationThreadLocalState(const RandomMBFGenerationSharedData<Variables>* generationData) : 
 		generationData(generationData),
-		generator() {
+		generator(properlySeededRNG()) {
 		
-		std::random_device seeder;
-		this->generator.seed(seeder() ^ std::chrono::high_resolution_clock::now().time_since_epoch().count());
-
 
 		for(size_t i = 0; i < PREFETCH_CACHE_SIZE; i++) {
 			this->prefetchCache[i] = generationData->sampler.mbfsByClassSize;
