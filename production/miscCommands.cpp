@@ -35,6 +35,8 @@
 
 #include "../dedelib/randomMBFGeneration.h"
 
+#include "../dedelib/dedekindEstimation.h"
+
 void RAMTestBenchFunc(size_t numHops, size_t numCurs, uint32_t* curs, uint32_t* jumpTable) {
 	for(size_t i = 0; i < numHops; i++) {
 		/*for(size_t c = 0; c < numCurs; c++) {
@@ -582,30 +584,6 @@ void testMixingPattern() {
 	printReversingMixInfo(expensivenessValues, 7);
 }
 
-#include <math.h>
-static double a(int n) {
-	int ch = choose(n, n / 2 - 1);
-	double powers = pow(2.0, -n/2) + n*n*pow(2.0, -n-5) - n * pow(2.0, -n-4);
-	return ch * powers;
-}
-static double b(int n) {
-	int ch = choose(n, (n - 3) / 2);
-	double powers = pow(2.0, -(n+3) / 2) - n*n*pow(2.0, -n-5) - n * pow(2.0, -n-3);
-	return ch * powers;
-}
-static double c(int n) {
-	int ch = choose(n, (n - 1) / 2);
-	double powers = pow(2.0, -(n+1) / 2) + n*n*pow(2.0, -n-4);
-	return ch * powers;
-}
-static double estimateDedekindNumber(int n) {
-	if(n % 2 == 0) {
-		return pow(2.0, choose(n, n / 2)) * exp(a(n));
-	} else {
-		return pow(2.0, choose(n, (n-1) / 2) + 1) * exp(b(n) + c(n));
-	}
-}
-
 
 template<unsigned int Variables>
 void computeUnateNumbers() {
@@ -779,7 +757,17 @@ CommandSet miscCommands{"Misc", {
 	{"countValidPermutationSetFraction7_4", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 4); }},
 	{"countValidPermutationSetFraction7_5", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 5); }},
 	{"countValidPermutationSetFraction7_6", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 6); }},
-	{"countValidPermutationSetFraction7_7", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 7); }}
+	{"countValidPermutationSetFraction7_7", []() {countValidPermutationSetFraction(std::vector<size_t>{10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000}, 7); }},
+
+	{"estimateNextDedekindNumber1", estimateNextDedekindNumber<1>},
+	{"estimateNextDedekindNumber2", estimateNextDedekindNumber<2>},
+	{"estimateNextDedekindNumber3", estimateNextDedekindNumber<3>},
+	{"estimateNextDedekindNumber4", estimateNextDedekindNumber<4>},
+	{"estimateNextDedekindNumber5", estimateNextDedekindNumber<5>},
+	{"estimateNextDedekindNumber6", estimateNextDedekindNumber<6>},
+	{"estimateNextDedekindNumber7", estimateNextDedekindNumber<7>},
+	{"estimateNextDedekindNumber8", estimateNextDedekindNumber<8>},
+	{"estimateNextDedekindNumber9", estimateNextDedekindNumber<9>},
 }, {
 	{"checkIntervalLayers1", [](const std::vector<std::string>& size) {checkIntervalLayers<1>(std::stoi(size[0])); }},
 	{"checkIntervalLayers2", [](const std::vector<std::string>& size) {checkIntervalLayers<2>(std::stoi(size[0])); }},

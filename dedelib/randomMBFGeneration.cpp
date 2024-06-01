@@ -39,10 +39,6 @@ RandomEngine properlySeededRNG() {
 
 constexpr size_t PREFETCH_CACHE_SIZE = 64;
 
-size_t align_to(size_t value, size_t align) {
-	return (value + align - 1) & ~(align - 1);
-}
-
 template<unsigned int Variables>
 struct MBFSampler{
 	struct CumulativeBuffer{
@@ -673,98 +669,4 @@ void parallelizeMBF9GenerationAcrossAllCores(size_t numToGenerate) {
 	// Always append to the file, so we keep gathering more and more results
 	std::ofstream outFile(FileName::randomMBFs(9), std::ios::binary | std::ios::app);
     outFile.write((const char*) resultBuf, bufferSize);
-}
-
-void naiveD10Estimation() {
-	std::cout << "Reading " << FileName::randomMBFs(9) << std::endl;
-	std::ifstream file(FileName::randomMBFs(9), std::ios::binary | std::ios::ate);
-	std::streamsize bufferSizeInBytes = file.tellg();
-	file.seekg(0, std::ios::beg);
-
-
-
-	Monotonic<9>* randomMBF9Buf = (Monotonic<9>*) aligned_alloc(1024*4, align_to(bufferSizeInBytes, 1024*4));
-	file.read((char*) randomMBF9Buf, bufferSizeInBytes);
-
-	static_assert(sizeof(Monotonic<9>) == 64);
-
-	size_t numRandomMBF9 = bufferSizeInBytes / sizeof(Monotonic<9>);
-
-	std::cout << "Loaded " << numRandomMBF9 << " MBF9" << std::endl;
-
-	if(numRandomMBF9 == 0) {
-		std::cerr << "No MBFs in this file? File is of size " << bufferSizeInBytes << " bytes. " << std::endl;
-		exit(1);
-	}
-
-	std::cout << "Check if any are equal:" << std::endl;
-	uint64_t total = 0;
-	uint64_t numEqual = 0;
-	uint64_t lastNumCopies = 0;
-	uint64_t numEqualCopyCount = 0;
-	for(size_t a = 0; a < numRandomMBF9; a++) {	
-		uint64_t numCopies = 0;
-		for(size_t b = a + 1; b < numRandomMBF9; b++) {
-			Monotonic<9> mbfA = randomMBF9Buf[a];
-			Monotonic<9> mbfB = randomMBF9Buf[b];
-
-			total++;
-
-			if(mbfA == mbfB) {
-				std::cout << "mbf " << a << " == mbf " << b << std::endl;
-				numEqual++;
-				numCopies++;
-			}
-		}
-		if(numCopies == lastNumCopies) {
-			numEqualCopyCount++;
-		} else {
-			std::cout << numEqualCopyCount << " lines of " << numCopies << " copies!" << std::endl;
-
-			numEqualCopyCount = 1;
-			lastNumCopies = numCopies;
-		}
-	}
-	std::cout << numEqual << " / " << total << " were equal!" << std::endl;
-
-	uint64_t totalCount = 0;
-	uint64_t validMBF10Count = 0;
-
-	for(size_t a = 0; a < numRandomMBF9 / 2; a++) {
-		
-		for(size_t b = numRandomMBF9 / 2; b < numRandomMBF9; b++) {
-
-			Monotonic<9> mbfA = randomMBF9Buf[a];
-			Monotonic<9> mbfB = randomMBF9Buf[b];
-			
-			totalCount++;
-			
-			if(mbfA <= mbfB) {
-				validMBF10Count++;
-			}
-		}
-		if(a % 1000 == 0) std::cout << a << std::endl;
-	}
-	/*
-	std::random_device seeder;
-	RandomEngine generator{seeder()};
-	for(int i = 0; i < 1000000; i++) {
-		size_t a = std::uniform_int_distribution<size_t>(0, numRandomMBF9 - 1)(generator);
-		size_t b = std::uniform_int_distribution<size_t>(0, numRandomMBF9 - 1)(generator);
-
-		if(a == b) continue;
-		Monotonic<9> mbfA = randomMBF9Buf[a];
-		Monotonic<9> mbfB = randomMBF9Buf[b];
-
-		totalCount++;
-		if(mbfA <= mbfB) {
-			validMBF10Count++;
-		}
-		if(i % 1000 == 0) std::cout << i << std::endl;
-	}*/
-
-	double fraction = double(validMBF10Count) / totalCount;
-	double sigma_sq = fraction * (1 - fraction) / totalCount;
-	std::cout << validMBF10Count << " / " << totalCount << " MBF9 comparisons = " << fraction << "; σ² = " << sigma_sq << ", σ = " << sqrt(sigma_sq) << std::endl;
-	std::cout << "D(10) ~= 286386577668298411128469151667598498812366^2 * " << fraction << " = " << (286386577668298411128469151667598498812366.0*286386577668298411128469151667598498812366.0 * fraction) << std::endl;
 }

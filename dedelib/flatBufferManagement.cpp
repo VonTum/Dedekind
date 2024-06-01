@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/stat.h>
 #endif
 
 bool BUFMANAGEMENT_MMAP = false;
@@ -109,4 +110,17 @@ void freeFlatVoidBuffer(const void* buffer, size_t size) {
 	} else {
 		numa_free(const_cast<void*>(buffer), size);
 	}
+}
+
+void* mmapWholeFileSequentialRead(const std::string& fileName, size_t& fileSize) {
+	struct stat st;
+	stat(fileName.c_str(), &st);
+	size_t size = st.st_size;
+	fileSize = size;
+
+	void* ptr = mmapFlatVoidBuffer(fileName, size);
+
+	madvise(ptr, size, MADV_SEQUENTIAL);
+
+	return ptr;
 }

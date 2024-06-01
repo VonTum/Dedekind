@@ -48,3 +48,11 @@ template<typename T>
 void freeFlatBufferNoMMAP(const T* buffer, size_t size) {
 	freeFlatVoidBufferNoMMAP(buffer, sizeof(T) * size);
 }
+
+
+inline size_t align_to(size_t value, size_t align) {
+	return (value + align - 1) & ~(align - 1);
+}
+
+
+void* mmapWholeFileSequentialRead(const std::string& fileName, size_t& fileSize);

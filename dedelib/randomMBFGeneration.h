@@ -17,5 +17,3 @@ extern template void benchmarkRandomMBFGeneration<6>();
 extern template void benchmarkRandomMBFGeneration<7>();
 
 void parallelizeMBF9GenerationAcrossAllCores(size_t numToGenerate);
-
-void naiveD10Estimation();
