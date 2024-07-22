@@ -768,6 +768,18 @@ CommandSet miscCommands{"Misc", {
 	{"estimateNextDedekindNumber7", estimateNextDedekindNumber<7>},
 	{"estimateNextDedekindNumber8", estimateNextDedekindNumber<8>},
 	{"estimateNextDedekindNumber9", estimateNextDedekindNumber<9>},
+
+	{"codeGenGetSignature", codeGenGetSignature},
+
+	{"makeSignatureStatistics1", makeSignatureStatistics<1>},
+	{"makeSignatureStatistics2", makeSignatureStatistics<2>},
+	{"makeSignatureStatistics3", makeSignatureStatistics<3>},
+	{"makeSignatureStatistics4", makeSignatureStatistics<4>},
+	{"makeSignatureStatistics5", makeSignatureStatistics<5>},
+	{"makeSignatureStatistics6", makeSignatureStatistics<6>},
+	{"makeSignatureStatistics7", makeSignatureStatistics<7>},
+	{"makeSignatureStatistics8", makeSignatureStatistics<8>},
+	{"makeSignatureStatistics9", makeSignatureStatistics<9>},
 }, {
 	{"checkIntervalLayers1", [](const std::vector<std::string>& size) {checkIntervalLayers<1>(std::stoi(size[0])); }},
 	{"checkIntervalLayers2", [](const std::vector<std::string>& size) {checkIntervalLayers<2>(std::stoi(size[0])); }},
@@ -799,5 +811,5 @@ CommandSet miscCommands{"Misc", {
 		int n = std::stoi(vars[0]);
 
 		parallelizeMBF9GenerationAcrossAllCores(n);
-	}}
+	}},
 }};

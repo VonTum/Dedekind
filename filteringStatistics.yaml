@@ -1,0 +1,26 @@
+# Multi-bit 9-dim MBF comparison filtering with 8xN Layer 4 bits & 8xN Layer 5 bits
+
+1 bit:
+nonfilteredComparisons: 72057594037927936
+filteredComparisons: 8983106275170552
+Filtering %: 12.4666%
+
+2 bits:
+nonfilteredComparisons: 72057594037927936
+filteredComparisons: 6623816247638999
+Filtering %: 9.19239%
+
+3 bits: 
+nonfilteredComparisons: 72057594037927936
+filteredComparisons: 7421189339636169
+Filtering %: 10.299%
+
+4 bits:
+nonfilteredComparisons: 72057594037927936
+filteredComparisons: 8988059363233673
+Filtering %: 12.4734%
+
+5 bits:
+nonfilteredComparisons: 72057594037927936
+filteredComparisons: 11578068400709365
+Filtering %: 16.0678%

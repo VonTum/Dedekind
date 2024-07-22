@@ -210,6 +210,12 @@ public:
 		return (subPart & makeMask(index)) != 0;
 	}
 
+	constexpr uint64_t get64(size_t index) const {
+		assert(index < size());
+		uint64_t block = this->data[index >> 6];
+		return block >> (index & 0x3F);
+	}
+
 	constexpr void set(size_t index) {
 		assert(index < size());
 		uint64_t& subPart = getBlock(index);
@@ -479,6 +485,16 @@ public:
 		}
 	}
 
+	uint64_t get64(size_t index) const {
+		assert(index < size());
+		size_t shift = index & 0x3F;
+		if(index >= 64) {
+			return _mm_extract_epi64(this->data, 1) >> shift;
+		} else {
+			return _mm_extract_epi64(this->data, 0) >> shift;
+		}
+	}
+
 	void set(size_t index) {
 		assert(index < size());
 		this->data = _mm_or_si128(makeMask(index), this->data);
@@ -688,6 +704,11 @@ public:
 		return (this->data & makeMask(index)) != 0;
 	}
 
+	constexpr uint64_t get64(size_t index) const {
+		assert(index < size());
+		return this->data >> index;
+	}
+
 	constexpr void set(size_t index) {
 		assert(index < size());
 		this->data |= makeMask(index);
@@ -848,6 +869,11 @@ public:
 		return (this->data & makeMask(index)) != 0;
 	}
 
+	constexpr uint64_t get64(size_t index) const {
+		assert(index < size());
+		return this->data >> index;
+	}
+
 	constexpr void set(size_t index) {
 		assert(index < size());
 		this->data |= makeMask(index);
@@ -1006,6 +1032,11 @@ public:
 	constexpr bool get(size_t index) const {
 		assert(index < size());
 		return (this->data & makeMask(index)) != 0;
+	}
+
+	constexpr uint64_t get64(size_t index) const {
+		assert(index < size());
+		return this->data >> index;
 	}
 
 	constexpr void set(size_t index) {
@@ -1169,6 +1200,11 @@ public:
 		return (this->data & makeMask(index)) != 0;
 	}
 
+	constexpr uint64_t get64(size_t index) const {
+		assert(index < size());
+		return this->data >> index;
+	}
+
 	constexpr void set(size_t index) {
 		assert(index < size());
 		this->data |= makeMask(index);
@@ -1329,6 +1365,11 @@ public:
 		return (this->data & makeMask(index)) != 0;
 	}
 
+	constexpr uint64_t get64(size_t index) const {
+		assert(index < size());
+		return this->data >> index;
+	}
+
 	constexpr void set(size_t index) {
 		assert(index < size());
 		this->data |= makeMask(index);
@@ -1487,6 +1528,12 @@ public:
 	constexpr bool get(size_t index) const {
 		assert(index < size());
 		return (this->data & makeMask(index)) != 0;
+	}
+
+	// Optimized function for further bit-level operations. Just returns a 64-bit uint with bit 0 the selected bit. Other bits are undefined
+	constexpr uint64_t get64(size_t index) const {
+		assert(index < size());
+		return this->data >> index;
 	}
 
 	constexpr void set(size_t index) {
