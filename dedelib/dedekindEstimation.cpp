@@ -203,13 +203,22 @@ static std::vector<uint16_t> getSignatureBits(int bitCount, unsigned int Variabl
 
 static void codeGenBitList(std::ostream& ss, const std::vector<uint16_t>& bits, int bitsPerBit, char combinator, size_t offset) {
 	for(size_t i = 0; i < bits.size() / bitsPerBit; i++) {
-		ss << "\tresult |= uint16_t((mbf.bf.bitset.get64(" << bits[i * bitsPerBit + 0] << ")";
+		ss << "\tresult |= uint16_t(mbf.bf.bitset.get64(" << bits[i * bitsPerBit + 0] << ")";
 		for(size_t j = 1; j < bitsPerBit; j++) {
 			ss << " " << combinator << " mbf.bf.bitset.get64(" << bits[i * bitsPerBit + j] << ")";
 		}
 		ss << ") & uint16_t(1)) << " << (i + offset) << ";" << std::endl;
 	}
 }
+
+static void codeGenThreeDimensionalBalancer(std::ostream& ss, uint16_t startPoint, int idx) {
+	ss << "\tresult |= uint16_t((mbf.bf.bitset.get64(" << startPoint + 1/*a*/
+	 << ") & mbf.bf.bitset.get64(" << startPoint + 2/*b*/
+	 << ") & mbf.bf.bitset.get64(" << startPoint + 4/*c*/
+	// << ")) | mbf.bf.bitset.get64(" << startPoint + 6/*bc*/
+	 << ") & uint16_t(1)) << " << idx << ";" << std::endl;
+}
+
 
 void codeGenGetSignature() {
 	std::ostream& oss = std::cout;
@@ -223,13 +232,20 @@ void codeGenGetSignature() {
 			codeGenBitList(oss, bits, 1, ' ', 0);
 		} else {
 			// Combine multiple bits to even out the odds of a signature bit
-			const int numBitsPerElemList[10]{0, 0, 0, 0, 0, 1, 0, 3, 0, 5};
-			size_t numBitPerBit = numBitsPerElemList[Variables];
-			std::vector<uint16_t> lowBits = getSignatureBits(Variables / 2, Variables, 8 * numBitPerBit);
-			std::vector<uint16_t> highBits = getSignatureBits(Variables / 2 + 1, Variables, 8 * numBitPerBit);
+			if(false) {
+				const int numBitsPerElemList[10]{0, 0, 0, 0, 0, 1, 0, 3, 0, 5};
+				size_t numBitPerBit = numBitsPerElemList[Variables];
+				std::vector<uint16_t> lowBits = getSignatureBits(Variables / 2, Variables, 8 * numBitPerBit);
+				std::vector<uint16_t> highBits = getSignatureBits(Variables / 2 + 1, Variables, 8 * numBitPerBit);
 
-			codeGenBitList(oss, lowBits, numBitPerBit, '&', 0);
-			codeGenBitList(oss, highBits, numBitPerBit, '|', 8);
+				codeGenBitList(oss, lowBits, numBitPerBit, '&', 0);
+				codeGenBitList(oss, highBits, numBitPerBit, '|', 8);
+			} else {
+				std::vector<uint16_t> bits = getSignatureBits((Variables - 3) / 2, Variables - 3, 16);
+				for(int i = 0; i < 16; i++) {
+					codeGenThreeDimensionalBalancer(std::cout, bits[i] << 3, i);
+				}
+			}
 		}
 		oss << "} else ";
 	}
@@ -389,7 +405,7 @@ uint16_t getSignature(Monotonic<Variables> mbf) {
 		result |= uint16_t((mbf.bf.bitset.get64(468) | mbf.bf.bitset.get64(157) | mbf.bf.bitset.get64(458) | mbf.bf.bitset.get64(107)) & uint16_t(1)) << 14;
 		result |= uint16_t((mbf.bf.bitset.get64(345) | mbf.bf.bitset.get64(428) | mbf.bf.bitset.get64(174) | mbf.bf.bitset.get64(62)) & uint16_t(1)) << 15;*/
 
-		// 5 bitsresult |= uint16_t((mbf.bf.bitset.get64(293) & mbf.bf.bitset.get64(212) & mbf.bf.bitset.get64(142) & mbf.bf.bitset.get64(226) & mbf.bf.bitset.get64(332)) & uint16_t(1)) << 0;
+		// 5 bits
 		/*result |= uint16_t((mbf.bf.bitset.get64(116) & mbf.bf.bitset.get64(456) & mbf.bf.bitset.get64(424) & mbf.bf.bitset.get64(85) & mbf.bf.bitset.get64(135)) & uint16_t(1)) << 1;
 		result |= uint16_t((mbf.bf.bitset.get64(60) & mbf.bf.bitset.get64(89) & mbf.bf.bitset.get64(228) & mbf.bf.bitset.get64(270) & mbf.bf.bitset.get64(139)) & uint16_t(1)) << 2;
 		result |= uint16_t((mbf.bf.bitset.get64(83) & mbf.bf.bitset.get64(108) & mbf.bf.bitset.get64(394) & mbf.bf.bitset.get64(396) & mbf.bf.bitset.get64(53)) & uint16_t(1)) << 3;
@@ -405,6 +421,44 @@ uint16_t getSignature(Monotonic<Variables> mbf) {
 		result |= uint16_t((mbf.bf.bitset.get64(157) | mbf.bf.bitset.get64(458) | mbf.bf.bitset.get64(107) | mbf.bf.bitset.get64(345) | mbf.bf.bitset.get64(428)) & uint16_t(1)) << 13;
 		result |= uint16_t((mbf.bf.bitset.get64(174) | mbf.bf.bitset.get64(62) | mbf.bf.bitset.get64(295) | mbf.bf.bitset.get64(31) | mbf.bf.bitset.get64(167)) & uint16_t(1)) << 14;
 		result |= uint16_t((mbf.bf.bitset.get64(244) | mbf.bf.bitset.get64(362) | mbf.bf.bitset.get64(93) | mbf.bf.bitset.get64(115) | mbf.bf.bitset.get64(434)) & uint16_t(1)) << 15;*/
+
+		// 3D Balancing Function. Highly correlated bits are taken in sub-cubes for 50/50 split, such that the correlation between groups is minimizedresult |= uint16_t(((mbf.bf.bitset.get64(305) & mbf.bf.bitset.get64(306) & mbf.bf.bitset.get64(308)) | mbf.bf.bitset.get64(310)) & uint16_t(1)) << 0;
+		// It's the smallest sub-function I could find that I could split 50/50 well. 
+		result |= uint16_t(mbf.bf.bitset.get64(305) & mbf.bf.bitset.get64(306) & mbf.bf.bitset.get64(308) & uint16_t(1)) << 0;
+		result |= uint16_t(mbf.bf.bitset.get64(201) & mbf.bf.bitset.get64(202) & mbf.bf.bitset.get64(204) & uint16_t(1)) << 1;
+		result |= uint16_t(mbf.bf.bitset.get64(353) & mbf.bf.bitset.get64(354) & mbf.bf.bitset.get64(356) & uint16_t(1)) << 2;
+		result |= uint16_t(mbf.bf.bitset.get64(177) & mbf.bf.bitset.get64(178) & mbf.bf.bitset.get64(180) & uint16_t(1)) << 3;
+		result |= uint16_t(mbf.bf.bitset.get64(297) & mbf.bf.bitset.get64(298) & mbf.bf.bitset.get64(300) & uint16_t(1)) << 4;
+		result |= uint16_t(mbf.bf.bitset.get64(57) & mbf.bf.bitset.get64(58) & mbf.bf.bitset.get64(60) & uint16_t(1)) << 5;
+		result |= uint16_t(mbf.bf.bitset.get64(153) & mbf.bf.bitset.get64(154) & mbf.bf.bitset.get64(156) & uint16_t(1)) << 6;
+		result |= uint16_t(mbf.bf.bitset.get64(225) & mbf.bf.bitset.get64(226) & mbf.bf.bitset.get64(228) & uint16_t(1)) << 7;
+		result |= uint16_t(mbf.bf.bitset.get64(329) & mbf.bf.bitset.get64(330) & mbf.bf.bitset.get64(332) & uint16_t(1)) << 8;
+		result |= uint16_t(mbf.bf.bitset.get64(401) & mbf.bf.bitset.get64(402) & mbf.bf.bitset.get64(404) & uint16_t(1)) << 9;
+		result |= uint16_t(mbf.bf.bitset.get64(337) & mbf.bf.bitset.get64(338) & mbf.bf.bitset.get64(340) & uint16_t(1)) << 10;
+		result |= uint16_t(mbf.bf.bitset.get64(393) & mbf.bf.bitset.get64(394) & mbf.bf.bitset.get64(396) & uint16_t(1)) << 11;
+		result |= uint16_t(mbf.bf.bitset.get64(105) & mbf.bf.bitset.get64(106) & mbf.bf.bitset.get64(108) & uint16_t(1)) << 12;
+		result |= uint16_t(mbf.bf.bitset.get64(169) & mbf.bf.bitset.get64(170) & mbf.bf.bitset.get64(172) & uint16_t(1)) << 13;
+		result |= uint16_t(mbf.bf.bitset.get64(89) & mbf.bf.bitset.get64(90) & mbf.bf.bitset.get64(92) & uint16_t(1)) << 14;
+		result |= uint16_t(mbf.bf.bitset.get64(449) & mbf.bf.bitset.get64(450) & mbf.bf.bitset.get64(452) & uint16_t(1)) << 15;
+
+		// Second 3D Balancing Function attempt
+		/*result |= uint16_t(mbf.bf.bitset.get64(321) & mbf.bf.bitset.get64(322) & mbf.bf.bitset.get64(324) & uint16_t(1)) << 0;
+		result |= uint16_t(mbf.bf.bitset.get64(25) & mbf.bf.bitset.get64(26) & mbf.bf.bitset.get64(28) & uint16_t(1)) << 1;
+		result |= uint16_t(mbf.bf.bitset.get64(273) & mbf.bf.bitset.get64(274) & mbf.bf.bitset.get64(276) & uint16_t(1)) << 2;
+		result |= uint16_t(mbf.bf.bitset.get64(265) & mbf.bf.bitset.get64(266) & mbf.bf.bitset.get64(268) & uint16_t(1)) << 3;
+		result |= uint16_t(mbf.bf.bitset.get64(305) & mbf.bf.bitset.get64(306) & mbf.bf.bitset.get64(308) & uint16_t(1)) << 4;
+		result |= uint16_t(mbf.bf.bitset.get64(201) & mbf.bf.bitset.get64(202) & mbf.bf.bitset.get64(204) & uint16_t(1)) << 5;
+		result |= uint16_t(mbf.bf.bitset.get64(353) & mbf.bf.bitset.get64(354) & mbf.bf.bitset.get64(356) & uint16_t(1)) << 6;
+		result |= uint16_t(mbf.bf.bitset.get64(177) & mbf.bf.bitset.get64(178) & mbf.bf.bitset.get64(180) & uint16_t(1)) << 7;
+		result |= uint16_t(mbf.bf.bitset.get64(297) & mbf.bf.bitset.get64(298) & mbf.bf.bitset.get64(300) & uint16_t(1)) << 8;
+		result |= uint16_t(mbf.bf.bitset.get64(57) & mbf.bf.bitset.get64(58) & mbf.bf.bitset.get64(60) & uint16_t(1)) << 9;
+		result |= uint16_t(mbf.bf.bitset.get64(153) & mbf.bf.bitset.get64(154) & mbf.bf.bitset.get64(156) & uint16_t(1)) << 10;
+		result |= uint16_t(mbf.bf.bitset.get64(225) & mbf.bf.bitset.get64(226) & mbf.bf.bitset.get64(228) & uint16_t(1)) << 11;
+		result |= uint16_t(mbf.bf.bitset.get64(465) & mbf.bf.bitset.get64(466) & mbf.bf.bitset.get64(468) & uint16_t(1)) << 12;
+		result |= uint16_t(mbf.bf.bitset.get64(121) & mbf.bf.bitset.get64(122) & mbf.bf.bitset.get64(124) & uint16_t(1)) << 13;
+		result |= uint16_t(mbf.bf.bitset.get64(433) & mbf.bf.bitset.get64(434) & mbf.bf.bitset.get64(436) & uint16_t(1)) << 14;
+		result |= uint16_t(mbf.bf.bitset.get64(425) & mbf.bf.bitset.get64(426) & mbf.bf.bitset.get64(428) & uint16_t(1)) << 15;*/
+
 	} else {
 		result = mbf.bf.bitset.data;
 	}
@@ -430,20 +484,37 @@ void makeSignatureStatistics() {
 
 	size_t statistics[1 << 16];
 	for(size_t i = 0; i < 1 << 16; i++) {statistics[i] = 0;}
+	size_t perBitStats[16]{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 	for(size_t i = 0; i < numRandomMBF; i++) {
 		uint16_t signature = getSignature(randomMBFBuf[i]);
+
 		/*printHex(std::cout, randomMBFBuf[i].bf);
 		std::cout << ": " << signature << std::endl;*/
 		statistics[signature]++;
+
+		for(int i = 0; i < 16; i++) {
+			if((signature & 0b1) == 1) {
+				perBitStats[i]++;
+			}
+			signature >>= 1;
+		}
 	}
 
 	for(size_t i = 0; i < 1 << 16; i++) {
 		if(i % 16 == 0) {
+			/*char binary[17];
+			binary[16] = '\0';
+			for */
 			std::cout << "\n[" << i << "]:    \t";
 		}
 
 		std::cout << statistics[i] << "\t";
+	}
+	std::cout << std::endl;
+
+	for(int i = 0; i < 16; i++) {
+		std::cout << "bit " << i << ": " << (perBitStats[i] * 100.0 / numRandomMBF) << "%\n";
 	}
 	std::cout << std::endl;
 

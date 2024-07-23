@@ -24,3 +24,8 @@ Filtering %: 12.4734%
 nonfilteredComparisons: 72057594037927936
 filteredComparisons: 11578068400709365
 Filtering %: 16.0678%
+
+3D bits:
+nonfilteredComparisons: 72057594037927936
+filteredComparisons: 7096579270807026
+Filtering %: 9.84848%
