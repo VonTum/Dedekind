@@ -34,8 +34,8 @@
 #include "../dedelib/flatBufferManagement.h"
 
 #include "../dedelib/randomMBFGeneration.h"
-
 #include "../dedelib/dedekindEstimation.h"
+#include "../dedelib/mbfFilter.h"
 
 void RAMTestBenchFunc(size_t numHops, size_t numCurs, uint32_t* curs, uint32_t* jumpTable) {
 	for(size_t i = 0; i < numHops; i++) {
@@ -780,6 +780,16 @@ CommandSet miscCommands{"Misc", {
 	{"makeSignatureStatistics7", makeSignatureStatistics<7>},
 	{"makeSignatureStatistics8", makeSignatureStatistics<8>},
 	{"makeSignatureStatistics9", makeSignatureStatistics<9>},
+
+	{"testFilterTreePerformance1", testFilterTreePerformance<1>},
+	{"testFilterTreePerformance2", testFilterTreePerformance<2>},
+	{"testFilterTreePerformance3", testFilterTreePerformance<3>},
+	{"testFilterTreePerformance4", testFilterTreePerformance<4>},
+	{"testFilterTreePerformance5", testFilterTreePerformance<5>},
+	{"testFilterTreePerformance6", testFilterTreePerformance<6>},
+	{"testFilterTreePerformance7", testFilterTreePerformance<7>},
+	{"testFilterTreePerformance8", testFilterTreePerformance<8>},
+	{"testFilterTreePerformance9", testFilterTreePerformance<9>},
 }, {
 	{"checkIntervalLayers1", [](const std::vector<std::string>& size) {checkIntervalLayers<1>(std::stoi(size[0])); }},
 	{"checkIntervalLayers2", [](const std::vector<std::string>& size) {checkIntervalLayers<2>(std::stoi(size[0])); }},

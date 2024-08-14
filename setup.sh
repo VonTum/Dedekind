@@ -1,4 +1,4 @@
-mkdir build
+mkdir build_release
 cmake -DCMAKE_BUILD_TYPE=Release -S . -B build
 
 mkdir build_debug

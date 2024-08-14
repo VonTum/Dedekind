@@ -28,15 +28,6 @@
 
 typedef std::mt19937_64 RandomEngine;
 
-RandomEngine properlySeededRNG() {
-	constexpr std::size_t N = RandomEngine::state_size * sizeof(typename RandomEngine::result_type);
-    std::random_device source;
-    std::random_device::result_type random_data[(N - 1) / sizeof(source()) + 1];
-    std::generate(std::begin(random_data), std::end(random_data), std::ref(source));
-    std::seed_seq seeds(std::begin(random_data), std::end(random_data));
-    return RandomEngine(seeds);
-}
-
 constexpr size_t PREFETCH_CACHE_SIZE = 64;
 
 template<unsigned int Variables>

@@ -58,6 +58,7 @@ add_library(dedelib
   dedelib/validationSetVerification.cpp
   dedelib/randomMBFGeneration.cpp
   dedelib/dedekindEstimation.cpp
+  dedelib/mbfFilter.cpp
 
   dedelib/bigint/uint128_t.cpp
   dedelib/bigint/uint256_t.cpp

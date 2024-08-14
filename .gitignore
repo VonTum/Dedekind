@@ -19,6 +19,7 @@ Dedekind/Release/
 build/
 build_debug/
 build_numa/
+build_release/
 build_debug_numa/
 data/
 *.mbf

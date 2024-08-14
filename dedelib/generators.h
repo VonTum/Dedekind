@@ -165,3 +165,15 @@ inline u128 genU128() {
 inline u192 genU192() {
 	return u192(genU64(), genU64(), genU64());
 }
+
+
+
+
+inline std::mt19937_64 properlySeededRNG() {
+	constexpr std::size_t N = std::mt19937_64::state_size * sizeof(typename std::mt19937_64::result_type);
+    std::random_device source;
+    std::random_device::result_type random_data[(N - 1) / sizeof(source()) + 1];
+    std::generate(std::begin(random_data), std::end(random_data), std::ref(source));
+    std::seed_seq seeds(std::begin(random_data), std::end(random_data));
+    return std::mt19937_64(seeds);
+}
