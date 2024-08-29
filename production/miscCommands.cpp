@@ -629,6 +629,33 @@ void computeUnateNumbers() {
 	std::cout << "Total Inequivalent Unates: " << totalInequivalentUnates << std::endl;
 }
 
+template<unsigned int Variables>
+void countMBFSizeStatistics() {
+	size_t fileSize;
+	const Monotonic<Variables>* mbfs = static_cast<const Monotonic<Variables>*>(mmapWholeFileSequentialRead(FileName::randomMBFs(Variables), fileSize));
+
+	size_t numMBFs = fileSize / sizeof(Monotonic<Variables>);
+
+	if(numMBFs > 1000*1000*1000) {numMBFs = 1000*1000*1000;}
+
+	int sizeDistribution[(1 << Variables) + 1];
+	for(size_t i = 0; i < (1 << Variables) + 1; i++) {
+		sizeDistribution[i] = 0;
+	}
+
+
+	for(size_t i = 0; i < numMBFs; i++) {
+		size_t ones = mbfs[i].size();
+		sizeDistribution[ones]++;
+	}
+
+	std::cout << "In LATEX pgfplots format" << std::endl;
+	std::cout << "Counted " << numMBFs << " MBFs:" << std::endl;
+	for(size_t i = 0; i < (1 << Variables) + 1; i++) {
+		std::cout << "(" << i << "," << sizeDistribution[i] << ")" << std::endl;
+	}
+}
+
 CommandSet miscCommands{"Misc", {
 	{"ramTest", []() {doRAMTest(); }},
 	{"testMixingPattern", [](){testMixingPattern();}},
@@ -790,6 +817,16 @@ CommandSet miscCommands{"Misc", {
 	{"testFilterTreePerformance7", testFilterTreePerformance<7>},
 	{"testFilterTreePerformance8", testFilterTreePerformance<8>},
 	{"testFilterTreePerformance9", testFilterTreePerformance<9>},
+	
+	{"countMBFSizeStatistics1", countMBFSizeStatistics<1>},
+	{"countMBFSizeStatistics2", countMBFSizeStatistics<2>},
+	{"countMBFSizeStatistics3", countMBFSizeStatistics<3>},
+	{"countMBFSizeStatistics4", countMBFSizeStatistics<4>},
+	{"countMBFSizeStatistics5", countMBFSizeStatistics<5>},
+	{"countMBFSizeStatistics6", countMBFSizeStatistics<6>},
+	{"countMBFSizeStatistics7", countMBFSizeStatistics<7>},
+	{"countMBFSizeStatistics8", countMBFSizeStatistics<8>},
+	{"countMBFSizeStatistics9", countMBFSizeStatistics<9>},
 }, {
 	{"checkIntervalLayers1", [](const std::vector<std::string>& size) {checkIntervalLayers<1>(std::stoi(size[0])); }},
 	{"checkIntervalLayers2", [](const std::vector<std::string>& size) {checkIntervalLayers<2>(std::stoi(size[0])); }},

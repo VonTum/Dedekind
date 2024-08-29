@@ -55,7 +55,7 @@ void MBFFilterTree::debugPrintTree() {
 
 template<unsigned int Variables>
 void testFilterTreePerformance() {
-	size_t numRandomMBF9 = 2*1024*1024;
+	size_t numRandomMBF9 = 8*1024*1024;
 	Monotonic<9>* randomMBF9Buf = const_cast<Monotonic<9>*>(readFlatBuffer<Monotonic<9>>(FileName::randomMBFs(9), numRandomMBF9));
 
 	static_assert(sizeof(Monotonic<9>) == 64);

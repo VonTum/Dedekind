@@ -33,9 +33,8 @@ template<unsigned int Variables>
 size_t countWhereBitIsSet(uint32_t bit, const Monotonic<Variables>* buf, size_t bufSize) {
     size_t total = 0;
     for(size_t i = 0; i < bufSize; i++) {
-        if(buf[i].bf.bitset.get(bit)) {
-            total++;
-        }
+        uint64_t bitSelect = buf[i].bf.bitset.get64(bit) & 1;
+        total += bitSelect;
     }
     return total;
 }
@@ -101,6 +100,7 @@ class MBFFilterTree {
             newNode.rightCount = rightSize;
             size_t validCombos = 0;
             size_t comboCount = std::min(leftSampleSize, rightSampleSize);
+            std::shuffle(leftBuf, leftBuf + comboCount, rng);
             for(size_t i = 0; i < comboCount; i++) {
                 if(rightBuf[i] <= leftBuf[i]) {
                     validCombos++;
