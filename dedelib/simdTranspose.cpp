@@ -91,13 +91,15 @@ inline void transpose_per_32_bits(const uint64_t* bitBuffer, size_t stride, size
         }
     }
 }
+
+/*
+// Outdated count valid bits impl
 void countValidBits(const uint64_t* bitBuffer, size_t stride, size_t numBitsets, uint32_t* totals) {
     transpose_per_32_bits(bitBuffer, stride, numBitsets, [totals](uint32_t bits, size_t bitIndex, size_t blockIndex){
         int bitCount = __builtin_popcount(bits);
         totals[bitIndex] += bitCount;
     });
 }
-
 
 #include <vector>
 #include <iostream>
@@ -164,12 +166,12 @@ int main(){
     auto timeFast = std::chrono::high_resolution_clock::now() - start2;
     std::cout << "Fast: " << timeFast.count() << "ns" << std::endl;
 
-    /*std::cout << "\ntotalsNaiveA:" << std::endl;
-    printTotals(totalsNaiveA, BITSET_SIZE);
-    std::cout << "\ntotalsNaiveB:" << std::endl;
-    printTotals(totalsNaiveB, BITSET_SIZE);
-    std::cout << "\ntotalsFast:" << std::endl;
-    printTotals(totalsFast, BITSET_SIZE);*/
+    // std::cout << "\ntotalsNaiveA:" << std::endl;
+    // printTotals(totalsNaiveA, BITSET_SIZE);
+    // std::cout << "\ntotalsNaiveB:" << std::endl;
+    // printTotals(totalsNaiveB, BITSET_SIZE);
+    // std::cout << "\ntotalsFast:" << std::endl;
+    // printTotals(totalsFast, BITSET_SIZE);
 
     for(size_t i = 0; i < BITSET_SIZE; i++) {
         if(totalsNaiveA[i] != totalsNaiveB[i]) {
@@ -182,3 +184,4 @@ int main(){
         }
     }
 }
+*/
