@@ -168,12 +168,12 @@ QuadraticCombinationAccumulator countValidCombosWithFilterTree(
 
 template<unsigned int Variables>
 void testTreeLessFilterTreePerformance() {
-	size_t numRandomMBF = 256*1024;
+	size_t numRandomMBF = 1024*1024;
 	Monotonic<Variables>* randomMBFBuf = const_cast<Monotonic<Variables>*>(readFlatBuffer<Monotonic<Variables>>(FileName::randomMBFs(Variables), numRandomMBF * sizeof(Monotonic<Variables>)));
 
 	std::cout << "Loaded " << numRandomMBF << " MBF" << Variables << std::endl;
 
-    std::cout << "Last Mbf: " << randomMBFBuf[numRandomMBF - 1] << std::endl;
+    //std::cout << "Last Mbf: " << randomMBFBuf[numRandomMBF - 1] << std::endl;
 
     size_t singleBufSize = numRandomMBF / 2;
     Monotonic<Variables>* leftMBFs = randomMBFBuf;
@@ -185,12 +185,12 @@ void testTreeLessFilterTreePerformance() {
         QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
     }
-    {
+    /*{
         TimeTracker timer("Quadratic ");
         QuadraticCombinationAccumulator accumulator;
         accumulator.countValidCombinationsQuadratic(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
-    }
+    }*/
 }
 
 template void testFilterTreePerformance<1>();

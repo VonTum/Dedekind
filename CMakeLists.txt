@@ -13,10 +13,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 
   add_compile_options("$<$<CONFIG:RELEASE>:/O2 /Oi /ot /GL>")
 else()
-  add_compile_options(-Wall -Wextra -march=native)
-  # add_compile_options(-g -fno-inline) # no-inline slows down code considerably
+  add_compile_options(-Wall -Wextra -march=native -g)
+  # add_compile_options($<$<CONFIG:RELEASE>:-fno-inline>) # no-inline slows down code considerably
   # profiling
-  # add_compile_options(-g -fno-omit-frame-pointer -fno-inline-small-functions)
+  # add_compile_options(-fno-omit-frame-pointer -fno-inline-small-functions)
   # add_definitions(-DNO_MULTITHREAD)
 
   add_compile_options("$<$<CONFIG:DEBUG>:-fsanitize=address>")

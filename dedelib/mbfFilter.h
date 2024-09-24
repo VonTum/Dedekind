@@ -72,13 +72,61 @@ template<typename IntT, size_t TotalBits>
 static void fastCountPerBit(const IntT *__restrict asBits, size_t numBitsets, IntT *__restrict counts) {
     constexpr size_t BitsPerPart = sizeof(IntT) * 8;
     constexpr size_t PartsPerMBF = TotalBits / BitsPerPart;
+    constexpr size_t TotalBytes = TotalBits / 8;
 
     // Make sure our count can still contain 
     assert(numBitsets < (1 << BitsPerPart));
     
-    memset(counts, 0, TotalBits * sizeof(IntT));
+    #ifdef __AVX2__
+
+    for(size_t i = 0; i < TotalBits; i++) {
+        counts[i] = 0xDD;
+    }
+    constexpr size_t VectorRegBitSize = 256;
+    constexpr size_t VectorRegByteSize = 32;
+    if constexpr(TotalBits % VectorRegBitSize == 0 && sizeof(IntT) == 1) { // IntT == uint8_t
+        __m256i firstBitsMask = _mm256_set1_epi8(1);
+
+        for(size_t avxChunk = 0; avxChunk < TotalBytes; avxChunk += VectorRegByteSize) {
+            __m256i subTotals[8] {
+                _mm256_setzero_si256(),
+                _mm256_setzero_si256(),
+                _mm256_setzero_si256(),
+                _mm256_setzero_si256(),
+                _mm256_setzero_si256(),
+                _mm256_setzero_si256(),
+                _mm256_setzero_si256(),
+                _mm256_setzero_si256(),
+            };
+
+            for(size_t curBitset = 0; curBitset < numBitsets; curBitset++) {
+                __m256i curChunk = _mm256_load_si256(reinterpret_cast<const __m256i*>(asBits + TotalBytes * curBitset + avxChunk));
+
+                // Unrolled loop because srli expects an immediate
+                subTotals[0] = _mm256_add_epi8(subTotals[0], _mm256_and_si256(curChunk, firstBitsMask));
+                subTotals[1] = _mm256_add_epi8(subTotals[1], _mm256_and_si256(_mm256_srli_epi16(curChunk, 1), firstBitsMask));
+                subTotals[2] = _mm256_add_epi8(subTotals[2], _mm256_and_si256(_mm256_srli_epi16(curChunk, 2), firstBitsMask));
+                subTotals[3] = _mm256_add_epi8(subTotals[3], _mm256_and_si256(_mm256_srli_epi16(curChunk, 3), firstBitsMask));
+                subTotals[4] = _mm256_add_epi8(subTotals[4], _mm256_and_si256(_mm256_srli_epi16(curChunk, 4), firstBitsMask));
+                subTotals[5] = _mm256_add_epi8(subTotals[5], _mm256_and_si256(_mm256_srli_epi16(curChunk, 5), firstBitsMask));
+                subTotals[6] = _mm256_add_epi8(subTotals[6], _mm256_and_si256(_mm256_srli_epi16(curChunk, 6), firstBitsMask));
+                subTotals[7] = _mm256_add_epi8(subTotals[7], _mm256_and_si256(_mm256_srli_epi16(curChunk, 7), firstBitsMask));
+            }
+
+            for(int curBit = 0; curBit < 8; curBit++) {
+                _mm256_store_si256(reinterpret_cast<__m256i*>(counts + curBit * (TotalBits / 8) + avxChunk), subTotals[curBit]);
+            }
+        }
+        return;
+    }
+    #endif
+
+    for(size_t i = 0; i < TotalBits; i++) {
+        counts[i] = 0;
+    }
 
     // Only vectorizes well with clang
+    // On second thought, even clang fucks this up. Hence manual vectorization up there
     for(size_t mbfIdx = 0; mbfIdx < numBitsets; mbfIdx++) {
         const IntT* curMBF = asBits + PartsPerMBF * mbfIdx;
         for(size_t bitInPart = 0; bitInPart < BitsPerPart; bitInPart++) {
@@ -106,10 +154,12 @@ static void checkFastCountPerBitBuffer(const Monotonic<Variables>* mbfs, size_t 
         }
     }
 
+    bool anyFailure = false;
     for(size_t i = 0; i < 1 << Variables; i++) {
-        //std::cout << i << ": " << int(counts[i]) << " " << int(newArray[i]) << std::endl;
-        assert(counts[i] == newArray[i]);
+        std::cout << i << ": " << int(counts[i]) << " " << int(newArray[i]) << std::endl;
+        if(counts[i] != newArray[i]) {anyFailure = true;}
     }
+    assert(!anyFailure);
 }
 
 template<typename IntT, unsigned int Variables>
@@ -138,8 +188,8 @@ size_t findBestBitToSplitOver(
     fastCountPerBit<IntT, TotalBits>(leftAsBits, leftSampleSize, leftCounts);
     fastCountPerBit<IntT, TotalBits>(rightAsBits, rightSampleSize, rightCounts);
 
-    //checkFastCountPerBitBuffer(leftMBFs, numLeftMBFs, leftCounts);
-    //checkFastCountPerBitBuffer(rightMBFs, numRightMBFs, rightCounts);
+    //checkFastCountPerBitBuffer(leftMBFs, leftSampleSize, leftCounts);
+    //checkFastCountPerBitBuffer(rightMBFs, rightSampleSize, rightCounts);
 
     size_t filterBit = 0; // If it's still 0, then we didn't find a suitable split so we don't split
     uint64_t bestFilterOutScore = minimumSavingsForSplit;
