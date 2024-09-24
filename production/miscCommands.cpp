@@ -817,6 +817,16 @@ CommandSet miscCommands{"Misc", {
 	{"testFilterTreePerformance7", testFilterTreePerformance<7>},
 	{"testFilterTreePerformance8", testFilterTreePerformance<8>},
 	{"testFilterTreePerformance9", testFilterTreePerformance<9>},
+
+	{"testTreeLessFilterTreePerformance1", testTreeLessFilterTreePerformance<1>},
+	{"testTreeLessFilterTreePerformance2", testTreeLessFilterTreePerformance<2>},
+	{"testTreeLessFilterTreePerformance3", testTreeLessFilterTreePerformance<3>},
+	{"testTreeLessFilterTreePerformance4", testTreeLessFilterTreePerformance<4>},
+	{"testTreeLessFilterTreePerformance5", testTreeLessFilterTreePerformance<5>},
+	{"testTreeLessFilterTreePerformance6", testTreeLessFilterTreePerformance<6>},
+	{"testTreeLessFilterTreePerformance7", testTreeLessFilterTreePerformance<7>},
+	{"testTreeLessFilterTreePerformance8", testTreeLessFilterTreePerformance<8>},
+	{"testTreeLessFilterTreePerformance9", testTreeLessFilterTreePerformance<9>},
 	
 	{"countMBFSizeStatistics1", countMBFSizeStatistics<1>},
 	{"countMBFSizeStatistics2", countMBFSizeStatistics<2>},

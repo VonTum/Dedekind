@@ -55,9 +55,9 @@ size_t partitionByBit(uint32_t bit, Monotonic<Variables>* buf, size_t bufSize) {
 template<typename T, typename RNG, size_t MAX_SAMPLE_SIZE = 255> // To fit count in uint8_t
 size_t makeSample(T* buf, size_t size, RNG& rng) {
     if(size > MAX_SAMPLE_SIZE) {
-        std::uniform_int_distribution<size_t> distribution = std::uniform_int_distribution<size_t>(0, size-1);
         for(size_t i = 0; i < MAX_SAMPLE_SIZE; i++) {
-            size_t selected = distribution(rng);
+            size_t selected = std::uniform_int_distribution<size_t>(i, size-1)(rng);
+            if(i == selected) {continue;}
             T swapTmp = buf[i];
             buf[i] = buf[selected];
             buf[selected] = swapTmp;
@@ -84,10 +84,7 @@ static void fastCountPerBit(const IntT *__restrict asBits, size_t numBitsets, In
         for(size_t bitInPart = 0; bitInPart < BitsPerPart; bitInPart++) {
             for(size_t partOfMBF = 0; partOfMBF < PartsPerMBF; partOfMBF++) {
                 IntT justTheBit = (curMBF[partOfMBF] >> bitInPart) & 1U;
-                if(justTheBit > 0) {
-                    counts[bitInPart * PartsPerMBF + partOfMBF]++;
-                }
-                //counts[bitInPart * PartsPerMBF + partOfMBF] += justTheBit;
+                counts[bitInPart * PartsPerMBF + partOfMBF] += justTheBit;
             }
         }
     }
@@ -116,12 +113,21 @@ static void checkFastCountPerBitBuffer(const Monotonic<Variables>* mbfs, size_t 
 }
 
 template<typename IntT, unsigned int Variables>
-size_t findBestBitToSplitOver(const Monotonic<Variables>* leftMBFs, const Monotonic<Variables>* rightMBFs, size_t numLeftMBFs, size_t numRightMBFs) {
+size_t findBestBitToSplitOver(
+    const Monotonic<Variables>* leftMBFs, const Monotonic<Variables>* rightMBFs,
+    size_t leftSampleSize, size_t rightSampleSize,
+    size_t leftSize, size_t rightSize
+) {
     constexpr size_t TotalBits = 1 << Variables;
     constexpr size_t BitsPerPart = sizeof(IntT) * 8;
     constexpr size_t PartsPerMBF = TotalBits / BitsPerPart;
     // How many comparisons we save it is worth to split the node for. 
-    constexpr size_t NOT_WORTH_IT_SPLIT_COUNT = 10000;
+    constexpr uint64_t NOT_WORTH_IT_SPLIT_COUNT = 1000;
+
+    // This factor is to calculate the expected total amount of checks that could be avoided
+    double sampleToTotalSizeFactor = static_cast<double>(leftSampleSize) * rightSampleSize / (leftSize * rightSize);
+    
+    uint64_t minimumSavingsForSplit = NOT_WORTH_IT_SPLIT_COUNT * sampleToTotalSizeFactor;
 
     const IntT* leftAsBits = reinterpret_cast<const IntT*>(leftMBFs);
     const IntT* rightAsBits = reinterpret_cast<const IntT*>(rightMBFs);
@@ -129,20 +135,20 @@ size_t findBestBitToSplitOver(const Monotonic<Variables>* leftMBFs, const Monoto
     alignas(64) IntT leftCounts[TotalBits];
     alignas(64) IntT rightCounts[TotalBits];
 
-    fastCountPerBit<IntT, TotalBits>(leftAsBits, numLeftMBFs, leftCounts);
-    fastCountPerBit<IntT, TotalBits>(rightAsBits, numRightMBFs, rightCounts);
+    fastCountPerBit<IntT, TotalBits>(leftAsBits, leftSampleSize, leftCounts);
+    fastCountPerBit<IntT, TotalBits>(rightAsBits, rightSampleSize, rightCounts);
 
     //checkFastCountPerBitBuffer(leftMBFs, numLeftMBFs, leftCounts);
     //checkFastCountPerBitBuffer(rightMBFs, numRightMBFs, rightCounts);
 
     size_t filterBit = 0; // If it's still 0, then we didn't find a suitable split so we don't split
-    uint64_t bestFilterOutScore = NOT_WORTH_IT_SPLIT_COUNT;
+    uint64_t bestFilterOutScore = minimumSavingsForSplit;
 
     for(size_t partOfMBF = 0; partOfMBF < PartsPerMBF; partOfMBF++) {
         for(size_t bitInPart = 0; bitInPart < BitsPerPart; bitInPart++) {
             size_t countIndex = bitInPart * PartsPerMBF + partOfMBF;
             size_t actualBit = partOfMBF * BitsPerPart + bitInPart;
-            uint64_t filteredOutScore = (numLeftMBFs - leftCounts[countIndex]) * rightCounts[countIndex];
+            uint64_t filteredOutScore = (leftSampleSize - leftCounts[countIndex]) * rightCounts[countIndex];
 
             if(filteredOutScore > bestFilterOutScore) {
                 filterBit = actualBit;
@@ -156,13 +162,13 @@ size_t findBestBitToSplitOver(const Monotonic<Variables>* leftMBFs, const Monoto
     /*{
         uint32_t slowFilterBit = 0; // If it's still 0, then we didn't find a suitable split so we don't split
         
-        uint64_t bestFilterOutScore = NOT_WORTH_IT_SPLIT_COUNT;
+        uint64_t bestFilterOutScore = minimumSavingsForSplit;
         // We don't cover 0 and 511 because they're kinda pointless. We don't have Top or Bottom in our sample
         for(uint32_t bit = 1; bit < (1 << Variables) - 1; bit++) {
-            size_t leftOneCount = countWhereBitIsSet(bit, leftMBFs, numLeftMBFs);
-            size_t rightOneCount = countWhereBitIsSet(bit, rightMBFs, numRightMBFs);
+            size_t leftOneCount = countWhereBitIsSet(bit, leftMBFs, leftSampleSize);
+            size_t rightOneCount = countWhereBitIsSet(bit, rightMBFs, rightSampleSize);
 
-            uint64_t filteredOutScore = (numLeftMBFs - leftOneCount) * rightOneCount;
+            uint64_t filteredOutScore = (leftSampleSize - leftOneCount) * rightOneCount;
 
             if(filteredOutScore > bestFilterOutScore) {
                 slowFilterBit = bit;
@@ -170,10 +176,10 @@ size_t findBestBitToSplitOver(const Monotonic<Variables>* leftMBFs, const Monoto
             }
         }
 
-        size_t verifyLeftOneCount = countWhereBitIsSet(filterBit, leftMBFs, numLeftMBFs);
-        size_t verifyRightOneCount = countWhereBitIsSet(filterBit, rightMBFs, numRightMBFs);
+        size_t verifyLeftOneCount = countWhereBitIsSet(filterBit, leftMBFs, leftSampleSize);
+        size_t verifyRightOneCount = countWhereBitIsSet(filterBit, rightMBFs, rightSampleSize);
 
-        uint64_t verifyFilteredOutScore = (numLeftMBFs - verifyLeftOneCount) * verifyRightOneCount;
+        uint64_t verifyFilteredOutScore = (leftSampleSize - verifyLeftOneCount) * verifyRightOneCount;
         assert(bestFilterOutScore == verifyFilteredOutScore);
         assert(filterBit == slowFilterBit);
         return filterBit;
@@ -187,12 +193,14 @@ class MBFFilterTree {
     size_t totalLeftMBFsInTree;
     size_t totalRightMBFsInTree;
 
+    std::mt19937_64 rng;
+
     // Recursively split nodes and construct the tree. 
     template<unsigned int Variables>
     void constructTree(
         Monotonic<Variables>* leftBuf, size_t leftSize,
         Monotonic<Variables>* rightBuf, size_t rightSize,
-        int depth, std::mt19937_64& rng
+        int depth
     ) {
         size_t newNodeIndex = this->tree.size();
         MBFFilterTreeNode& newNode = this->tree.emplace_back();
@@ -221,7 +229,7 @@ class MBFFilterTree {
         #endif
 
         // If it's still 0, then we didn't find a suitable split so we don't split
-        uint32_t filterBit = findBestBitToSplitOver<uint8_t>(leftBuf, rightBuf, leftSampleSize, rightSampleSize);
+        uint32_t filterBit = findBestBitToSplitOver<uint8_t>(leftBuf, rightBuf, leftSampleSize, rightSampleSize, leftSize, rightSize);
 
         // Base case, if we didn't split. 
         newNode.bitIndex = filterBit;    
@@ -238,11 +246,11 @@ class MBFFilterTree {
         
         // First the 0 case. Because the tree is balanced like that
         // The zeros part of right is passed, but the whole of left is passed. 
-        this->constructTree(leftBuf, leftSize, rightBuf + rightZerosStartAt, rightSize - rightZerosStartAt, depth + 1, rng);
+        this->constructTree(leftBuf, leftSize, rightBuf + rightZerosStartAt, rightSize - rightZerosStartAt, depth + 1);
         this->tree[newNodeIndex].branchTo = this->tree.size(); // Points to the new node we're about to create
 
         // The ones part of right is passed, and only the left part that has ones is passed 
-        this->constructTree(leftBuf, leftZerosStartAt, rightBuf, rightZerosStartAt, depth + 1, rng);
+        this->constructTree(leftBuf, leftZerosStartAt, rightBuf, rightZerosStartAt, depth + 1);
     }
 
 public:
@@ -253,13 +261,14 @@ public:
         this->totalLeftMBFsInTree = halfBufSize;
         this->totalRightMBFsInTree = halfBufSize;
         
-        std::mt19937_64 rng = properlySeededRNG();
+        this->rng = properlySeededRNG();
 
-        this->constructTree(mbfBuf, halfBufSize, mbfBuf + halfBufSize, halfBufSize, 0, rng);
+        this->constructTree(mbfBuf, halfBufSize, mbfBuf + halfBufSize, halfBufSize, 0);
     }
 
     void debugPrintTree();
 };
+
 
 template<unsigned int Variables>
 void testFilterTreePerformance();
@@ -273,3 +282,15 @@ extern template void testFilterTreePerformance<6>();
 extern template void testFilterTreePerformance<7>();
 extern template void testFilterTreePerformance<8>();
 extern template void testFilterTreePerformance<9>();
+
+template<unsigned int Variables>
+void testTreeLessFilterTreePerformance();
+extern template void testTreeLessFilterTreePerformance<1>();
+extern template void testTreeLessFilterTreePerformance<2>();
+extern template void testTreeLessFilterTreePerformance<3>();
+extern template void testTreeLessFilterTreePerformance<4>();
+extern template void testTreeLessFilterTreePerformance<5>();
+extern template void testTreeLessFilterTreePerformance<6>();
+extern template void testTreeLessFilterTreePerformance<7>();
+extern template void testTreeLessFilterTreePerformance<8>();
+extern template void testTreeLessFilterTreePerformance<9>();
