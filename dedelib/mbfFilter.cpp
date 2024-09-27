@@ -2,11 +2,13 @@
 
 #include <iostream>
 #include <iomanip>
+#include <memory>
 
 #include "flatBufferManagement.h"
 #include "fileNames.h"
 #include "toString.h"
 #include "timeTracker.h"
+#include "simdTranspose.h"
 
 void MBFFilterTree::debugPrintTree() {
     std::cout << std::fixed << std::setprecision(5);
@@ -75,23 +77,98 @@ struct QuadraticCombinationAccumulator {
     uint64_t totalSearchSpace = 0;
     uint64_t totalCalls = 0;
 
+    std::unique_ptr<uint32_t[]> temporaryBitsetTransposeBuffer{nullptr};
+    size_t temporaryBitsetTransposeBufferSize = 0;
+    std::vector<uint16_t> allBits;
+
+    template<unsigned int Variables>
+    void countValidCombinationsWithBitBuffer(
+        Monotonic<Variables>* leftBuf, size_t leftSize,
+        Monotonic<Variables>* rightBuf, size_t rightSize
+    ) {
+        constexpr size_t BITS_PER_MBF = 1 << Variables;
+        constexpr size_t SIMD_BLOCK_SIZE_IN_BITS = 1024;
+        constexpr size_t SIMD_BLOCK_SIZE_IN_BYTES = SIMD_BLOCK_SIZE_IN_BITS / 8;
+        constexpr size_t U64_PER_BLOCK = SIMD_BLOCK_SIZE_IN_BYTES / sizeof(uint64_t);
+
+        size_t numBlocksPerBit = (leftSize + SIMD_BLOCK_SIZE_IN_BITS - 1) / SIMD_BLOCK_SIZE_IN_BITS;
+
+        size_t requiredBufferSize = numBlocksPerBit * BITS_PER_MBF * SIMD_BLOCK_SIZE_IN_BYTES;
+
+        if(this->temporaryBitsetTransposeBufferSize < requiredBufferSize) {
+            // Big blocks tend to be aligned
+            temporaryBitsetTransposeBuffer = std::unique_ptr<uint32_t[]>{new uint32_t[requiredBufferSize / sizeof(uint32_t)]};
+        }
+
+        memset(this->temporaryBitsetTransposeBuffer.get(), 0, requiredBufferSize);
+
+        transpose_per_32_bits(reinterpret_cast<uint64_t*>(leftBuf), BITS_PER_MBF / 64, leftSize, [&](uint32_t bits, size_t bitIndex, size_t blockIndex){
+            size_t uint32_tPosition = bitIndex * numBlocksPerBit * SIMD_BLOCK_SIZE_IN_BYTES / sizeof(uint32_t) + blockIndex;
+            assert(uint32_tPosition * sizeof(uint32_t) < requiredBufferSize);
+            this->temporaryBitsetTransposeBuffer.get()[uint32_tPosition] = bits;
+        });
+
+        uint64_t thisTotal = 0;
+
+        this->allBits.clear();
+        for(size_t i = 0; i < rightSize; i++) {
+            Monotonic<Variables> curRightMBF = rightBuf[i];
+
+            AntiChain<Variables> topBits = curRightMBF.asAntiChain();
+            topBits.forEachOne([&](size_t index){
+                this->allBits.push_back(index);
+            });
+
+            allBits[allBits.size() - 1] |= 0x8000;
+        }
+        uint64_t curBlock[U64_PER_BLOCK];
+
+        const uint64_t* bitsetBuffer = reinterpret_cast<uint64_t*>(this->temporaryBitsetTransposeBuffer.get());
+
+        for(size_t blockI = 0; blockI < numBlocksPerBit; blockI++) {
+            const uint64_t* curBlockBitsetBuf = bitsetBuffer + U64_PER_BLOCK * blockI;
+
+            for(uint16_t bitIndex : this->allBits) {
+                size_t bitOffset = U64_PER_BLOCK * numBlocksPerBit * (bitIndex & 0x7FFF);
+                assert(bitOffset * sizeof(uint64_t) < requiredBufferSize);
+                const uint64_t* thisBlock = curBlockBitsetBuf + bitOffset;
+
+                for(size_t partInBlock = 0; partInBlock < U64_PER_BLOCK; partInBlock++) {
+                    curBlock[partInBlock] &= thisBlock[partInBlock];
+                }
+                if(bitIndex & 0x8000) {
+                    for(uint64_t elem : curBlock) {
+                        thisTotal += popcnt64(elem);
+                    }
+                    for(size_t partInBlock = 0; partInBlock < U64_PER_BLOCK; partInBlock++) {
+                        curBlock[partInBlock] = uint64_t(-1);
+                    }
+                }
+            }
+        }
+
+        this->totalSearchSpace += leftSize * rightSize;
+        this->total += thisTotal;
+        this->totalCalls++;
+    }
+
     template<unsigned int Variables>
     void countValidCombinationsQuadratic(
         Monotonic<Variables>* leftBuf, size_t leftSize,
         Monotonic<Variables>* rightBuf, size_t rightSize
     ) {
-        uint64_t total = 0;
+        uint64_t thisTotal = 0;
         for(size_t j = 0; j < rightSize; j++) {
             Monotonic<Variables> rightMbf = rightBuf[j];
             for(size_t i = 0; i < leftSize; i++) {
                 Monotonic<Variables> leftMbf = leftBuf[i];
                 if(rightMbf <= leftMbf) {
-                    total++;
+                    thisTotal++;
                 }
             }
         }
         this->totalSearchSpace += leftSize * rightSize;
-        this->total += total;
+        this->total += thisTotal;
         this->totalCalls++;
     }
 
@@ -168,7 +245,7 @@ QuadraticCombinationAccumulator countValidCombosWithFilterTree(
 
 template<unsigned int Variables>
 void testTreeLessFilterTreePerformance() {
-	size_t numRandomMBF = 1024*1024;
+	size_t numRandomMBF = 256*1024;
 	Monotonic<Variables>* randomMBFBuf = const_cast<Monotonic<Variables>*>(readFlatBuffer<Monotonic<Variables>>(FileName::randomMBFs(Variables), numRandomMBF * sizeof(Monotonic<Variables>)));
 
 	std::cout << "Loaded " << numRandomMBF << " MBF" << Variables << std::endl;
@@ -185,12 +262,18 @@ void testTreeLessFilterTreePerformance() {
         QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
     }
-    /*{
+    {
         TimeTracker timer("Quadratic ");
         QuadraticCombinationAccumulator accumulator;
         accumulator.countValidCombinationsQuadratic(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
-    }*/
+    }
+    {
+        TimeTracker timer("Quadratic Fast ");
+        QuadraticCombinationAccumulator accumulator;
+        accumulator.countValidCombinationsWithBitBuffer(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
+        accumulator.print();
+    }
 }
 
 template void testFilterTreePerformance<1>();

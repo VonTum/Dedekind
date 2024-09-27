@@ -59,7 +59,6 @@ add_library(dedelib
   dedelib/randomMBFGeneration.cpp
   dedelib/dedekindEstimation.cpp
   dedelib/mbfFilter.cpp
-  dedelib/simdTranspose.cpp
 
   dedelib/bigint/uint128_t.cpp
   dedelib/bigint/uint256_t.cpp
