@@ -66,10 +66,10 @@ inline void transpose_per_32_bits(const uint64_t* bitBuffer, size_t stride, size
             output[0] = _mm256_unpacklo_epi64(unp0_B, unp4_B);
             output[1] = _mm256_unpackhi_epi64(unp0_B, unp4_B);
             output[2] = _mm256_unpacklo_epi64(unp1_B, unp5_B);
-            output[6] = _mm256_unpackhi_epi64(unp1_B, unp5_B);
+            output[3] = _mm256_unpackhi_epi64(unp1_B, unp5_B);
             output[4] = _mm256_unpacklo_epi64(unp2_B, unp6_B);
             output[5] = _mm256_unpackhi_epi64(unp2_B, unp6_B);
-            output[3] = _mm256_unpacklo_epi64(unp3_B, unp7_B);
+            output[6] = _mm256_unpacklo_epi64(unp3_B, unp7_B);
             output[7] = _mm256_unpackhi_epi64(unp3_B, unp7_B);
 
             // So the output now looks like 32 bytes per vector register, where each byte has the bits for 8 different BFs. 
