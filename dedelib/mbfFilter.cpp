@@ -19,7 +19,7 @@
 
 #define MAKE_STATISTICS
 
-
+#define NOINLINE __attribute__ ((noinline))
 
 struct MBFFilterTreeNode {
     // If bitIndex == 0, then this is an empty terminal node. Don't check, just follow bufIndex to a MBF buffer
@@ -51,7 +51,7 @@ size_t countWhereBitIsSet(uint32_t bit, const Monotonic<Variables>* buf, size_t 
 }
 
 template<unsigned int Variables>
-size_t partitionByBit(uint32_t bit, Monotonic<Variables>* buf, size_t bufSize) {
+size_t NOINLINE partitionByBit(uint32_t bit, Monotonic<Variables>* buf, size_t bufSize) {
     Monotonic<Variables>* midPoint = std::partition(buf, buf + bufSize, [bit](const Monotonic<Variables>& mbf){
         return mbf.bf.bitset.get(bit);
     });
@@ -63,7 +63,7 @@ size_t partitionByBit(uint32_t bit, Monotonic<Variables>* buf, size_t bufSize) {
 // If the sample is larger than MAX_SAMPLE_SIZE, we pick out MAX_SAMPLE_SIZE random elements
 // from the whole buffer and move them to the front
 template<typename T, typename RNG, size_t MAX_SAMPLE_SIZE = 255> // To fit count in uint8_t
-size_t makeSample(T* buf, size_t size, RNG& rng) {
+size_t NOINLINE makeSample(T* buf, size_t size, RNG& rng) {
     if(size > MAX_SAMPLE_SIZE) {
         for(size_t i = 0; i < MAX_SAMPLE_SIZE; i++) {
             size_t selected = std::uniform_int_distribution<size_t>(i, size-1)(rng);
@@ -79,7 +79,7 @@ size_t makeSample(T* buf, size_t size, RNG& rng) {
 }
 
 template<typename IntT, size_t TotalBits>
-static void fastCountPerBit(const IntT *__restrict asBits, size_t numBitsets, IntT *__restrict counts) {
+static void NOINLINE fastCountPerBit(const IntT *__restrict asBits, size_t numBitsets, IntT *__restrict counts) {
     constexpr size_t BitsPerPart = sizeof(IntT) * 8;
     constexpr size_t PartsPerMBF = TotalBits / BitsPerPart;
     constexpr size_t TotalBytes = TotalBits / 8;
@@ -149,7 +149,7 @@ static void fastCountPerBit(const IntT *__restrict asBits, size_t numBitsets, In
 }
 
 template<typename IntT, unsigned int Variables>
-static void checkFastCountPerBitBuffer(const Monotonic<Variables>* mbfs, size_t numMBFs, const IntT* counts) {
+static void NOINLINE checkFastCountPerBitBuffer(const Monotonic<Variables>* mbfs, size_t numMBFs, const IntT* counts) {
     constexpr size_t TotalBits = 1 << Variables;
     constexpr size_t BitsPerPart = sizeof(IntT) * 8;
     constexpr size_t PartsPerMBF = TotalBits / BitsPerPart;
@@ -173,10 +173,10 @@ static void checkFastCountPerBitBuffer(const Monotonic<Variables>* mbfs, size_t 
 }
 
 // How many comparisons we save it is worth to split the node for. 
-static uint64_t NOT_WORTH_IT_SPLIT_COUNT = 64000;
+static uint64_t NOT_WORTH_IT_SPLIT_COUNT = 65536000; // See parameterStudyBitComparisons.txt
 
 template<typename IntT, unsigned int Variables>
-size_t findBestBitToSplitOver(
+size_t NOINLINE findBestBitToSplitOver(
     const Monotonic<Variables>* leftMBFs, const Monotonic<Variables>* rightMBFs,
     size_t leftSampleSize, size_t rightSampleSize,
     size_t leftSize, size_t rightSize
@@ -393,6 +393,39 @@ void testFilterTreePerformance() {
 }
 
 
+template<size_t U64_PER_BLOCK>
+uint64_t NOINLINE countValidCombinationsBitwiseSIMD(size_t numBlocksPerBit, const uint64_t *bitsetBuffer, std::vector<uint16_t>& allBits) {
+    uint64_t thisTotal = 0;
+
+    uint64_t curBlock[U64_PER_BLOCK];
+    for (size_t partInBlock = 0; partInBlock < U64_PER_BLOCK; partInBlock++) {
+        curBlock[partInBlock] = uint64_t(-1);
+    }
+
+    for (size_t blockI = 0; blockI < numBlocksPerBit; blockI++) {
+        const uint64_t *curBlockBitsetBuf = bitsetBuffer + U64_PER_BLOCK * blockI;
+
+        for (uint16_t bitIndex : allBits) {
+            size_t bitOffset = U64_PER_BLOCK * numBlocksPerBit * (bitIndex & 0x7FFF);
+            const uint64_t *thisBlock = curBlockBitsetBuf + bitOffset;
+
+            for (size_t partInBlock = 0; partInBlock < U64_PER_BLOCK; partInBlock++) {
+                curBlock[partInBlock] &= thisBlock[partInBlock];
+            }
+            if (bitIndex & 0x8000) {
+                for (uint64_t elem : curBlock) {
+                    thisTotal += popcnt64(elem);
+                }
+                for (size_t partInBlock = 0; partInBlock < U64_PER_BLOCK; partInBlock++) {
+                    curBlock[partInBlock] = uint64_t(-1);
+                }
+            }
+        }
+    }
+
+    return thisTotal;
+}
+
 
 struct QuadraticCombinationAccumulator {
     uint64_t total = 0;
@@ -404,7 +437,7 @@ struct QuadraticCombinationAccumulator {
     std::vector<uint16_t> allBits;
 
     template<unsigned int Variables>
-    void countValidCombinationsWithBitBuffer(
+    void NOINLINE countValidCombinationsWithBitBuffer(
         Monotonic<Variables>* leftBuf, size_t leftSize,
         Monotonic<Variables>* rightBuf, size_t rightSize
     ) {
@@ -435,8 +468,6 @@ struct QuadraticCombinationAccumulator {
             this->temporaryBitsetTransposeBuffer.get()[uint32_tPosition] = bits;
         });
 
-        uint64_t thisTotal = 0;
-
         this->allBits.clear();
         for(size_t i = 0; i < rightSize; i++) {
             Monotonic<Variables> curRightMBF = rightBuf[i];
@@ -448,42 +479,16 @@ struct QuadraticCombinationAccumulator {
 
             allBits[allBits.size() - 1] |= 0x8000;
         }
-        uint64_t curBlock[U64_PER_BLOCK];
-        for(size_t partInBlock = 0; partInBlock < U64_PER_BLOCK; partInBlock++) {
-            curBlock[partInBlock] = uint64_t(-1);
-        }
 
-        const uint64_t* bitsetBuffer = reinterpret_cast<uint64_t*>(this->temporaryBitsetTransposeBuffer.get());
-
-        for(size_t blockI = 0; blockI < numBlocksPerBit; blockI++) {
-            const uint64_t* curBlockBitsetBuf = bitsetBuffer + U64_PER_BLOCK * blockI;
-
-            for(uint16_t bitIndex : this->allBits) {
-                size_t bitOffset = U64_PER_BLOCK * numBlocksPerBit * (bitIndex & 0x7FFF);
-                assert(bitOffset * sizeof(uint64_t) < requiredBufferSize);
-                const uint64_t* thisBlock = curBlockBitsetBuf + bitOffset;
-
-                for(size_t partInBlock = 0; partInBlock < U64_PER_BLOCK; partInBlock++) {
-                    curBlock[partInBlock] &= thisBlock[partInBlock];
-                }
-                if(bitIndex & 0x8000) {
-                    for(uint64_t elem : curBlock) {
-                        thisTotal += popcnt64(elem);
-                    }
-                    for(size_t partInBlock = 0; partInBlock < U64_PER_BLOCK; partInBlock++) {
-                        curBlock[partInBlock] = uint64_t(-1);
-                    }
-                }
-            }
-        }
+        const uint64_t *bitsetBuffer = reinterpret_cast<uint64_t *>(this->temporaryBitsetTransposeBuffer.get());
 
         this->totalSearchSpace += leftSize * rightSize;
-        this->total += thisTotal;
         this->totalCalls++;
+        this->total += countValidCombinationsBitwiseSIMD<U64_PER_BLOCK>(numBlocksPerBit, bitsetBuffer, this->allBits);
     }
 
     template<unsigned int Variables>
-    void countValidCombinationsQuadratic(
+    void NOINLINE countValidCombinationsQuadratic(
         Monotonic<Variables>* leftBuf, size_t leftSize,
         Monotonic<Variables>* rightBuf, size_t rightSize
     ) {
@@ -608,6 +613,13 @@ void testTreeLessFilterTreePerformance() {
         rightMBFs += 20;
     }*/
 
+    {
+        TimeTracker timer(std::string("Filter Tree (") + std::to_string(NOT_WORTH_IT_SPLIT_COUNT) + ") ");
+        QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
+        accumulator.print();
+        NOT_WORTH_IT_SPLIT_COUNT *= 2;
+    }
+    return;
 
     {
         TimeTracker timer("Quadratic Fast ");
