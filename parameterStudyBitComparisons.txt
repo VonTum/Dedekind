@@ -1,0 +1,281 @@
+
+
+PARAMETER STUDY SIMD_BLOCK_SIZE_IN_BITS:
+1024: 
+running testTreeLessFilterTreePerformance9
+Loaded 262144 MBF9
+Between the two halves of these MBFs there are 17179869184 possible combinations
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Quadratic Fast 5330.41ms
+
+2048:
+running testTreeLessFilterTreePerformance9
+Loaded 262144 MBF9
+Between the two halves of these MBFs there are 17179869184 possible combinations
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Quadratic Fast 3056.82ms
+
+4096:
+running testTreeLessFilterTreePerformance9
+Loaded 262144 MBF9
+Between the two halves of these MBFs there are 17179869184 possible combinations
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Quadratic Fast 2590.59ms
+
+8192:
+running testTreeLessFilterTreePerformance9
+Loaded 262144 MBF9
+Between the two halves of these MBFs there are 17179869184 possible combinations
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Quadratic Fast 2310.59ms
+
+16384:
+running testTreeLessFilterTreePerformance9
+Loaded 262144 MBF9
+Between the two halves of these MBFs there are 17179869184 possible combinations
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Quadratic Fast 2546.68ms
+
+
+
+
+
+PARAMETER STUDY NOT_WORTH_IT_SPLIT. With SIMD_BLOCK_SIZE_IN_BITS=1024
+
+running testTreeLessFilterTreePerformance9
+Loaded 262144 MBF9
+Between the two halves of these MBFs there are 17179869184 possible combinations
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Quadratic Fast 4566.46ms
+Total: 1929337/74955255=2.57398%
+Calls made: 58743
+Filter Tree (1000) 4648.03ms
+Total: 1929337/123250193=1.56538%
+Calls made: 47706
+Filter Tree (2000) 4693.67ms
+Total: 1929337/200199951=0.963705%
+Calls made: 36679
+Filter Tree (4000) 5005.39ms
+Total: 1929337/285882130=0.674871%
+Calls made: 28162
+Filter Tree (8000) 5390.26ms
+Total: 1929337/436057948=0.44245%
+Calls made: 18768
+Filter Tree (16000) 5496.92ms
+Total: 1929337/598980882=0.322103%
+Calls made: 11298
+Filter Tree (32000) 4593.37ms
+Total: 1929337/826315292=0.233487%
+Calls made: 7250
+Filter Tree (64000) 3917.85ms
+Total: 1929337/1099776190=0.17543%
+Calls made: 4055
+Filter Tree (128000) 2782.61ms
+Total: 1929337/1420167741=0.135853%
+Calls made: 2225
+Filter Tree (256000) 1907.03ms
+Total: 1929337/1690449775=0.114132%
+Calls made: 1175
+Filter Tree (512000) 1389.48ms
+Total: 1929337/2061296473=0.0935982%
+Calls made: 694
+Filter Tree (1024000) 1178.29ms
+Total: 1929337/2374219234=0.081262%
+Calls made: 393
+Filter Tree (2048000) 988.92ms
+Total: 1929337/2814050878=0.0685608%
+Calls made: 242
+Filter Tree (4096000) 976.418ms
+Total: 1929337/3251270453=0.059341%
+Calls made: 149
+Filter Tree (8192000) 964.503ms
+Total: 1929337/3802606961=0.0507372%
+Calls made: 90
+Filter Tree (16384000) 1027.22ms
+Total: 1929337/4396153865=0.0438869%
+Calls made: 51
+Filter Tree (32768000) 1143.09ms
+Total: 1929337/4983725051=0.0387127%
+Calls made: 31
+Filter Tree (65536000) 1262.63ms
+Total: 1929337/5975713437=0.0322863%
+Calls made: 19
+Filter Tree (131072000) 1472.86ms
+Total: 1929337/7155568231=0.0269627%
+Calls made: 12
+Filter Tree (262144000) 1799.29ms
+Total: 1929337/7953669199=0.0242572%
+Calls made: 8
+Filter Tree (524288000) 1933.26ms
+Total: 1929337/9471296409=0.0203704%
+Calls made: 5
+Filter Tree (1048576000) 2440.59ms
+Total: 1929337/10720991989=0.0179959%
+Calls made: 4
+Filter Tree (2097152000) 3133.54ms
+Total: 1929337/14275279274=0.0135152%
+Calls made: 2
+Filter Tree (4194304000) 4228.59ms
+Total: 1929337/14259390466=0.0135303%
+Calls made: 2
+Filter Tree (8388608000) 4238.24ms
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Filter Tree (16777216000) 5126.42ms
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Filter Tree (33554432000) 5123.9ms
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Filter Tree (67108864000) 5138.98ms
+
+
+PARAMETER STUDY NOT_WORTH_IT_SPLIT. With SIMD_BLOCK_SIZE_IN_BITS=8196
+
+Detected 20 threads
+running testTreeLessFilterTreePerformance9
+Loaded 262144 MBF9
+Between the two halves of these MBFs there are 17179869184 possible combinations
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Quadratic Fast 2433.31ms
+Total: 1929337/809834801=0.238238%
+Calls made: 6978
+Filter Tree (64000) 6143.24ms
+Total: 1929337/1108226155=0.174092%
+Calls made: 4071
+Filter Tree (128000) 4362.99ms
+Total: 1929337/1457402217=0.132382%
+Calls made: 2265
+Filter Tree (256000) 3070.07ms
+Total: 1929337/1734921733=0.111206%
+Calls made: 1183
+Filter Tree (512000) 2001.38ms
+Total: 1929337/1997778573=0.0965741%
+Calls made: 674
+Filter Tree (1024000) 1441.14ms
+Total: 1929337/2419337405=0.0797465%
+Calls made: 401
+Filter Tree (2048000) 1138.13ms
+Total: 1929337/2721779324=0.0708851%
+Calls made: 229
+Filter Tree (4096000) 886.072ms
+Total: 1929337/3316771093=0.0581691%
+Calls made: 152
+Filter Tree (8192000) 846.625ms
+Total: 1929337/3716831254=0.0519081%
+Calls made: 86
+Filter Tree (16384000) 812.105ms
+Total: 1929337/4376607709=0.0440829%
+Calls made: 52
+Filter Tree (32768000) 809.161ms
+Total: 1929337/5289363876=0.0364758%
+Calls made: 31
+Filter Tree (65536000) 930.008ms
+Total: 1929337/5901902767=0.0326901%
+Calls made: 19
+Filter Tree (131072000) 958.262ms
+Total: 1929337/7164438924=0.0269294%
+Calls made: 11
+Filter Tree (262144000) 1044.89ms
+Total: 1929337/8021164396=0.0240531%
+Calls made: 8
+Filter Tree (524288000) 1005.63ms
+Total: 1929337/9805582324=0.0196759%
+Calls made: 5
+Filter Tree (1048576000) 1227.1ms
+Total: 1929337/10533318102=0.0183165%
+Calls made: 4
+Filter Tree (2097152000) 1264.21ms
+Total: 1929337/14299077508=0.0134927%
+Calls made: 2
+Filter Tree (4194304000) 1687.46ms
+Total: 1929337/14286151392=0.0135049%
+Calls made: 2
+Filter Tree (8388608000) 1687.61ms
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Filter Tree (16777216000) 1681.07ms
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Filter Tree (33554432000) 1685.67ms
+Total: 1929337/17179869184=0.0112302%
+Calls made: 1
+Quadratic 17.2505s
+Time taken: 54.7309s
+
+
+PARAMETER STUDY NOT_WORTH_IT_SPLIT. With SIMD_BLOCK_SIZE_IN_BITS=8192 and (1024*1024) ^ 2 combinations
+Detected 20 threads
+running testTreeLessFilterTreePerformance9
+Loaded 1048576 MBF9
+Between the two halves of these MBFs there are 274877906944 possible combinations
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Quadratic Fast 41.7335s
+Total: 29938673/5717239613=0.523656%
+Calls made: 57742
+Filter Tree (64000) 112.209s
+Total: 29938673/7962120045=0.376014%
+Calls made: 34838
+Filter Tree (128000) 95.056s
+Total: 29938673/10660613311=0.280834%
+Calls made: 21063
+Filter Tree (256000) 75.6857s
+Total: 29938673/14146058035=0.21164%
+Calls made: 11868
+Filter Tree (512000) 53.5304s
+Total: 29938673/17479974986=0.171274%
+Calls made: 6235
+Filter Tree (1024000) 33.5795s
+Total: 29938673/20871403868=0.143444%
+Calls made: 3308
+Filter Tree (2048000) 20.8971s
+Total: 29938673/26198935694=0.114274%
+Calls made: 2068
+Filter Tree (4096000) 15.9019s
+Total: 29938673/28017374058=0.106858%
+Calls made: 1112
+Filter Tree (8192000) 11.1462s
+Total: 29938673/34094671976=0.0878104%
+Calls made: 707
+Filter Tree (16384000) 9549.19ms
+Total: 29938673/39460423252=0.0758701%
+Calls made: 414
+Filter Tree (32768000) 7769.35ms
+Total: 29938673/43885868202=0.0682194%
+Calls made: 238
+Filter Tree (65536000) 7527.09ms
+Total: 29938673/52056294049=0.0575121%
+Calls made: 154
+Filter Tree (131072000) 7685.71ms
+Total: 29938673/60481466401=0.0495006%
+Calls made: 87
+Filter Tree (262144000) 7991.95ms
+Total: 29938673/70617497809=0.0423955%
+Calls made: 52
+Filter Tree (524288000) 9359.3ms
+Total: 29938673/83114784824=0.0360209%
+Calls made: 33
+Filter Tree (1048576000) 11.3538s
+Total: 29938673/96124450673=0.0311457%
+Calls made: 21
+Filter Tree (2097152000) 12.1893s
+Total: 29938673/115158390929=0.0259978%
+Calls made: 11
+Filter Tree (4194304000) 14.5107s
+Total: 29938673/122585903247=0.0244226%
+Calls made: 8
+Filter Tree (8388608000) 15.0223s
+Total: 29938673/143535921529=0.020858%
+Calls made: 6
+Filter Tree (16777216000) 18.8134s
+Total: 29938673/167458566274=0.0178783%
+Calls made: 4
+Filter Tree (33554432000) 20.5483s
