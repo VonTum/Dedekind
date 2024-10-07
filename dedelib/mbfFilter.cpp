@@ -173,7 +173,7 @@ static void NOINLINE checkFastCountPerBitBuffer(const Monotonic<Variables>* mbfs
 }
 
 // How many comparisons we save it is worth to split the node for. 
-static uint64_t NOT_WORTH_IT_SPLIT_COUNT = 65536000; // See parameterStudyBitComparisons.txt
+static uint64_t NOT_WORTH_IT_SPLIT_COUNT = 131072000; // See parameterStudyBitComparisons.txt
 
 template<typename IntT, unsigned int Variables>
 size_t NOINLINE findBestBitToSplitOver(
@@ -393,7 +393,7 @@ void testFilterTreePerformance() {
 }
 
 
-template<size_t U64_PER_BLOCK>
+template<size_t NUM_POSSIBLE_BITS, size_t U64_PER_BLOCK>
 uint64_t NOINLINE countValidCombinationsBitwiseSIMD(size_t numBlocksPerBit, const uint64_t *bitsetBuffer, std::vector<uint16_t>& allBits) {
     uint64_t thisTotal = 0;
 
@@ -422,10 +422,10 @@ uint64_t NOINLINE countValidCombinationsBitwiseSIMD(size_t numBlocksPerBit, cons
     }
 
     for (size_t blockI = 0; blockI < numBlocksPerBit; blockI++) {
-        const uint64_t *curBlockBitsetBuf = bitsetBuffer + U64_PER_BLOCK * blockI;
+        const uint64_t *curBlockBitsetBuf = bitsetBuffer + U64_PER_BLOCK * NUM_POSSIBLE_BITS * blockI;
 
         for (uint16_t bitIndex : allBits) {
-            size_t bitOffset = U64_PER_BLOCK * numBlocksPerBit * (bitIndex & 0x7FFF);
+            size_t bitOffset = U64_PER_BLOCK * (bitIndex & 0x7FFF);
             const SIMD_REG* thisBlock = reinterpret_cast<const SIMD_REG*>(curBlockBitsetBuf + bitOffset);
 
             for (size_t partInBlock = 0; partInBlock < VECTORS_PER_BLOCK; partInBlock++) {
@@ -468,6 +468,7 @@ struct QuadraticCombinationAccumulator {
         constexpr size_t SIMD_BLOCK_SIZE_IN_BITS = 2048;
         constexpr size_t SIMD_BLOCK_SIZE_IN_BYTES = SIMD_BLOCK_SIZE_IN_BITS / 8;
         constexpr size_t U64_PER_BLOCK = SIMD_BLOCK_SIZE_IN_BYTES / sizeof(uint64_t);
+        constexpr size_t U32_PER_BLOCK = SIMD_BLOCK_SIZE_IN_BYTES / sizeof(uint32_t);
 
         size_t numBlocksPerBit = (leftSize + SIMD_BLOCK_SIZE_IN_BITS - 1) / SIMD_BLOCK_SIZE_IN_BITS;
 
@@ -482,9 +483,16 @@ struct QuadraticCombinationAccumulator {
         memset(this->temporaryBitsetTransposeBuffer.get(), 0, requiredBufferSize);
 
         transpose_per_32_bits(reinterpret_cast<uint64_t*>(leftBuf), BITS_PER_MBF / 64, leftSize, [&](uint32_t bits, size_t bitIndex, size_t blockIndex){
-            size_t uint32_tPosition = bitIndex * numBlocksPerBit * SIMD_BLOCK_SIZE_IN_BYTES / sizeof(uint32_t) + blockIndex;
-            assert(uint32_tPosition * sizeof(uint32_t) < requiredBufferSize);
-            this->temporaryBitsetTransposeBuffer.get()[uint32_tPosition] = bits;
+            // A list of big bitsets
+            //size_t position = bitIndex * numBlocksPerBit * U32_PER_BLOCK + blockIndex;
+
+            // Array Of Array Of Interleaved Bit Chunks
+            size_t thisChunk = blockIndex / U32_PER_BLOCK;
+            size_t elementInChunk = blockIndex % U32_PER_BLOCK;
+            size_t position = thisChunk * BITS_PER_MBF * U32_PER_BLOCK + bitIndex * U32_PER_BLOCK + elementInChunk;
+            
+            assert(position * sizeof(uint32_t) < requiredBufferSize);
+            this->temporaryBitsetTransposeBuffer.get()[position] = bits;
         });
 
         this->allBits.clear();
@@ -503,7 +511,7 @@ struct QuadraticCombinationAccumulator {
 
         this->totalSearchSpace += leftSize * rightSize;
         this->totalCalls++;
-        this->total += countValidCombinationsBitwiseSIMD<U64_PER_BLOCK>(numBlocksPerBit, bitsetBuffer, this->allBits);
+        this->total += countValidCombinationsBitwiseSIMD<BITS_PER_MBF, U64_PER_BLOCK>(numBlocksPerBit, bitsetBuffer, this->allBits);
     }
 
     template<unsigned int Variables>
@@ -632,12 +640,12 @@ void testTreeLessFilterTreePerformance() {
         rightMBFs += 20;
     }*/
 
-    /*{
-        TimeTracker timer(std::string("Filter Tree (") + std::to_string(NOT_WORTH_IT_SPLIT_COUNT) + ") ");
+    {
+        TimeTracker timer(std::string("Best Filter Tree (") + std::to_string(NOT_WORTH_IT_SPLIT_COUNT) + ") ");
         QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
         NOT_WORTH_IT_SPLIT_COUNT *= 2;
-    }*/
+    }
     //return;
 
     {
@@ -646,12 +654,13 @@ void testTreeLessFilterTreePerformance() {
         accumulator.countValidCombinationsWithBitBuffer(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
     }
-    /*for(int i = 0; i < 20; i++) {
+    NOT_WORTH_IT_SPLIT_COUNT /= (1 << 15);
+    for(int i = 0; i <= 30; i++) {
         TimeTracker timer(std::string("Filter Tree (") + std::to_string(NOT_WORTH_IT_SPLIT_COUNT) + ") ");
         QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
         NOT_WORTH_IT_SPLIT_COUNT *= 2;
-    }*/
+    }
     /*{
         TimeTracker timer("Quadratic ");
         QuadraticCombinationAccumulator accumulator;

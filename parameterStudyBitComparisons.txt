@@ -279,3 +279,203 @@ Filter Tree (16777216000) 18.8134s
 Total: 29938673/167458566274=0.0178783%
 Calls made: 4
 Filter Tree (33554432000) 20.5483s
+
+
+
+
+MORE PARAMETER STUDIES: (Now with Array Of Array Of Array) (for avoiding cache line set conflicts (stride conflicts) Cache is only 8-way associative)
+
+SIMD_BLOCK_SIZE_IN_BITS: 
+256:
+Loaded 1048576 MBF9
+Between the two halves of these MBFs there are 274877906944 possible combinations
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Quadratic Fast 35.5012s
+
+512:
+Loaded 1048576 MBF9
+Between the two halves of these MBFs there are 274877906944 possible combinations
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Quadratic Fast 19.0837s
+
+1024: 
+Loaded 1048576 MBF9
+Between the two halves of these MBFs there are 274877906944 possible combinations
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Quadratic Fast 18.0097s
+
+1536:
+Loaded 1048576 MBF9
+Between the two halves of these MBFs there are 274877906944 possible combinations
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Quadratic Fast 18.5889s
+
+2048: 
+Loaded 1048576 MBF9
+Between the two halves of these MBFs there are 274877906944 possible combinations
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Quadratic Fast 16.7531s
+
+3072:
+Loaded 1048576 MBF9
+Between the two halves of these MBFs there are 274877906944 possible combinations
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Quadratic Fast 21.1548s
+
+4096:
+Loaded 1048576 MBF9
+Between the two halves of these MBFs there are 274877906944 possible combinations
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Quadratic Fast 21.3835s
+
+8192:
+Loaded 1048576 MBF9
+Between the two halves of these MBFs there are 274877906944 possible combinations
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Quadratic Fast 29.338s
+
+
+PARAMETER STUDY on  NOT_WORTH_IT_SPLIT_COUNT  with   SIMD_BLOCK_SIZE_IN_BITS = 2048
+
+Loaded 1048576 MBF9
+Between the two halves of these MBFs there are 274877906944 possible combinations
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Quadratic Fast 18.9506s
+Total: 29938673/17667801616=0.169453%
+Calls made: 6308
+Filter Tree (1024000) 18.4974s
+Total: 29938673/20995394697=0.142596%
+Calls made: 3364
+Filter Tree (2048000) 11.5916s
+Total: 29938673/25845492551=0.115837%
+Calls made: 2065
+Filter Tree (4096000) 8678.75ms
+Total: 29938673/29423884482=0.10175%
+Calls made: 1196
+Filter Tree (8192000) 6456.19ms
+Total: 29938673/33404134764=0.0896257%
+Calls made: 696
+Filter Tree (16384000) 4981.79ms
+Total: 29938673/38439411507=0.0778854%
+Calls made: 415
+Filter Tree (32768000) 4122.8ms
+Total: 29938673/46418627476=0.0644971%
+Calls made: 243
+Filter Tree (65536000) 3569.92ms
+Total: 29938673/53292189685=0.0561784%
+Calls made: 146
+Filter Tree (131072000) 3486.68ms
+Total: 29938673/60123493588=0.0497953%
+Calls made: 91
+Filter Tree (262144000) 3757.62ms
+Total: 29938673/69039804459=0.0433644%
+Calls made: 50
+Filter Tree (524288000) 3859.31ms
+Total: 29938673/84399331735=0.0354726%
+Calls made: 33
+Filter Tree (1048576000) 5148.85ms
+Total: 29938673/96940795177=0.0308835%
+Calls made: 19
+Filter Tree (2097152000) 5890.88ms
+Total: 29938673/112160734474=0.0266927%
+Calls made: 11
+Filter Tree (4194304000) 6582.7ms
+Total: 29938673/125015624522=0.0239479%
+Calls made: 8
+Filter Tree (8388608000) 7391.63ms
+Total: 29938673/138829166745=0.0215651%
+Calls made: 6
+Filter Tree (16777216000) 8296.17ms
+Total: 29938673/192641917574=0.0155411%
+Calls made: 3
+Filter Tree (33554432000) 10.6359s
+Total: 29938673/228530769527=0.0131005%
+Calls made: 2
+Filter Tree (67108864000) 13.6882s
+Total: 29938673/228362224028=0.0131102%
+Calls made: 2
+Filter Tree (134217728000) 13.2982s
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Filter Tree (268435456000) 12.4842s
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Filter Tree (536870912000) 16.2164s
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Filter Tree (1073741824000) 12.8674s
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Filter Tree (2147483648000) 16.3977s
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Filter Tree (4294967296000) 13.9721s
+
+
+PARAMETER STUDY on  NOT_WORTH_IT_SPLIT_COUNT  with   SIMD_BLOCK_SIZE_IN_BITS = 1024
+
+Loaded 1048576 MBF9
+Between the two halves of these MBFs there are 274877906944 possible combinations
+Total: 29938673/274877906944=0.0108916%
+Calls made: 1
+Quadratic Fast 17.1601s
+Total: 29938673/17667801616=0.169453%
+Calls made: 6308
+Filter Tree (1024000) 16.7252s
+Total: 29938673/20995394697=0.142596%
+Calls made: 3364
+Filter Tree (2048000) 10.7569s
+Total: 29938673/25845492551=0.115837%
+Calls made: 2065
+Filter Tree (4096000) 7865.83ms
+Total: 29938673/29423884482=0.10175%
+Calls made: 1196
+Filter Tree (8192000) 5832.24ms
+Total: 29938673/33404134764=0.0896257%
+Calls made: 696
+Filter Tree (16384000) 4750ms
+Total: 29938673/38439411507=0.0778854%
+Calls made: 415
+Filter Tree (32768000) 3933.8ms
+Total: 29938673/46418627476=0.0644971%
+Calls made: 243
+Filter Tree (65536000) 3642.25ms
+Total: 29938673/53292189685=0.0561784%
+Calls made: 146
+Filter Tree (131072000) 3575.87ms
+Total: 29938673/60123493588=0.0497953%
+Calls made: 91
+Filter Tree (262144000) 3724.71ms
+Total: 29938673/69039804459=0.0433644%
+Calls made: 50
+Filter Tree (524288000) 4084.76ms
+Total: 29938673/84399331735=0.0354726%
+Calls made: 33
+Filter Tree (1048576000) 5267.48ms
+Total: 29938673/96940795177=0.0308835%
+Calls made: 19
+Filter Tree (2097152000) 5654.42ms
+Total: 29938673/112160734474=0.0266927%
+Calls made: 11
+Filter Tree (4194304000) 6377.23ms
+Total: 29938673/125015624522=0.0239479%
+Calls made: 8
+Filter Tree (8388608000) 7102.9ms
+Total: 29938673/138829166745=0.0215651%
+Calls made: 6
+Filter Tree (16777216000) 7412.81ms
+Total: 29938673/192641917574=0.0155411%
+Calls made: 3
+Filter Tree (33554432000) 10.0815s
+Total: 29938673/228530769527=0.0131005%
+Calls made: 2
+Filter Tree (67108864000) 12.6263s
