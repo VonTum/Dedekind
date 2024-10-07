@@ -107,3 +107,39 @@ __always_inline int clz8(uint8_t x) {
 }
 #endif
 
+#ifdef __SSE__
+#include <immintrin.h>
+inline uint64_t popcnt256(__m128i v) {
+	return popcnt64(_mm_extract_epi64(v, 0))
+		+ popcnt64(_mm_extract_epi64(v, 1));
+}
+
+#endif
+#ifdef __AVX__
+#include <immintrin.h>
+inline uint64_t popcnt256(__m256i v) {
+	return popcnt64(_mm256_extract_epi64(v, 0))
+		+ popcnt64(_mm256_extract_epi64(v, 1))
+		+ popcnt64(_mm256_extract_epi64(v, 2))
+		+ popcnt64(_mm256_extract_epi64(v, 3));
+}
+
+#endif
+
+#ifdef __AVX512F__
+#include <immintrin.h>
+inline uint64_t popcnt512(__m512i v) {
+	uint64_t data[8];
+	#ifdef __AVX512VPOPCNTDQ__
+	__m512i cnt = _mm512_popcnt_epi64(v);
+	_mm512_store_epi64(&data, cnt);
+	#else
+	_mm512_store_epi64(&data, v);
+	for(int i = 0; i < 8; i++) {
+		data[i] = popcnt64(data[i]);
+	}
+	#endif
+
+	return data[0] + data[1] + data[2] + data[3] + data[4] + data[5] + data[6] + data[7];
+}
+#endif

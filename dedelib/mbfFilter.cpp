@@ -397,9 +397,28 @@ template<size_t U64_PER_BLOCK>
 uint64_t NOINLINE countValidCombinationsBitwiseSIMD(size_t numBlocksPerBit, const uint64_t *bitsetBuffer, std::vector<uint16_t>& allBits) {
     uint64_t thisTotal = 0;
 
-    uint64_t curBlock[U64_PER_BLOCK];
-    for (size_t partInBlock = 0; partInBlock < U64_PER_BLOCK; partInBlock++) {
-        curBlock[partInBlock] = uint64_t(-1);
+#ifdef __AVX2__
+    static_assert(U64_PER_BLOCK % 4 == 0);
+    constexpr size_t VECTORS_PER_BLOCK = U64_PER_BLOCK / 4;
+    #define SIMD_REG __m256i
+    #define SIMD_SET_ONES _mm256_set1_epi8(0xFF)
+    #define SIMD_POPCOUNT popcnt256
+#elif defined(__AVX512F__)
+    static_assert(U64_PER_BLOCK % 8 == 0);
+    constexpr size_t VECTORS_PER_BLOCK = U64_PER_BLOCK / 8;
+    #define SIMD_REG __m512i
+    #define SIMD_SET_ONES _mm512_set1_epi8(0xFF)
+    #define SIMD_POPCOUNT popcnt512
+#else
+    constexpr size_t VECTORS_PER_BLOCK = U64_PER_BLOCK;
+    #define SIMD_REG uint64_t
+    #define SIMD_SET_ONES uint64_t(-1)
+    #define SIMD_POPCOUNT popcnt64
+#endif
+
+    SIMD_REG curBlock[VECTORS_PER_BLOCK];
+    for (size_t partInBlock = 0; partInBlock < VECTORS_PER_BLOCK; partInBlock++) {
+        curBlock[partInBlock] = SIMD_SET_ONES;
     }
 
     for (size_t blockI = 0; blockI < numBlocksPerBit; blockI++) {
@@ -407,17 +426,17 @@ uint64_t NOINLINE countValidCombinationsBitwiseSIMD(size_t numBlocksPerBit, cons
 
         for (uint16_t bitIndex : allBits) {
             size_t bitOffset = U64_PER_BLOCK * numBlocksPerBit * (bitIndex & 0x7FFF);
-            const uint64_t *thisBlock = curBlockBitsetBuf + bitOffset;
+            const SIMD_REG* thisBlock = reinterpret_cast<const SIMD_REG*>(curBlockBitsetBuf + bitOffset);
 
-            for (size_t partInBlock = 0; partInBlock < U64_PER_BLOCK; partInBlock++) {
+            for (size_t partInBlock = 0; partInBlock < VECTORS_PER_BLOCK; partInBlock++) {
                 curBlock[partInBlock] &= thisBlock[partInBlock];
             }
             if (bitIndex & 0x8000) {
-                for (uint64_t elem : curBlock) {
-                    thisTotal += popcnt64(elem);
+                for (SIMD_REG elem : curBlock) {
+                    thisTotal += SIMD_POPCOUNT(elem);
                 }
-                for (size_t partInBlock = 0; partInBlock < U64_PER_BLOCK; partInBlock++) {
-                    curBlock[partInBlock] = uint64_t(-1);
+                for (size_t partInBlock = 0; partInBlock < VECTORS_PER_BLOCK; partInBlock++) {
+                    curBlock[partInBlock] = SIMD_SET_ONES;
                 }
             }
         }
@@ -446,7 +465,7 @@ struct QuadraticCombinationAccumulator {
             return; // Add 0
         }
         constexpr size_t BITS_PER_MBF = 1 << Variables;
-        constexpr size_t SIMD_BLOCK_SIZE_IN_BITS = 16384;
+        constexpr size_t SIMD_BLOCK_SIZE_IN_BITS = 2048;
         constexpr size_t SIMD_BLOCK_SIZE_IN_BYTES = SIMD_BLOCK_SIZE_IN_BITS / 8;
         constexpr size_t U64_PER_BLOCK = SIMD_BLOCK_SIZE_IN_BYTES / sizeof(uint64_t);
 
@@ -613,13 +632,13 @@ void testTreeLessFilterTreePerformance() {
         rightMBFs += 20;
     }*/
 
-    {
+    /*{
         TimeTracker timer(std::string("Filter Tree (") + std::to_string(NOT_WORTH_IT_SPLIT_COUNT) + ") ");
         QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
         NOT_WORTH_IT_SPLIT_COUNT *= 2;
-    }
-    return;
+    }*/
+    //return;
 
     {
         TimeTracker timer("Quadratic Fast ");
@@ -627,18 +646,18 @@ void testTreeLessFilterTreePerformance() {
         accumulator.countValidCombinationsWithBitBuffer(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
     }
-    for(int i = 0; i < 20; i++) {
+    /*for(int i = 0; i < 20; i++) {
         TimeTracker timer(std::string("Filter Tree (") + std::to_string(NOT_WORTH_IT_SPLIT_COUNT) + ") ");
         QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
         NOT_WORTH_IT_SPLIT_COUNT *= 2;
-    }
-    {
+    }*/
+    /*{
         TimeTracker timer("Quadratic ");
         QuadraticCombinationAccumulator accumulator;
         accumulator.countValidCombinationsQuadratic(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
-    }
+    }*/
 }
 
 template void testFilterTreePerformance<1>();
