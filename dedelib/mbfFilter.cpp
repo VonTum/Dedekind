@@ -16,6 +16,7 @@
 #include "simdTranspose.h"
 #include "funcTypes.h"
 #include "generators.h"
+#include "crossPlatformIntrinsics.h"
 
 #define MAKE_STATISTICS
 
@@ -173,6 +174,7 @@ static void NOINLINE checkFastCountPerBitBuffer(const Monotonic<Variables>* mbfs
 }
 
 // How many comparisons we save it is worth to split the node for. 
+//static uint64_t NOT_WORTH_IT_SPLIT_COUNT = 131072000; // See parameterStudyBitComparisons.txt
 static uint64_t NOT_WORTH_IT_SPLIT_COUNT = 131072000; // See parameterStudyBitComparisons.txt
 
 template<typename IntT, unsigned int Variables>
@@ -392,9 +394,9 @@ void testFilterTreePerformance() {
     tree.debugPrintTree();
 }
 
-
 template<size_t NUM_POSSIBLE_BITS, size_t U64_PER_BLOCK>
 uint64_t NOINLINE countValidCombinationsBitwiseSIMD(size_t numBlocksPerBit, const uint64_t *bitsetBuffer, std::vector<uint16_t>& allBits) {
+    assert(allBits.size() != 0); // Because we've removed the initial check for the core loop. Should already be satisfied by an early check in the calling function
     uint64_t thisTotal = 0;
 
 #ifdef __AVX2__
@@ -424,7 +426,8 @@ uint64_t NOINLINE countValidCombinationsBitwiseSIMD(size_t numBlocksPerBit, cons
     for (size_t blockI = 0; blockI < numBlocksPerBit; blockI++) {
         const uint64_t *curBlockBitsetBuf = bitsetBuffer + U64_PER_BLOCK * NUM_POSSIBLE_BITS * blockI;
 
-        for (uint16_t bitIndex : allBits) {
+        for(size_t curIdx = 0;;) { // Don't check < allBits.size() every loop, just when last element in block. Keeps inner loop really tight
+            uint16_t bitIndex = allBits[curIdx++];
             size_t bitOffset = U64_PER_BLOCK * (bitIndex & 0x7FFF);
             const SIMD_REG* thisBlock = reinterpret_cast<const SIMD_REG*>(curBlockBitsetBuf + bitOffset);
 
@@ -437,6 +440,9 @@ uint64_t NOINLINE countValidCombinationsBitwiseSIMD(size_t numBlocksPerBit, cons
                 }
                 for (size_t partInBlock = 0; partInBlock < VECTORS_PER_BLOCK; partInBlock++) {
                     curBlock[partInBlock] = SIMD_SET_ONES;
+                }
+                if(curIdx >= allBits.size()) {
+                    break;
                 }
             }
         }
@@ -607,7 +613,7 @@ QuadraticCombinationAccumulator countValidCombosWithFilterTree(
 
 template<unsigned int Variables>
 void testTreeLessFilterTreePerformance() {
-	size_t numRandomMBF = 1024*1024;
+	size_t numRandomMBF = 1024*1024*2;
 	Monotonic<Variables>* randomMBFBuf = const_cast<Monotonic<Variables>*>(readFlatBuffer<Monotonic<Variables>>(FileName::randomMBFs(Variables), numRandomMBF * sizeof(Monotonic<Variables>)));
 
 	std::cout << "Loaded " << numRandomMBF << " MBF" << Variables << std::endl;
@@ -646,7 +652,7 @@ void testTreeLessFilterTreePerformance() {
         accumulator.print();
         NOT_WORTH_IT_SPLIT_COUNT *= 2;
     }
-    //return;
+    return;
 
     {
         TimeTracker timer("Quadratic Fast ");
