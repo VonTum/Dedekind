@@ -395,8 +395,8 @@ void testFilterTreePerformance() {
 }
 
 template<size_t NUM_POSSIBLE_BITS, size_t U64_PER_BLOCK>
-uint64_t NOINLINE countValidCombinationsBitwiseSIMD(size_t numBlocksPerBit, const uint64_t *bitsetBuffer, std::vector<uint16_t>& allBits) {
-    assert(allBits.size() != 0); // Because we've removed the initial check for the core loop. Should already be satisfied by an early check in the calling function
+uint64_t countValidCombinationsBitwiseSIMD(size_t numBlocksPerBit, const uint64_t *bitsetBuffer, std::vector<uint16_t>& allBits) {
+    if(allBits.size() == 0) {return 0;}
     uint64_t thisTotal = 0;
 
 #ifdef __AVX2__
@@ -426,31 +426,71 @@ uint64_t NOINLINE countValidCombinationsBitwiseSIMD(size_t numBlocksPerBit, cons
     for (size_t blockI = 0; blockI < numBlocksPerBit; blockI++) {
         const uint64_t *curBlockBitsetBuf = bitsetBuffer + U64_PER_BLOCK * NUM_POSSIBLE_BITS * blockI;
 
-        for(size_t curIdx = 0;;) { // Don't check < allBits.size() every loop, just when last element in block. Keeps inner loop really tight
-            uint16_t bitIndex = allBits[curIdx++];
-            size_t bitOffset = U64_PER_BLOCK * (bitIndex & 0x7FFF);
-            const SIMD_REG* thisBlock = reinterpret_cast<const SIMD_REG*>(curBlockBitsetBuf + bitOffset);
+        for(size_t curIdx = 0; curIdx < allBits.size();) {
+            uint16_t bitIndex;
+            // AND all bitsets together
+            do {
+                bitIndex = allBits[curIdx++];
+                size_t bitOffset = U64_PER_BLOCK * (bitIndex & 0x7FFF);
+                const SIMD_REG* thisBlock = reinterpret_cast<const SIMD_REG*>(curBlockBitsetBuf + bitOffset);
 
-            for (size_t partInBlock = 0; partInBlock < VECTORS_PER_BLOCK; partInBlock++) {
-                curBlock[partInBlock] &= thisBlock[partInBlock];
-            }
-            if (bitIndex & 0x8000) {
-                for (SIMD_REG elem : curBlock) {
-                    thisTotal += SIMD_POPCOUNT(elem);
-                }
                 for (size_t partInBlock = 0; partInBlock < VECTORS_PER_BLOCK; partInBlock++) {
-                    curBlock[partInBlock] = SIMD_SET_ONES;
+                    curBlock[partInBlock] &= thisBlock[partInBlock];
                 }
-                if(curIdx >= allBits.size()) {
-                    break;
-                }
+            } while(__builtin_expect((bitIndex & 0x8000) == 0, 1));
+
+            // Then count how many 1's we have remaining
+            // Optimized AVX version using clever shuffle trick appears not to be an optimization
+            #if !defined(__AVX512F__) && defined(__AVX2__) && false
+            const __m256i bitCountsPerNibble = _mm256_setr_epi8(
+                0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4,
+                0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4
+            );
+            __m256i count = _mm256_setzero_si256();  // Accumulator for popcount results
+
+            // Iterate over the __m256i elements
+            for (int i = 0; i < VECTORS_PER_BLOCK; i++) {
+                // Mask lower 4 bits of each byte
+                __m256i lower_nibbles = _mm256_and_si256(curBlock[i], _mm256_set1_epi8(0x0F));
+                // Mask upper 4 bits of each byte
+                __m256i upper_nibbles = _mm256_srli_epi16(curBlock[i], 4);
+                upper_nibbles = _mm256_and_si256(upper_nibbles, _mm256_set1_epi8(0x0F));
+
+                // Lookup the popcount for both lower and upper nibbles using shuffle
+                __m256i popcount_lower = _mm256_shuffle_epi8(bitCountsPerNibble, lower_nibbles);
+                __m256i popcount_upper = _mm256_shuffle_epi8(bitCountsPerNibble, upper_nibbles);
+
+                // Sum the popcounts for the lower and upper nibbles
+                __m256i popcount_sum = _mm256_add_epi8(popcount_lower, popcount_upper);
+
+                // Accumulate the popcount result into the count variable
+                count = _mm256_add_epi64(count, popcount_sum);
+            }
+
+            // Now that we have one 8-bit AVX register of results, add em all together
+            // First, sum adjacent pairs of bytes using _mm256_sad_epu8 (absolute differences)
+            __m256i sum1 = _mm256_sad_epu8(count, _mm256_setzero_si256());
+
+            // sum1 now contains 4 lanes of 64-bit sums (each summing 8 adjacent bytes)
+            // We need to further sum these 64-bit values
+            uint64_t tmp[4];
+            _mm256_storeu_si256((__m256i *)tmp, sum1);
+
+            // Final sum of all bytes in the vector
+            thisTotal += tmp[0] + tmp[1] + tmp[2] + tmp[3];
+            #else
+            for (SIMD_REG elem : curBlock) {
+                thisTotal += SIMD_POPCOUNT(elem);
+            }
+            #endif
+            for (size_t partInBlock = 0; partInBlock < VECTORS_PER_BLOCK; partInBlock++) {
+                curBlock[partInBlock] = SIMD_SET_ONES;
             }
         }
     }
 
     return thisTotal;
 }
-
 
 struct QuadraticCombinationAccumulator {
     uint64_t total = 0;
@@ -650,7 +690,11 @@ void testTreeLessFilterTreePerformance() {
         TimeTracker timer(std::string("Best Filter Tree (") + std::to_string(NOT_WORTH_IT_SPLIT_COUNT) + ") ");
         QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
-        NOT_WORTH_IT_SPLIT_COUNT *= 2;
+    }
+    {
+        TimeTracker timer(std::string("Best Filter Tree (") + std::to_string(NOT_WORTH_IT_SPLIT_COUNT) + ") ");
+        QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
+        accumulator.print();
     }
     return;
 

@@ -1,10 +1,14 @@
 #include <immintrin.h>
 #include <stdint.h>
+
+
+#define NOINLINE __attribute__ ((noinline))
+
 // Iterates through 32 bits for up to 32 given bitsets of size 64*stride. 
 // Expects a function of the form: void(uint32_t bits, size_t bitIndex, size_t blockIndex)
 // It will be called 64*stride times per block. 
 template<typename Func>
-inline void transpose_per_32_bits(const uint64_t* bitBuffer, size_t stride, size_t numBitsets, Func func) {
+inline void NOINLINE transpose_per_32_bits(const uint64_t* bitBuffer, size_t stride, size_t numBitsets, Func func) {
     __m256i strideAVX = _mm256_set1_epi64x(stride*4);
     __m256i maxIndex = _mm256_set1_epi64x(numBitsets * stride);
 
