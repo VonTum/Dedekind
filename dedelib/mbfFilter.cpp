@@ -494,12 +494,18 @@ uint64_t countValidCombinationsBitwiseSIMD(size_t numBlocksPerBit, const uint64_
 
 struct QuadraticCombinationAccumulator {
     uint64_t total = 0;
-    uint64_t totalSearchSpace = 0;
+    uint64_t checkedComparisons = 0;
     uint64_t totalCalls = 0;
 
     std::unique_ptr<uint32_t[]> temporaryBitsetTransposeBuffer{nullptr};
     size_t temporaryBitsetTransposeBufferSize = 0;
     std::vector<uint16_t> allBits;
+
+    void reset() {
+        this->total = 0;
+        this->checkedComparisons = 0;
+        this->totalCalls = 0;
+    }
 
     template<unsigned int Variables>
     void NOINLINE countValidCombinationsWithBitBuffer(
@@ -555,7 +561,7 @@ struct QuadraticCombinationAccumulator {
 
         const uint64_t *bitsetBuffer = reinterpret_cast<uint64_t *>(this->temporaryBitsetTransposeBuffer.get());
 
-        this->totalSearchSpace += leftSize * rightSize;
+        this->checkedComparisons += leftSize * rightSize;
         this->totalCalls++;
         this->total += countValidCombinationsBitwiseSIMD<BITS_PER_MBF, U64_PER_BLOCK>(numBlocksPerBit, bitsetBuffer, this->allBits);
     }
@@ -575,13 +581,13 @@ struct QuadraticCombinationAccumulator {
                 }
             }
         }
-        this->totalSearchSpace += leftSize * rightSize;
+        this->checkedComparisons += leftSize * rightSize;
         this->total += thisTotal;
         this->totalCalls++;
     }
 
     void print() const {
-        std::cout << "Total: " << this->total << "/" << totalSearchSpace << "=" << this->total * 100.0 / totalSearchSpace << "%" << std::endl;
+        std::cout << "Total: " << this->total << "/" << checkedComparisons << "=" << this->total * 100.0 / checkedComparisons << "%" << std::endl;
         std::cout << "Calls made: " << this->totalCalls << std::endl;
     }
 };
@@ -653,19 +659,19 @@ QuadraticCombinationAccumulator countValidCombosWithFilterTree(
 
 template<unsigned int Variables>
 void testTreeLessFilterTreePerformance() {
-	size_t numRandomMBF = 1024*1024*2;
+	size_t numRandomMBF = 1024*1024*16;
 	Monotonic<Variables>* randomMBFBuf = const_cast<Monotonic<Variables>*>(readFlatBuffer<Monotonic<Variables>>(FileName::randomMBFs(Variables), numRandomMBF * sizeof(Monotonic<Variables>)));
 
 	std::cout << "Loaded " << numRandomMBF << " MBF" << Variables << std::endl;
 
     //std::cout << "Last Mbf: " << randomMBFBuf[numRandomMBF - 1] << std::endl;
 
-    size_t singleBufSize = numRandomMBF / 2;
+    /*size_t singleBufSize = numRandomMBF / 2;
     Monotonic<Variables>* leftMBFs = randomMBFBuf;
     Monotonic<Variables>* rightMBFs = randomMBFBuf + singleBufSize;
     
     std::cout << "Between the two halves of these MBFs there are " << singleBufSize * singleBufSize << " possible combinations" << std::endl;
-    
+    */
 
     /*QuadraticCombinationAccumulator accumulatorA;
     QuadraticCombinationAccumulator accumulatorB;
@@ -686,12 +692,24 @@ void testTreeLessFilterTreePerformance() {
         rightMBFs += 20;
     }*/
 
-    {
-        TimeTracker timer(std::string("Best Filter Tree (") + std::to_string(NOT_WORTH_IT_SPLIT_COUNT) + ") ");
-        QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
+    
+    size_t localSingleBufSize = 1024*128;
+    while(localSingleBufSize <= numRandomMBF / 2) {
+        Monotonic<Variables>* leftMBFs = randomMBFBuf;
+        Monotonic<Variables>* rightMBFs = randomMBFBuf + localSingleBufSize;
+        
+        std::cout << "Single buffer size: " << localSingleBufSize << std::endl;
+        std::cout << "Between the two halves of these MBFs there are " << localSingleBufSize * localSingleBufSize << " possible combinations" << std::endl;
+
+        TimeTracker timer(std::string("Filter Tree for Size (") + std::to_string(localSingleBufSize) + ") ");
+        QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, localSingleBufSize, rightMBFs, localSingleBufSize);
         accumulator.print();
+        localSingleBufSize *= 2;
     }
-    {
+
+
+
+    /*{
         TimeTracker timer(std::string("Best Filter Tree (") + std::to_string(NOT_WORTH_IT_SPLIT_COUNT) + ") ");
         QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
@@ -710,13 +728,123 @@ void testTreeLessFilterTreePerformance() {
         QuadraticCombinationAccumulator accumulator = countValidCombosWithFilterTree(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
         NOT_WORTH_IT_SPLIT_COUNT *= 2;
-    }
+    }*/
     /*{
         TimeTracker timer("Quadratic ");
         QuadraticCombinationAccumulator accumulator;
         accumulator.countValidCombinationsQuadratic(leftMBFs, singleBufSize, rightMBFs, singleBufSize);
         accumulator.print();
     }*/
+}
+
+#include "threadPool.h"
+#include <string>
+#include <fstream>
+#include <numeric>
+#include <cmath>
+
+template<unsigned int Variables>
+void estimateDPlusOneWithPairs(const std::vector<std::string>& args) {
+    constexpr long double DN_SQUARED = dedekindNumbersAsDoubles[Variables] * dedekindNumbersAsDoubles[Variables];
+    
+    size_t blockSize = std::stoi(args[0]);
+
+    std::ifstream file(FileName::randomMBFs(Variables), std::ios::binary);
+
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open random MBFs file" << std::endl;
+        return;
+    }
+
+    std::cout << "Reading random MBFs of size " << Variables << " with Block Size " << blockSize << std::endl;
+
+    std::mutex fileReadMutex;
+
+    std::mutex printMutex;
+    std::vector<long double> allValidFractionEstimates;
+    uint64_t totalComparisonsPassed;
+    uint64_t checkedComparisons;
+    uint64_t totalSearchSpace;
+
+    size_t expectedBlockSizeInBytes = blockSize * sizeof(Monotonic<Variables>);
+
+    runInParallelOnAllCores([&](int coreID){
+        // Gets freed at program exit
+        Monotonic<Variables>* thisMBFsBlock = (Monotonic<Variables>*) aligned_alloc(64, expectedBlockSizeInBytes);
+
+        QuadraticCombinationAccumulator accum;
+
+        // High randomness not required
+        std::default_random_engine rng;
+
+        while(true) {
+            size_t numMBFsInThisBlock;
+            {
+                std::lock_guard<std::mutex> lg(fileReadMutex);
+                
+                file.read(reinterpret_cast<char*>(thisMBFsBlock), expectedBlockSizeInBytes);
+
+                numMBFsInThisBlock = file.gcount() / sizeof(Monotonic<Variables>);
+            }
+
+            if(numMBFsInThisBlock < blockSize) {
+                break;
+            }
+
+            size_t leftBufSize = numMBFsInThisBlock / 2;
+            size_t rightBufSize = numMBFsInThisBlock - leftBufSize;
+
+            {
+                std::lock_guard<std::mutex> lg(printMutex);
+                std::cout << "Thread " << coreID << " read " << numMBFsInThisBlock << " MBFs (" << leftBufSize << " left, " << rightBufSize << " right)" << std::endl;
+            }
+            Monotonic<Variables>* leftMBFs = thisMBFsBlock;
+            Monotonic<Variables>* rightMBFs = thisMBFsBlock + leftBufSize;
+            
+            accum.reset();
+            countValidCombosWithFilterTreeRecurse(leftMBFs, leftBufSize, rightMBFs, rightBufSize, rng, accum);
+
+            long double validMatchFraction = static_cast<long double>(accum.total) / (leftBufSize * rightBufSize);
+
+            long double dNPlusOneEstimate = DN_SQUARED * validMatchFraction;
+
+            {
+                std::lock_guard<std::mutex> lg(printMutex);
+                std::cout << "Thread " << coreID << " produced fraction " << validMatchFraction << " = " << accum.total << " / " << leftBufSize * rightBufSize << std::endl;
+                std::cout << "Thread " << coreID << " performed " << accum.totalCalls << " total calls. " << std::endl;
+                std::cout << "Thread " << coreID << " FilterTree filtered " << accum.checkedComparisons << " / " << leftBufSize * rightBufSize << " with " << static_cast<long double>(accum.checkedComparisons) / (leftBufSize * rightBufSize) << " of total search space needing to be searched. " << std::endl;
+
+                allValidFractionEstimates.push_back(validMatchFraction);
+                totalComparisonsPassed += accum.total;
+                checkedComparisons += accum.checkedComparisons;
+                totalSearchSpace += leftBufSize * rightBufSize;
+            }
+        }
+    });
+
+    std::cout << "Finished with all threads!\n\n\n" << std::endl;
+
+    std::cout << "Found Match Fractions: " << std::endl;
+
+    for(long double elem : allValidFractionEstimates) {
+        std::cout << elem << std::endl;
+    }
+
+    std::cout << std::endl;
+    std::cout << "Covered " << allValidFractionEstimates.size() << " blocks of " << blockSize << " MBFs" << std::endl;
+    std::cout << "In total " << totalComparisonsPassed << " / " << checkedComparisons << " MBF pairs formed a valid MBF" << Variables+1 << std::endl;
+    std::cout << "Only " << checkedComparisons << " / " << totalSearchSpace << " were actually needed. With FilterTree = " << static_cast<long double>(checkedComparisons) / totalSearchSpace << std::endl;
+
+    long double sum = std::accumulate(allValidFractionEstimates.begin(), allValidFractionEstimates.end(), 0.0L);
+    long double mean = sum / allValidFractionEstimates.size();
+
+    long double sq_sum = std::inner_product(allValidFractionEstimates.begin(), allValidFractionEstimates.end(), allValidFractionEstimates.begin(), 0.0L);
+    long double std_dev = std::sqrt(sq_sum / allValidFractionEstimates.size() - mean * mean);
+
+    std::cout << "The mean match fraction estimate = " << mean << std::endl;
+    std::cout << "Std deviation = " << std_dev << std::endl;
+    std::cout << "D(" << Variables + 1 << ") estimate = " << mean * DN_SQUARED << std::endl;
+    std::cout << "Std deviation = " << std_dev * DN_SQUARED << std::endl;
 }
 
 template void testFilterTreePerformance<1>();
@@ -738,3 +866,13 @@ template void testTreeLessFilterTreePerformance<6>();
 template void testTreeLessFilterTreePerformance<7>();
 template void testTreeLessFilterTreePerformance<8>();
 template void testTreeLessFilterTreePerformance<9>();
+
+template void estimateDPlusOneWithPairs<1>(const std::vector<std::string>& args);
+template void estimateDPlusOneWithPairs<2>(const std::vector<std::string>& args);
+template void estimateDPlusOneWithPairs<3>(const std::vector<std::string>& args);
+template void estimateDPlusOneWithPairs<4>(const std::vector<std::string>& args);
+template void estimateDPlusOneWithPairs<5>(const std::vector<std::string>& args);
+template void estimateDPlusOneWithPairs<6>(const std::vector<std::string>& args);
+template void estimateDPlusOneWithPairs<7>(const std::vector<std::string>& args);
+template void estimateDPlusOneWithPairs<8>(const std::vector<std::string>& args);
+template void estimateDPlusOneWithPairs<9>(const std::vector<std::string>& args);

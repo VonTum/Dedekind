@@ -856,6 +856,16 @@ CommandSet miscCommands{"Misc", {
 	{"pcoeffLayerElementStats6", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<6>(std::stoi(size[0])); }},
 	{"pcoeffLayerElementStats7", [](const std::vector<std::string>& size) {benchPCoeffLayerElementStats<7>(std::stoi(size[0])); }},
 
+	{"estimateDPlusOneWithPairs1", estimateDPlusOneWithPairs<1>},
+	{"estimateDPlusOneWithPairs2", estimateDPlusOneWithPairs<2>},
+	{"estimateDPlusOneWithPairs3", estimateDPlusOneWithPairs<3>},
+	{"estimateDPlusOneWithPairs4", estimateDPlusOneWithPairs<4>},
+	{"estimateDPlusOneWithPairs5", estimateDPlusOneWithPairs<5>},
+	{"estimateDPlusOneWithPairs6", estimateDPlusOneWithPairs<6>},
+	{"estimateDPlusOneWithPairs7", estimateDPlusOneWithPairs<7>},
+	{"estimateDPlusOneWithPairs8", estimateDPlusOneWithPairs<8>},
+	{"estimateDPlusOneWithPairs9", estimateDPlusOneWithPairs<9>},
+
 	{"estimateDedekind", [](const std::vector<std::string>& vars) {
 		int n = std::stoi(vars[0]);
 

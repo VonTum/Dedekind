@@ -567,3 +567,45 @@ Total: 29938673/228355767604=0.0131105%
 Calls made: 2
 Filter Tree (134217728000) 17.3723s
 
+
+
+BENCHMARKS FOR VARYING SingleBufferSize (Left & Right buf are same size)
+Detected 20 threads
+running testTreeLessFilterTreePerformance9
+Loaded 16777216 MBF9
+Single buffer size: 131072
+Between the two halves of these MBFs there are 17179869184 possible combinations
+Total: 1929337/6019029097=0.032054%
+Calls made: 20
+Filter Tree for Size (131072) 649.675ms
+Single buffer size: 262144
+Between the two halves of these MBFs there are 68719476736 possible combinations
+Total: 7407084/17595081053=0.0420975%
+Calls made: 54
+Filter Tree for Size (262144) 1550.75ms
+Single buffer size: 524288
+Between the two halves of these MBFs there are 274877906944 possible combinations
+Total: 29938673/51837403670=0.057755%
+Calls made: 154
+Filter Tree for Size (524288) 4519.01ms
+Single buffer size: 1048576
+Between the two halves of these MBFs there are 1099511627776 possible combinations
+Total: 120836361/155090211412=0.0779136%
+Calls made: 417
+Filter Tree for Size (1048576) 14.5688s
+Single buffer size: 2097152
+Between the two halves of these MBFs there are 4398046511104 possible combinations
+Total: 482921193/475242200157=0.101616%
+Calls made: 1211
+Filter Tree for Size (2097152) 52.5054s
+Single buffer size: 4194304
+Between the two halves of these MBFs there are 17592186044416 possible combinations
+Total: 1928542617/1415244693017=0.136269%
+Calls made: 3413
+Filter Tree for Size (4194304) 197.904s
+Single buffer size: 8388608
+Between the two halves of these MBFs there are 70368744177664 possible combinations
+Total: 7609690028/4291456236586=0.177322%
+Calls made: 10091
+Filter Tree for Size (8388608) 831.288s
+Time taken: 1182.63s
