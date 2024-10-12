@@ -737,6 +737,37 @@ void testTreeLessFilterTreePerformance() {
     }*/
 }
 
+template<unsigned int Variables>
+uint64_t countWellKnownMBFCombinations(
+    Monotonic<Variables>* leftBuf, size_t leftSize,
+    Monotonic<Variables>* rightBuf, size_t rightSize
+) {
+    constexpr size_t MIDDLE_LAYER_OF_HIGHER_MBF = (Variables+1) / 2;
+
+    Monotonic<Variables> middle0 = Monotonic<Variables>::getFilledUpToIncludingLayer(MIDDLE_LAYER_OF_HIGHER_MBF - 2);
+    Monotonic<Variables> middle1 = Monotonic<Variables>::getFilledUpToIncludingLayer(MIDDLE_LAYER_OF_HIGHER_MBF - 1);
+    Monotonic<Variables> middle2 = Monotonic<Variables>::getFilledUpToIncludingLayer(MIDDLE_LAYER_OF_HIGHER_MBF);
+
+    uint64_t leftMayFormWellKnown = 0;
+    uint64_t rightMayFormWellKnown = 0;
+    for(size_t i = 0; i < leftSize; i++) {
+        // Check that the lower part has no zeros
+        // Check that the upper part has no ones
+        if(andnot(middle0.bf, leftBuf[i].bf).isEmpty() && andnot(leftBuf[i].bf, middle1.bf).isEmpty()) {
+            leftMayFormWellKnown++;
+        }
+    }
+    for(size_t i = 0; i < rightSize; i++) {
+        // Check that the lower part has no zeros
+        // Check that the upper part has no ones
+        if(andnot(middle1.bf, rightBuf[i].bf).isEmpty() && andnot(rightBuf[i].bf, middle2.bf).isEmpty()) {
+            rightMayFormWellKnown++;
+        }
+    }
+
+    return leftMayFormWellKnown * rightMayFormWellKnown;
+}
+
 #include "threadPool.h"
 #include <string>
 #include <fstream>
@@ -762,9 +793,11 @@ void estimateDPlusOneWithPairs(const std::vector<std::string>& args) {
 
     std::mutex printMutex;
     std::vector<long double> allValidFractionEstimates;
-    uint64_t totalComparisonsPassed;
-    uint64_t checkedComparisons;
-    uint64_t totalSearchSpace;
+    std::vector<long double> allWellKnownMBF10Estimates;
+    uint64_t totalComparisonsPassed = 0;
+    uint64_t totalWellKnownMBF10 = 0;
+    uint64_t checkedComparisons = 0;
+    uint64_t totalSearchSpace = 0;
 
     size_t expectedBlockSizeInBytes = blockSize * sizeof(Monotonic<Variables>);
 
@@ -802,20 +835,24 @@ void estimateDPlusOneWithPairs(const std::vector<std::string>& args) {
             Monotonic<Variables>* rightMBFs = thisMBFsBlock + leftBufSize;
             
             accum.reset();
+            uint64_t numWellKnownMBFs = countWellKnownMBFCombinations(leftMBFs, leftBufSize, rightMBFs, rightBufSize);
             countValidCombosWithFilterTreeRecurse(leftMBFs, leftBufSize, rightMBFs, rightBufSize, rng, accum);
 
-            long double validMatchFraction = static_cast<long double>(accum.total) / (leftBufSize * rightBufSize);
 
-            long double dNPlusOneEstimate = DN_SQUARED * validMatchFraction;
+            long double validMatchFraction = static_cast<long double>(accum.total) / (leftBufSize * rightBufSize);
+            long double wellKnownMBF10Fraction = static_cast<long double>(numWellKnownMBFs) / accum.total;
 
             {
                 std::lock_guard<std::mutex> lg(printMutex);
                 std::cout << "Thread " << coreID << " produced fraction " << validMatchFraction << " = " << accum.total << " / " << leftBufSize * rightBufSize << std::endl;
                 std::cout << "Thread " << coreID << " performed " << accum.totalCalls << " total calls. " << std::endl;
                 std::cout << "Thread " << coreID << " FilterTree filtered " << accum.checkedComparisons << " / " << leftBufSize * rightBufSize << " with " << static_cast<long double>(accum.checkedComparisons) / (leftBufSize * rightBufSize) << " of total search space needing to be searched. " << std::endl;
+                std::cout << "Thread " << coreID << " produced well known MBF10 fraction " << wellKnownMBF10Fraction << " = " << numWellKnownMBFs << " / " << accum.total << std::endl;
 
                 allValidFractionEstimates.push_back(validMatchFraction);
+                allWellKnownMBF10Estimates.push_back(wellKnownMBF10Fraction);
                 totalComparisonsPassed += accum.total;
+                totalWellKnownMBF10 += numWellKnownMBFs;
                 checkedComparisons += accum.checkedComparisons;
                 totalSearchSpace += leftBufSize * rightBufSize;
             }
@@ -829,22 +866,52 @@ void estimateDPlusOneWithPairs(const std::vector<std::string>& args) {
     for(long double elem : allValidFractionEstimates) {
         std::cout << elem << std::endl;
     }
+    std::cout << "Found Well Known MBF Fractions: " << std::endl;
+    for(long double elem : allWellKnownMBF10Estimates) {
+        std::cout << elem << std::endl;
+    }
 
     std::cout << std::endl;
     std::cout << "Covered " << allValidFractionEstimates.size() << " blocks of " << blockSize << " MBFs" << std::endl;
     std::cout << "In total " << totalComparisonsPassed << " / " << checkedComparisons << " MBF pairs formed a valid MBF" << Variables+1 << std::endl;
     std::cout << "Only " << checkedComparisons << " / " << totalSearchSpace << " were actually needed. With FilterTree = " << static_cast<long double>(checkedComparisons) / totalSearchSpace << std::endl;
+    std::cout << "Found " << totalWellKnownMBF10 << " well known MBF10s" << std::endl;
 
     long double sum = std::accumulate(allValidFractionEstimates.begin(), allValidFractionEstimates.end(), 0.0L);
     long double mean = sum / allValidFractionEstimates.size();
 
     long double sq_sum = std::inner_product(allValidFractionEstimates.begin(), allValidFractionEstimates.end(), allValidFractionEstimates.begin(), 0.0L);
     long double std_dev = std::sqrt(sq_sum / allValidFractionEstimates.size() - mean * mean);
-
+    long double standardError = std_dev / std::sqrt(allValidFractionEstimates.size());
+    
     std::cout << "The mean match fraction estimate = " << mean << std::endl;
     std::cout << "Std deviation = " << std_dev << std::endl;
     std::cout << "D(" << Variables + 1 << ") estimate = " << mean * DN_SQUARED << std::endl;
     std::cout << "Std deviation = " << std_dev * DN_SQUARED << std::endl;
+    std::cout << "Standard Error = " << standardError * DN_SQUARED << std::endl;
+    long double error_bar = 1.96 * standardError * DN_SQUARED;
+    std::cout << "95% confidence interval: [" << (mean * DN_SQUARED - error_bar) << ", " << (mean * DN_SQUARED + error_bar) << "]" << std::endl;
+    std::cout << std::endl;
+
+    constexpr long double NUM_WELL_KNOWN_MBF = powl(2, choose(Variables + 1, (Variables + 1) / 2));
+    long double wellKnownMBF10Mean = std::accumulate(allWellKnownMBF10Estimates.begin(), allWellKnownMBF10Estimates.end(), 0.0L) / allWellKnownMBF10Estimates.size();
+    long double wellKnownMBF10SqSum = std::inner_product(allWellKnownMBF10Estimates.begin(), allWellKnownMBF10Estimates.end(), allWellKnownMBF10Estimates.begin(), 0.0L);
+    long double wellKnownMBF10StdDev = std::sqrt(wellKnownMBF10SqSum / allWellKnownMBF10Estimates.size() - wellKnownMBF10Mean * wellKnownMBF10Mean);
+    long double wellKnownMBF10StandardError = wellKnownMBF10StdDev / std::sqrt(allWellKnownMBF10Estimates.size());
+
+    long double wellKnownMBF10RecipMean = 1.0L / wellKnownMBF10Mean;
+    long double wellKnownMBF10RecipStdDev = wellKnownMBF10StdDev / (wellKnownMBF10Mean * wellKnownMBF10Mean);
+    long double wellKnownMBF10RecipStandardError = wellKnownMBF10RecipStdDev / std::sqrt(allWellKnownMBF10Estimates.size());
+    
+
+    std::cout << "The mean well known MBF10 fraction estimate = " << wellKnownMBF10Mean << std::endl;
+    std::cout << "Std deviation = " << wellKnownMBF10StdDev << std::endl;
+    std::cout << "Standard Error = " << wellKnownMBF10StandardError << std::endl;
+    std::cout << "D(" << Variables + 1 << ") estimate = " << wellKnownMBF10RecipMean * NUM_WELL_KNOWN_MBF << std::endl;
+    std::cout << "Std deviation = " << wellKnownMBF10RecipStdDev * NUM_WELL_KNOWN_MBF << std::endl;
+    std::cout << "Standard Error = " << wellKnownMBF10RecipStandardError * NUM_WELL_KNOWN_MBF << std::endl;
+    long double wellKnownErrorBar = 1.96 * wellKnownMBF10RecipStandardError * NUM_WELL_KNOWN_MBF;
+    std::cout << "95% confidence interval: [" << (wellKnownMBF10RecipMean * NUM_WELL_KNOWN_MBF - wellKnownErrorBar) << ", " << (wellKnownMBF10RecipMean * NUM_WELL_KNOWN_MBF + wellKnownErrorBar) << "]" << std::endl;
 }
 
 template void testFilterTreePerformance<1>();

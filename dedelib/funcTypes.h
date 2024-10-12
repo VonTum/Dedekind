@@ -267,6 +267,18 @@ struct Monotonic {
 		result.add(0);
 		return Monotonic(result);
 	}
+
+	static constexpr Monotonic getFilledUpToIncludingLayer(unsigned int layer) {
+		BooleanFunction<Variables> result = BooleanFunction<Variables>::empty();
+
+		for(size_t bit = 0; bit < (1 << Variables); bit++) {
+			if(constexpr_popcnt(bit) <= layer) {
+				result.bitset.set(bit);
+			}
+		}
+
+		return Monotonic(result);
+	}
 };
 
 template<unsigned int Variables>

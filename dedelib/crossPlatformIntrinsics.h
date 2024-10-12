@@ -143,3 +143,16 @@ inline uint64_t popcnt512(__m512i v) {
 	return data[0] + data[1] + data[2] + data[3] + data[4] + data[5] + data[6] + data[7];
 }
 #endif
+
+template<typename IntT>
+constexpr IntT constexpr_popcnt(IntT v) {
+	IntT result = 0;
+
+	while(v) {
+		if (v & 1) {
+			result++;
+		}
+		v >>= 1;
+	}
+	return result;
+}
