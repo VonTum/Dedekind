@@ -618,6 +618,51 @@ void runOneThreadPerNUMANode(std::vector<cpu_set_t>& cpusPerNUMANode, void(*func
 	std::cout << "Threads joined!" << std::endl;
 }
 
+
+void parallelizeMBF8GenerationAcrossAllCores(size_t numToGenerate) {
+	std::vector<cpu_set_t> cpusPerNUMANode = getNUMA_CPUSets();
+
+	#define INITIAL_NUMA_NODE 0
+	std::cout << "Initializing and reading file..." << std::endl;
+	RandomMBFGenerationSharedData<7>** generationDatas = new RandomMBFGenerationSharedData<7>*[getNumNumaNodes()];
+	pthread_t initial_create_thread = createPThreadAffinity(cpusPerNUMANode[INITIAL_NUMA_NODE], [](void* voidData) -> void* {
+		RandomMBFGenerationSharedData<7>** initialData = (RandomMBFGenerationSharedData<7>**) voidData;
+		*initialData = new RandomMBFGenerationSharedData<7>();
+		return NULL;
+	}, (void*) &generationDatas[0]);
+	void* nullTarget;
+	pthread_join(initial_create_thread, &nullTarget);
+
+	std::cout << "Copying data across " << getNumNumaNodes() << " NUMA Nodes..." << std::endl;
+	runOneThreadPerNUMANode<RandomMBFGenerationSharedData<7>*>(cpusPerNUMANode, [](int nodeID, RandomMBFGenerationSharedData<7>** generationDatas){
+		if(nodeID == INITIAL_NUMA_NODE) return;
+		generationDatas[nodeID] = new RandomMBFGenerationSharedData<7>(*generationDatas[INITIAL_NUMA_NODE]);
+	}, generationDatas);
+
+	std::cout << "All data copied!" << std::endl;
+
+    size_t bufferSize = sizeof(std::array<Monotonic<7>, 4>) * numToGenerate;
+	size_t alignedBufferSize = align_to(bufferSize, 1024*4);
+    std::array<Monotonic<7>, 2>* resultBuf = (std::array<Monotonic<7>, 2>*) aligned_alloc(1024*4, alignedBufferSize);
+    madvise(resultBuf, alignedBufferSize, MADV_NOHUGEPAGE); // Preserve huge pages for buffers that need it
+    
+	std::cout << "Random Generation..." << std::endl;
+	auto start = std::chrono::high_resolution_clock::now();
+    iterRangeInParallelBlocksOnAllCores<size_t, size_t, RandomMBFGenerationThreadLocalState<7>>(0, numToGenerate, 64, [&](RandomMBFGenerationThreadLocalState<7>& threadState, size_t elem){
+        resultBuf[elem] = mbfUp8(threadState);
+    }, [&](int threadID) -> RandomMBFGenerationThreadLocalState<7> {
+        return RandomMBFGenerationThreadLocalState<7>(generationDatas[numa_node_of_cpu(threadID)]);
+    });
+
+	auto time = std::chrono::high_resolution_clock::now() - start;
+	double seconds = std::chrono::duration_cast<std::chrono::milliseconds>(time).count() / 1000.0;
+	std::cout << "Took " << seconds << "s: " << (numToGenerate / seconds) << " random MBF8 per second using " << std::thread::hardware_concurrency() << " threads." << std::endl;
+
+	// Always append to the file, so we keep gathering more and more results
+	std::ofstream outFile(FileName::randomMBFs(8), std::ios::binary | std::ios::app);
+    outFile.write((const char*) resultBuf, bufferSize);
+}
+
 void parallelizeMBF9GenerationAcrossAllCores(size_t numToGenerate) {
 	std::vector<cpu_set_t> cpusPerNUMANode = getNUMA_CPUSets();
 
