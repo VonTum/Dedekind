@@ -656,6 +656,22 @@ void countMBFSizeStatistics() {
 	}
 }
 
+template<unsigned int Variables>
+void countMinCUTsExact() {
+	const Monotonic<Variables>* mbfs = readFlatBufferNoMMAP<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+	const ClassInfo* allBigIntervalSizes = readFlatBufferNoMMAP<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
+
+	size_t total = 0;
+
+	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+		AntiChain<Variables> asAC = mbfs[i].asAntiChain();
+
+		total += allBigIntervalSizes[i].classSize * asAC.size();
+	}
+
+	std::cout << "Total minCutNodes: " << total << "/" << dedekindNumbers[Variables] << " which is about: " << double(total) / dedekindNumbers[Variables] << std::endl;
+}
+
 CommandSet miscCommands{"Misc", {
 	{"ramTest", []() {doRAMTest(); }},
 	{"testMixingPattern", [](){testMixingPattern();}},
@@ -838,6 +854,16 @@ CommandSet miscCommands{"Misc", {
 	{"countMBFSizeStatistics8", countMBFSizeStatistics<8>},
 	{"countMBFSizeStatistics9", countMBFSizeStatistics<9>},
 
+	{"countMinCUTsExact1", countMinCUTsExact<1>},
+	{"countMinCUTsExact2", countMinCUTsExact<2>},
+	{"countMinCUTsExact3", countMinCUTsExact<3>},
+	{"countMinCUTsExact4", countMinCUTsExact<4>},
+	{"countMinCUTsExact5", countMinCUTsExact<5>},
+	{"countMinCUTsExact6", countMinCUTsExact<6>},
+	{"countMinCUTsExact7", countMinCUTsExact<7>},
+	{"countMinCUTsExact8", countMinCUTsExact<8>},
+	{"countMinCUTsExact9", countMinCUTsExact<9>},
+
 	{"estimateDedekRandomWalks1", estimateDedekRandomWalks<1>},
 	{"estimateDedekRandomWalks2", estimateDedekRandomWalks<2>},
 	{"estimateDedekRandomWalks3", estimateDedekRandomWalks<3>},
@@ -894,5 +920,10 @@ CommandSet miscCommands{"Misc", {
 		int n = std::stoi(vars[0]);
 
 		parallelizeMBF9GenerationAcrossAllCores(n);
+	}},
+	{"parallelizeMBF8GenerationAcrossAllCores", [](const std::vector<std::string>& vars) {
+		int n = std::stoi(vars[0]);
+
+		parallelizeMBF8GenerationAcrossAllCores(n);
 	}},
 }};
