@@ -495,11 +495,11 @@ public:
 
 			__m128i forced = _mm_setzero_si128();
 
-			__m128i v0Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b10101010)), 1);
+			__m128i v0Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(MASK_1)), 1);
 			forced = _mm_or_si128(forced, v0Removed);
-			__m128i v1Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b11001100)), 2);
+			__m128i v1Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(MASK_2)), 2);
 			forced = _mm_or_si128(forced, v1Removed);
-			__m128i v2Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b11110000)), 4);
+			__m128i v2Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(MASK_4)), 4);
 			forced = _mm_or_si128(forced, v2Removed);
 			__m128i v3Removed = _mm_srli_epi16(bs, 8);
 			forced = _mm_or_si128(forced, v3Removed);
@@ -512,6 +512,32 @@ public:
 
 			BooleanFunction result;
 			result.bitset.data = forced;
+			return result;
+		} else if constexpr(Variables >= 7) {
+			BooleanFunction result = BooleanFunction::empty();
+
+			for(size_t i = 0; i < this->bitset.BLOCK_COUNT; i++) {
+				uint64_t curElem = this->bitset.data[i];
+				result.bitset.data[i] = 
+					((curElem & MASK_1) >> 1) | 
+					((curElem & MASK_2) >> 2) | 
+					((curElem & MASK_4) >> 4) | 
+					((curElem & MASK_8) >> 8) | 
+					((curElem & MASK_16) >> 16) | 
+					(curElem >> 32);
+			}
+
+			for(unsigned int HigherVariable = 6; HigherVariable < Variables; HigherVariable++) {
+				// We always need to update BLOCK_COUNT/2 blocks. 
+				unsigned int BlocksPerBigBlock = 1 << (HigherVariable - 6);
+				unsigned int BigBlockCount = 1 << (Variables - HigherVariable - 1);
+				
+				for(unsigned int bb = 0; bb < BigBlockCount; bb++) {
+					for(unsigned int subBlock = 0; subBlock < BlocksPerBigBlock; subBlock++) {
+						result.bitset.data[bb * 2 * BlocksPerBigBlock + subBlock] |= this->bitset.data[(bb * 2 + 1) * BlocksPerBigBlock + subBlock];
+					}
+				}
+			}
 			return result;
 		} else {
 			Bits forced = Bits::empty();
@@ -532,11 +558,11 @@ public:
 
 			__m128i forced = _mm_setzero_si128();
 
-			__m128i v0Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b10101010), bs), 1);
+			__m128i v0Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(MASK_1), bs), 1);
 			forced = _mm_or_si128(v0Added, forced);
-			__m128i v1Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b11001100), bs), 2);
+			__m128i v1Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(MASK_2), bs), 2);
 			forced = _mm_or_si128(v1Added, forced);
-			__m128i v2Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b11110000), bs), 4);
+			__m128i v2Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(MASK_4), bs), 4);
 			forced = _mm_or_si128(v2Added, forced);
 			__m128i v3Added = _mm_slli_epi16(bs, 8);
 			forced = _mm_or_si128(v3Added, forced);
@@ -550,7 +576,33 @@ public:
 			BooleanFunction result;
 			result.bitset.data = forced;
 			return result;
-		} else {
+		} else if constexpr(Variables >= 7) {
+			BooleanFunction result = BooleanFunction::empty();
+
+			for(size_t i = 0; i < this->bitset.BLOCK_COUNT; i++) {
+				uint64_t curElem = this->bitset.data[i];
+				result.bitset.data[i] = 
+					((curElem & ~MASK_1) << 1) | 
+					((curElem & ~MASK_2) << 2) | 
+					((curElem & ~MASK_4) << 4) | 
+					((curElem & ~MASK_8) << 8) | 
+					((curElem & ~MASK_16) << 16) | 
+					(curElem << 32);
+			}
+
+			for(unsigned int HigherVariable = 6; HigherVariable < Variables; HigherVariable++) {
+				// We always need to update BLOCK_COUNT/2 blocks. 
+				unsigned int BlocksPerBigBlock = 1 << (HigherVariable - 6);
+				unsigned int BigBlockCount = 1 << (Variables - HigherVariable - 1);
+				
+				for(unsigned int bb = 0; bb < BigBlockCount; bb++) {
+					for(unsigned int subBlock = 0; subBlock < BlocksPerBigBlock; subBlock++) {
+						result.bitset.data[(bb * 2 + 1) * BlocksPerBigBlock + subBlock] |= this->bitset.data[bb * 2 * BlocksPerBigBlock + subBlock];
+					}
+				}
+			}
+			return result;
+		} else{
 			Bits forced = Bits::empty();
 
 			Bits bs = this->bitset;
@@ -573,11 +625,11 @@ public:
 
 			__m128i forced = _mm_cmpeq_epi16(_mm_setzero_si128(), _mm_setzero_si128()); // all 1s
 
-			__m128i v0Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b10101010)), 1);
+			__m128i v0Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(MASK_1)), 1);
 			forced = _mm_andnot_si128(forced, v0Removed);
-			__m128i v1Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b11001100)), 2);
+			__m128i v1Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(MASK_2)), 2);
 			forced = _mm_andnot_si128(forced, v1Removed);
-			__m128i v2Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b11110000)), 4);
+			__m128i v2Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(MASK_4)), 4);
 			forced = _mm_andnot_si128(forced, v2Removed);
 			__m128i v3Removed = _mm_srli_epi16(bs, 8);
 			forced = _mm_andnot_si128(forced, v3Removed);
@@ -590,6 +642,32 @@ public:
 
 			BooleanFunction result;
 			result.bitset.data = forced;
+			return result;
+		} else if constexpr(Variables >= 7) {
+			BooleanFunction result = BooleanFunction::full();
+
+			for(size_t i = 0; i < this->bitset.BLOCK_COUNT; i++) {
+				uint64_t curElem = this->bitset.data[i];
+				result.bitset.data[i] = 
+					((curElem >> 1) | MASK_1) &
+					((curElem >> 2) | MASK_2) &
+					((curElem >> 4) | MASK_4) &
+					((curElem >> 8) | MASK_8) &
+					((curElem >> 16) | MASK_16) &
+					((curElem >> 32) | MASK_32);
+			}
+
+			for(unsigned int HigherVariable = 6; HigherVariable < Variables; HigherVariable++) {
+				// We always need to update BLOCK_COUNT/2 blocks. 
+				unsigned int BlocksPerBigBlock = 1 << (HigherVariable - 6);
+				unsigned int BigBlockCount = 1 << (Variables - HigherVariable - 1);
+				
+				for(unsigned int bb = 0; bb < BigBlockCount; bb++) {
+					for(unsigned int subBlock = 0; subBlock < BlocksPerBigBlock; subBlock++) {
+						result.bitset.data[bb * 2 * BlocksPerBigBlock + subBlock] &= this->bitset.data[(bb * 2 + 1) * BlocksPerBigBlock + subBlock];
+					}
+				}
+			}
 			return result;
 		} else {
 			Bits bs = ~this->bitset;
@@ -612,11 +690,11 @@ public:
 
 			__m128i forced = _mm_cmpeq_epi16(_mm_setzero_si128(), _mm_setzero_si128()); // all 1s
 
-			__m128i v0Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b10101010), bs), 1);
+			__m128i v0Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(MASK_1), bs), 1);
 			forced = _mm_andnot_si128(v0Added, forced);
-			__m128i v1Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b11001100), bs), 2);
+			__m128i v1Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(MASK_2), bs), 2);
 			forced = _mm_andnot_si128(v1Added, forced);
-			__m128i v2Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b11110000), bs), 4);
+			__m128i v2Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(MASK_4), bs), 4);
 			forced = _mm_andnot_si128(v2Added, forced);
 			__m128i v3Added = _mm_slli_epi16(bs, 8);
 			forced = _mm_andnot_si128(v3Added, forced);
@@ -629,6 +707,32 @@ public:
 
 			BooleanFunction result;
 			result.bitset.data = forced;
+			return result;
+		} else if constexpr(Variables >= 7) {
+			BooleanFunction result = BooleanFunction::full();
+
+			for(size_t i = 0; i < this->bitset.BLOCK_COUNT; i++) {
+				uint64_t curElem = this->bitset.data[i];
+				result.bitset.data[i] = 
+					((curElem << 1) | ~MASK_1) &
+					((curElem << 2) | ~MASK_2) &
+					((curElem << 4) | ~MASK_4) &
+					((curElem << 8) | ~MASK_8) &
+					((curElem << 16) | ~MASK_16) &
+					((curElem << 32) | ~MASK_32);
+			}
+
+			for(unsigned int HigherVariable = 6; HigherVariable < Variables; HigherVariable++) {
+				// We always need to update BLOCK_COUNT/2 blocks. 
+				unsigned int BlocksPerBigBlock = 1 << (HigherVariable - 6);
+				unsigned int BigBlockCount = 1 << (Variables - HigherVariable - 1);
+				
+				for(unsigned int bb = 0; bb < BigBlockCount; bb++) {
+					for(unsigned int subBlock = 0; subBlock < BlocksPerBigBlock; subBlock++) {
+						result.bitset.data[(bb * 2 + 1) * BlocksPerBigBlock + subBlock] &= this->bitset.data[bb * 2 * BlocksPerBigBlock + subBlock];
+					}
+				}
+			}
 			return result;
 		} else {
 			Bits bs = ~this->bitset;
@@ -684,11 +788,11 @@ public:
 		if constexpr(Variables == 7) {
 			__m128i bs = this->bitset.data;
 
-			__m128i v0Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b10101010)), 1);
+			__m128i v0Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(MASK_1)), 1);
 			bs = _mm_or_si128(bs, v0Removed);
-			__m128i v1Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b11001100)), 2);
+			__m128i v1Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(MASK_2)), 2);
 			bs = _mm_or_si128(bs, v1Removed);
-			__m128i v2Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi8(0b11110000)), 4);
+			__m128i v2Removed = _mm_srli_epi64(_mm_and_si128(bs, _mm_set1_epi64x(MASK_4)), 4);
 			bs = _mm_or_si128(bs, v2Removed);
 			__m128i v3Removed = _mm_srli_epi16(bs, 8);
 			bs = _mm_or_si128(bs, v3Removed);
@@ -724,11 +828,11 @@ public:
 		if constexpr(Variables == 7) {
 			__m128i bs = this->bitset.data;
 
-			__m128i v0Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b10101010), bs), 1);
+			__m128i v0Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(MASK_1), bs), 1);
 			bs = _mm_or_si128(bs, v0Added);
-			__m128i v1Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b11001100), bs), 2);
+			__m128i v1Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(MASK_2), bs), 2);
 			bs = _mm_or_si128(bs, v1Added);
-			__m128i v2Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi8(0b11110000), bs), 4);
+			__m128i v2Added = _mm_slli_epi64(_mm_andnot_si128(_mm_set1_epi64x(MASK_4), bs), 4);
 			bs = _mm_or_si128(bs, v2Added);
 			__m128i v3Added = _mm_slli_epi16(bs, 8);
 			bs = _mm_or_si128(bs, v3Added);
@@ -790,6 +894,10 @@ public:
 
 	size_t getLast() const {
 		return bitset.getLastOnBit();
+	}
+
+	size_t getNth(size_t n) const {
+		return bitset.getNthOnBit(n);
 	}
 
 	// takes a function of the form void(const BooleanFunction& expanded)

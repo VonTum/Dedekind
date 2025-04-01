@@ -661,3 +661,91 @@ void parallelizeMBF9GenerationAcrossAllCores(size_t numToGenerate) {
 	std::ofstream outFile(FileName::randomMBFs(9), std::ios::binary | std::ios::app);
     outFile.write((const char*) resultBuf, bufferSize);
 }
+
+
+// ==== Random Walks ====
+
+template<unsigned int Variables, typename RandomEngine>
+__attribute__ ((noinline)) size_t stepRandom(Monotonic<Variables>& mbf, RandomEngine& rng) {
+	Monotonic<Variables> succ = mbf.succ();
+	Monotonic<Variables> pred = mbf.pred();
+	
+	BooleanFunction<Variables> possibleBits = andnot(succ.bf, mbf.bf) | andnot(mbf.bf, pred.bf);
+
+	size_t numBits = possibleBits.size();
+
+	size_t selectedToFlip = std::uniform_int_distribution<size_t>(0, numBits - 1)(rng);
+
+	mbf.bf.bitset.toggle(possibleBits.getNth(selectedToFlip));
+
+	assert(mbf.bf.isMonotonic());
+
+	return numBits;
+}
+
+constexpr size_t NUM_STEPS = 15000;
+constexpr size_t NUM_TRIALS = 100000;
+
+template<unsigned int Variables, typename RandomEngine>
+Monotonic<Variables> generateMBFByWalks(RandomEngine& rng) {
+	Monotonic<Variables> curMbf = Monotonic<Variables>::getBot();
+	
+	for(size_t step = 0; step < NUM_STEPS; step++) {
+		stepRandom(curMbf, rng);
+	}
+
+	return curMbf;
+}
+
+template<unsigned int Variables>
+void estimateDedekRandomWalks() {
+	RandomEngine rng = properlySeededRNG();
+
+	std::cout << "Random Generation of MBF" << Variables << std::endl;
+
+	const BooleanFunction<Variables> lowerHalf = Monotonic<Variables>::getFilledUpToIncludingLayer(Variables / 2 - 1).bf;
+	const BooleanFunction<Variables> upperHalf = ~Monotonic<Variables>::getFilledUpToIncludingLayer(Variables / 2).bf;
+
+	uint64_t numWellKnownMBFs = 0;
+
+	auto start = std::chrono::high_resolution_clock::now();
+	for(size_t trial = 0; trial < NUM_TRIALS; trial++) {
+		Monotonic<Variables> genMbf = generateMBFByWalks<Variables>(rng);
+
+		bool isWellKnown = ((upperHalf & genMbf.bf) | andnot(lowerHalf, genMbf.bf)).isEmpty();
+
+		if(isWellKnown) {
+			numWellKnownMBFs++;
+		}
+	}
+	auto time = std::chrono::high_resolution_clock::now() - start;
+	double seconds = std::chrono::duration_cast<std::chrono::milliseconds>(time).count() / 1000.0;
+
+	double loopsPerSecond = NUM_TRIALS * NUM_STEPS / seconds;
+
+	std::cout << "Took " << seconds << "s: " << (NUM_TRIALS / seconds) << " random MBF" << Variables << " per second." << std::endl;
+
+	std::cout << "This means " << loopsPerSecond << " loops/s" << std::endl;
+
+	double estimatedDedekindNumber = pow(2.0, double(choose(Variables, Variables / 2))) * NUM_TRIALS / numWellKnownMBFs;
+
+	std::cout << "Fraction of well known: " << numWellKnownMBFs << " / " << NUM_TRIALS << " = " << double(numWellKnownMBFs) / NUM_TRIALS;
+
+	std::cout << "Estimated D(" << Variables << ") = " << estimatedDedekindNumber << std::endl;
+}
+
+template void estimateDedekRandomWalks<1>();
+template void estimateDedekRandomWalks<2>();
+template void estimateDedekRandomWalks<3>();
+template void estimateDedekRandomWalks<4>();
+template void estimateDedekRandomWalks<5>();
+template void estimateDedekRandomWalks<6>();
+template void estimateDedekRandomWalks<7>();
+template void estimateDedekRandomWalks<8>();
+template void estimateDedekRandomWalks<9>();
+template void estimateDedekRandomWalks<10>();
+template void estimateDedekRandomWalks<11>();
+template void estimateDedekRandomWalks<12>();
+template void estimateDedekRandomWalks<13>();
+template void estimateDedekRandomWalks<14>();
+template void estimateDedekRandomWalks<15>();

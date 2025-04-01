@@ -6,18 +6,21 @@
 
 #include "crossPlatformIntrinsics.h"
 
+constexpr uint64_t MASK_1 = 0xAAAAAAAAAAAAAAAA;
+constexpr uint64_t MASK_2 = 0xCCCCCCCCCCCCCCCC;
+constexpr uint64_t MASK_4 = 0xF0F0F0F0F0F0F0F0;
+constexpr uint64_t MASK_8 = 0xFF00FF00FF00FF00;
+constexpr uint64_t MASK_16 = 0xFFFF0000FFFF0000;
+constexpr uint64_t MASK_32 = 0xFFFFFFFF00000000;
+
+
 inline constexpr uint64_t reverse64(uint64_t v) {
 	v = (v << 32) | (v >> 32);
-	constexpr uint64_t mask16 = 0xFFFF0000FFFF0000;
-	v = ((v & mask16) >> 16) | ((v & ~mask16) << 16);
-	constexpr uint64_t mask8 = 0xFF00FF00FF00FF00;
-	v = ((v & mask8) >> 8) | ((v & ~mask8) << 8);
-	constexpr uint64_t mask4 = 0xF0F0F0F0F0F0F0F0;
-	v = ((v & mask4) >> 4) | ((v & ~mask4) << 4);
-	constexpr uint64_t mask2 = 0xCCCCCCCCCCCCCCCC;
-	v = ((v & mask2) >> 2) | ((v & ~mask2) << 2);
-	constexpr uint64_t mask1 = 0xAAAAAAAAAAAAAAAA;
-	v = ((v & mask1) >> 1) | ((v & ~mask1) << 1);
+	v = ((v & MASK_16) >> 16) | ((v & ~MASK_16) << 16);
+	v = ((v & MASK_8) >> 8) | ((v & ~MASK_8) << 8);
+	v = ((v & MASK_4) >> 4) | ((v & ~MASK_4) << 4);
+	v = ((v & MASK_2) >> 2) | ((v & ~MASK_2) << 2);
+	v = ((v & MASK_1) >> 1) | ((v & ~MASK_1) << 1);
 	return v;
 }
 inline constexpr uint32_t reverse32(uint32_t v) {
@@ -58,6 +61,13 @@ inline constexpr uint8_t reverse4(uint8_t v) {
 }
 inline constexpr uint8_t reverse2(uint8_t v) {
 	return (v << 1) | (v >> 1);
+}
+
+inline size_t getNthOnBit64(size_t n, uint64_t v) {
+	for(; n > 0; n--) {
+		v &= ~(uint64_t(1) << ctz64(v));
+	}
+	return ctz64(v);
 }
 
 // kindly croudsourced from StackOverflow https://stackoverflow.com/questions/66091420/how-to-best-emulate-the-logical-meaning-of-mm-slli-si128-128-bit-bit-shift-n
@@ -202,6 +212,18 @@ public:
 			}
 		}
 		return 0;
+	}
+	size_t getNthOnBit(size_t n) const {
+		for(size_t curBlockI = 0; curBlockI < BLOCK_COUNT; curBlockI++) {
+			uint64_t curBlock = data[curBlockI];
+			int bitsInCurBlock = popcnt64(curBlock);
+			if(n < bitsInCurBlock) {
+				return curBlockI * 64 + getNthOnBit64(n, curBlock);
+			} else {
+				n -= bitsInCurBlock;
+			}
+		}
+		throw "Unreachable";
 	}
 
 	constexpr bool get(size_t index) const {
@@ -475,6 +497,15 @@ public:
 		}
 		return 0;
 	}
+	size_t getNthOnBit(size_t n) const {
+		uint64_t firstPart = _mm_extract_epi64(this->data, 0);
+		int bitsInFirstPart = popcnt64(firstPart);
+		if(n < bitsInFirstPart) {
+			return getNthOnBit64(n, firstPart);
+		} else {
+			return getNthOnBit64(n - bitsInFirstPart, _mm_extract_epi64(this->data, 1));
+		}
+	}
 
 	bool get(size_t index) const {
 		assert(index < size());
@@ -698,6 +729,9 @@ public:
 	size_t getLastOnBit() const {
 		return clz64(this->data);
 	}
+	size_t getNthOnBit(size_t n) const {
+		return getNthOnBit64(n, this->data);
+	}
 
 	constexpr bool get(size_t index) const {
 		assert(index < size());
@@ -863,6 +897,9 @@ public:
 	size_t getLastOnBit() const {
 		return clz32(this->data);
 	}
+	size_t getNthOnBit(size_t n) const {
+		return getNthOnBit64(n, this->data);
+	}
 
 	constexpr bool get(size_t index) const {
 		assert(index < size());
@@ -1027,6 +1064,9 @@ public:
 	}
 	size_t getLastOnBit() const {
 		return clz16(this->data);
+	}
+	size_t getNthOnBit(size_t n) const {
+		return getNthOnBit64(n, this->data);
 	}
 
 	constexpr bool get(size_t index) const {
@@ -1194,6 +1234,9 @@ public:
 	size_t getLastOnBit() const {
 		return clz8(this->data);
 	}
+	size_t getNthOnBit(size_t n) const {
+		return getNthOnBit64(n, this->data);
+	}
 
 	constexpr bool get(size_t index) const {
 		assert(index < size());
@@ -1359,6 +1402,9 @@ public:
 	size_t getLastOnBit() const {
 		return clz8(this->data);
 	}
+	size_t getNthOnBit(size_t n) const {
+		return getNthOnBit64(n, this->data);
+	}
 
 	constexpr bool get(size_t index) const {
 		assert(index < size());
@@ -1523,6 +1569,9 @@ public:
 	}
 	size_t getLastOnBit() const {
 		return clz8(this->data);
+	}
+	size_t getNthOnBit(size_t n) const {
+		return getNthOnBit64(n, this->data);
 	}
 
 	constexpr bool get(size_t index) const {
