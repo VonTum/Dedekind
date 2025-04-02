@@ -472,12 +472,13 @@ template void benchmarkRandomMBFGeneration<7>();
 
 
 std::array<Monotonic<7>, 2> mbfUp8(RandomMBFGenerationThreadLocalState<7>& gen) {
-	while(true) {
-		std::array<Monotonic<7>, 2> arr{gen.sampleNonPermuted(), gen.samplePermuted()};
-		if(arr[0] <= arr[1]) {
-			return arr;
-		}
-	}
+	std::array<Monotonic<7>, 2> arr{gen.sampleNonPermuted(), gen.samplePermuted()};
+	do {
+		arr[0] = gen.sampleNonPermuted();
+		arr[1] = gen.samplePermuted();
+	} while(!(arr[1] <= arr[0]));
+    gen.coPermuteRandom(&arr[0], 2);
+	return arr;
 }
 
 std::array<Monotonic<7>, 4> mbfUp9(RandomMBFGenerationThreadLocalState<7>& gen) {
@@ -676,6 +677,68 @@ void parallelizeMBFGenerationAcrossAllCores(size_t numToGenerate) {
 template void parallelizeMBFGenerationAcrossAllCores<7>(size_t numToGenerate);
 template void parallelizeMBFGenerationAcrossAllCores<8>(size_t numToGenerate);
 template void parallelizeMBFGenerationAcrossAllCores<9>(size_t numToGenerate);
+
+void generateMBFsFromPreviousBuffer(unsigned int Variables) {
+	size_t fileSize;
+	const uint64_t* mbfs = static_cast<const uint64_t*>(mmapWholeFileSequentialRead(FileName::randomMBFs(Variables), fileSize));
+	std::vector<uint64_t> outMBFs;
+
+	size_t bitsPerMBF = 1 << Variables;
+	size_t blocksPerMBF = bitsPerMBF / (sizeof(uint64_t) * 8);
+
+	size_t numMBFs = (fileSize * 8) / bitsPerMBF;
+
+	/*std::cout << "Checking input MBFs" << std::endl;
+	for(size_t i = 0; i < numMBFs; i++) {
+		const uint64_t* curMBFPair = &mbfs[i * blocksPerMBF];
+
+		if(Variables == 8) {
+			if(!reinterpret_cast<const BooleanFunction<8>*>(curMBFPair)->isMonotonic()) {
+				throw "INVALID MBF";
+			}
+		}
+		if(Variables == 9) {
+			if(!reinterpret_cast<const BooleanFunction<9>*>(curMBFPair)->isMonotonic()) {
+				throw "INVALID MBF";
+			}
+		}
+	}*/
+
+	std::cout << "Generating" << std::endl;
+	for(size_t i = 0; i < numMBFs / 2; i++) {
+		bool isValidPair = true;
+
+		const uint64_t* curMBFPair = &mbfs[i * (blocksPerMBF * 2)];
+		for(size_t b = 0; b < blocksPerMBF; b++) {
+			if((curMBFPair[blocksPerMBF + b] & ~curMBFPair[b]) != 0) {
+				isValidPair = false;
+				break;
+			}
+		}
+
+		if(isValidPair) {
+			std::cout << '.' << std::flush;
+			if(Variables == 8) {
+				if(!reinterpret_cast<const BooleanFunction<9>*>(curMBFPair)->isMonotonic()) {
+					throw "INVALID MBF";
+				}
+			}
+			if(Variables == 9) {
+				if(!reinterpret_cast<const BooleanFunction<10>*>(curMBFPair)->isMonotonic()) {
+					throw "INVALID MBF";
+				}
+			}
+			for(size_t b = 0; b < blocksPerMBF * 2; b++) {
+				outMBFs.push_back(curMBFPair[b]);
+			}
+		}
+	}
+
+	std::cout << "Total generated MBFs: " << outMBFs.size() / (blocksPerMBF * 2) << std::endl;
+
+	std::ofstream outFile(FileName::randomMBFs(Variables + 1), std::ios::binary);
+    outFile.write((const char*) outMBFs.data(), outMBFs.size() * sizeof(uint64_t) * 8);
+}
 
 // ==== Random Walks ====
 

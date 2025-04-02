@@ -681,6 +681,8 @@ void estimateAverageNumMinCutsFromRandomMBFs() {
 	size_t total = 0;
 
 	for(size_t i = 0; i < numMBFs; i++) {
+		if(!mbfs[i].bf.isMonotonic()) throw "AAAAH";
+
 		AntiChain<Variables> asAC = mbfs[i].asAntiChain();
 
 		total += asAC.size();
@@ -884,6 +886,10 @@ CommandSet miscCommands{"Misc", {
 	{"estimateAverageNumMinCutsFromRandomMBFs7", estimateAverageNumMinCutsFromRandomMBFs<7>},
 	{"estimateAverageNumMinCutsFromRandomMBFs8", estimateAverageNumMinCutsFromRandomMBFs<8>},
 	{"estimateAverageNumMinCutsFromRandomMBFs9", estimateAverageNumMinCutsFromRandomMBFs<9>},
+	{"estimateAverageNumMinCutsFromRandomMBFs10", estimateAverageNumMinCutsFromRandomMBFs<10>},
+	{"estimateAverageNumMinCutsFromRandomMBFs11", estimateAverageNumMinCutsFromRandomMBFs<11>},
+	{"estimateAverageNumMinCutsFromRandomMBFs12", estimateAverageNumMinCutsFromRandomMBFs<12>},
+	{"estimateAverageNumMinCutsFromRandomMBFs13", estimateAverageNumMinCutsFromRandomMBFs<13>},
 
 	{"estimateDedekRandomWalks1", estimateDedekRandomWalks<1>},
 	{"estimateDedekRandomWalks2", estimateDedekRandomWalks<2>},
@@ -948,5 +954,9 @@ CommandSet miscCommands{"Misc", {
 	{"parallelizeMBFGenerationAcrossAllCores9", [](const std::vector<std::string>& vars) {
 		long long n = std::stoll(vars[0]);
 		parallelizeMBFGenerationAcrossAllCores<9>(n);
+	}},
+	{"generateMBFsFromPreviousBuffer", [](const std::vector<std::string>& vars) {
+		long long Variables = std::stoll(vars[0]);
+		generateMBFsFromPreviousBuffer(Variables);
 	}},
 }};

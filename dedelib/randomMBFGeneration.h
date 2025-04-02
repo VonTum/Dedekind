@@ -19,6 +19,8 @@ extern template void benchmarkRandomMBFGeneration<7>();
 template<unsigned int Variables>
 void parallelizeMBFGenerationAcrossAllCores(size_t numToGenerate);
 
+void generateMBFsFromPreviousBuffer(unsigned int Variables);
+
 extern template void parallelizeMBFGenerationAcrossAllCores<7>(size_t numToGenerate);
 extern template void parallelizeMBFGenerationAcrossAllCores<8>(size_t numToGenerate);
 extern template void parallelizeMBFGenerationAcrossAllCores<9>(size_t numToGenerate);
