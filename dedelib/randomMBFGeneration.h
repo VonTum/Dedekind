@@ -16,8 +16,12 @@ extern template void benchmarkRandomMBFGeneration<5>();
 extern template void benchmarkRandomMBFGeneration<6>();
 extern template void benchmarkRandomMBFGeneration<7>();
 
-void parallelizeMBF8GenerationAcrossAllCores(size_t numToGenerate);
-void parallelizeMBF9GenerationAcrossAllCores(size_t numToGenerate);
+template<unsigned int Variables>
+void parallelizeMBFGenerationAcrossAllCores(size_t numToGenerate);
+
+extern template void parallelizeMBFGenerationAcrossAllCores<7>(size_t numToGenerate);
+extern template void parallelizeMBFGenerationAcrossAllCores<8>(size_t numToGenerate);
+extern template void parallelizeMBFGenerationAcrossAllCores<9>(size_t numToGenerate);
 
 template<unsigned int Variables>
 void estimateDedekRandomWalks();

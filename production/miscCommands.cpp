@@ -672,6 +672,23 @@ void countMinCUTsExact() {
 	std::cout << "Total minCutNodes: " << total << "/" << dedekindNumbers[Variables] << " which is about: " << double(total) / dedekindNumbers[Variables] << std::endl;
 }
 
+template<unsigned int Variables>
+void estimateAverageNumMinCutsFromRandomMBFs() {
+	size_t fileSize;
+	const Monotonic<Variables>* mbfs = static_cast<const Monotonic<Variables>*>(mmapWholeFileSequentialRead(FileName::randomMBFs(Variables), fileSize));
+
+	size_t numMBFs = fileSize / sizeof(Monotonic<Variables>);
+	size_t total = 0;
+
+	for(size_t i = 0; i < numMBFs; i++) {
+		AntiChain<Variables> asAC = mbfs[i].asAntiChain();
+
+		total += asAC.size();
+	}
+
+	std::cout << "Total minCutNodes: " << total << "/" << numMBFs << " which is about: " << double(total) / numMBFs << std::endl;
+}
+
 CommandSet miscCommands{"Misc", {
 	{"ramTest", []() {doRAMTest(); }},
 	{"testMixingPattern", [](){testMixingPattern();}},
@@ -864,6 +881,10 @@ CommandSet miscCommands{"Misc", {
 	{"countMinCUTsExact8", countMinCUTsExact<8>},
 	{"countMinCUTsExact9", countMinCUTsExact<9>},
 
+	{"estimateAverageNumMinCutsFromRandomMBFs7", estimateAverageNumMinCutsFromRandomMBFs<7>},
+	{"estimateAverageNumMinCutsFromRandomMBFs8", estimateAverageNumMinCutsFromRandomMBFs<8>},
+	{"estimateAverageNumMinCutsFromRandomMBFs9", estimateAverageNumMinCutsFromRandomMBFs<9>},
+
 	{"estimateDedekRandomWalks1", estimateDedekRandomWalks<1>},
 	{"estimateDedekRandomWalks2", estimateDedekRandomWalks<2>},
 	{"estimateDedekRandomWalks3", estimateDedekRandomWalks<3>},
@@ -916,14 +937,16 @@ CommandSet miscCommands{"Misc", {
 		}
 	}},
 
-	{"parallelizeMBF9GenerationAcrossAllCores", [](const std::vector<std::string>& vars) {
-		int n = std::stoi(vars[0]);
-
-		parallelizeMBF9GenerationAcrossAllCores(n);
+	{"parallelizeMBFGenerationAcrossAllCores7", [](const std::vector<std::string>& vars) {
+		long long n = std::stoll(vars[0]);
+		parallelizeMBFGenerationAcrossAllCores<7>(n);
 	}},
-	{"parallelizeMBF8GenerationAcrossAllCores", [](const std::vector<std::string>& vars) {
-		int n = std::stoi(vars[0]);
-
-		parallelizeMBF8GenerationAcrossAllCores(n);
+	{"parallelizeMBFGenerationAcrossAllCores8", [](const std::vector<std::string>& vars) {
+		long long n = std::stoll(vars[0]);
+		parallelizeMBFGenerationAcrossAllCores<8>(n);
+	}},
+	{"parallelizeMBFGenerationAcrossAllCores9", [](const std::vector<std::string>& vars) {
+		long long n = std::stoll(vars[0]);
+		parallelizeMBFGenerationAcrossAllCores<9>(n);
 	}},
 }};
