@@ -688,7 +688,23 @@ void estimateAverageNumMinCutsFromRandomMBFs() {
 		total += asAC.size();
 	}
 
-	std::cout << "Total minCutNodes: " << total << "/" << numMBFs << " which is about: " << double(total) / numMBFs << std::endl;
+	double avg = double(total) / numMBFs;
+	long double standardDeviationTotal = 0.0;
+
+	for(size_t i = 0; i < numMBFs; i++) {
+		AntiChain<Variables> asAC = mbfs[i].asAntiChain();
+
+		double delta = asAC.size() - avg;
+
+		standardDeviationTotal += delta * delta;
+	}
+
+	double stdDev = sqrt(standardDeviationTotal / (numMBFs - 1));
+
+	double stdErr = stdDev / sqrt(double(numMBFs));
+
+	std::cout << "Total minCutNodes: " << total << "/" << numMBFs << " which is about: " << avg << std::endl;
+	std::cout << "Avg stdDev: " << stdDev << " stdErr: " << stdErr << std::endl;
 }
 
 CommandSet miscCommands{"Misc", {
