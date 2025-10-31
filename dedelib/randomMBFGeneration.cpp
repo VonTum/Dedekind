@@ -472,12 +472,13 @@ template void benchmarkRandomMBFGeneration<7>();
 
 
 std::array<Monotonic<7>, 2> mbfUp8(RandomMBFGenerationThreadLocalState<7>& gen) {
-	while(true) {
-		std::array<Monotonic<7>, 2> arr{gen.sampleNonPermuted(), gen.samplePermuted()};
-		if(arr[0] <= arr[1]) {
-			return arr;
-		}
-	}
+	std::array<Monotonic<7>, 2> arr{gen.sampleNonPermuted(), gen.samplePermuted()};
+	do {
+		arr[0] = gen.sampleNonPermuted();
+		arr[1] = gen.samplePermuted();
+	} while(!(arr[1] <= arr[0]));
+    gen.coPermuteRandom(&arr[0], 2);
+	return arr;
 }
 
 std::array<Monotonic<7>, 4> mbfUp9(RandomMBFGenerationThreadLocalState<7>& gen) {
@@ -618,7 +619,8 @@ void runOneThreadPerNUMANode(std::vector<cpu_set_t>& cpusPerNUMANode, void(*func
 	std::cout << "Threads joined!" << std::endl;
 }
 
-void parallelizeMBF9GenerationAcrossAllCores(size_t numToGenerate) {
+template<unsigned int Variables>
+void parallelizeMBFGenerationAcrossAllCores(size_t numToGenerate) {
 	std::vector<cpu_set_t> cpusPerNUMANode = getNUMA_CPUSets();
 
 	#define INITIAL_NUMA_NODE 0
@@ -640,24 +642,187 @@ void parallelizeMBF9GenerationAcrossAllCores(size_t numToGenerate) {
 
 	std::cout << "All data copied!" << std::endl;
 
-    size_t bufferSize = sizeof(std::array<Monotonic<7>, 4>) * numToGenerate;
-	size_t alignedBufferSize = align_to(bufferSize, 1024*4);
-    std::array<Monotonic<7>, 4>* resultBuf = (std::array<Monotonic<7>, 4>*) aligned_alloc(1024*4, alignedBufferSize);
+	constexpr size_t NUM_MBF7_BLOCKS = 1 << (Variables - 7);
+
+    size_t bufferSize = sizeof(std::array<Monotonic<7>, NUM_MBF7_BLOCKS>) * numToGenerate;
+	size_t alignedBufferSize = align_to(bufferSize, 4096);
+    std::array<Monotonic<7>, NUM_MBF7_BLOCKS>* resultBuf = (std::array<Monotonic<7>, NUM_MBF7_BLOCKS>*) aligned_alloc(4096, alignedBufferSize);
     madvise(resultBuf, alignedBufferSize, MADV_NOHUGEPAGE); // Preserve huge pages for buffers that need it
     
 	std::cout << "Random Generation..." << std::endl;
 	auto start = std::chrono::high_resolution_clock::now();
     iterRangeInParallelBlocksOnAllCores<size_t, size_t, RandomMBFGenerationThreadLocalState<7>>(0, numToGenerate, 64, [&](RandomMBFGenerationThreadLocalState<7>& threadState, size_t elem){
-        resultBuf[elem] = mbfUp9(threadState);
+		if constexpr(Variables == 7) {
+			resultBuf[elem][0] = threadState.samplePermuted();
+		} else if constexpr(Variables == 8) {
+        	resultBuf[elem] = mbfUp8(threadState);
+		} else if constexpr(Variables == 9) {
+        	resultBuf[elem] = mbfUp9(threadState);
+		} else {
+			throw "Unimplemented!";
+		}
     }, [&](int threadID) -> RandomMBFGenerationThreadLocalState<7> {
         return RandomMBFGenerationThreadLocalState<7>(generationDatas[numa_node_of_cpu(threadID)]);
     });
 
 	auto time = std::chrono::high_resolution_clock::now() - start;
 	double seconds = std::chrono::duration_cast<std::chrono::milliseconds>(time).count() / 1000.0;
-	std::cout << "Took " << seconds << "s: " << (numToGenerate / seconds) << " random MBF9 per second using " << std::thread::hardware_concurrency() << " threads." << std::endl;
+	std::cout << "Took " << seconds << "s: " << (numToGenerate / seconds) << " random MBF8 per second using " << std::thread::hardware_concurrency() << " threads." << std::endl;
 
 	// Always append to the file, so we keep gathering more and more results
-	std::ofstream outFile(FileName::randomMBFs(9), std::ios::binary | std::ios::app);
+	std::ofstream outFile(FileName::randomMBFs(Variables), std::ios::binary | std::ios::app);
     outFile.write((const char*) resultBuf, bufferSize);
 }
+
+template void parallelizeMBFGenerationAcrossAllCores<7>(size_t numToGenerate);
+template void parallelizeMBFGenerationAcrossAllCores<8>(size_t numToGenerate);
+template void parallelizeMBFGenerationAcrossAllCores<9>(size_t numToGenerate);
+
+void generateMBFsFromPreviousBuffer(unsigned int Variables) {
+	size_t fileSize;
+	const uint64_t* mbfs = static_cast<const uint64_t*>(mmapWholeFileSequentialRead(FileName::randomMBFs(Variables), fileSize));
+	std::vector<uint64_t> outMBFs;
+
+	size_t bitsPerMBF = 1 << Variables;
+	size_t blocksPerMBF = bitsPerMBF / (sizeof(uint64_t) * 8);
+
+	size_t numMBFs = (fileSize * 8) / bitsPerMBF;
+
+	/*std::cout << "Checking input MBFs" << std::endl;
+	for(size_t i = 0; i < numMBFs; i++) {
+		const uint64_t* curMBFPair = &mbfs[i * blocksPerMBF];
+
+		if(Variables == 8) {
+			if(!reinterpret_cast<const BooleanFunction<8>*>(curMBFPair)->isMonotonic()) {
+				throw "INVALID MBF";
+			}
+		}
+		if(Variables == 9) {
+			if(!reinterpret_cast<const BooleanFunction<9>*>(curMBFPair)->isMonotonic()) {
+				throw "INVALID MBF";
+			}
+		}
+	}*/
+
+	std::cout << "Generating" << std::endl;
+	for(size_t i = 0; i < numMBFs / 2; i++) {
+		bool isValidPair = true;
+
+		const uint64_t* curMBFPair = &mbfs[i * (blocksPerMBF * 2)];
+		for(size_t b = 0; b < blocksPerMBF; b++) {
+			if((curMBFPair[blocksPerMBF + b] & ~curMBFPair[b]) != 0) {
+				isValidPair = false;
+				break;
+			}
+		}
+
+		if(isValidPair) {
+			std::cout << '.' << std::flush;
+			if(Variables == 8) {
+				if(!reinterpret_cast<const BooleanFunction<9>*>(curMBFPair)->isMonotonic()) {
+					throw "INVALID MBF";
+				}
+			}
+			if(Variables == 9) {
+				if(!reinterpret_cast<const BooleanFunction<10>*>(curMBFPair)->isMonotonic()) {
+					throw "INVALID MBF";
+				}
+			}
+			for(size_t b = 0; b < blocksPerMBF * 2; b++) {
+				outMBFs.push_back(curMBFPair[b]);
+			}
+		}
+	}
+
+	std::cout << "Total generated MBFs: " << outMBFs.size() / (blocksPerMBF * 2) << std::endl;
+
+	std::ofstream outFile(FileName::randomMBFs(Variables + 1), std::ios::binary);
+    outFile.write((const char*) outMBFs.data(), outMBFs.size() * sizeof(uint64_t) * 8);
+}
+
+// ==== Random Walks ====
+
+template<unsigned int Variables, typename RandomEngine>
+__attribute__ ((noinline)) size_t stepRandom(Monotonic<Variables>& mbf, RandomEngine& rng) {
+	Monotonic<Variables> succ = mbf.succ();
+	Monotonic<Variables> pred = mbf.pred();
+	
+	BooleanFunction<Variables> possibleBits = andnot(succ.bf, mbf.bf) | andnot(mbf.bf, pred.bf);
+
+	size_t numBits = possibleBits.size();
+
+	size_t selectedToFlip = std::uniform_int_distribution<size_t>(0, numBits - 1)(rng);
+
+	mbf.bf.bitset.toggle(possibleBits.getNth(selectedToFlip));
+
+	assert(mbf.bf.isMonotonic());
+
+	return numBits;
+}
+
+constexpr size_t NUM_STEPS = 15000;
+constexpr size_t NUM_TRIALS = 100000;
+
+template<unsigned int Variables, typename RandomEngine>
+Monotonic<Variables> generateMBFByWalks(RandomEngine& rng) {
+	Monotonic<Variables> curMbf = Monotonic<Variables>::getBot();
+	
+	for(size_t step = 0; step < NUM_STEPS; step++) {
+		stepRandom(curMbf, rng);
+	}
+
+	return curMbf;
+}
+
+template<unsigned int Variables>
+void estimateDedekRandomWalks() {
+	RandomEngine rng = properlySeededRNG();
+
+	std::cout << "Random Generation of MBF" << Variables << std::endl;
+
+	const BooleanFunction<Variables> lowerHalf = Monotonic<Variables>::getFilledUpToIncludingLayer(Variables / 2 - 1).bf;
+	const BooleanFunction<Variables> upperHalf = ~Monotonic<Variables>::getFilledUpToIncludingLayer(Variables / 2).bf;
+
+	uint64_t numWellKnownMBFs = 0;
+
+	auto start = std::chrono::high_resolution_clock::now();
+	for(size_t trial = 0; trial < NUM_TRIALS; trial++) {
+		Monotonic<Variables> genMbf = generateMBFByWalks<Variables>(rng);
+
+		bool isWellKnown = ((upperHalf & genMbf.bf) | andnot(lowerHalf, genMbf.bf)).isEmpty();
+
+		if(isWellKnown) {
+			numWellKnownMBFs++;
+		}
+	}
+	auto time = std::chrono::high_resolution_clock::now() - start;
+	double seconds = std::chrono::duration_cast<std::chrono::milliseconds>(time).count() / 1000.0;
+
+	double loopsPerSecond = NUM_TRIALS * NUM_STEPS / seconds;
+
+	std::cout << "Took " << seconds << "s: " << (NUM_TRIALS / seconds) << " random MBF" << Variables << " per second." << std::endl;
+
+	std::cout << "This means " << loopsPerSecond << " loops/s" << std::endl;
+
+	double estimatedDedekindNumber = pow(2.0, double(choose(Variables, Variables / 2))) * NUM_TRIALS / numWellKnownMBFs;
+
+	std::cout << "Fraction of well known: " << numWellKnownMBFs << " / " << NUM_TRIALS << " = " << double(numWellKnownMBFs) / NUM_TRIALS;
+
+	std::cout << "Estimated D(" << Variables << ") = " << estimatedDedekindNumber << std::endl;
+}
+
+template void estimateDedekRandomWalks<1>();
+template void estimateDedekRandomWalks<2>();
+template void estimateDedekRandomWalks<3>();
+template void estimateDedekRandomWalks<4>();
+template void estimateDedekRandomWalks<5>();
+template void estimateDedekRandomWalks<6>();
+template void estimateDedekRandomWalks<7>();
+template void estimateDedekRandomWalks<8>();
+template void estimateDedekRandomWalks<9>();
+template void estimateDedekRandomWalks<10>();
+template void estimateDedekRandomWalks<11>();
+template void estimateDedekRandomWalks<12>();
+template void estimateDedekRandomWalks<13>();
+template void estimateDedekRandomWalks<14>();
+template void estimateDedekRandomWalks<15>();

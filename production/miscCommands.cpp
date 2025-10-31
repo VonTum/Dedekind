@@ -657,6 +657,57 @@ void countMBFSizeStatistics() {
 }
 
 template<unsigned int Variables>
+void countMinCUTsExact() {
+	const Monotonic<Variables>* mbfs = readFlatBufferNoMMAP<Monotonic<Variables>>(FileName::flatMBFs(Variables), mbfCounts[Variables]);
+	const ClassInfo* allBigIntervalSizes = readFlatBufferNoMMAP<ClassInfo>(FileName::flatClassInfo(Variables), mbfCounts[Variables]);
+
+	size_t total = 0;
+
+	for(size_t i = 0; i < mbfCounts[Variables]; i++) {
+		AntiChain<Variables> asAC = mbfs[i].asAntiChain();
+
+		total += allBigIntervalSizes[i].classSize * asAC.size();
+	}
+
+	std::cout << "Total minCutNodes: " << total << "/" << dedekindNumbers[Variables] << " which is about: " << double(total) / dedekindNumbers[Variables] << std::endl;
+}
+
+template<unsigned int Variables>
+void estimateAverageNumMinCutsFromRandomMBFs() {
+	size_t fileSize;
+	const Monotonic<Variables>* mbfs = static_cast<const Monotonic<Variables>*>(mmapWholeFileSequentialRead(FileName::randomMBFs(Variables), fileSize));
+
+	size_t numMBFs = fileSize / sizeof(Monotonic<Variables>);
+	size_t total = 0;
+
+	for(size_t i = 0; i < numMBFs; i++) {
+		if(!mbfs[i].bf.isMonotonic()) throw "AAAAH";
+
+		AntiChain<Variables> asAC = mbfs[i].asAntiChain();
+
+		total += asAC.size();
+	}
+
+	double avg = double(total) / numMBFs;
+	long double standardDeviationTotal = 0.0;
+
+	for(size_t i = 0; i < numMBFs; i++) {
+		AntiChain<Variables> asAC = mbfs[i].asAntiChain();
+
+		double delta = asAC.size() - avg;
+
+		standardDeviationTotal += delta * delta;
+	}
+
+	double stdDev = sqrt(standardDeviationTotal / (numMBFs - 1));
+
+	double stdErr = stdDev / sqrt(double(numMBFs));
+
+	std::cout << "Total minCutNodes: " << total << "/" << numMBFs << " which is about: " << avg << std::endl;
+	std::cout << "Avg stdDev: " << stdDev << " stdErr: " << stdErr << std::endl;
+}
+
+template<unsigned int Variables>
 void getLayerSizeStatistics() {
 	size_t fileSize;
 	const Monotonic<Variables>* mbfs = static_cast<const Monotonic<Variables>*>(mmapWholeFileSequentialRead(FileName::flatMBFs(Variables), fileSize));
@@ -868,6 +919,40 @@ CommandSet miscCommands{"Misc", {
 	{"countMBFSizeStatistics8", countMBFSizeStatistics<8>},
 	{"countMBFSizeStatistics9", countMBFSizeStatistics<9>},
 
+	{"countMinCUTsExact1", countMinCUTsExact<1>},
+	{"countMinCUTsExact2", countMinCUTsExact<2>},
+	{"countMinCUTsExact3", countMinCUTsExact<3>},
+	{"countMinCUTsExact4", countMinCUTsExact<4>},
+	{"countMinCUTsExact5", countMinCUTsExact<5>},
+	{"countMinCUTsExact6", countMinCUTsExact<6>},
+	{"countMinCUTsExact7", countMinCUTsExact<7>},
+	{"countMinCUTsExact8", countMinCUTsExact<8>},
+	{"countMinCUTsExact9", countMinCUTsExact<9>},
+
+	{"estimateAverageNumMinCutsFromRandomMBFs7", estimateAverageNumMinCutsFromRandomMBFs<7>},
+	{"estimateAverageNumMinCutsFromRandomMBFs8", estimateAverageNumMinCutsFromRandomMBFs<8>},
+	{"estimateAverageNumMinCutsFromRandomMBFs9", estimateAverageNumMinCutsFromRandomMBFs<9>},
+	{"estimateAverageNumMinCutsFromRandomMBFs10", estimateAverageNumMinCutsFromRandomMBFs<10>},
+	{"estimateAverageNumMinCutsFromRandomMBFs11", estimateAverageNumMinCutsFromRandomMBFs<11>},
+	{"estimateAverageNumMinCutsFromRandomMBFs12", estimateAverageNumMinCutsFromRandomMBFs<12>},
+	{"estimateAverageNumMinCutsFromRandomMBFs13", estimateAverageNumMinCutsFromRandomMBFs<13>},
+
+	{"estimateDedekRandomWalks1", estimateDedekRandomWalks<1>},
+	{"estimateDedekRandomWalks2", estimateDedekRandomWalks<2>},
+	{"estimateDedekRandomWalks3", estimateDedekRandomWalks<3>},
+	{"estimateDedekRandomWalks4", estimateDedekRandomWalks<4>},
+	{"estimateDedekRandomWalks5", estimateDedekRandomWalks<5>},
+	{"estimateDedekRandomWalks6", estimateDedekRandomWalks<6>},
+	{"estimateDedekRandomWalks7", estimateDedekRandomWalks<7>},
+	{"estimateDedekRandomWalks8", estimateDedekRandomWalks<8>},
+	{"estimateDedekRandomWalks9", estimateDedekRandomWalks<9>},
+	{"estimateDedekRandomWalks10", estimateDedekRandomWalks<10>},
+	{"estimateDedekRandomWalks11", estimateDedekRandomWalks<11>},
+	{"estimateDedekRandomWalks12", estimateDedekRandomWalks<12>},
+	{"estimateDedekRandomWalks13", estimateDedekRandomWalks<13>},
+	{"estimateDedekRandomWalks14", estimateDedekRandomWalks<14>},
+	{"estimateDedekRandomWalks15", estimateDedekRandomWalks<15>},
+
 	{"getLayerSizeStatistics1", getLayerSizeStatistics<1>},
 	{"getLayerSizeStatistics2", getLayerSizeStatistics<2>},
 	{"getLayerSizeStatistics3", getLayerSizeStatistics<3>},
@@ -912,9 +997,20 @@ CommandSet miscCommands{"Misc", {
 		}
 	}},
 
-	{"parallelizeMBF9GenerationAcrossAllCores", [](const std::vector<std::string>& vars) {
-		int n = std::stoi(vars[0]);
-
-		parallelizeMBF9GenerationAcrossAllCores(n);
+	{"parallelizeMBFGenerationAcrossAllCores7", [](const std::vector<std::string>& vars) {
+		long long n = std::stoll(vars[0]);
+		parallelizeMBFGenerationAcrossAllCores<7>(n);
+	}},
+	{"parallelizeMBFGenerationAcrossAllCores8", [](const std::vector<std::string>& vars) {
+		long long n = std::stoll(vars[0]);
+		parallelizeMBFGenerationAcrossAllCores<8>(n);
+	}},
+	{"parallelizeMBFGenerationAcrossAllCores9", [](const std::vector<std::string>& vars) {
+		long long n = std::stoll(vars[0]);
+		parallelizeMBFGenerationAcrossAllCores<9>(n);
+	}},
+	{"generateMBFsFromPreviousBuffer", [](const std::vector<std::string>& vars) {
+		long long Variables = std::stoll(vars[0]);
+		generateMBFsFromPreviousBuffer(Variables);
 	}},
 }};
