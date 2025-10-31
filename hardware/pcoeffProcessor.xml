@@ -51,8 +51,8 @@
       <AVALON port="iready" type="iready"/>
       <AVALON port="ovalid" type="ovalid"/>
       <AVALON port="oready" type="oready"/>
-      <INPUT  port="mbfUppers" width="128"/>
-      <INPUT  port="mbfLowers" width="128"/>
+      <INPUT  port="mbfA" width="128"/>
+      <INPUT  port="mbfB" width="128"/>
       <INPUT  port="startNewTop" width="1"/>
       <OUTPUT port="results" width="128"/>
     </INTERFACE>

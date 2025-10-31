@@ -10,6 +10,5 @@
 
 module load devel/CMake/3.21.1-GCCcore-11.2.0
 
-./production parallelizeMBF9GenerationAcrossAllCores:16777216
-## ./production parallelizeMBF9GenerationAcrossAllCores:262144
+./production estimateDPlusOneWithPairs9:10000000
 

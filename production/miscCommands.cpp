@@ -656,6 +656,36 @@ void countMBFSizeStatistics() {
 	}
 }
 
+template<unsigned int Variables>
+void getLayerSizeStatistics() {
+	size_t fileSize;
+	const Monotonic<Variables>* mbfs = static_cast<const Monotonic<Variables>*>(mmapWholeFileSequentialRead(FileName::flatMBFs(Variables), fileSize));
+
+	size_t numMBFs = fileSize / sizeof(Monotonic<Variables>);
+
+	size_t grandTotalMBFs = 0;
+	for(size_t curLayer = 0; curLayer < (1 << Variables) + 1; curLayer++) {
+		size_t totalMBFsInLayer = 0;
+		for(size_t mbfI = 0; mbfI < layerSizes[Variables][curLayer]; mbfI++) {
+			Monotonic<Variables> mbf = *mbfs++;
+			size_t totalDuplicates = 0;
+			Monotonic<Variables> mbfCopy = mbf;
+			mbfCopy.bf.forEachPermutation([&](const BooleanFunction<Variables>& bb){
+				if(mbf.bf == bb) {
+					totalDuplicates++;
+				}
+			});
+			//std::cout << mbf.bf << ":" << mbf.size() << "; " << totalDuplicates << " dups" << std::endl;
+			size_t nonSymmetricCopies = factorial(Variables) / totalDuplicates;
+			totalMBFsInLayer += nonSymmetricCopies;
+		}
+		std::cout << "MBFs in Layer " << curLayer << ": " << totalMBFsInLayer << std::endl;
+		grandTotalMBFs += totalMBFsInLayer;
+	}
+
+	std::cout << "Grand total: " << grandTotalMBFs << ", compared to dedekind number " << dedekindNumbers[Variables] << std::endl;
+}
+
 CommandSet miscCommands{"Misc", {
 	{"ramTest", []() {doRAMTest(); }},
 	{"testMixingPattern", [](){testMixingPattern();}},
@@ -837,6 +867,14 @@ CommandSet miscCommands{"Misc", {
 	{"countMBFSizeStatistics7", countMBFSizeStatistics<7>},
 	{"countMBFSizeStatistics8", countMBFSizeStatistics<8>},
 	{"countMBFSizeStatistics9", countMBFSizeStatistics<9>},
+
+	{"getLayerSizeStatistics1", getLayerSizeStatistics<1>},
+	{"getLayerSizeStatistics2", getLayerSizeStatistics<2>},
+	{"getLayerSizeStatistics3", getLayerSizeStatistics<3>},
+	{"getLayerSizeStatistics4", getLayerSizeStatistics<4>},
+	{"getLayerSizeStatistics5", getLayerSizeStatistics<5>},
+	{"getLayerSizeStatistics6", getLayerSizeStatistics<6>},
+	{"getLayerSizeStatistics7", getLayerSizeStatistics<7>},
 }, {
 	{"checkIntervalLayers1", [](const std::vector<std::string>& size) {checkIntervalLayers<1>(std::stoi(size[0])); }},
 	{"checkIntervalLayers2", [](const std::vector<std::string>& size) {checkIntervalLayers<2>(std::stoi(size[0])); }},

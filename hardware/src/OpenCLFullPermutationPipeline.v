@@ -9,14 +9,12 @@ module OpenCLFullPermutationPipeline #(parameter TOTAL_FPP_COUNT = 10, parameter
     output ovalid,
     output oready,
     
-    input[127:0] mbfUppers,
-    input[127:0] mbfLowers,
+    input[127:0] mbfA,
+    input[127:0] mbfB,
     input startNewTop, // we reuse bot to set the top, to save on inputs. 
     output[127:0] results   // first 3 bits ecc status, 13 bits pcoeffCountOut, last 48 bits summedDataOut
 );
 
-wire[127:0] mbfA = {mbfUppers[127:64], mbfLowers[127:64]};
-wire[127:0] mbfB = {mbfUppers[63:0], mbfLowers[63:0]};
 wire botInValid = ivalid && !startNewTop;
 wire topInValid = ivalid && startNewTop;
 

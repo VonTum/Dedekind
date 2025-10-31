@@ -1,5 +1,5 @@
 // Implemented in HDL
-ulong2 pcoeffProcessor(ulong2 mbfUppers, ulong2 mbfLowers, bool startNewTop);
+ulong2 pcoeffProcessor(ulong2 mbfA, ulong2 mbfB, bool startNewTop);
 
 uint bitReverse4(uint v) {
   return ((v & 0x1) << 3) | ((v & 0x2) << 1) | ((v & 0x4) >> 1) | ((v & 0x8) >> 3);
@@ -36,9 +36,8 @@ kernel void dedekindAccelerator(
     // Load the mbf from memory. Pipelined, because accessed mbfs are nonconsecutive. No cache either because it could never be large enough to be functional
     ulong2 mbfA = __burst_coalesced_load(&mbfLUTA[curJob.x & 0x7FFFFFFFu]);
     ulong2 mbfB = __burst_coalesced_load(&mbfLUTB[curJob.y & 0x7FFFFFFFu]);
-    ulong2 uppers = (ulong2)(mbfA.x, mbfB.x);
-    ulong2 lowers = (ulong2)(mbfA.y, mbfB.y);
-    ulong2 result = pcoeffProcessor(__fpga_reg(uppers), __fpga_reg(lowers), __fpga_reg(startNewTop));
+    
+    ulong2 result = pcoeffProcessor(__fpga_reg(mbfA), __fpga_reg(mbfB), __fpga_reg(startNewTop));
     processedPCoeffsOut[shuffledI] = __fpga_reg(result);
   }
 }
